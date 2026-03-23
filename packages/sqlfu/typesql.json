@@ -1,0 +1,6 @@
+{
+  "databaseUri": "/Users/mmkal/src/sqlight/packages/sqlfu/.sqlfu/typegen.db",
+  "sqlDir": "sql",
+  "client": "libsql",
+  "target": "node"
+}

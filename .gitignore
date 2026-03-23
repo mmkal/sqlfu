@@ -1,0 +1,7 @@
+node_modules
+*ignoreme*
+.pnpm-store
+dist
+.sqlfu
+packages/sqlfu/.typesql
+*.tsbuildinfo

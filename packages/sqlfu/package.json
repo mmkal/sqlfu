@@ -1,0 +1,36 @@
+{
+  "name": "sqlfu",
+  "version": "0.0.0",
+  "description": "Slim SQLite tooling around libsql, D1, typesql, and sqldef",
+  "type": "module",
+  "bin": {
+    "sqlfu": "./dist/cli/main.js"
+  },
+  "exports": {
+    ".": "./dist/index.js",
+    "./cli": "./dist/cli/main.js"
+  },
+  "files": [
+    "dist",
+    "sql",
+    "definitions.sql",
+    "typesql.json"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "pnpm run build && node --test test/**/*.test.js",
+    "generate": "node ./dist/cli/main.js generate",
+    "cli": "node ./dist/cli/main.js"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.17.2",
+    "trpc-cli": "^0.14.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "typescript": "^5.9.3",
+    "typesql-cli": "^0.22.0"
+  }
+}

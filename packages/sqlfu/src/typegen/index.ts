@@ -1,11 +1,11 @@
 import fs from 'node:fs/promises';
-import {spawn} from 'node:child_process';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 import {createClient} from '@libsql/client';
 
 import {loadProjectConfig} from '../core/config.js';
+import {runPackageBinary} from '../core/tooling.js';
 import type {ProjectConfigOverrides} from '../core/types.js';
 import {materializeSchemaDatabase} from '../migrator/index.js';
 
@@ -34,7 +34,7 @@ export async function generateQueryTypes(overrides: ProjectConfigOverrides = {})
   const config = await loadProjectConfig(overrides);
   await materializeSchemaDatabase(overrides, config.tempDbPath);
   const typesqlConfigPath = await writeTypesqlConfig(overrides);
-  await runLocalCli('typesql', ['compile', '--config', typesqlConfigPath], packageRoot);
+  await runPackageBinary('typesql-cli', ['compile', '--config', typesqlConfigPath], packageRoot);
   await refineGeneratedTypes(config.tempDbPath, config.sqlDir);
 }
 
@@ -437,26 +437,6 @@ async function patchGeneratedTypeFile(filePath: string, columns: ReadonlyMap<str
   if (nextContents !== contents) {
     await fs.writeFile(filePath, nextContents);
   }
-}
-
-async function runLocalCli(command: string, args: readonly string[], cwd: string): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn('pnpm', ['exec', command, ...args], {
-      cwd,
-      stdio: 'inherit',
-      env: process.env,
-    });
-
-    child.on('exit', (code) => {
-      if (code === 0) {
-        resolve();
-        return;
-      }
-      reject(new Error(`${command} exited with code ${code ?? 'unknown'}`));
-    });
-
-    child.on('error', reject);
-  });
 }
 
 function relativeToCwd(cwd: string, targetPath: string): string {

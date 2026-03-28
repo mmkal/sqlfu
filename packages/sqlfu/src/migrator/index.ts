@@ -3,6 +3,7 @@ import {spawn} from 'node:child_process';
 import path from 'node:path';
 
 import {loadProjectConfig} from '../core/config.js';
+import {runPackageBinary} from '../core/tooling.js';
 import type {MigrateDiffResult, ProjectConfigOverrides, SqlfuProjectConfig} from '../core/types.js';
 import {ensureSqlite3defBinary} from './binary.js';
 
@@ -30,6 +31,38 @@ export async function exportSchema(overrides: ProjectConfigOverrides = {}, dbPat
   const config = await loadProjectConfig(overrides);
   const target = dbPath ?? config.dbPath;
   return runSqlite3def(config, ['--export', target]);
+}
+
+export async function createMigrationDraft(overrides: ProjectConfigOverrides = {}, name: string): Promise<string> {
+  const config = await loadProjectConfig(overrides);
+  await assertDefinitionsExists(config);
+  await fs.mkdir(config.migrationsDir, {recursive: true});
+
+  const output = await runDbmate(config, ['new', name]);
+  const migrationPath = output.match(/Creating migration:\s+(.+)$/m)?.[1]?.trim();
+
+  if (!migrationPath) {
+    throw new Error(`dbmate did not report the created migration path.\n${output}`.trim());
+  }
+
+  const migrationSql = await draftMigrationSql(config);
+  await writeMigrationDraft(migrationPath, migrationSql);
+  return `Created ${migrationPath}`;
+}
+
+export async function migrateUp(overrides: ProjectConfigOverrides = {}): Promise<string> {
+  const config = await loadProjectConfig(overrides);
+  return runDbmate(config, ['up']);
+}
+
+export async function migrateStatus(overrides: ProjectConfigOverrides = {}): Promise<string> {
+  const config = await loadProjectConfig(overrides);
+  return runDbmate(config, ['status']);
+}
+
+export async function dumpSchemaFile(overrides: ProjectConfigOverrides = {}): Promise<string> {
+  const config = await loadProjectConfig(overrides);
+  return runDbmate(config, ['dump']);
 }
 
 export async function checkDatabase(overrides: ProjectConfigOverrides = {}, dbPath?: string): Promise<void> {
@@ -92,19 +125,91 @@ async function assertDefinitionsExists(config: SqlfuProjectConfig): Promise<void
 }
 
 function hasMeaningfulDiff(output: string): boolean {
+  return getMeaningfulDiffLines(output).length > 0;
+}
+
+function getMeaningfulDiffLines(output: string): string[] {
   if (/Nothing is modified/i.test(output)) {
-    return false;
+    return [];
   }
 
-  const meaningfulLines = output
+  return output
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean)
     .filter((line) => line !== '-- dry run --')
     .filter((line) => line !== 'BEGIN;')
     .filter((line) => line !== 'COMMIT;')
+    .filter((line) => line !== 'DROP TABLE "schema_migrations";')
+    .filter((line) => line !== '-- Skipped: DROP TABLE "schema_migrations";')
     .filter((line) => !/^-- Skipped: DROP TABLE ".*_fts_(data|idx|content|docsize|config)";$/i.test(line))
     .filter((line) => line !== 'finished!');
+}
 
-  return meaningfulLines.length > 0;
+async function draftMigrationSql(config: SqlfuProjectConfig): Promise<string> {
+  const baselineDbPath = path.join(config.tempDir, 'migration-draft.db');
+
+  await fs.mkdir(path.dirname(baselineDbPath), {recursive: true});
+  await fs.rm(baselineDbPath, {force: true});
+  await fs.rm(`${baselineDbPath}-shm`, {force: true});
+  await fs.rm(`${baselineDbPath}-wal`, {force: true});
+
+  if (await fileExists(config.schemaFile)) {
+    await runSqlite3def(config, ['--apply', '--file', config.schemaFile, baselineDbPath]);
+  }
+
+  const diffOutput = await runSqlite3def(config, ['--dry-run', '--file', config.definitionsPath, baselineDbPath]);
+  const lines = getMeaningfulDiffLines(diffOutput);
+
+  if (lines.length === 0) {
+    return '-- No schema changes detected between schema.sql and definitions.sql.';
+  }
+
+  const warningLines = lines.some(isDestructiveStatement)
+    ? ['-- WARNING: destructive statements were detected in this draft. Review carefully before applying.', '']
+    : [];
+
+  return [...warningLines, ...lines].join('\n');
+}
+
+async function writeMigrationDraft(migrationPath: string, upSql: string): Promise<void> {
+  const contents = `-- migrate:up\n${upSql}\n\n-- migrate:down\n-- Write rollback SQL here if you need it.\n`;
+  await fs.writeFile(migrationPath, contents);
+}
+
+async function runDbmate(config: SqlfuProjectConfig, args: readonly string[]): Promise<string> {
+  await fs.mkdir(config.migrationsDir, {recursive: true});
+  await fs.mkdir(path.dirname(config.schemaFile), {recursive: true});
+  await fs.mkdir(path.dirname(config.dbPath), {recursive: true});
+
+  return runPackageBinary(
+    'dbmate',
+    [
+      '--url',
+      toDbmateSqliteUrl(config.dbPath),
+      '--migrations-dir',
+      config.migrationsDir,
+      '--schema-file',
+      config.schemaFile,
+      ...args,
+    ],
+    config.cwd,
+  );
+}
+
+function toDbmateSqliteUrl(dbPath: string): string {
+  return `sqlite:${dbPath}`;
+}
+
+async function fileExists(filePath: string): Promise<boolean> {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isDestructiveStatement(statement: string): boolean {
+  return /\bDROP\s+(TABLE|COLUMN|INDEX|VIEW|TRIGGER)\b/i.test(statement);
 }

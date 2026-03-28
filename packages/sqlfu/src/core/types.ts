@@ -41,6 +41,8 @@ export interface D1DatabaseLike {
 
 export interface SqlfuConfig {
   readonly dbPath?: string;
+  readonly migrationsDir?: string;
+  readonly schemaFile?: string;
   readonly definitionsPath?: string;
   readonly sqlDir?: string;
   readonly tempDir?: string;
@@ -54,6 +56,8 @@ export interface SqlfuProjectConfig {
   readonly cwd: string;
   readonly configPath?: string;
   readonly dbPath: string;
+  readonly migrationsDir: string;
+  readonly schemaFile: string;
   readonly definitionsPath: string;
   readonly sqlDir: string;
   readonly tempDir: string;

@@ -25,6 +25,7 @@
   },
   "dependencies": {
     "@libsql/client": "^0.17.2",
+    "dbmate": "^2.31.0",
     "trpc-cli": "^0.14.0",
     "zod": "^4.3.6"
   },

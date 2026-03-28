@@ -6,11 +6,11 @@ import {expect, test} from 'vitest';
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const sqlite3defBinaryPath = path.join(packageRoot, '.sqlfu', 'bin', 'sqlite3def');
-const {applyDefinitions, checkDatabase, diffDatabase, exportSchema, generateQueryTypes, loadProjectConfig} = await import(
+const {checkDatabase, createMigrationDraft, diffDatabase, dumpSchemaFile, generateQueryTypes, loadProjectConfig, migrateStatus, migrateUp} = await import(
   pathToFileURL(path.join(packageRoot, 'dist', 'index.js')).href,
 );
 
-test('generate and migrate honor sqlfu.config.ts defaults', async () => {
+test('generate and dbmate-backed migrations honor sqlfu.config.ts defaults', async () => {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'sqlfu-smoke-'));
 
   try {
@@ -21,6 +21,8 @@ test('generate and migrate honor sqlfu.config.ts defaults', async () => {
       `
 export default {
   dbPath: './app.db',
+  migrationsDir: './migrations',
+  schemaFile: './schema.sql',
 };
 `,
     );
@@ -42,28 +44,39 @@ LIMIT 1;
 
     const resolvedConfig = await loadProjectConfig({cwd: tempRoot});
     await generateQueryTypes({cwd: tempRoot, sqlite3defBinaryPath});
-    await applyDefinitions({cwd: tempRoot, sqlite3defBinaryPath});
+    const createOutput = await createMigrationDraft({cwd: tempRoot, sqlite3defBinaryPath}, 'initial_schema');
+    await migrateUp({cwd: tempRoot});
 
     const generatedQueryPath = path.join(tempRoot, 'sql', 'list-post-summaries.ts');
     const generatedParameterizedQueryPath = path.join(tempRoot, 'sql', 'find-post-by-slug.ts');
+    const migrationPath = path.join(tempRoot, 'migrations');
     const generatedIndexPath = path.join(tempRoot, 'sql', 'index.ts');
     const generatedTypesqlConfigPath = path.join(tempRoot, 'typesql.json');
     const configuredDbPath = path.join(tempRoot, 'app.db');
+    const schemaFilePath = path.join(tempRoot, 'schema.sql');
+    const [migrationFileName] = await fs.readdir(migrationPath);
 
-    const [generatedQuery, generatedParameterizedQuery, generatedTypesqlConfig, diffResult, exportedSchema] = await Promise.all([
+    const [generatedQuery, generatedParameterizedQuery, generatedTypesqlConfig, generatedMigration, diffResult, statusOutput, dumpOutput] =
+      await Promise.all([
       fs.readFile(generatedQueryPath, 'utf8'),
       fs.readFile(generatedParameterizedQueryPath, 'utf8'),
       fs.readFile(generatedTypesqlConfigPath, 'utf8'),
+      fs.readFile(path.join(migrationPath, migrationFileName), 'utf8'),
       diffDatabase({cwd: tempRoot, sqlite3defBinaryPath}),
-      exportSchema({cwd: tempRoot, sqlite3defBinaryPath}),
+      migrateStatus({cwd: tempRoot}),
+      dumpSchemaFile({cwd: tempRoot}),
     ]);
 
     await fs.access(generatedIndexPath);
     await fs.access(generatedTypesqlConfigPath);
     await fs.access(configuredDbPath);
+    await fs.access(schemaFilePath);
 
     expect(resolvedConfig.configPath).toBe(path.join(tempRoot, 'sqlfu.config.ts'));
     expect(resolvedConfig.dbPath).toBe(configuredDbPath);
+    expect(resolvedConfig.migrationsDir).toBe(migrationPath);
+    expect(resolvedConfig.schemaFile).toBe(schemaFilePath);
+    expect(createOutput).toMatch(/Created .*initial_schema\.sql/);
     expect(generatedQuery).toMatch(/export async function listPostSummaries/);
     expect(generatedQuery).toMatch(/id: number;/);
     expect(generatedQuery).toMatch(/slug: string;/);
@@ -77,9 +90,13 @@ LIMIT 1;
     expect(generatedParameterizedQuery).toMatch(/Promise<FindPostBySlugResult \| null>/);
     expect(generatedParameterizedQuery).toMatch(/body AS excerpt/);
 
+    expect(generatedMigration).toMatch(/-- migrate:up/);
+    expect(generatedMigration).toMatch(/CREATE TABLE posts/);
+    expect(generatedMigration).toMatch(/-- migrate:down/);
     expect(generatedTypesqlConfig).toMatch(/"includeCrudTables": \[\]/);
     expect(diffResult.drift).toBe(false);
-    expect(exportedSchema).toMatch(/CREATE TABLE posts/);
+    expect(statusOutput).toMatch(/Applied/);
+    expect(typeof dumpOutput).toBe('string');
 
     await checkDatabase({cwd: tempRoot, sqlite3defBinaryPath});
   } finally {

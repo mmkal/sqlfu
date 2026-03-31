@@ -233,6 +233,272 @@ test('generate infers simple expression aliases like substr in result types', as
   expect(generatedTs).toMatchInlineSnapshot(`"//Invalid SQL"`);
 });
 
+test('generate snapshots insert queries', async () => {
+  await using project = await createGenerateFixture({
+    definitionsSql: dedent`
+      create table posts (id integer primary key, slug text not null);
+    `,
+    sqlFiles: {
+      'sql/insert-post.sql': `insert into posts (slug) values (:slug);`,
+    },
+  });
+
+  await project.generate();
+
+  const generatedTs = await project.readFile('sql/insert-post.ts');
+
+  expect(generatedTs).toMatchInlineSnapshot(`
+    "import type {AsyncExecutor} from 'sqlfu';
+
+    export type InsertPostParams = {
+    	slug: string;
+    }
+
+    export type InsertPostResult = {
+    	rowsAffected: number;
+    	lastInsertRowid: number;
+    }
+
+    export async function insertPost(client: Client | Transaction, params: InsertPostParams): Promise<InsertPostResult> {
+    	const sql = \`
+    	insert into posts (slug) values (?);
+    	
+    	\`
+    	return client.execute({ sql, args: [params.slug] })
+    		.then(res => mapArrayToInsertPostResult(res));
+    }
+
+    function mapArrayToInsertPostResult(data: any) {
+    	const result: InsertPostResult = {
+    		rowsAffected: data.rowsAffected,
+    		lastInsertRowid: data.lastInsertRowid
+    	}
+    	return result;
+    }"
+  `);
+});
+
+test('generate snapshots update queries', async () => {
+  await using project = await createGenerateFixture({
+    definitionsSql: dedent`
+      create table posts (id integer primary key, slug text not null);
+    `,
+    sqlFiles: {
+      'sql/update-post.sql': `update posts set slug = :slug where id = :id;`,
+    },
+  });
+
+  await project.generate();
+
+  const generatedTs = await project.readFile('sql/update-post.ts');
+
+  expect(generatedTs).toMatchInlineSnapshot(`
+    "import type {AsyncExecutor} from 'sqlfu';
+
+    export type UpdatePostData = {
+    	slug: string;
+    }
+
+    export type UpdatePostParams = {
+    	id: number;
+    }
+
+    export type UpdatePostResult = {
+    	rowsAffected: number;
+    }
+
+    export async function updatePost(client: Client | Transaction, data: UpdatePostData, params: UpdatePostParams): Promise<UpdatePostResult> {
+    	const sql = \`
+    	update posts set slug = ? where id = ?;
+    	
+    	\`
+    	return client.execute({ sql, args: [data.slug, params.id] })
+    		.then(res => mapArrayToUpdatePostResult(res));
+    }
+
+    function mapArrayToUpdatePostResult(data: any) {
+    	const result: UpdatePostResult = {
+    		rowsAffected: data.rowsAffected
+    	}
+    	return result;
+    }"
+  `);
+});
+
+test('generate snapshots delete queries', async () => {
+  await using project = await createGenerateFixture({
+    definitionsSql: dedent`
+      create table posts (id integer primary key, slug text not null);
+    `,
+    sqlFiles: {
+      'sql/delete-post.sql': `delete from posts where id = :id;`,
+    },
+  });
+
+  await project.generate();
+
+  const generatedTs = await project.readFile('sql/delete-post.ts');
+
+  expect(generatedTs).toMatchInlineSnapshot(`
+    "import type {AsyncExecutor} from 'sqlfu';
+
+    export type DeletePostParams = {
+    	id: number;
+    }
+
+    export type DeletePostResult = {
+    	rowsAffected: number;
+    }
+
+    export async function deletePost(client: Client | Transaction, params: DeletePostParams): Promise<DeletePostResult> {
+    	const sql = \`
+    	delete from posts where id = ?;
+    	
+    	\`
+    	return client.execute({ sql, args: [params.id] })
+    		.then(res => mapArrayToDeletePostResult(res));
+    }
+
+    function mapArrayToDeletePostResult(data: any) {
+    	const result: DeletePostResult = {
+    		rowsAffected: data.rowsAffected
+    	}
+    	return result;
+    }"
+  `);
+});
+
+test('generate snapshots function queries', async () => {
+  await using project = await createGenerateFixture({
+    definitionsSql: dedent`
+      create table posts (id integer primary key, slug text not null);
+    `,
+    sqlFiles: {
+      'sql/count-posts.sql': `select count(*) as total from posts;`,
+    },
+  });
+
+  await project.generate();
+
+  const generatedTs = await project.readFile('sql/count-posts.ts');
+
+  expect(generatedTs).toMatchInlineSnapshot(`
+    "import type {AsyncExecutor} from 'sqlfu';
+
+    export type CountPostsResult = {
+    	total: number;
+    }
+
+    export async function countPosts(executor: AsyncExecutor): Promise<CountPostsResult | null> {
+    	const sql = \`
+    		select count(*) as total from posts;
+    		
+    		\`
+    	return executor.query<CountPostsResult>({ sql, args: [] })
+    	.then(result => result.rows[0] ?? null);
+    }
+    "
+  `);
+});
+
+test('generate snapshots user-defined function queries', async () => {
+  await using project = await createGenerateFixture({
+    definitionsSql: dedent`
+      create table posts (slug text not null);
+    `,
+    sqlFiles: {
+      'sql/list-normalized-slugs.sql': `select my_slugify(slug) as normalized_slug from posts;`,
+    },
+  });
+
+  await project.generate();
+
+  const generatedTs = await project.readFile('sql/list-normalized-slugs.ts');
+
+  expect(generatedTs).toMatchInlineSnapshot(`"//Invalid SQL"`);
+});
+
+test('generate snapshots cte queries with the works', async () => {
+  await using project = await createGenerateFixture({
+    definitionsSql: dedent`
+      create table posts (id integer primary key, slug text not null);
+    `,
+    sqlFiles: {
+      'sql/latest-posts.sql': dedent`
+        with latest as (select id, slug from posts)
+        select id, slug from latest;
+      `,
+      'sql/latest-post-by-slug.sql': dedent`
+        with latest as (select id, slug from posts where slug = :slug)
+        select id, slug from latest
+        limit 1;
+      `,
+      'sql/insert-post-from-cte.sql': dedent`
+        with incoming as (select :slug as slug)
+        insert into posts (slug) select slug from incoming;
+      `,
+      'sql/update-post-from-cte.sql': dedent`
+        with incoming as (select :id as id, :slug as slug)
+        update posts
+        set slug = (select slug from incoming where incoming.id = posts.id)
+        where id in (select id from incoming);
+      `,
+    },
+  });
+
+  await project.generate();
+
+  const latestPostsTs = await project.readFile('sql/latest-posts.ts');
+  const latestPostBySlugTs = await project.readFile('sql/latest-post-by-slug.ts');
+  const insertPostFromCteTs = await project.readFile('sql/insert-post-from-cte.ts');
+  const updatePostFromCteTs = await project.readFile('sql/update-post-from-cte.ts');
+
+  expect(latestPostsTs).toMatchInlineSnapshot(`
+    "import type {AsyncExecutor} from 'sqlfu';
+
+    export type LatestPostsResult = {
+    	id: number;
+    	slug: string;
+    }
+
+    export async function latestPosts(executor: AsyncExecutor): Promise<LatestPostsResult[]> {
+    	const sql = \`
+    		with latest as (select id, slug from posts)
+    		select id, slug from latest;
+    		
+    		\`
+    	return executor.query<LatestPostsResult>({ sql, args: [] });
+    }
+    "
+  `);
+  expect(latestPostBySlugTs).toMatchInlineSnapshot(`
+    "import type {AsyncExecutor} from 'sqlfu';
+
+    export type LatestPostBySlugParams = {
+    	slug: string;
+    }
+
+    export type LatestPostBySlugResult = {
+    	id: number;
+    	slug: string;
+    }
+
+    export async function latestPostBySlug(executor: AsyncExecutor, params: LatestPostBySlugParams): Promise<LatestPostBySlugResult | null> {
+    	const sql = \`
+    		with latest as (select id, slug from posts where slug = ?)
+    		select id, slug from latest
+    		limit 1;
+    		
+    		\`
+    	return executor.query<LatestPostBySlugResult>({ sql, args: [params.slug] })
+    	.then(result => result.rows[0] ?? null);
+    }
+    "
+  `);
+  expect(insertPostFromCteTs).toMatchInlineSnapshot(`"//Invalid SQL"`);
+  expect(updatePostFromCteTs).toMatchInlineSnapshot(`"//Invalid SQL"`);
+});
+
 async function createGenerateFixture(input: {
   definitionsSql: string;
   sqlFiles: Record<string, string>;

@@ -2,6 +2,10 @@
   "name": "sqlfu",
   "version": "0.0.0",
   "description": "Slim SQLite tooling around libsql, D1, typesql, and sqldef",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mmkal/sqlfu.git"
+  },
   "type": "module",
   "bin": {
     "sqlfu": "./dist/cli/main.js"

@@ -40,7 +40,10 @@ export async function generateQueryTypes(overrides: ProjectConfigOverrides = {})
   // snake_case -> camelCase, direct access to TypeSQL's intermediate descriptors so sqlfu can
   // emit zod/custom nullability-aware output, or a first-class way to expose the generated SQL
   // itself instead of hiding it inside wrapper functions, we may need to vendor TypeSQL instead
-  // of continuing to treat it as a black-box compiler plus post-processing step.
+  // of continuing to treat it as a black-box compiler plus post-processing step. Another concrete
+  // reason: TypeSQL currently falls over on writable CTE shapes; if sqlfu owns the parser/analyzer
+  // path we could AST-rewrite `insert/update ... returning ...` branches into equivalent select-ish
+  // analysis queries, similar to how pgkit handles those cases.
   await rewriteGeneratedWrappers(config.sqlDir);
 }
 

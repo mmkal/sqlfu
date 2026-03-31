@@ -101,7 +101,7 @@ test('draft without a name creates a default draft file when none exists yet', a
 
   await expect(project.fs.readdir('migrations')).resolves.toMatchObject([
     '20260331090000_create_users.sql',
-    expect.stringMatching(/^\d+_draft\.sql$/),
+    expect.stringMatching(/^\d+_create_table_posts\.sql$/),
   ]);
 });
 

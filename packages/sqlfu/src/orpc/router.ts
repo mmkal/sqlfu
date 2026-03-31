@@ -1,6 +1,7 @@
 import {createRouterClient, os} from '@orpc/server';
 import {z} from 'zod';
 
+import {migrationNickname} from '../core/naming.js';
 import {createDefaultSqlite3defConfig, diffSnapshotSqlToDesiredSql} from '../core/sqlite3def.js';
 
 export interface SqlfuFsLike {
@@ -112,7 +113,9 @@ export const sqlfuRouter = {
     const draftBody = wantsContent
       ? input!.content!.trim()
       : (await diffSnapshotSqlToDesiredSql(sqlite3defConfig, {snapshotSql, desiredSql})).join('\n');
-    const targetFileName = existingDraft?.fileName ?? `${nextMigrationId(migrations)}_${slugify(input?.name ?? 'draft')}.sql`;
+    const targetFileName =
+      existingDraft?.fileName ??
+      `${nextMigrationId(migrations)}_${slugify(input?.name ?? migrationNickname(draftBody))}.sql`;
 
     await context.fs.mkdir(context.config.migrationsDir);
     await context.fs.writeFile(
@@ -233,7 +236,7 @@ function slugify(value: string): string {
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '') || 'draft';
+    .replace(/^_+|_+$/g, '') || 'migration';
 }
 
 function joinPath(left: string, right: string): string {

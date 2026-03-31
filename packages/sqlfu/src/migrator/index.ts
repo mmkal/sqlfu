@@ -59,7 +59,7 @@ export async function migrateStatus(overrides: ProjectConfigOverrides = {}): Pro
   return runDbmate(config, ['status']);
 }
 
-export async function dumpSchemaFile(overrides: ProjectConfigOverrides = {}): Promise<string> {
+export async function dumpSnapshotFile(overrides: ProjectConfigOverrides = {}): Promise<string> {
   const config = await loadProjectConfig(overrides);
   return runDbmate(config, ['dump']);
 }
@@ -96,12 +96,12 @@ function hasMeaningfulDiff(output: string): boolean {
 }
 
 async function draftMigrationSql(config: SqlfuProjectConfig): Promise<string> {
-  const snapshotSql = (await fileExists(config.schemaFile)) ? await fs.readFile(config.schemaFile, 'utf8') : '';
+  const snapshotSql = (await fileExists(config.snapshotFile)) ? await fs.readFile(config.snapshotFile, 'utf8') : '';
   const desiredSql = await fs.readFile(config.definitionsPath, 'utf8');
   const lines = await diffSnapshotSqlToDesiredSql(config, {snapshotSql, desiredSql});
 
   if (lines.length === 0) {
-    return '-- No schema changes detected between schema.sql and definitions.sql.';
+    return '-- No schema changes detected between snapshot.sql and definitions.sql.';
   }
 
   const warningLines = lines.some(isDestructiveStatement)
@@ -118,7 +118,7 @@ async function writeMigrationDraft(migrationPath: string, upSql: string): Promis
 
 async function runDbmate(config: SqlfuProjectConfig, args: readonly string[]): Promise<string> {
   await fs.mkdir(config.migrationsDir, {recursive: true});
-  await fs.mkdir(path.dirname(config.schemaFile), {recursive: true});
+  await fs.mkdir(path.dirname(config.snapshotFile), {recursive: true});
   await fs.mkdir(path.dirname(config.dbPath), {recursive: true});
 
   return runPackageBinary(
@@ -129,7 +129,7 @@ async function runDbmate(config: SqlfuProjectConfig, args: readonly string[]): P
       '--migrations-dir',
       config.migrationsDir,
       '--schema-file',
-      config.schemaFile,
+      config.snapshotFile,
       ...args,
     ],
     config.cwd,

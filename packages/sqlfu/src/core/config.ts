@@ -32,7 +32,7 @@ export function resolveProjectConfig(
     configPath,
     dbPath: resolveConfigPathValue(cwd, configDir, overrides.dbPath, fileConfig.dbPath, path.join('.sqlfu', 'dev.db')),
     migrationsDir: resolveConfigPathValue(cwd, configDir, overrides.migrationsDir, fileConfig.migrationsDir, 'migrations'),
-    schemaFile: resolveConfigPathValue(cwd, configDir, overrides.schemaFile, fileConfig.schemaFile, 'schema.sql'),
+    snapshotFile: resolveConfigPathValue(cwd, configDir, overrides.snapshotFile, fileConfig.snapshotFile, 'snapshot.sql'),
     definitionsPath: resolveConfigPathValue(cwd, configDir, overrides.definitionsPath, fileConfig.definitionsPath, 'definitions.sql'),
     sqlDir: resolveConfigPathValue(cwd, configDir, overrides.sqlDir, fileConfig.sqlDir, 'sql'),
     tempDir,

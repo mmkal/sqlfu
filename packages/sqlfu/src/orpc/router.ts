@@ -59,7 +59,7 @@ const configShape = {
   configPath: z.string().optional(),
   dbPath: z.string().optional(),
   migrationsDir: z.string().optional(),
-  schemaFile: z.string().optional(),
+  snapshotFile: z.string().optional(),
   definitionsPath: z.string().optional(),
   sqlDir: z.string().optional(),
   tempDir: z.string().optional(),
@@ -241,7 +241,7 @@ async function resolveRuntime(
     config: {
       definitionsPath: projectConfig.definitionsPath,
       migrationsDir: projectConfig.migrationsDir,
-      snapshotPath: projectConfig.schemaFile,
+      snapshotPath: projectConfig.snapshotFile,
       dbPath: projectConfig.dbPath,
     },
     fs: {

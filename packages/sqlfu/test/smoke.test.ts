@@ -6,7 +6,7 @@ import {expect, test} from 'vitest';
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const sqlite3defBinaryPath = path.join(packageRoot, '.sqlfu', 'bin', 'sqlite3def');
-const {checkDatabase, createMigrationDraft, diffDatabase, dumpSchemaFile, generateQueryTypes, loadProjectConfig, migrateStatus, migrateUp} = await import(
+const {checkDatabase, createMigrationDraft, diffDatabase, dumpSnapshotFile, generateQueryTypes, loadProjectConfig, migrateStatus, migrateUp} = await import(
   pathToFileURL(path.join(packageRoot, 'dist', 'index.js')).href,
 );
 
@@ -22,7 +22,7 @@ test('generate and dbmate-backed migrations honor sqlfu.config.ts defaults', asy
 export default {
   dbPath: './app.db',
   migrationsDir: './migrations',
-  schemaFile: './schema.sql',
+  snapshotFile: './snapshot.sql',
 };
 `,
     );
@@ -53,7 +53,7 @@ LIMIT 1;
     const generatedIndexPath = path.join(tempRoot, 'sql', 'index.ts');
     const generatedTypesqlConfigPath = path.join(tempRoot, 'typesql.json');
     const configuredDbPath = path.join(tempRoot, 'app.db');
-    const schemaFilePath = path.join(tempRoot, 'schema.sql');
+    const snapshotFilePath = path.join(tempRoot, 'snapshot.sql');
     const [migrationFileName] = await fs.readdir(migrationPath);
 
     const [generatedQuery, generatedParameterizedQuery, generatedTypesqlConfig, generatedMigration, diffResult, statusOutput, dumpOutput] =
@@ -64,18 +64,18 @@ LIMIT 1;
       fs.readFile(path.join(migrationPath, migrationFileName), 'utf8'),
       diffDatabase({cwd: tempRoot, sqlite3defBinaryPath}),
       migrateStatus({cwd: tempRoot}),
-      dumpSchemaFile({cwd: tempRoot}),
+      dumpSnapshotFile({cwd: tempRoot}),
     ]);
 
     await fs.access(generatedIndexPath);
     await fs.access(generatedTypesqlConfigPath);
     await fs.access(configuredDbPath);
-    await fs.access(schemaFilePath);
+    await fs.access(snapshotFilePath);
 
     expect(resolvedConfig.configPath).toBe(path.join(tempRoot, 'sqlfu.config.ts'));
     expect(resolvedConfig.dbPath).toBe(configuredDbPath);
     expect(resolvedConfig.migrationsDir).toBe(migrationPath);
-    expect(resolvedConfig.schemaFile).toBe(schemaFilePath);
+    expect(resolvedConfig.snapshotFile).toBe(snapshotFilePath);
     expect(createOutput).toMatch(/Created .*initial_schema\.sql/);
     expect(generatedQuery).toMatch(/export async function listPostSummaries/);
     expect(generatedQuery).toMatch(/id: number;/);

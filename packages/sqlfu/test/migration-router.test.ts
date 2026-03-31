@@ -38,7 +38,7 @@ test('draft creates the single mutable migration from finalized history to defin
   expect(await project.fs.readFile(draftMigrationPath)).toContain('-- status: draft');
   expect(await project.fs.readFile(draftMigrationPath)).toContain('create table posts');
   expect(await project.fs.readFile('snapshot.sql')).toContain('create table users');
-  expect(await project.db.exportSchema()).resolves.toContain('create table users');
+  expect(await project.db.exportSchema()).toContain('create table users');
 });
 
 test('draft rewrites the existing draft instead of creating a second editable migration', async () => {
@@ -102,8 +102,8 @@ test('migrate refuses to run while a draft migration exists', async () => {
   `);
 
   await expect(project.caller.migrate()).rejects.toThrow(/draft/i);
-  expect(await project.db.exportSchema()).resolves.toContain('create table users');
-  expect(await project.db.exportSchema()).resolves.not.toContain('create table posts');
+  expect(await project.db.exportSchema()).toContain('create table users');
+  expect(await project.db.exportSchema()).not.toContain('create table posts');
 });
 
 test('sync fixes a drifted development database without mutating migrations or snapshot.sql', async () => {
@@ -134,8 +134,8 @@ test('sync fixes a drifted development database without mutating migrations or s
 
   await project.caller.sync();
 
-  expect(await project.db.exportSchema()).resolves.toContain('create table posts');
-  expect(await project.db.exportSchema()).resolves.not.toContain('nickname');
+  expect(await project.db.exportSchema()).toContain('create table posts');
+  expect(await project.db.exportSchema()).not.toContain('nickname');
   expect(await project.fs.readFile('migrations/20260331090001_add_posts.sql')).toBe(beforeDraft);
   expect(await project.fs.readFile('snapshot.sql')).toBe(beforeSnapshot);
 });
@@ -199,7 +199,7 @@ test('draft does not require the actual database to match definitions.sql first'
   const draftMigrationPath = `migrations/${migrationFiles.at(-1)!}`;
   expect(await project.fs.readFile(draftMigrationPath)).toContain('-- status: draft');
   expect(await project.fs.readFile(draftMigrationPath)).toContain('create table posts');
-  expect(await project.db.exportSchema()).resolves.toContain('nickname');
+  expect(await project.db.exportSchema()).toContain('nickname');
 });
 
 async function createProjectFixture(input: {
@@ -271,6 +271,23 @@ function createRealDatabase(dbPath: string) {
 
   return {
     async execute(sql: string) {
+      const existingObjects = await client.execute(`
+        select type, name
+        from sqlite_schema
+        where name not like 'sqlite_%'
+        order by case type when 'index' then 0 else 1 end, name
+      `);
+
+      for (const row of existingObjects.rows as Array<Record<string, unknown>>) {
+        const type = String(row.type);
+        const name = String(row.name);
+        if (type === 'index') {
+          await client.execute(`drop index if exists "${name}"`);
+          continue;
+        }
+        await client.execute(`drop ${type} if exists "${name}"`);
+      }
+
       for (const statement of sqlStatements(sql)) {
         await client.execute(statement);
       }
@@ -283,7 +300,7 @@ function createRealDatabase(dbPath: string) {
           and name not like 'sqlite_%'
         order by type, name
       `);
-      return result.rows.map((row) => String(row.sql)).join('\n');
+      return result.rows.map((row) => String(row.sql).toLowerCase()).join('\n');
     },
     async close() {
       client.close();

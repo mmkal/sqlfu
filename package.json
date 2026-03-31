@@ -3,6 +3,7 @@
   "private": true,
   "packageManager": "pnpm@10.30.1",
   "scripts": {
+    "sqlfu": "cd packages/sqlfu && pnpm",
     "build": "pnpm --filter sqlfu build",
     "test": "pnpm --filter sqlfu test",
     "typecheck": "pnpm --filter sqlfu typecheck",

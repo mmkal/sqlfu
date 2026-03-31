@@ -418,85 +418,38 @@ test('generate snapshots user-defined function queries', async () => {
   expect(generatedTs).toMatchInlineSnapshot(`"//Invalid SQL"`);
 });
 
-test('generate snapshots cte queries with the works', async () => {
+test('generate snapshots cte queries with the works in one query', async () => {
   await using project = await createGenerateFixture({
     definitionsSql: dedent`
       create table posts (id integer primary key, slug text not null);
     `,
     sqlFiles: {
-      'sql/latest-posts.sql': dedent`
-        with latest as (select id, slug from posts)
-        select id, slug from latest;
-      `,
-      'sql/latest-post-by-slug.sql': dedent`
-        with latest as (select id, slug from posts where slug = :slug)
-        select id, slug from latest
-        limit 1;
-      `,
-      'sql/insert-post-from-cte.sql': dedent`
-        with incoming as (select :slug as slug)
-        insert into posts (slug) select slug from incoming;
-      `,
-      'sql/update-post-from-cte.sql': dedent`
-        with incoming as (select :id as id, :slug as slug)
-        update posts
-        set slug = (select slug from incoming where incoming.id = posts.id)
-        where id in (select id from incoming);
+      'sql/sync-post-from-cte.sql': dedent`
+        with incoming as (select :id as id, :slug as slug),
+        inserted as (
+          insert into posts (id, slug)
+          select id, slug from incoming
+          where not exists (select 1 from posts where posts.id = incoming.id)
+          returning id, slug
+        ),
+        updated as (
+          update posts
+          set slug = (select slug from incoming where incoming.id = posts.id)
+          where id in (select id from incoming)
+          returning id, slug
+        )
+        select id, slug from updated
+        union all
+        select id, slug from inserted;
       `,
     },
   });
 
   await project.generate();
 
-  const latestPostsTs = await project.readFile('sql/latest-posts.ts');
-  const latestPostBySlugTs = await project.readFile('sql/latest-post-by-slug.ts');
-  const insertPostFromCteTs = await project.readFile('sql/insert-post-from-cte.ts');
-  const updatePostFromCteTs = await project.readFile('sql/update-post-from-cte.ts');
+  const generatedTs = await project.readFile('sql/sync-post-from-cte.ts');
 
-  expect(latestPostsTs).toMatchInlineSnapshot(`
-    "import type {AsyncExecutor} from 'sqlfu';
-
-    export type LatestPostsResult = {
-    	id: number;
-    	slug: string;
-    }
-
-    export async function latestPosts(executor: AsyncExecutor): Promise<LatestPostsResult[]> {
-    	const sql = \`
-    		with latest as (select id, slug from posts)
-    		select id, slug from latest;
-    		
-    		\`
-    	return executor.query<LatestPostsResult>({ sql, args: [] });
-    }
-    "
-  `);
-  expect(latestPostBySlugTs).toMatchInlineSnapshot(`
-    "import type {AsyncExecutor} from 'sqlfu';
-
-    export type LatestPostBySlugParams = {
-    	slug: string;
-    }
-
-    export type LatestPostBySlugResult = {
-    	id: number;
-    	slug: string;
-    }
-
-    export async function latestPostBySlug(executor: AsyncExecutor, params: LatestPostBySlugParams): Promise<LatestPostBySlugResult | null> {
-    	const sql = \`
-    		with latest as (select id, slug from posts where slug = ?)
-    		select id, slug from latest
-    		limit 1;
-    		
-    		\`
-    	return executor.query<LatestPostBySlugResult>({ sql, args: [params.slug] })
-    	.then(result => result.rows[0] ?? null);
-    }
-    "
-  `);
-  expect(insertPostFromCteTs).toMatchInlineSnapshot(`"//Invalid SQL"`);
-  expect(updatePostFromCteTs).toMatchInlineSnapshot(`"//Invalid SQL"`);
+  expect(generatedTs).toMatchInlineSnapshot(`"//Invalid SQL"`);
 });
 
 async function createGenerateFixture(input: {

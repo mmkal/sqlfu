@@ -18,7 +18,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.typecheck.json",
     "test": "pnpm run build && vitest run test/smoke.test.ts",
     "generate": "node ./dist/cli/main.js generate",
     "cli": "node ./dist/cli/main.js"

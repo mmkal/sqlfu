@@ -1,8 +1,12 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
+
 import {createRouterClient, os} from '@orpc/server';
 import {z} from 'zod';
 
+import {loadProjectConfig} from '../core/config.js';
 import {migrationNickname} from '../core/naming.js';
-import {createDefaultSqlite3defConfig, diffSnapshotSqlToDesiredSql} from '../core/sqlite3def.js';
+import {createDefaultSqlite3defConfig, diffSnapshotSqlToDesiredSql, runSqlite3def} from '../core/sqlite3def.js';
 
 export interface SqlfuFsLike {
   exists(path: string): Promise<boolean>;
@@ -35,9 +39,9 @@ export interface SqlfuRouterConfig {
 }
 
 export interface SqlfuRouterContext {
-  readonly config: SqlfuRouterConfig;
-  readonly fs: SqlfuFsLike;
-  readonly db: SqlfuDatabaseLike;
+  readonly config?: SqlfuRouterConfig;
+  readonly fs?: SqlfuFsLike;
+  readonly db?: SqlfuDatabaseLike;
 }
 
 type MigrationStatus = 'draft' | 'final';
@@ -50,8 +54,24 @@ type MigrationFile = {
 };
 
 const sqlite3defConfig = createDefaultSqlite3defConfig('orpc');
+const configShape = {
+  cwd: z.string().optional(),
+  configPath: z.string().optional(),
+  dbPath: z.string().optional(),
+  migrationsDir: z.string().optional(),
+  schemaFile: z.string().optional(),
+  definitionsPath: z.string().optional(),
+  sqlDir: z.string().optional(),
+  tempDir: z.string().optional(),
+  tempDbPath: z.string().optional(),
+  typesqlConfigPath: z.string().optional(),
+  sqlite3defVersion: z.string().optional(),
+  sqlite3defBinaryPath: z.string().optional(),
+};
+export const sqlfuConfigInput = z.object(configShape).default({});
 const draftInputSchema = z
   .object({
+    ...configShape,
     name: z.string().min(1).optional(),
     finalize: z.boolean().optional(),
     content: z.string().optional(),
@@ -60,26 +80,29 @@ const draftInputSchema = z
 const base = os.$context<SqlfuRouterContext>();
 
 export const sqlfuRouter = {
-  sync: base.handler(async ({context}) => {
-    const desiredSql = await context.fs.readFile(context.config.definitionsPath);
-    await context.db.execute(desiredSql);
+  sync: base.input(sqlfuConfigInput).handler(async ({context, input}) => {
+    await using runtime = await resolveRuntime(context, input);
+    const desiredSql = await runtime.fs.readFile(runtime.config.definitionsPath);
+    await runtime.db.execute(desiredSql);
   }),
 
-  migrate: base.handler(async ({context}) => {
-    const migrations = await loadMigrations(context);
+  migrate: base.input(sqlfuConfigInput).handler(async ({context, input}) => {
+    await using runtime = await resolveRuntime(context, input);
+    const migrations = await loadMigrations(runtime);
     const draftMigration = migrations.find((migration) => migration.status() === 'draft');
     if (draftMigration) {
       throw new Error(`draft migration must be finalized before migrate: ${draftMigration.fileName}`);
     }
 
-    const snapshotSql = await context.fs.readFile(context.config.snapshotPath);
-    await context.db.execute(snapshotSql);
+    const snapshotSql = await runtime.fs.readFile(runtime.config.snapshotPath);
+    await runtime.db.execute(snapshotSql);
   }),
 
   draft: base.input(draftInputSchema).handler(async ({context, input}) => {
-    const desiredSql = await context.fs.readFile(context.config.definitionsPath);
-    const snapshotSql = await context.fs.readFile(context.config.snapshotPath);
-    const migrations = await loadMigrations(context);
+    await using runtime = await resolveRuntime(context, input);
+    const desiredSql = await runtime.fs.readFile(runtime.config.definitionsPath);
+    const snapshotSql = await runtime.fs.readFile(runtime.config.snapshotPath);
+    const migrations = await loadMigrations(runtime);
     const existingDraft = migrations.find((migration) => migration.status() === 'draft');
     const wantsFinalize = input?.finalize === true;
     const wantsContent = typeof input?.content === 'string';
@@ -98,13 +121,13 @@ export const sqlfuRouter = {
         throw new Error('no draft migration exists to finalize');
       }
 
-      await context.fs.writeFile(
-        joinPath(context.config.migrationsDir, existingDraft.fileName),
-        serializeMigration('final', existingDraft.body),
-      );
-      await context.fs.writeFile(context.config.snapshotPath, withTrailingNewline(desiredSql));
-      return;
-    }
+        await runtime.fs.writeFile(
+          joinPath(runtime.config.migrationsDir, existingDraft.fileName),
+          serializeMigration('final', existingDraft.body),
+        );
+        await runtime.fs.writeFile(runtime.config.snapshotPath, withTrailingNewline(desiredSql));
+        return;
+      }
 
     if (existingDraft && wantsName) {
       throw new Error(`draft migration already exists: ${existingDraft.fileName}`);
@@ -117,18 +140,19 @@ export const sqlfuRouter = {
       existingDraft?.fileName ??
       `${nextMigrationId(migrations)}_${slugify(input?.name ?? migrationNickname(draftBody))}.sql`;
 
-    await context.fs.mkdir(context.config.migrationsDir);
-    await context.fs.writeFile(
-      joinPath(context.config.migrationsDir, targetFileName),
+    await runtime.fs.mkdir(runtime.config.migrationsDir);
+    await runtime.fs.writeFile(
+      joinPath(runtime.config.migrationsDir, targetFileName),
       serializeMigration('draft', draftBody),
     );
   }),
 
-  check: base.handler(async ({context}): Promise<SqlfuCheckReport> => {
-    const definitionsSql = await context.fs.readFile(context.config.definitionsPath);
-    const snapshotSql = await context.fs.readFile(context.config.snapshotPath);
-    const migrations = await loadMigrations(context);
-    const databaseSql = await context.db.exportSchema();
+  check: base.input(sqlfuConfigInput).handler(async ({context, input}): Promise<SqlfuCheckReport> => {
+    await using runtime = await resolveRuntime(context, input);
+    const definitionsSql = await runtime.fs.readFile(runtime.config.definitionsPath);
+    const snapshotSql = await runtime.fs.readFile(runtime.config.snapshotPath);
+    const migrations = await loadMigrations(runtime);
+    const databaseSql = await runtime.db.exportSchema();
 
     const finalSql = migrations
       .filter((migration) => migration.status() === 'final')
@@ -174,7 +198,7 @@ export function createSqlfuCaller(context: SqlfuRouterContext) {
   return createRouterClient(sqlfuRouter, {context});
 }
 
-async function loadMigrations(context: SqlfuRouterContext): Promise<MigrationFile[]> {
+async function loadMigrations(context: {config: SqlfuRouterConfig; fs: SqlfuFsLike}): Promise<MigrationFile[]> {
   const exists = await context.fs.exists(context.config.migrationsDir);
   if (!exists) {
     return [];
@@ -190,6 +214,71 @@ async function loadMigrations(context: SqlfuRouterContext): Promise<MigrationFil
       return parseMigrationFile(fileName, contents);
     }),
   );
+}
+
+async function resolveRuntime(
+  context: SqlfuRouterContext,
+  overrides?: z.input<typeof sqlfuConfigInput>,
+): Promise<{
+  config: SqlfuRouterConfig;
+  fs: SqlfuFsLike;
+  db: SqlfuDatabaseLike;
+  [Symbol.asyncDispose](): Promise<void>;
+}> {
+  if (context.config && context.fs && context.db) {
+    return {
+      config: context.config,
+      fs: context.fs,
+      db: context.db,
+      async [Symbol.asyncDispose]() {},
+    };
+  }
+
+  const projectConfig = await loadProjectConfig(overrides ?? {});
+  const stagedSqlPath = path.join(projectConfig.tempDir, 'cli-applied.sql');
+
+  return {
+    config: {
+      definitionsPath: projectConfig.definitionsPath,
+      migrationsDir: projectConfig.migrationsDir,
+      snapshotPath: projectConfig.schemaFile,
+      dbPath: projectConfig.dbPath,
+    },
+    fs: {
+      async exists(filePath: string) {
+        try {
+          await fs.access(filePath);
+          return true;
+        } catch {
+          return false;
+        }
+      },
+      async readFile(filePath: string) {
+        return fs.readFile(filePath, 'utf8');
+      },
+      async writeFile(filePath: string, contents: string) {
+        await fs.mkdir(path.dirname(filePath), {recursive: true});
+        await fs.writeFile(filePath, contents);
+      },
+      async readdir(dirPath: string) {
+        return (await fs.readdir(dirPath)).sort();
+      },
+      async mkdir(dirPath: string) {
+        await fs.mkdir(dirPath, {recursive: true});
+      },
+    },
+    db: {
+      async execute(sql: string) {
+        await fs.mkdir(path.dirname(stagedSqlPath), {recursive: true});
+        await fs.writeFile(stagedSqlPath, sql);
+        await runSqlite3def(projectConfig, ['--apply', '--file', stagedSqlPath, projectConfig.dbPath]);
+      },
+      async exportSchema() {
+        return runSqlite3def(projectConfig, ['--export', projectConfig.dbPath]);
+      },
+    },
+    async [Symbol.asyncDispose]() {},
+  };
 }
 
 function parseMigrationFile(fileName: string, contents: string): MigrationFile {

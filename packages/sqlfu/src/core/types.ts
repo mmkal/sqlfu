@@ -1,5 +1,7 @@
 export type QueryArg = null | string | number | bigint | Uint8Array | boolean;
 
+export type ResultRow = Record<string, unknown>;
+
 export interface SqlFragment {
   readonly sql: string;
   readonly args: readonly QueryArg[];
@@ -7,36 +9,42 @@ export interface SqlFragment {
 
 export interface SqlQuery extends SqlFragment {}
 
-export interface RunResult {
+export interface QueryResult<TRow extends ResultRow = ResultRow> {
+  readonly rows: readonly TRow[];
   readonly rowsAffected: number;
   readonly lastInsertRowid: string | number | bigint | null;
 }
 
-export interface QueryExecutor {
-  all<TRow extends Record<string, unknown>>(query: SqlQuery): Promise<readonly TRow[]>;
-  first<TRow extends Record<string, unknown>>(query: SqlQuery): Promise<TRow | null>;
-  run(query: SqlQuery): Promise<RunResult>;
+export interface SyncExecutor {
+  query<TRow extends ResultRow = ResultRow>(query: SqlQuery): QueryResult<TRow>;
 }
 
-export interface D1ResultRow {
-  [key: string]: unknown;
+export interface AsyncExecutor {
+  query<TRow extends ResultRow = ResultRow>(query: SqlQuery): Promise<QueryResult<TRow>>;
 }
 
-export interface D1PreparedStatement {
-  bind(...values: unknown[]): D1PreparedStatement;
-  all<T = D1ResultRow>(): Promise<{results: T[]}>;
-  first<T = D1ResultRow>(columnName?: string): Promise<T | null>;
-  run(): Promise<{
-    success: boolean;
-    meta?: {
-      changes?: number;
-      last_row_id?: number | string;
-    };
-  }>;
+export interface SyncTransaction extends SyncExecutor {}
+
+export interface AsyncTransaction extends AsyncExecutor {}
+
+export interface SyncTransactional {
+  transaction<TResult>(fn: (tx: SyncTransaction) => TResult): TResult;
 }
 
-export interface D1DatabaseLike {
-  prepare(query: string): D1PreparedStatement;
+export interface AsyncTransactional {
+  transaction<TResult>(fn: (tx: AsyncTransaction) => Promise<TResult>): Promise<TResult>;
+}
+
+export interface SyncConnection extends SyncExecutor, SyncTransactional {}
+
+export interface AsyncConnection extends AsyncExecutor, AsyncTransactional {}
+
+export interface SyncClient {
+  connect(): SyncConnection;
+}
+
+export interface AsyncClient {
+  connect(): Promise<AsyncConnection>;
 }
 
 export interface SqlfuConfig {

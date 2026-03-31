@@ -1,9 +1,9 @@
 import {createClient, type Client, type InStatement} from '@libsql/client';
 
 import {bindSql} from '../core/sql.js';
-import type {QueryExecutor, RunResult, SqlQuery} from '../core/types.js';
+import type {AsyncExecutor, QueryResult, ResultRow, SqlQuery} from '../core/types.js';
 
-export interface LibsqlDatabase extends QueryExecutor {
+export interface LibsqlDatabase extends AsyncExecutor {
   readonly sql: ReturnType<typeof bindSql>;
   readonly client: Client;
 }
@@ -19,18 +19,11 @@ export function createLibsqlDatabase(options: CreateLibsqlDatabaseOptions): Libs
     authToken: options.authToken,
   });
 
-  const executor: QueryExecutor = {
-    async all<TRow extends Record<string, unknown>>(query: SqlQuery): Promise<readonly TRow[]> {
-      const result = await client.execute(toStatement(query));
-      return result.rows as unknown as TRow[];
-    },
-    async first<TRow extends Record<string, unknown>>(query: SqlQuery): Promise<TRow | null> {
-      const result = await client.execute(toStatement(query));
-      return (result.rows[0] as unknown as TRow | undefined) ?? null;
-    },
-    async run(query: SqlQuery): Promise<RunResult> {
+  const executor: AsyncExecutor = {
+    async query<TRow extends ResultRow = ResultRow>(query: SqlQuery): Promise<QueryResult<TRow>> {
       const result = await client.execute(toStatement(query));
       return {
+        rows: result.rows as unknown as TRow[],
         rowsAffected: result.rowsAffected,
         lastInsertRowid: result.lastInsertRowid ?? null,
       };

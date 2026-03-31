@@ -32,7 +32,7 @@ test('generate writes wrappers and a barrel for every checked-in query', async (
   expect(indexTs).toMatch(/list-post-summaries\.js/);
   expect(indexTs).toMatch(/find-post-by-slug\.js/);
   expect(listPostSummariesTs).toMatchInlineSnapshot(`
-    "import type { Client, Transaction } from '@libsql/client';
+    "import type {AsyncExecutor} from 'sqlfu';
 
     export type ListPostSummariesResult = {
     	id: number;
@@ -41,28 +41,17 @@ test('generate writes wrappers and a barrel for every checked-in query', async (
     	excerpt: string;
     }
 
-    export async function listPostSummaries(client: Client | Transaction): Promise<ListPostSummariesResult[]> {
+    export async function listPostSummaries(executor: AsyncExecutor): Promise<ListPostSummariesResult[]> {
     	const sql = \`
-    	select id, slug, published_at, excerpt from post_summaries;
-    	
-    	\`
-    	return client.execute(sql)
-    		.then(res => res.rows)
-    		.then(rows => rows.map(row => mapArrayToListPostSummariesResult(row)));
+    		select id, slug, published_at, excerpt from post_summaries;
+    		
+    		\`
+    	return executor.query<ListPostSummariesResult>({ sql, args: [] });
     }
-
-    function mapArrayToListPostSummariesResult(data: any) {
-    	const result: ListPostSummariesResult = {
-    		id: data[0],
-    		slug: data[1],
-    		published_at: data[2],
-    		excerpt: data[3]
-    	}
-    	return result;
-    }"
+    "
   `);
   expect(findPostBySlugTs).toMatchInlineSnapshot(`
-    "import type { Client, Transaction } from '@libsql/client';
+    "import type {AsyncExecutor} from 'sqlfu';
 
     export type FindPostBySlugParams = {
     	slug: string;
@@ -74,24 +63,15 @@ test('generate writes wrappers and a barrel for every checked-in query', async (
     	excerpt: string;
     }
 
-    export async function findPostBySlug(client: Client | Transaction, params: FindPostBySlugParams): Promise<FindPostBySlugResult | null> {
+    export async function findPostBySlug(executor: AsyncExecutor, params: FindPostBySlugParams): Promise<FindPostBySlugResult | null> {
     	const sql = \`
-    	select id, slug, body as excerpt from posts where slug = ? limit 1;
-    	
-    	\`
-    	return client.execute({ sql, args: [params.slug] })
-    		.then(res => res.rows)
-    		.then(rows => rows.length > 0 ? mapArrayToFindPostBySlugResult(rows[0]) : null);
+    		select id, slug, body as excerpt from posts where slug = ? limit 1;
+    		
+    		\`
+    	return executor.query<FindPostBySlugResult>({ sql, args: [params.slug] })
+    	.then(result => result.rows[0] ?? null);
     }
-
-    function mapArrayToFindPostBySlugResult(data: any) {
-    	const result: FindPostBySlugResult = {
-    		id: data[0],
-    		slug: data[1],
-    		excerpt: data[2]
-    	}
-    	return result;
-    }"
+    "
   `);
   expect(typesqlJson).toContain('"includeCrudTables": []');
 });
@@ -111,7 +91,7 @@ test('generate emits named param types and a nullable single-row result for limi
   const generatedTs = await project.readFile('sql/find-post-by-slug.ts');
 
   expect(generatedTs).toMatchInlineSnapshot(`
-    "import type { Client, Transaction } from '@libsql/client';
+    "import type {AsyncExecutor} from 'sqlfu';
 
     export type FindPostBySlugParams = {
     	slug: string;
@@ -123,24 +103,15 @@ test('generate emits named param types and a nullable single-row result for limi
     	title?: string;
     }
 
-    export async function findPostBySlug(client: Client | Transaction, params: FindPostBySlugParams): Promise<FindPostBySlugResult | null> {
+    export async function findPostBySlug(executor: AsyncExecutor, params: FindPostBySlugParams): Promise<FindPostBySlugResult | null> {
     	const sql = \`
-    	select id, slug, title from posts where slug = ? limit 1;
-    	
-    	\`
-    	return client.execute({ sql, args: [params.slug] })
-    		.then(res => res.rows)
-    		.then(rows => rows.length > 0 ? mapArrayToFindPostBySlugResult(rows[0]) : null);
+    		select id, slug, title from posts where slug = ? limit 1;
+    		
+    		\`
+    	return executor.query<FindPostBySlugResult>({ sql, args: [params.slug] })
+    	.then(result => result.rows[0] ?? null);
     }
-
-    function mapArrayToFindPostBySlugResult(data: any) {
-    	const result: FindPostBySlugResult = {
-    		id: data[0],
-    		slug: data[1],
-    		title: data[2]
-    	}
-    	return result;
-    }"
+    "
   `);
 });
 
@@ -159,30 +130,21 @@ test('generate uses schema types for aliased selected columns instead of leaving
   const generatedTs = await project.readFile('sql/find-post-preview.ts');
 
   expect(generatedTs).toMatchInlineSnapshot(`
-    "import type { Client, Transaction } from '@libsql/client';
+    "import type {AsyncExecutor} from 'sqlfu';
 
     export type FindPostPreviewResult = {
     	id: number;
     	excerpt: string;
     }
 
-    export async function findPostPreview(client: Client | Transaction): Promise<FindPostPreviewResult[]> {
+    export async function findPostPreview(executor: AsyncExecutor): Promise<FindPostPreviewResult[]> {
     	const sql = \`
-    	select id, body as excerpt from posts limit 5;
-    	
-    	\`
-    	return client.execute(sql)
-    		.then(res => res.rows)
-    		.then(rows => rows.map(row => mapArrayToFindPostPreviewResult(row)));
+    		select id, body as excerpt from posts limit 5;
+    		
+    		\`
+    	return executor.query<FindPostPreviewResult>({ sql, args: [] });
     }
-
-    function mapArrayToFindPostPreviewResult(data: any) {
-    	const result: FindPostPreviewResult = {
-    		id: data[0],
-    		excerpt: data[1]
-    	}
-    	return result;
-    }"
+    "
   `);
 });
 
@@ -201,30 +163,22 @@ test('generate treats selected columns as required when the query narrows them w
   const generatedTs = await project.readFile('sql/find-published-post-by-slug.ts');
 
   expect(generatedTs).toMatchInlineSnapshot(`
-    "import type { Client, Transaction } from '@libsql/client';
+    "import type {AsyncExecutor} from 'sqlfu';
 
     export type FindPublishedPostBySlugResult = {
     	id: number;
     	published_at: string;
     }
 
-    export async function findPublishedPostBySlug(client: Client | Transaction): Promise<FindPublishedPostBySlugResult | null> {
+    export async function findPublishedPostBySlug(executor: AsyncExecutor): Promise<FindPublishedPostBySlugResult | null> {
     	const sql = \`
-    	select id, published_at from posts where published_at is not null limit 1;
-    	
-    	\`
-    	return client.execute(sql)
-    		.then(res => res.rows)
-    		.then(rows => rows.length > 0 ? mapArrayToFindPublishedPostBySlugResult(rows[0]) : null);
+    		select id, published_at from posts where published_at is not null limit 1;
+    		
+    		\`
+    	return executor.query<FindPublishedPostBySlugResult>({ sql, args: [] })
+    	.then(result => result.rows[0] ?? null);
     }
-
-    function mapArrayToFindPublishedPostBySlugResult(data: any) {
-    	const result: FindPublishedPostBySlugResult = {
-    		id: data[0],
-    		published_at: data[1]
-    	}
-    	return result;
-    }"
+    "
   `);
 });
 
@@ -244,30 +198,21 @@ test('generate preserves useful result types for queries that read through views
   const generatedTs = await project.readFile('sql/list-post-summaries.ts');
 
   expect(generatedTs).toMatchInlineSnapshot(`
-    "import type { Client, Transaction } from '@libsql/client';
+    "import type {AsyncExecutor} from 'sqlfu';
 
     export type ListPostSummariesResult = {
     	id: number;
     	excerpt: string;
     }
 
-    export async function listPostSummaries(client: Client | Transaction): Promise<ListPostSummariesResult[]> {
+    export async function listPostSummaries(executor: AsyncExecutor): Promise<ListPostSummariesResult[]> {
     	const sql = \`
-    	select id, excerpt from post_summaries;
-    	
-    	\`
-    	return client.execute(sql)
-    		.then(res => res.rows)
-    		.then(rows => rows.map(row => mapArrayToListPostSummariesResult(row)));
+    		select id, excerpt from post_summaries;
+    		
+    		\`
+    	return executor.query<ListPostSummariesResult>({ sql, args: [] });
     }
-
-    function mapArrayToListPostSummariesResult(data: any) {
-    	const result: ListPostSummariesResult = {
-    		id: data[0],
-    		excerpt: data[1]
-    	}
-    	return result;
-    }"
+    "
   `);
 });
 

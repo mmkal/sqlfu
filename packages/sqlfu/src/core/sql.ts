@@ -1,26 +1,26 @@
-import type {QueryArg, QueryExecutor, RunResult, SqlFragment, SqlQuery} from './types.js';
+import type {AsyncExecutor, QueryArg, QueryResult, ResultRow, SqlFragment, SqlQuery} from './types.js';
 
 const emptyFragment: SqlFragment = {sql: '', args: []};
 
-export class BoundQuery<TRow extends Record<string, unknown>> implements PromiseLike<readonly TRow[]> {
+export class BoundQuery<TRow extends ResultRow> implements PromiseLike<readonly TRow[]> {
   readonly query: SqlQuery;
-  readonly #executor: QueryExecutor;
+  readonly #executor: AsyncExecutor;
 
-  constructor(executor: QueryExecutor, query: SqlQuery) {
+  constructor(executor: AsyncExecutor, query: SqlQuery) {
     this.#executor = executor;
     this.query = query;
   }
 
   all(): Promise<readonly TRow[]> {
-    return this.#executor.all<TRow>(this.query);
+    return this.#executor.query<TRow>(this.query).then((result) => result.rows);
   }
 
   first(): Promise<TRow | null> {
-    return this.#executor.first<TRow>(this.query);
+    return this.#executor.query<TRow>(this.query).then((result) => result.rows[0] ?? null);
   }
 
-  run(): Promise<RunResult> {
-    return this.#executor.run(this.query);
+  run(): Promise<QueryResult<TRow>> {
+    return this.#executor.query<TRow>(this.query);
   }
 
   then<TResult1 = readonly TRow[], TResult2 = never>(
@@ -32,7 +32,7 @@ export class BoundQuery<TRow extends Record<string, unknown>> implements Promise
 }
 
 export interface BoundSqlTag {
-  <TRow extends Record<string, unknown> = Record<string, unknown>>(
+  <TRow extends ResultRow = ResultRow>(
     strings: TemplateStringsArray,
     ...values: readonly SqlValue[]
   ): BoundQuery<TRow>;
@@ -101,8 +101,8 @@ export function join(values: readonly SqlValue[], separator = ', '): SqlFragment
   return {sql: text, args};
 }
 
-export function bindSql(executor: QueryExecutor): BoundSqlTag {
-  return <TRow extends Record<string, unknown> = Record<string, unknown>>(
+export function bindSql(executor: AsyncExecutor): BoundSqlTag {
+  return <TRow extends ResultRow = ResultRow>(
     strings: TemplateStringsArray,
     ...values: readonly SqlValue[]
   ) => new BoundQuery<TRow>(executor, sql(strings, ...values));

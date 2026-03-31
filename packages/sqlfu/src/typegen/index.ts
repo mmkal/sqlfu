@@ -36,6 +36,11 @@ export async function generateQueryTypes(overrides: ProjectConfigOverrides = {})
   const typesqlConfigPath = await writeTypesqlConfig(overrides);
   await runPackageBinary('typesql-cli', ['compile', '--config', typesqlConfigPath], packageRoot);
   await refineGeneratedTypes(config.tempDbPath, config.sqlDir);
+  // TODO: If we need custom fs support (for example memfs), column-name transforms such as
+  // snake_case -> camelCase, or direct access to TypeSQL's intermediate descriptors so sqlfu
+  // can emit zod/custom nullability-aware output, we may need to vendor TypeSQL instead of
+  // continuing to treat it as a black-box compiler plus post-processing step.
+  await rewriteGeneratedWrappers(config.sqlDir);
 }
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(new URL('../../package.json', import.meta.url))));
@@ -73,6 +78,96 @@ async function refineGeneratedTypes(databasePath: string, sqlDir: string): Promi
         ]);
       }),
   );
+}
+
+async function rewriteGeneratedWrappers(sqlDir: string): Promise<void> {
+  const sqlEntries = await fs.readdir(sqlDir, {withFileTypes: true});
+
+  await Promise.all(
+    sqlEntries
+      .filter((entry) => entry.isFile() && entry.name.endsWith('.ts') && entry.name !== 'index.ts')
+      .map(async (entry) => {
+        const filePath = path.join(sqlDir, entry.name);
+        const contents = await fs.readFile(filePath, 'utf8');
+        const nextContents = rewriteGeneratedWrapper(contents);
+        if (nextContents !== contents) {
+          await fs.writeFile(filePath, nextContents);
+        }
+      }),
+  );
+}
+
+function rewriteGeneratedWrapper(contents: string): string {
+  if (contents.trim() === '//Invalid SQL') {
+    return contents;
+  }
+
+  const importPattern = /^import type \{ Client, Transaction \} from '@libsql\/client';\n\n/;
+  if (!importPattern.test(contents)) {
+    return contents;
+  }
+
+  const resultTypeName = contents.match(/export type ([A-Za-z0-9_]+Result) = \{/m)?.[1];
+  const functionPattern =
+    /export async function ([A-Za-z0-9_]+)\(client: Client \| Transaction(, params: [A-Za-z0-9_]+)?\): Promise<([^>]+)>\s*\{\n([\s\S]*?)\n\}\n\nfunction mapArrayTo[A-Za-z0-9_]+\([\s\S]*$/m;
+  const match = contents.match(functionPattern);
+
+  if (!match || !resultTypeName) {
+    return contents.replace(importPattern, `import type {AsyncExecutor} from 'sqlfu';\n\n`);
+  }
+
+  const [, functionName, paramsClause = '', returnType, functionBody] = match;
+  const sqlMatch = functionBody.match(/const sql = `[\s\S]*?`/m);
+  const executeMatch = functionBody.match(/return client\.execute\(([\s\S]*?)\)\n([\s\S]*)$/m);
+
+  if (!sqlMatch || !executeMatch) {
+    return contents.replace(importPattern, `import type {AsyncExecutor} from 'sqlfu';\n\n`);
+  }
+
+  const executeArgs = normalizeExecuteArgs(executeMatch[1].trim());
+  const returnStatement = buildExecutorReturn(executeMatch[2], resultTypeName, executeArgs);
+  if (!returnStatement) {
+    return contents.replace(importPattern, `import type {AsyncExecutor} from 'sqlfu';\n\n`);
+  }
+
+  const header = contents.slice(0, match.index).replace(importPattern, `import type {AsyncExecutor} from 'sqlfu';\n\n`);
+  const rewrittenFunction = [
+    `export async function ${functionName}(executor: AsyncExecutor${paramsClause}): Promise<${returnType}> {`,
+    indentLines(sqlMatch[0], '\t'),
+    `\t${returnStatement.replaceAll('\n', '\n\t')}`,
+    `}`,
+    '',
+  ].join('\n');
+
+  return `${header}${rewrittenFunction}`;
+}
+
+function normalizeExecuteArgs(value: string): string {
+  return value === 'sql' ? '{ sql, args: [] }' : value;
+}
+
+function buildExecutorReturn(chainedCalls: string, resultTypeName: string, executeArgs: string): string | undefined {
+  const normalized = chainedCalls.trim();
+
+  if (/^\.then\(res => res\.rows\)\s*\.then\(rows => rows\.map\(row => mapArrayTo[A-Za-z0-9_]+\(row\)\)\);$/m.test(normalized)) {
+    return `return executor.query<${resultTypeName}>(${executeArgs});`;
+  }
+
+  if (/^\.then\(res => res\.rows\)\s*\.then\(rows => rows\.length > 0 \? mapArrayTo[A-Za-z0-9_]+\(\s*rows\[0\]\s*\) : null\);$/m.test(normalized)) {
+    return [
+      `return executor.query<${resultTypeName}>(${executeArgs})`,
+      `.then(result => result.rows[0] ?? null);`,
+    ].join('\n');
+  }
+
+  return undefined;
+}
+
+function indentLines(value: string, indent: string): string {
+  return value
+    .split('\n')
+    .map((line) => `${indent}${line}`)
+    .join('\n');
 }
 
 async function loadSchema(databasePath: string): Promise<ReadonlyMap<string, RelationInfo>> {

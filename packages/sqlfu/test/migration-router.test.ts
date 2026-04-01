@@ -6,7 +6,7 @@ import {createClient} from '@libsql/client';
 import {createRouterClient} from '@orpc/server';
 import {expect, test} from 'vitest';
 
-import {sqlfuRouter} from '../src/orpc/router.js';
+import {sqlfuRouter} from '../src/api.js';
 
 test('draft creates the single mutable migration from finalized history to definitions.sql', async () => {
   await using project = await createProjectFixture({

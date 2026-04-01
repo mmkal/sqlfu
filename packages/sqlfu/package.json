@@ -8,11 +8,13 @@
   },
   "type": "module",
   "bin": {
-    "sqlfu": "./dist/cli/main.js"
+    "sqlfu": "./dist/cli.js"
   },
   "exports": {
     ".": "./dist/index.js",
-    "./cli": "./dist/cli/main.js"
+    "./client": "./dist/client.js",
+    "./api": "./dist/api.js",
+    "./cli": "./dist/cli.js"
   },
   "files": [
     "dist",
@@ -24,8 +26,8 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.typecheck.json",
     "test": "pnpm run build && vitest run test/smoke.test.ts",
-    "generate": "node ./dist/cli/main.js generate",
-    "cli": "node ./dist/cli/main.js"
+    "generate": "node ./dist/cli.js generate",
+    "cli": "node ./dist/cli.js"
   },
   "dependencies": {
     "@libsql/client": "^0.17.2",

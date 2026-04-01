@@ -4,9 +4,10 @@ import path from 'node:path';
 import {createRouterClient, os} from '@orpc/server';
 import {z} from 'zod';
 
-import {loadProjectConfig} from '../core/config.js';
-import {migrationNickname} from '../core/naming.js';
-import {createDefaultSqlite3defConfig, diffSnapshotSqlToDesiredSql, runSqlite3def} from '../core/sqlite3def.js';
+import {loadProjectConfig} from './core/config.js';
+import {migrationNickname} from './core/naming.js';
+import {createDefaultSqlite3defConfig, diffSnapshotSqlToDesiredSql, runSqlite3def} from './core/sqlite3def.js';
+import {generateQueryTypes} from './typegen/index.js';
 
 export interface SqlfuFsLike {
   exists(path: string): Promise<boolean>;
@@ -80,7 +81,16 @@ const draftInputSchema = z
   .optional();
 const base = os.$context<SqlfuRouterContext>();
 
-export const sqlfuRouter = {
+export const router = {
+  generate: os.input(sqlfuConfigInput).handler(async ({input}) => {
+    await generateQueryTypes(input);
+    return 'Generated schema-derived database and TypeSQL outputs.';
+  }),
+
+  config: os.input(sqlfuConfigInput).handler(async ({input}) => {
+    return loadProjectConfig(input);
+  }),
+
   sync: base.input(sqlfuConfigInput).handler(async ({context, input}) => {
     await using runtime = await resolveRuntime(context, input);
     const desiredSql = await runtime.fs.readFile(runtime.config.definitionsPath);
@@ -122,13 +132,13 @@ export const sqlfuRouter = {
         throw new Error('no draft migration exists to finalize');
       }
 
-        await runtime.fs.writeFile(
-          joinPath(runtime.config.migrationsDir, existingDraft.fileName),
-          serializeMigration('final', existingDraft.body),
-        );
-        await runtime.fs.writeFile(runtime.config.snapshotPath, withTrailingNewline(desiredSql));
-        return;
-      }
+      await runtime.fs.writeFile(
+        joinPath(runtime.config.migrationsDir, existingDraft.fileName),
+        serializeMigration('final', existingDraft.body),
+      );
+      await runtime.fs.writeFile(runtime.config.snapshotPath, withTrailingNewline(desiredSql));
+      return;
+    }
 
     if (existingDraft && wantsName) {
       throw new Error(`draft migration already exists: ${existingDraft.fileName}`);
@@ -195,9 +205,13 @@ export const sqlfuRouter = {
   }),
 };
 
-export function createSqlfuCaller(context: SqlfuRouterContext) {
-  return createRouterClient(sqlfuRouter, {context});
+export const sqlfuRouter = router;
+
+export function createCaller(context: SqlfuRouterContext) {
+  return createRouterClient(router, {context});
 }
+
+export const createSqlfuCaller = createCaller;
 
 async function loadMigrations(context: {config: SqlfuRouterConfig; fs: SqlfuFsLike}): Promise<MigrationFile[]> {
   const exists = await context.fs.exists(context.config.migrationsDir);
@@ -247,12 +261,7 @@ async function resolveRuntime(
     },
     fs: {
       async exists(filePath: string) {
-        try {
-          await fs.access(filePath);
-          return true;
-        } catch {
-          return false;
-        }
+        return fs.access(filePath).then(() => true, () => false);
       },
       async readFile(filePath: string) {
         return fs.readFile(filePath, 'utf8');
@@ -326,7 +335,7 @@ function slugify(value: string): string {
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '') || 'migration';
+    .replace(/^_+|_+$/u, '') || 'migration';
 }
 
 function joinPath(left: string, right: string): string {

@@ -46,10 +46,10 @@ test('generate writes wrappers and a barrel for every checked-in query', async (
     }
 
     export async function listPostSummaries(executor: QueryExecutor): Promise<ListPostSummariesResult[]> {
-    		const sql = \`
-    		select id, slug, published_at, excerpt from post_summaries;
-    		
-    		\`
+    	const sql = \`
+    	select id, slug, published_at, excerpt from post_summaries;
+    	
+    	\`
     	const query: SqlQuery = { sql, args: [] };
     	return executor.query<ListPostSummariesResult>(query);
     }
@@ -69,10 +69,10 @@ test('generate writes wrappers and a barrel for every checked-in query', async (
     }
 
     export async function findPostBySlug(executor: QueryExecutor, params: FindPostBySlugParams): Promise<FindPostBySlugResult | null> {
-    		const sql = \`
-    		select id, slug, body as excerpt from posts where slug = ? limit 1;
-    		
-    		\`
+    	const sql = \`
+    	select id, slug, body as excerpt from posts where slug = ? limit 1;
+    	
+    	\`
     	const query: SqlQuery = { sql, args: [params.slug] };
     	const rows = await executor.query<FindPostBySlugResult>(query);
     	return rows.length > 0 ? rows[0] : null;
@@ -245,10 +245,10 @@ test('generate emits named param types and a nullable single-row result for limi
     }
 
     export async function findPostBySlug(executor: QueryExecutor, params: FindPostBySlugParams): Promise<FindPostBySlugResult | null> {
-    		const sql = \`
-    		select id, slug, title from posts where slug = ? limit 1;
-    		
-    		\`
+    	const sql = \`
+    	select id, slug, title from posts where slug = ? limit 1;
+    	
+    	\`
     	const query: SqlQuery = { sql, args: [params.slug] };
     	const rows = await executor.query<FindPostBySlugResult>(query);
     	return rows.length > 0 ? rows[0] : null;
@@ -281,10 +281,10 @@ test('generate uses schema types for aliased selected columns instead of leaving
     }
 
     export async function findPostPreview(executor: QueryExecutor): Promise<FindPostPreviewResult[]> {
-    		const sql = \`
-    		select id, body as excerpt from posts limit 5;
-    		
-    		\`
+    	const sql = \`
+    	select id, body as excerpt from posts limit 5;
+    	
+    	\`
     	const query: SqlQuery = { sql, args: [] };
     	return executor.query<FindPostPreviewResult>(query);
     }
@@ -316,10 +316,10 @@ test('generate treats selected columns as required when the query narrows them w
     }
 
     export async function findPublishedPostBySlug(executor: QueryExecutor): Promise<FindPublishedPostBySlugResult | null> {
-    		const sql = \`
-    		select id, published_at from posts where published_at is not null limit 1;
-    		
-    		\`
+    	const sql = \`
+    	select id, published_at from posts where published_at is not null limit 1;
+    	
+    	\`
     	const query: SqlQuery = { sql, args: [] };
     	const rows = await executor.query<FindPublishedPostBySlugResult>(query);
     	return rows.length > 0 ? rows[0] : null;
@@ -353,10 +353,10 @@ test('generate preserves useful result types for queries that read through views
     }
 
     export async function listPostSummaries(executor: QueryExecutor): Promise<ListPostSummariesResult[]> {
-    		const sql = \`
-    		select id, excerpt from post_summaries;
-    		
-    		\`
+    	const sql = \`
+    	select id, excerpt from post_summaries;
+    	
+    	\`
     	const query: SqlQuery = { sql, args: [] };
     	return executor.query<ListPostSummariesResult>(query);
     }
@@ -413,10 +413,10 @@ test('generate snapshots insert queries', async () => {
     }
 
     export async function insertPost(executor: QueryExecutor, params: InsertPostParams): Promise<InsertPostResult> {
-    		const sql = \`
-    		insert into posts (slug) values (?);
-    		
-    		\`
+    	const sql = \`
+    	insert into posts (slug) values (?);
+    	
+    	\`
     	const query: SqlQuery = { sql, args: [params.slug] };
     	const result = await executor.query(query);
     	if (result.rowsAffected === undefined) {
@@ -429,6 +429,48 @@ test('generate snapshots insert queries', async () => {
     		rowsAffected: result.rowsAffected,
     		lastInsertRowid: Number(result.lastInsertRowid),
     	};
+    }
+    "
+  `);
+});
+
+test('generate treats insert returning queries as single-row results', async () => {
+  await using project = await createGenerateFixture({
+    definitionsSql: dedent`
+      create table users (id integer primary key, name text not null, email text not null);
+    `,
+    files: {
+      'sql/add-user.sql': `insert into users (name, email) values (:fullName, :emailAddress) returning *;`,
+    },
+  });
+
+  await project.generate();
+
+  const generatedTs = await project.readFile('sql/add-user.ts');
+
+  await expect(project.getCompileDiagnostics()).resolves.toEqual([]);
+  expect(generatedTs).toMatchInlineSnapshot(`
+    "import type {QueryExecutor, SqlQuery} from 'sqlfu';
+
+    export type AddUserParams = {
+    	fullName: string;
+    	emailAddress: string;
+    }
+
+    export type AddUserResult = {
+    	id: number;
+    	name: string;
+    	email: string;
+    }
+
+    export async function addUser(executor: QueryExecutor, params: AddUserParams): Promise<AddUserResult> {
+    	const sql = \`
+    	insert into users (name, email) values (?, ?) returning *;
+    	
+    	\`
+    	const query: SqlQuery = { sql, args: [params.fullName, params.emailAddress] };
+    	const rows = await executor.query<AddUserResult>(query);
+    	return rows[0];
     }
     "
   `);
@@ -465,10 +507,10 @@ test('generate snapshots update queries', async () => {
     }
 
     export async function updatePost(executor: QueryExecutor, data: UpdatePostData, params: UpdatePostParams): Promise<UpdatePostResult> {
-    		const sql = \`
-    		update posts set slug = ? where id = ?;
-    		
-    		\`
+    	const sql = \`
+    	update posts set slug = ? where id = ?;
+    	
+    	\`
     	const query: SqlQuery = { sql, args: [data.slug, params.id] };
     	const result = await executor.query(query);
     	if (result.rowsAffected === undefined) {
@@ -509,10 +551,10 @@ test('generate snapshots delete queries', async () => {
     }
 
     export async function deletePost(executor: QueryExecutor, params: DeletePostParams): Promise<DeletePostResult> {
-    		const sql = \`
-    		delete from posts where id = ?;
-    		
-    		\`
+    	const sql = \`
+    	delete from posts where id = ?;
+    	
+    	\`
     	const query: SqlQuery = { sql, args: [params.id] };
     	const result = await executor.query(query);
     	if (result.rowsAffected === undefined) {
@@ -549,10 +591,10 @@ test('generate snapshots function queries', async () => {
     }
 
     export async function countPosts(executor: QueryExecutor): Promise<CountPostsResult | null> {
-    		const sql = \`
-    		select count(*) as total from posts;
-    		
-    		\`
+    	const sql = \`
+    	select count(*) as total from posts;
+    	
+    	\`
     	const query: SqlQuery = { sql, args: [] };
     	const rows = await executor.query<CountPostsResult>(query);
     	return rows.length > 0 ? rows[0] : null;

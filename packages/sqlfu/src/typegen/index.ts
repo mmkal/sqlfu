@@ -136,6 +136,7 @@ function rewriteGeneratedWrapper(contents: string): string {
   const typeBlocks = extractExportedTypeBlocks(contents);
   const sqlBlock = extractSqlBlock(contents);
   const executeArg = extractExecuteArgument(contents);
+  const resultMode = extractResultMode(contents);
   const queryExpression = executeArg === 'sql' ? '{ sql, args: [] }' : executeArg;
   const resultType = signature.returnType.endsWith('[]')
     ? signature.returnType.slice(0, -2)
@@ -152,7 +153,7 @@ function rewriteGeneratedWrapper(contents: string): string {
     indent(sqlBlock),
     `\tconst query: SqlQuery = ${queryExpression};`,
     ...buildGeneratedImplementation({
-      returnType: signature.returnType,
+      resultMode,
       resultType,
       resultProperties: extractTypeProperties(typeBlocks, resultType),
     }),
@@ -191,7 +192,10 @@ function extractSqlBlock(contents: string): string {
   const lines = contents.split('\n');
   const sqlStart = lines.findIndex((line) => line.trimStart().startsWith('const sql = `'));
   const sqlEnd = lines.findIndex((line, index) => index > sqlStart && line.trim() === '`');
-  return lines.slice(sqlStart, sqlEnd + 1).join('\n');
+  return lines
+    .slice(sqlStart, sqlEnd + 1)
+    .map((line) => line.replace(/^\t/, ''))
+    .join('\n');
 }
 
 function extractExecuteArgument(contents: string): string {
@@ -205,22 +209,49 @@ function extractExecuteArgument(contents: string): string {
   return executeLine.slice(executeLine.indexOf('return client.execute(') + 'return client.execute('.length, -1);
 }
 
+function extractResultMode(contents: string): 'many' | 'nullableOne' | 'one' | 'metadata' {
+  if (!contents.includes(`.then(res => res.rows)`)) {
+    return 'metadata';
+  }
+
+  if (contents.includes(`.then(rows => rows.map(`)) {
+    return 'many';
+  }
+
+  if (contents.includes(`.then(rows => rows.length > 0 ?`)) {
+    return 'nullableOne';
+  }
+
+  if (contents.includes(`.then(rows => mapArrayTo`)) {
+    return 'one';
+  }
+
+  throw new Error('Could not determine generated wrapper result mode');
+}
+
 function buildGeneratedImplementation(input: {
-  returnType: string;
+  resultMode: 'many' | 'nullableOne' | 'one' | 'metadata';
   resultType: string;
   resultProperties: ReadonlyArray<{
     readonly name: string;
     readonly optional: boolean;
   }>;
 }): string[] {
-  if (input.returnType.endsWith('[]')) {
+  if (input.resultMode === 'many') {
     return [`\treturn executor.query<${input.resultType}>(query);`];
   }
 
-  if (input.returnType.endsWith(' | null')) {
+  if (input.resultMode === 'nullableOne') {
     return [
       `\tconst rows = await executor.query<${input.resultType}>(query);`,
       `\treturn rows.length > 0 ? rows[0] : null;`,
+    ];
+  }
+
+  if (input.resultMode === 'one') {
+    return [
+      `\tconst rows = await executor.query<${input.resultType}>(query);`,
+      `\treturn rows[0];`,
     ];
   }
 

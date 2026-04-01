@@ -11,13 +11,14 @@ import {materializeSchemaDatabase} from '../migrator/index.js';
 
 export async function writeTypesqlConfig(overrides: ProjectConfigOverrides = {}): Promise<string> {
   const config = await loadProjectConfig(overrides);
+  await fs.mkdir(path.dirname(config.typesqlConfigPath), {recursive: true});
 
   await fs.writeFile(
     config.typesqlConfigPath,
     JSON.stringify(
       {
         databaseUri: config.tempDbPath,
-        sqlDir: relativeToCwd(config.cwd, config.sqlDir),
+        sqlDir: relativeToConfigFile(config.typesqlConfigPath, config.sqlDir),
         client: 'libsql',
         includeCrudTables: [],
         target: 'node',
@@ -34,7 +35,7 @@ export async function generateQueryTypes(overrides: ProjectConfigOverrides = {})
   const config = await loadProjectConfig(overrides);
   await materializeSchemaDatabase(overrides, config.tempDbPath);
   const typesqlConfigPath = await writeTypesqlConfig(overrides);
-  await runPackageBinary('typesql-cli', ['compile', '--config', typesqlConfigPath], packageRoot);
+  await runPackageBinary('typesql-cli', ['compile', '--config', typesqlConfigPath], config.cwd);
   await refineGeneratedTypes(config.tempDbPath, config.sqlDir);
   // TODO: If we need custom fs support (for example memfs), column-name transforms such as
   // snake_case -> camelCase, direct access to TypeSQL's intermediate descriptors so sqlfu can
@@ -47,6 +48,7 @@ export async function generateQueryTypes(overrides: ProjectConfigOverrides = {})
   // depends on consumers having `typesql-cli` available even though it is an internal implementation
   // detail; that's another reason to eventually vendor the TypeSQL pieces we rely on.
   await rewriteGeneratedWrappers(config.sqlDir, config.generatedImportExtension);
+  await writeTypesqlConfig(overrides);
 }
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(new URL('../../package.json', import.meta.url))));
@@ -504,8 +506,8 @@ async function patchGeneratedTypeFile(filePath: string, columns: ReadonlyMap<str
   }
 }
 
-function relativeToCwd(cwd: string, targetPath: string): string {
-  const relative = targetPath.startsWith(cwd) ? targetPath.slice(cwd.length + 1) : targetPath;
+function relativeToConfigFile(configFilePath: string, targetPath: string): string {
+  const relative = path.relative(path.dirname(configFilePath), targetPath);
   return relative.length > 0 ? relative : '.';
 }
 

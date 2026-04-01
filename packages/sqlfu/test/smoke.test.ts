@@ -51,7 +51,7 @@ LIMIT 1;
     const generatedParameterizedQueryPath = path.join(tempRoot, 'sql', 'find-post-by-slug.ts');
     const migrationPath = path.join(tempRoot, 'migrations');
     const generatedIndexPath = path.join(tempRoot, 'sql', 'index.ts');
-    const generatedTypesqlConfigPath = path.join(tempRoot, 'typesql.json');
+    const generatedTypesqlConfigPath = path.join(tempRoot, '.sqlfu', 'typesql.json');
     const configuredDbPath = path.join(tempRoot, 'app.db');
     const snapshotFilePath = path.join(tempRoot, 'snapshot.sql');
     const [migrationFileName] = await fs.readdir(migrationPath);

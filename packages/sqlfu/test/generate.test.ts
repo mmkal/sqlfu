@@ -17,7 +17,7 @@ test('generate writes wrappers and a barrel for every checked-in query', async (
       create table posts (id integer primary key, slug text not null, body text not null, published_at text);
       create view post_summaries as select id, slug, published_at, body as excerpt from posts;
     `,
-    sqlFiles: {
+    files: {
       'sql/list-post-summaries.sql': `select id, slug, published_at, excerpt from post_summaries;`,
       'sql/find-post-by-slug.sql': `select id, slug, body as excerpt from posts where slug = :slug limit 1;`,
     },
@@ -119,7 +119,7 @@ test('generate can use .ts extensions in the barrel file', async () => {
     definitionsSql: dedent`
       create table posts (id integer primary key, slug text not null);
     `,
-    sqlFiles: {
+    files: {
       'sql/list-posts.sql': `select id, slug from posts;`,
     },
     config: {
@@ -134,12 +134,55 @@ test('generate can use .ts extensions in the barrel file', async () => {
   expect(indexTs).toBe(`export * from "./list-posts.ts";\n`);
 });
 
+test('generate defaults to .ts extensions when tsconfig opts into ts import extensions', async () => {
+  await using project = await createGenerateFixture({
+    definitionsSql: dedent`
+      create table posts (id integer primary key, slug text not null);
+    `,
+    files: {
+      'sql/list-posts.sql': `select id, slug from posts;`,
+      'tsconfig.json': JSON.stringify(
+        { compilerOptions: { allowImportingTsExtensions: true } },
+      ),
+    },
+  });
+
+  await project.generate();
+
+  const indexTs = await project.readFile('sql/index.ts');
+
+  expect(indexTs).toBe(`export * from "./list-posts.ts";\n`);
+});
+
+test('explicit generatedImportExtension overrides tsconfig detection', async () => {
+  await using project = await createGenerateFixture({
+    definitionsSql: dedent`
+      create table posts (id integer primary key, slug text not null);
+    `,
+    files: {
+      'sql/list-posts.sql': `select id, slug from posts;`,
+      'tsconfig.json': JSON.stringify(
+        { compilerOptions: { allowImportingTsExtensions: true } },
+      ),
+    },
+    config: {
+      generatedImportExtension: '.js',
+    },
+  });
+
+  await project.generate();
+
+  const indexTs = await project.readFile('sql/index.ts');
+
+  expect(indexTs).toBe(`export * from "./list-posts.js";\n`);
+});
+
 test('generate emits named param types and a nullable single-row result for limit 1 queries', async () => {
   await using project = await createGenerateFixture({
     definitionsSql: dedent`
       create table posts (id integer primary key, slug text not null, title text);
     `,
-    sqlFiles: {
+    files: {
       'sql/find-post-by-slug.sql': `select id, slug, title from posts where slug = :slug limit 1;`,
     },
   });
@@ -196,7 +239,7 @@ test('generate uses schema types for aliased selected columns instead of leaving
     definitionsSql: dedent`
       create table posts (id integer primary key, body text not null);
     `,
-    sqlFiles: {
+    files: {
       'sql/find-post-preview.sql': `select id, body as excerpt from posts limit 5;`,
     },
   });
@@ -247,7 +290,7 @@ test('generate treats selected columns as required when the query narrows them w
     definitionsSql: dedent`
       create table posts (id integer primary key, published_at text);
     `,
-    sqlFiles: {
+    files: {
       'sql/find-published-post-by-slug.sql': `select id, published_at from posts where published_at is not null limit 1;`,
     },
   });
@@ -299,7 +342,7 @@ test('generate preserves useful result types for queries that read through views
       create table posts (id integer primary key, body text not null);
       create view post_summaries as select id, body as excerpt from posts;
     `,
-    sqlFiles: {
+    files: {
       'sql/list-post-summaries.sql': `select id, excerpt from post_summaries;`,
     },
   });
@@ -350,7 +393,7 @@ test('generate infers simple expression aliases like substr in result types', as
     definitionsSql: dedent`
       create table posts (body text not null);
     `,
-    sqlFiles: {
+    files: {
       'sql/list-post-cards.sql': `select substr(body, 1, 20) as excerpt from posts;`,
     },
   });
@@ -371,7 +414,7 @@ test('generate snapshots insert queries', async () => {
     definitionsSql: dedent`
       create table posts (id integer primary key, slug text not null);
     `,
-    sqlFiles: {
+    files: {
       'sql/insert-post.sql': `insert into posts (slug) values (:slug);`,
     },
   });
@@ -425,7 +468,7 @@ test('generate snapshots update queries', async () => {
     definitionsSql: dedent`
       create table posts (id integer primary key, slug text not null);
     `,
-    sqlFiles: {
+    files: {
       'sql/update-post.sql': `update posts set slug = :slug where id = :id;`,
     },
   });
@@ -481,7 +524,7 @@ test('generate snapshots delete queries', async () => {
     definitionsSql: dedent`
       create table posts (id integer primary key, slug text not null);
     `,
-    sqlFiles: {
+    files: {
       'sql/delete-post.sql': `delete from posts where id = :id;`,
     },
   });
@@ -533,7 +576,7 @@ test('generate snapshots function queries', async () => {
     definitionsSql: dedent`
       create table posts (id integer primary key, slug text not null);
     `,
-    sqlFiles: {
+    files: {
       'sql/count-posts.sql': `select count(*) as total from posts;`,
     },
   });
@@ -582,7 +625,7 @@ test('generate snapshots user-defined function queries', async () => {
     definitionsSql: dedent`
       create table posts (slug text not null);
     `,
-    sqlFiles: {
+    files: {
       'sql/list-normalized-slugs.sql': `select my_slugify(slug) as normalized_slug from posts;`,
     },
   });
@@ -604,7 +647,7 @@ test('generate snapshots cte queries with the works in one query', async () => {
     definitionsSql: dedent`
       create table posts (id integer primary key, slug text not null);
     `,
-    sqlFiles: {
+    files: {
       'sql/sync-post-from-cte.sql': dedent`
         with incoming as (select :id as id, :slug as slug),
         inserted as (
@@ -640,7 +683,7 @@ test('generate snapshots cte queries with the works in one query', async () => {
 
 async function createGenerateFixture(input: {
   definitionsSql: string;
-  sqlFiles: Record<string, string>;
+  files: Record<string, string>;
   config?: {
     generatedImportExtension?: '.js' | '.ts';
   };
@@ -655,7 +698,7 @@ async function createGenerateFixture(input: {
         snapshotFile: './snapshot.sql',
         definitionsPath: './definitions.sql',
         sqlDir: './sql',
-        generatedImportExtension: '${input.config?.generatedImportExtension ?? '.js'}',
+        ${input.config?.generatedImportExtension ? `generatedImportExtension: '${input.config.generatedImportExtension}',` : ''}
         tempDir: './.sqlfu',
         tempDbPath: './.sqlfu/typegen.db',
         typesqlConfigPath: './typesql.json',
@@ -663,7 +706,7 @@ async function createGenerateFixture(input: {
     `,
   );
 
-  for (const [relativePath, contents] of Object.entries(input.sqlFiles)) {
+  for (const [relativePath, contents] of Object.entries(input.files)) {
     const fullPath = path.join(root, relativePath);
     await fs.mkdir(path.dirname(fullPath), {recursive: true});
     await fs.writeFile(fullPath, `${contents.trim()}\n`);

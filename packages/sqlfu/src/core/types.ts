@@ -84,32 +84,16 @@ export interface SqlfuConfig {
   readonly definitionsPath: string;
   readonly sqlDir: string;
   readonly generatedImportExtension?: '.js' | '.ts';
-  readonly tempDir?: string;
-  readonly tempDbPath?: string;
-  readonly typesqlConfigPath?: string;
-  readonly sqlite3defVersion?: string;
-  readonly sqlite3defBinaryPath?: string;
 }
 
 export interface SqlfuProjectConfig {
-  readonly cwd: string;
-  readonly configPath?: string;
+  readonly projectRoot: string;
   readonly dbPath: string;
   readonly migrationsDir: string;
   readonly snapshotFile: string;
   readonly definitionsPath: string;
   readonly sqlDir: string;
   readonly generatedImportExtension: '.js' | '.ts';
-  readonly tempDir: string;
-  readonly tempDbPath: string;
-  readonly typesqlConfigPath: string;
-  readonly sqlite3defVersion: string;
-  readonly sqlite3defBinaryPath: string;
-}
-
-export interface ProjectConfigOverrides {
-  readonly cwd?: string;
-  readonly configPath?: string;
 }
 
 export interface MigrateDiffResult {

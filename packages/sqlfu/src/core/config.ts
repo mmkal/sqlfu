@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 
-import type {ProjectConfigOverrides, SqlfuConfig, SqlfuProjectConfig} from './types.js';
+import type {SqlfuConfig, SqlfuProjectConfig} from './types.js';
 
 export const defaultSqlite3defVersion = 'v3.10.1';
 const defaultConfigFileNames = ['sqlfu.config.ts', 'sqlfu.config.mjs', 'sqlfu.config.js', 'sqlfu.config.cjs'] as const;
@@ -11,38 +11,29 @@ export function defineConfig(config: SqlfuConfig): SqlfuConfig {
   return config;
 }
 
-export async function loadProjectConfig(overrides: ProjectConfigOverrides = {}): Promise<SqlfuProjectConfig> {
-  const cwd = path.resolve(overrides.cwd ?? process.cwd());
-  const configPath = await resolveConfigPath(cwd, overrides.configPath);
+export async function loadProjectConfig(): Promise<SqlfuProjectConfig> {
+  const cwd = path.resolve(process.cwd());
+  const configPath = await resolveConfigPath(cwd);
   const fileConfig = await loadConfigFile(configPath);
   const tsconfigPreferences = await loadTsconfigPreferences(path.dirname(configPath));
-  return resolveProjectConfig(overrides, fileConfig, configPath, tsconfigPreferences);
+  return resolveProjectConfig(fileConfig, configPath, tsconfigPreferences);
 }
 
 export function resolveProjectConfig(
-  overrides: ProjectConfigOverrides = {},
   fileConfig: SqlfuConfig,
   configPath: string,
   tsconfigPreferences: TsconfigPreferences = {},
 ): SqlfuProjectConfig {
-  const cwd = path.resolve(overrides.cwd ?? process.cwd());
   const configDir = path.dirname(configPath);
-  const tempDir = resolveConfigPathValue(cwd, configDir, fileConfig.tempDir ?? '.sqlfu');
 
   return {
-    cwd,
-    configPath,
-    dbPath: resolveConfigPathValue(cwd, configDir, fileConfig.dbPath),
-    migrationsDir: resolveConfigPathValue(cwd, configDir, fileConfig.migrationsDir),
-    snapshotFile: resolveConfigPathValue(cwd, configDir, fileConfig.snapshotFile),
-    definitionsPath: resolveConfigPathValue(cwd, configDir, fileConfig.definitionsPath),
-    sqlDir: resolveConfigPathValue(cwd, configDir, fileConfig.sqlDir),
+    projectRoot: configDir,
+    dbPath: resolveConfigPathValue(configDir, fileConfig.dbPath),
+    migrationsDir: resolveConfigPathValue(configDir, fileConfig.migrationsDir),
+    snapshotFile: resolveConfigPathValue(configDir, fileConfig.snapshotFile),
+    definitionsPath: resolveConfigPathValue(configDir, fileConfig.definitionsPath),
+    sqlDir: resolveConfigPathValue(configDir, fileConfig.sqlDir),
     generatedImportExtension: fileConfig.generatedImportExtension ?? inferGeneratedImportExtension(tsconfigPreferences),
-    tempDir,
-    tempDbPath: resolveConfigPathValue(cwd, configDir, fileConfig.tempDbPath ?? path.join('.sqlfu', 'typegen.db')),
-    typesqlConfigPath: resolveConfigPathValue(cwd, configDir, fileConfig.typesqlConfigPath ?? path.join('.sqlfu', 'typesql.json')),
-    sqlite3defVersion: fileConfig.sqlite3defVersion ?? defaultSqlite3defVersion,
-    sqlite3defBinaryPath: resolveConfigPathValue(cwd, configDir, fileConfig.sqlite3defBinaryPath ?? path.join(tempDir, 'bin', 'sqlite3def')),
   };
 }
 
@@ -50,17 +41,7 @@ type TsconfigPreferences = {
   readonly prefersTsImportExtensions?: boolean;
 };
 
-async function resolveConfigPath(cwd: string, configPath?: string): Promise<string> {
-  if (configPath) {
-    const resolved = path.resolve(cwd, configPath);
-    try {
-      await fs.access(resolved);
-      return resolved;
-    } catch {
-      throw new Error(`No sqlfu config found at ${resolved}`);
-    }
-  }
-
+async function resolveConfigPath(cwd: string): Promise<string> {
   for (const candidate of defaultConfigFileNames) {
     const resolved = path.resolve(cwd, candidate);
     try {
@@ -166,6 +147,6 @@ function assertConfigShape(configPath: string, config: object): asserts config i
   }
 }
 
-function resolveConfigPathValue(cwd: string, configDir: string, configValue: string): string {
-  return path.resolve(path.isAbsolute(configValue) ? cwd : configDir, configValue);
+function resolveConfigPathValue(configDir: string, configValue: string): string {
+  return path.resolve(configDir, configValue);
 }

@@ -1,21 +1,24 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+
+const sqlite3defVersion = 'v3.10.1';
+const packageRoot = fileURLToPath(new URL('../../', import.meta.url));
+const sqlite3defBinaryPath = path.join(packageRoot, '.sqlfu', 'bin', 'sqlite3def');
 
 interface Sqlite3defBinaryConfig {
   readonly tempDir: string;
-  readonly sqlite3defVersion: string;
-  readonly sqlite3defBinaryPath: string;
 }
 
 export async function ensureSqlite3defBinary(config: Sqlite3defBinaryConfig): Promise<string> {
   try {
-    await fs.access(config.sqlite3defBinaryPath);
-    return config.sqlite3defBinaryPath;
+    await fs.access(sqlite3defBinaryPath);
+    return sqlite3defBinaryPath;
   } catch {
-    await fs.mkdir(path.dirname(config.sqlite3defBinaryPath), {recursive: true});
+    await fs.mkdir(path.dirname(sqlite3defBinaryPath), {recursive: true});
     await downloadAndExtractBinary(config);
-    return config.sqlite3defBinaryPath;
+    return sqlite3defBinaryPath;
   }
 }
 
@@ -45,7 +48,7 @@ function getArchiveInfo(version: string): {url: string; binaryName: string; arch
 }
 
 async function downloadAndExtractBinary(config: Sqlite3defBinaryConfig): Promise<void> {
-  const archive = getArchiveInfo(config.sqlite3defVersion);
+  const archive = getArchiveInfo(sqlite3defVersion);
   const archivePath = path.join(config.tempDir, `${archive.binaryName}.${archive.archiveType}`);
 
   const response = await fetch(archive.url);
@@ -61,10 +64,10 @@ async function downloadAndExtractBinary(config: Sqlite3defBinaryConfig): Promise
   await new Promise<void>((resolve, reject) => {
     const child =
       archive.archiveType === 'zip'
-        ? childProcess.spawn('unzip', ['-o', archivePath, '-d', path.dirname(config.sqlite3defBinaryPath)], {
+        ? childProcess.spawn('unzip', ['-o', archivePath, '-d', path.dirname(sqlite3defBinaryPath)], {
             stdio: 'inherit',
           })
-        : childProcess.spawn('tar', ['-xzf', archivePath, '-C', path.dirname(config.sqlite3defBinaryPath)], {
+        : childProcess.spawn('tar', ['-xzf', archivePath, '-C', path.dirname(sqlite3defBinaryPath)], {
             stdio: 'inherit',
           });
     child.on('exit', (code) => {
@@ -77,6 +80,6 @@ async function downloadAndExtractBinary(config: Sqlite3defBinaryConfig): Promise
     child.on('error', reject);
   });
 
-  await fs.chmod(config.sqlite3defBinaryPath, 0o755);
+  await fs.chmod(sqlite3defBinaryPath, 0o755);
   await fs.rm(archivePath, {force: true});
 }

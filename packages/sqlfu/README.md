@@ -59,13 +59,7 @@ Required config fields:
 - `definitionsPath`: schema source of truth
 - `sqlDir`: directory containing checked-in `.sql` queries
 
-Optional config fields:
-
-- `tempDir`: working directory for downloaded binaries and generated temp databases
-- `tempDbPath`: schema-materialized database used during `sqlfu generate`
-- `typesqlConfigPath`: generated TypeSQL config path
-- `sqlite3defBinaryPath`: custom `sqlite3def` binary location
-- `sqlite3defVersion`: `sqlite3def` release to auto-download
+`sqlfu` manages its own temporary files under `.sqlfu/` and uses a fixed bundled `sqlite3def` version internally.
 
 ## Commands
 

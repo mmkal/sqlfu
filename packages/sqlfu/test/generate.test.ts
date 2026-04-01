@@ -9,7 +9,6 @@ import {expect, test} from 'vitest';
 import {generateQueryTypes} from '../src/typegen/index.js';
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const sqlite3defBinaryPath = path.join(packageRoot, '.sqlfu', 'bin', 'sqlite3def');
 
 test('generate writes wrappers and a barrel for every checked-in query', async () => {
   await using project = await createGenerateFixture({
@@ -28,7 +27,7 @@ test('generate writes wrappers and a barrel for every checked-in query', async (
   const listPostSummariesTs = await project.readFile('sql/list-post-summaries.ts');
   const findPostBySlugTs = await project.readFile('sql/find-post-by-slug.ts');
   const indexTs = await project.readFile('sql/index.ts');
-  const typesqlJson = await project.readFile('typesql.json');
+  const typesqlJson = await project.readFile('.sqlfu/typesql.json');
 
   expect(indexTs).toMatch(/list-post-summaries\.js/);
   expect(indexTs).toMatch(/find-post-by-slug\.js/);
@@ -690,10 +689,6 @@ async function createGenerateFixture(input: {
         definitionsPath: './definitions.sql',
         sqlDir: './sql',
         ${input.config?.generatedImportExtension ? `generatedImportExtension: '${input.config.generatedImportExtension}',` : ''}
-        tempDir: './.sqlfu',
-        tempDbPath: './.sqlfu/typegen.db',
-        typesqlConfigPath: './typesql.json',
-        sqlite3defBinaryPath: ${JSON.stringify(sqlite3defBinaryPath)},
       };
     `,
   );
@@ -706,7 +701,7 @@ async function createGenerateFixture(input: {
 
   return {
     async generate() {
-      await generateQueryTypes({cwd: root});
+      await inWorkingDirectory(root, () => generateQueryTypes());
     },
     async readFile(relativePath: string) {
       return fs.readFile(path.join(root, relativePath), 'utf8');
@@ -741,4 +736,14 @@ async function createGenerateFixture(input: {
       await fs.rm(root, {recursive: true, force: true});
     },
   };
+}
+
+async function inWorkingDirectory<TResult>(cwd: string, fn: () => Promise<TResult>): Promise<TResult> {
+  const previousCwd = process.cwd();
+  process.chdir(cwd);
+  try {
+    return await fn();
+  } finally {
+    process.chdir(previousCwd);
+  }
 }

@@ -21,7 +21,7 @@ const base = os.$context<SqlfuRouterContext>();
 
 export const router = {
   generate: base.handler(async ({context}) => {
-    await generateQueryTypes({configPath: context.projectConfig.configPath});
+    await generateQueryTypes();
     return 'Generated schema-derived database and TypeSQL outputs.';
   }),
 
@@ -157,7 +157,7 @@ async function resolveRuntime(context: SqlfuRouterContext): Promise<{
   db: SqlfuDatabaseLike;
   [Symbol.asyncDispose](): Promise<void>;
 }> {
-  const stagedSqlPath = path.join(context.projectConfig.tempDir, 'cli-applied.sql');
+  const stagedSqlPath = path.join(context.projectConfig.projectRoot, '.sqlfu', 'cli-applied.sql');
   const defaultFs: SqlfuFsLike = {
     async exists(filePath: string) {
       return fs.access(filePath).then(() => true, () => false);
@@ -180,10 +180,22 @@ async function resolveRuntime(context: SqlfuRouterContext): Promise<{
     async applySchema(sql: string) {
       await fs.mkdir(path.dirname(stagedSqlPath), {recursive: true});
       await fs.writeFile(stagedSqlPath, sql);
-      await runSqlite3def(context.projectConfig, ['--apply', '--file', stagedSqlPath, context.projectConfig.dbPath]);
+      await runSqlite3def(
+        {
+          ...createDefaultSqlite3defConfig('orpc-runtime'),
+          projectRoot: context.projectConfig.projectRoot,
+        },
+        ['--apply', '--file', stagedSqlPath, context.projectConfig.dbPath],
+      );
     },
     async exportSchema() {
-      return runSqlite3def(context.projectConfig, ['--export', context.projectConfig.dbPath]);
+      return runSqlite3def(
+        {
+          ...createDefaultSqlite3defConfig('orpc-runtime'),
+          projectRoot: context.projectConfig.projectRoot,
+        },
+        ['--export', context.projectConfig.dbPath],
+      );
     },
   };
 

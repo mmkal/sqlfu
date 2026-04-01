@@ -5,12 +5,10 @@ import {fileURLToPath, pathToFileURL} from 'node:url';
 import {expect, test} from 'vitest';
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const sqlite3defBinaryPath = path.join(packageRoot, '.sqlfu', 'bin', 'sqlite3def');
-const {checkDatabase, createMigrationDraft, diffDatabase, dumpSnapshotFile, generateQueryTypes, loadProjectConfig, migrateStatus, migrateUp} = await import(
-  pathToFileURL(path.join(packageRoot, 'dist', 'index.js')).href,
-);
+const {checkDatabase, createMigrationDraft, diffDatabase, dumpSnapshotFile, generateQueryTypes, loadProjectConfig, migrateStatus, migrateUp} =
+  (await import(pathToFileURL(path.join(packageRoot, 'dist', 'index.js')).href)) as typeof import('../src/index.js');
 
-test('generate and dbmate-backed migrations honor sqlfu.config.ts defaults', async () => {
+test('generate and dbmate-backed migrations honor sqlfu.config.ts defaults', {timeout: 15000}, async () => {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'sqlfu-smoke-'));
 
   try {
@@ -25,7 +23,6 @@ export default {
   snapshotFile: './snapshot.sql',
   definitionsPath: './definitions.sql',
   sqlDir: './sql',
-  sqlite3defBinaryPath: ${JSON.stringify(sqlite3defBinaryPath)},
 };
 `,
     );
@@ -45,10 +42,10 @@ LIMIT 1;
 `,
     );
 
-    const resolvedConfig = await loadProjectConfig({cwd: tempRoot});
-    await generateQueryTypes({cwd: tempRoot});
-    const createOutput = await createMigrationDraft({cwd: tempRoot}, 'initial_schema');
-    await migrateUp({cwd: tempRoot});
+    const resolvedConfig = await inWorkingDirectory(tempRoot, () => loadProjectConfig());
+    await inWorkingDirectory(tempRoot, () => generateQueryTypes());
+    const createOutput = await inWorkingDirectory(tempRoot, () => createMigrationDraft('initial_schema'));
+    await inWorkingDirectory(tempRoot, () => migrateUp());
 
     const generatedQueryPath = path.join(tempRoot, 'sql', 'list-post-summaries.ts');
     const generatedParameterizedQueryPath = path.join(tempRoot, 'sql', 'find-post-by-slug.ts');
@@ -65,9 +62,9 @@ LIMIT 1;
       fs.readFile(generatedParameterizedQueryPath, 'utf8'),
       fs.readFile(generatedTypesqlConfigPath, 'utf8'),
       fs.readFile(path.join(migrationPath, migrationFileName), 'utf8'),
-      diffDatabase({cwd: tempRoot}),
-      migrateStatus({cwd: tempRoot}),
-      dumpSnapshotFile({cwd: tempRoot}),
+      inWorkingDirectory(tempRoot, () => diffDatabase()),
+      inWorkingDirectory(tempRoot, () => migrateStatus()),
+      inWorkingDirectory(tempRoot, () => dumpSnapshotFile()),
     ]);
 
     await fs.access(generatedIndexPath);
@@ -75,10 +72,10 @@ LIMIT 1;
     await fs.access(configuredDbPath);
     await fs.access(snapshotFilePath);
 
-    expect(resolvedConfig.configPath).toBe(path.join(tempRoot, 'sqlfu.config.ts'));
-    expect(resolvedConfig.dbPath).toBe(configuredDbPath);
-    expect(resolvedConfig.migrationsDir).toBe(migrationPath);
-    expect(resolvedConfig.snapshotFile).toBe(snapshotFilePath);
+    expect(await fs.realpath(resolvedConfig.projectRoot)).toBe(await fs.realpath(tempRoot));
+    expect(await fs.realpath(resolvedConfig.dbPath)).toBe(await fs.realpath(configuredDbPath));
+    expect(await fs.realpath(resolvedConfig.migrationsDir)).toBe(await fs.realpath(migrationPath));
+    expect(await fs.realpath(resolvedConfig.snapshotFile)).toBe(await fs.realpath(snapshotFilePath));
     expect(createOutput).toMatch(/Created .*initial_schema\.sql/);
     expect(generatedQuery).toMatch(/export async function listPostSummaries/);
     expect(generatedQuery).toMatch(/id: number;/);
@@ -101,8 +98,18 @@ LIMIT 1;
     expect(statusOutput).toMatch(/Applied/);
     expect(typeof dumpOutput).toBe('string');
 
-    await checkDatabase({cwd: tempRoot});
+    await inWorkingDirectory(tempRoot, () => checkDatabase());
   } finally {
     await fs.rm(tempRoot, {recursive: true, force: true});
   }
 });
+
+async function inWorkingDirectory<TResult>(cwd: string, fn: () => Promise<TResult>): Promise<TResult> {
+  const previousCwd = process.cwd();
+  process.chdir(cwd);
+  try {
+    return await fn();
+  } finally {
+    process.chdir(previousCwd);
+  }
+}

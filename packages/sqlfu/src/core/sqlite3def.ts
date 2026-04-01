@@ -3,25 +3,21 @@ import path from 'node:path';
 import {spawn} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 
-import {defaultSqlite3defVersion} from './config.js';
 import {ensureSqlite3defBinary} from '../migrator/binary.js';
 
+const packageRoot = fileURLToPath(new URL('../../', import.meta.url));
+const sharedSqlite3defDir = path.join(packageRoot, '.sqlfu');
+
 export interface Sqlite3defConfig {
-  readonly cwd: string;
+  readonly projectRoot: string;
   readonly tempDir: string;
-  readonly sqlite3defVersion: string;
-  readonly sqlite3defBinaryPath: string;
 }
 
 export function createDefaultSqlite3defConfig(scope = 'default'): Sqlite3defConfig {
-  const packageRoot = fileURLToPath(new URL('../../', import.meta.url));
-  const sharedTempDir = path.join(packageRoot, '.sqlfu');
-  const tempDir = path.join(sharedTempDir, scope);
+  const tempDir = path.join(sharedSqlite3defDir, scope);
   return {
-    cwd: process.cwd(),
+    projectRoot: process.cwd(),
     tempDir,
-    sqlite3defVersion: defaultSqlite3defVersion,
-    sqlite3defBinaryPath: path.join(sharedTempDir, 'bin', 'sqlite3def'),
   };
 }
 
@@ -30,7 +26,7 @@ export async function runSqlite3def(config: Sqlite3defConfig, args: readonly str
 
   return new Promise<string>((resolve, reject) => {
     const child = spawn(binaryPath, [...args], {
-      cwd: config.cwd,
+      cwd: config.projectRoot,
       env: process.env,
     });
 

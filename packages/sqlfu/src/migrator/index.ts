@@ -3,14 +3,14 @@ import path from 'node:path';
 
 import {loadProjectConfig} from '../core/config.js';
 import {runPackageBinary} from '../core/tooling.js';
-import {diffSnapshotSqlToDesiredSql, getMeaningfulDiffLines, runSqlite3def} from '../core/sqlite3def.js';
-import type {MigrateDiffResult, ProjectConfigOverrides, SqlfuProjectConfig} from '../core/types.js';
+import {createDefaultSqlite3defConfig, diffSnapshotSqlToDesiredSql, getMeaningfulDiffLines, runSqlite3def} from '../core/sqlite3def.js';
+import type {MigrateDiffResult, SqlfuProjectConfig} from '../core/types.js';
 
-export async function diffDatabase(overrides: ProjectConfigOverrides = {}, dbPath?: string): Promise<MigrateDiffResult> {
-  const config = await loadProjectConfig(overrides);
+export async function diffDatabase(dbPath?: string): Promise<MigrateDiffResult> {
+  const config = await loadProjectConfig();
   await assertDefinitionsExists(config);
   const target = dbPath ?? config.dbPath;
-  const output = await runSqlite3def(config, ['--dry-run', '--file', config.definitionsPath, target]);
+  const output = await runSqlite3def(sqlite3defConfig(config), ['--dry-run', '--file', config.definitionsPath, target]);
   const drift = hasMeaningfulDiff(output);
   return {
     drift,
@@ -18,22 +18,22 @@ export async function diffDatabase(overrides: ProjectConfigOverrides = {}, dbPat
   };
 }
 
-export async function applyDefinitions(overrides: ProjectConfigOverrides = {}, dbPath?: string): Promise<string> {
-  const config = await loadProjectConfig(overrides);
+export async function applyDefinitions(dbPath?: string): Promise<string> {
+  const config = await loadProjectConfig();
   await assertDefinitionsExists(config);
   const target = dbPath ?? config.dbPath;
   await fs.mkdir(path.dirname(target), {recursive: true});
-  return runSqlite3def(config, ['--apply', '--file', config.definitionsPath, target]);
+  return runSqlite3def(sqlite3defConfig(config), ['--apply', '--file', config.definitionsPath, target]);
 }
 
-export async function exportSchema(overrides: ProjectConfigOverrides = {}, dbPath?: string): Promise<string> {
-  const config = await loadProjectConfig(overrides);
+export async function exportSchema(dbPath?: string): Promise<string> {
+  const config = await loadProjectConfig();
   const target = dbPath ?? config.dbPath;
-  return runSqlite3def(config, ['--export', target]);
+  return runSqlite3def(sqlite3defConfig(config), ['--export', target]);
 }
 
-export async function createMigrationDraft(overrides: ProjectConfigOverrides = {}, name: string): Promise<string> {
-  const config = await loadProjectConfig(overrides);
+export async function createMigrationDraft(name: string): Promise<string> {
+  const config = await loadProjectConfig();
   await assertDefinitionsExists(config);
   await fs.mkdir(config.migrationsDir, {recursive: true});
 
@@ -49,37 +49,37 @@ export async function createMigrationDraft(overrides: ProjectConfigOverrides = {
   return `Created ${migrationPath}`;
 }
 
-export async function migrateUp(overrides: ProjectConfigOverrides = {}): Promise<string> {
-  const config = await loadProjectConfig(overrides);
+export async function migrateUp(): Promise<string> {
+  const config = await loadProjectConfig();
   return runDbmate(config, ['up']);
 }
 
-export async function migrateStatus(overrides: ProjectConfigOverrides = {}): Promise<string> {
-  const config = await loadProjectConfig(overrides);
+export async function migrateStatus(): Promise<string> {
+  const config = await loadProjectConfig();
   return runDbmate(config, ['status']);
 }
 
-export async function dumpSnapshotFile(overrides: ProjectConfigOverrides = {}): Promise<string> {
-  const config = await loadProjectConfig(overrides);
+export async function dumpSnapshotFile(): Promise<string> {
+  const config = await loadProjectConfig();
   return runDbmate(config, ['dump']);
 }
 
-export async function checkDatabase(overrides: ProjectConfigOverrides = {}, dbPath?: string): Promise<void> {
-  const result = await diffDatabase(overrides, dbPath);
+export async function checkDatabase(dbPath?: string): Promise<void> {
+  const result = await diffDatabase(dbPath);
   if (result.drift) {
     throw new Error(result.output.trim() || 'Schema drift detected.');
   }
 }
 
-export async function materializeSchemaDatabase(overrides: ProjectConfigOverrides = {}, dbPath?: string): Promise<string> {
-  const config = await loadProjectConfig(overrides);
-  const target = dbPath ?? config.tempDbPath;
+export async function materializeSchemaDatabase(dbPath: string): Promise<string> {
+  await loadProjectConfig();
+  const target = dbPath;
 
   await fs.mkdir(path.dirname(target), {recursive: true});
   await fs.rm(target, {force: true});
   await fs.rm(`${target}-shm`, {force: true});
   await fs.rm(`${target}-wal`, {force: true});
-  await applyDefinitions(overrides, target);
+  await applyDefinitions(target);
   return target;
 }
 
@@ -95,10 +95,17 @@ function hasMeaningfulDiff(output: string): boolean {
   return getMeaningfulDiffLines(output).length > 0;
 }
 
+function sqlite3defConfig(config: SqlfuProjectConfig) {
+  return {
+    ...createDefaultSqlite3defConfig('project'),
+    projectRoot: config.projectRoot,
+  };
+}
+
 async function draftMigrationSql(config: SqlfuProjectConfig): Promise<string> {
   const snapshotSql = (await fileExists(config.snapshotFile)) ? await fs.readFile(config.snapshotFile, 'utf8') : '';
   const desiredSql = await fs.readFile(config.definitionsPath, 'utf8');
-  const lines = await diffSnapshotSqlToDesiredSql(config, {snapshotSql, desiredSql});
+  const lines = await diffSnapshotSqlToDesiredSql(sqlite3defConfig(config), {snapshotSql, desiredSql});
 
   if (lines.length === 0) {
     return '-- No schema changes detected between snapshot.sql and definitions.sql.';
@@ -132,7 +139,7 @@ async function runDbmate(config: SqlfuProjectConfig, args: readonly string[]): P
       config.snapshotFile,
       ...args,
     ],
-    config.cwd,
+    config.projectRoot,
   );
 }
 

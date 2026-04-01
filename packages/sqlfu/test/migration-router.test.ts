@@ -364,19 +364,13 @@ async function createProjectFixture(input: {
 
   const db = createRealDatabase(path.join(root, 'dev.db'));
   const projectConfig: SqlfuProjectConfig = {
-    cwd: root,
-    configPath: path.join(root, 'sqlfu.config.ts'),
+    projectRoot: root,
     dbPath: path.join(root, 'dev.db'),
     migrationsDir: path.join(root, 'migrations'),
     snapshotFile: path.join(root, 'snapshot.sql'),
     definitionsPath: path.join(root, 'definitions.sql'),
     sqlDir: path.join(root, 'sql'),
     generatedImportExtension: '.js',
-    tempDir: path.join(root, '.sqlfu'),
-    tempDbPath: path.join(root, '.sqlfu', 'typegen.db'),
-    typesqlConfigPath: path.join(root, '.sqlfu', 'typesql.json'),
-    sqlite3defVersion: 'test',
-    sqlite3defBinaryPath: path.join(root, '.sqlfu', 'bin', 'sqlite3def'),
   };
   const context = {
     projectConfig,

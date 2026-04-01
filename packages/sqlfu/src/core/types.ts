@@ -78,11 +78,11 @@ export type SqlTag = SyncSqlTag | AsyncSqlTag;
 export type SqlValue = QueryArg | SqlFragment;
 
 export interface SqlfuConfig {
-  readonly dbPath?: string;
-  readonly migrationsDir?: string;
-  readonly snapshotFile?: string;
-  readonly definitionsPath?: string;
-  readonly sqlDir?: string;
+  readonly dbPath: string;
+  readonly migrationsDir: string;
+  readonly snapshotFile: string;
+  readonly definitionsPath: string;
+  readonly sqlDir: string;
   readonly generatedImportExtension?: '.js' | '.ts';
   readonly tempDir?: string;
   readonly tempDbPath?: string;
@@ -107,7 +107,7 @@ export interface SqlfuProjectConfig {
   readonly sqlite3defBinaryPath: string;
 }
 
-export interface ProjectConfigOverrides extends SqlfuConfig {
+export interface ProjectConfigOverrides {
   readonly cwd?: string;
   readonly configPath?: string;
 }

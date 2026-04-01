@@ -23,6 +23,9 @@ export default {
   dbPath: './app.db',
   migrationsDir: './migrations',
   snapshotFile: './snapshot.sql',
+  definitionsPath: './definitions.sql',
+  sqlDir: './sql',
+  sqlite3defBinaryPath: ${JSON.stringify(sqlite3defBinaryPath)},
 };
 `,
     );
@@ -43,8 +46,8 @@ LIMIT 1;
     );
 
     const resolvedConfig = await loadProjectConfig({cwd: tempRoot});
-    await generateQueryTypes({cwd: tempRoot, sqlite3defBinaryPath});
-    const createOutput = await createMigrationDraft({cwd: tempRoot, sqlite3defBinaryPath}, 'initial_schema');
+    await generateQueryTypes({cwd: tempRoot});
+    const createOutput = await createMigrationDraft({cwd: tempRoot}, 'initial_schema');
     await migrateUp({cwd: tempRoot});
 
     const generatedQueryPath = path.join(tempRoot, 'sql', 'list-post-summaries.ts');
@@ -62,7 +65,7 @@ LIMIT 1;
       fs.readFile(generatedParameterizedQueryPath, 'utf8'),
       fs.readFile(generatedTypesqlConfigPath, 'utf8'),
       fs.readFile(path.join(migrationPath, migrationFileName), 'utf8'),
-      diffDatabase({cwd: tempRoot, sqlite3defBinaryPath}),
+      diffDatabase({cwd: tempRoot}),
       migrateStatus({cwd: tempRoot}),
       dumpSnapshotFile({cwd: tempRoot}),
     ]);
@@ -98,7 +101,7 @@ LIMIT 1;
     expect(statusOutput).toMatch(/Applied/);
     expect(typeof dumpOutput).toBe('string');
 
-    await checkDatabase({cwd: tempRoot, sqlite3defBinaryPath});
+    await checkDatabase({cwd: tempRoot});
   } finally {
     await fs.rm(tempRoot, {recursive: true, force: true});
   }

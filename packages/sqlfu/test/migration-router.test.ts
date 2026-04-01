@@ -7,6 +7,7 @@ import {createRouterClient} from '@orpc/server';
 import {expect, test} from 'vitest';
 
 import {sqlfuRouter} from '../src/api.js';
+import type {SqlfuProjectConfig} from '../src/core/types.js';
 
 test('draft creates the single mutable migration from finalized history to definitions.sql', async () => {
   await using project = await createProjectFixture({
@@ -241,7 +242,7 @@ test('sync fixes a drifted development database without mutating migrations or s
   expect(await project.fs.readFile('snapshot.sql')).toBe(beforeSnapshot);
 });
 
-test('check respects injected config and db even when fs falls back to the default filesystem', async () => {
+test('check respects injected project config and db even when fs falls back to the default filesystem', async () => {
   await using project = await createProjectFixture({
     definitionsSql: dedent`
       create table users (id int, email text);
@@ -259,12 +260,7 @@ test('check respects injected config and db even when fs falls back to the defau
   let exportSchemaCalls = 0;
   const caller = createRouterClient(sqlfuRouter, {
     context: {
-      config: {
-        definitionsPath: resolvePath(project.root, 'definitions.sql'),
-        migrationsDir: resolvePath(project.root, 'migrations'),
-        snapshotPath: resolvePath(project.root, 'snapshot.sql'),
-        dbPath: resolvePath(project.root, 'dev.db'),
-      },
+      projectConfig: project.projectConfig,
       db: {
         async applySchema() {
           throw new Error('applySchema should not be called');
@@ -367,13 +363,23 @@ async function createProjectFixture(input: {
   }
 
   const db = createRealDatabase(path.join(root, 'dev.db'));
+  const projectConfig: SqlfuProjectConfig = {
+    cwd: root,
+    configPath: path.join(root, 'sqlfu.config.ts'),
+    dbPath: path.join(root, 'dev.db'),
+    migrationsDir: path.join(root, 'migrations'),
+    snapshotFile: path.join(root, 'snapshot.sql'),
+    definitionsPath: path.join(root, 'definitions.sql'),
+    sqlDir: path.join(root, 'sql'),
+    generatedImportExtension: '.js',
+    tempDir: path.join(root, '.sqlfu'),
+    tempDbPath: path.join(root, '.sqlfu', 'typegen.db'),
+    typesqlConfigPath: path.join(root, '.sqlfu', 'typesql.json'),
+    sqlite3defVersion: 'test',
+    sqlite3defBinaryPath: path.join(root, '.sqlfu', 'bin', 'sqlite3def'),
+  };
   const context = {
-    config: {
-      definitionsPath: 'definitions.sql',
-      migrationsDir: 'migrations',
-      snapshotPath: 'snapshot.sql',
-      dbPath: 'dev.db',
-    },
+    projectConfig,
     fs: fsAdapter,
     db,
   };
@@ -384,6 +390,7 @@ async function createProjectFixture(input: {
     fs: fsAdapter,
     db,
     root,
+    projectConfig,
     async [Symbol.asyncDispose]() {
       await db.close();
       await fs.rm(root, {recursive: true, force: true});
@@ -393,27 +400,27 @@ async function createProjectFixture(input: {
 
 function createRealFs(root: string) {
   return {
-    async exists(relativePath: string) {
+    async exists(filePath: string) {
       try {
-        await fs.access(resolvePath(root, relativePath));
+        await fs.access(resolvePath(root, filePath));
         return true;
       } catch {
         return false;
       }
     },
-    async readFile(relativePath: string) {
-      return fs.readFile(resolvePath(root, relativePath), 'utf8');
+    async readFile(filePath: string) {
+      return fs.readFile(resolvePath(root, filePath), 'utf8');
     },
-    async writeFile(relativePath: string, contents: string) {
-      const fullPath = resolvePath(root, relativePath);
+    async writeFile(filePath: string, contents: string) {
+      const fullPath = resolvePath(root, filePath);
       await fs.mkdir(path.dirname(fullPath), {recursive: true});
       await fs.writeFile(fullPath, contents);
     },
-    async readdir(relativePath: string) {
-      return (await fs.readdir(resolvePath(root, relativePath))).sort();
+    async readdir(dirPath: string) {
+      return (await fs.readdir(resolvePath(root, dirPath))).sort();
     },
-    async mkdir(relativePath: string) {
-      await fs.mkdir(resolvePath(root, relativePath), {recursive: true});
+    async mkdir(dirPath: string) {
+      await fs.mkdir(resolvePath(root, dirPath), {recursive: true});
     },
   };
 }
@@ -468,8 +475,8 @@ function draftMigration(upSql: string) {
   return `-- status: draft\n${dedent(upSql)}\n`;
 }
 
-function resolvePath(root: string, relativePath: string) {
-  return path.join(root, relativePath);
+function resolvePath(root: string, filePath: string) {
+  return path.isAbsolute(filePath) ? filePath : path.join(root, filePath);
 }
 
 function sqlStatements(sql: string) {

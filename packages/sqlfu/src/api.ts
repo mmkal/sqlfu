@@ -4,31 +4,14 @@ import path from 'node:path';
 import {createRouterClient, os} from '@orpc/server';
 import {z} from 'zod';
 
-import {loadProjectConfig} from './core/config.js';
 import {migrationNickname} from './core/naming.js';
 import {createDefaultSqlite3defConfig, diffSnapshotSqlToDesiredSql, runSqlite3def} from './core/sqlite3def.js';
+import type {SqlfuProjectConfig} from './core/types.js';
 import {generateQueryTypes} from './typegen/index.js';
 
 const sqlite3defConfig = createDefaultSqlite3defConfig('orpc');
-const configShape = {
-  cwd: z.string().optional(),
-  configPath: z.string().optional(),
-  dbPath: z.string().optional(),
-  migrationsDir: z.string().optional(),
-  snapshotFile: z.string().optional(),
-  definitionsPath: z.string().optional(),
-  sqlDir: z.string().optional(),
-  generatedImportExtension: z.enum(['.js', '.ts']).optional(),
-  tempDir: z.string().optional(),
-  tempDbPath: z.string().optional(),
-  typesqlConfigPath: z.string().optional(),
-  sqlite3defVersion: z.string().optional(),
-  sqlite3defBinaryPath: z.string().optional(),
-};
-export const sqlfuConfigInput = z.object(configShape).default({});
 const draftInputSchema = z
   .object({
-    ...configShape,
     name: z.string().min(1).optional(),
     finalize: z.boolean().optional(),
     content: z.string().optional(),
@@ -37,23 +20,23 @@ const draftInputSchema = z
 const base = os.$context<SqlfuRouterContext>();
 
 export const router = {
-  generate: os.input(sqlfuConfigInput).handler(async ({input}) => {
-    await generateQueryTypes(input);
+  generate: base.handler(async ({context}) => {
+    await generateQueryTypes({configPath: context.projectConfig.configPath});
     return 'Generated schema-derived database and TypeSQL outputs.';
   }),
 
-  config: os.input(sqlfuConfigInput).handler(async ({input}) => {
-    return loadProjectConfig(input);
+  config: base.handler(async ({context}) => {
+    return context.projectConfig;
   }),
 
-  sync: base.input(sqlfuConfigInput).handler(async ({context, input}) => {
-    await using runtime = await resolveRuntime(context, input);
+  sync: base.handler(async ({context}) => {
+    await using runtime = await resolveRuntime(context);
     const desiredSql = await runtime.fs.readFile(runtime.config.definitionsPath);
     await runtime.db.applySchema(desiredSql);
   }),
 
-  migrate: base.input(sqlfuConfigInput).handler(async ({context, input}) => {
-    await using runtime = await resolveRuntime(context, input);
+  migrate: base.handler(async ({context}) => {
+    await using runtime = await resolveRuntime(context);
     const migrations = await loadMigrations(runtime);
     const draftMigration = migrations.find((migration) => migration.status() === 'draft');
     if (draftMigration) {
@@ -65,7 +48,7 @@ export const router = {
   }),
 
   draft: base.input(draftInputSchema).handler(async ({context, input}) => {
-    await using runtime = await resolveRuntime(context, input);
+    await using runtime = await resolveRuntime(context);
     const desiredSql = await runtime.fs.readFile(runtime.config.definitionsPath);
     const snapshotSql = await runtime.fs.readFile(runtime.config.snapshotPath);
     const migrations = await loadMigrations(runtime);
@@ -113,8 +96,8 @@ export const router = {
     );
   }),
 
-  check: base.input(sqlfuConfigInput).handler(async ({context, input}): Promise<SqlfuCheckReport> => {
-    await using runtime = await resolveRuntime(context, input);
+  check: base.handler(async ({context}): Promise<SqlfuCheckReport> => {
+    await using runtime = await resolveRuntime(context);
     const definitionsSql = await runtime.fs.readFile(runtime.config.definitionsPath);
     const snapshotSql = await runtime.fs.readFile(runtime.config.snapshotPath);
     const migrations = await loadMigrations(runtime);
@@ -168,17 +151,13 @@ export function createCaller(context: SqlfuRouterContext) {
 
 export const createSqlfuCaller = createCaller;
 
-async function resolveRuntime(
-  context: SqlfuRouterContext,
-  overrides?: z.input<typeof sqlfuConfigInput>,
-): Promise<{
+async function resolveRuntime(context: SqlfuRouterContext): Promise<{
   config: SqlfuRouterConfig;
   fs: SqlfuFsLike;
   db: SqlfuDatabaseLike;
   [Symbol.asyncDispose](): Promise<void>;
 }> {
-  const projectConfig = await loadProjectConfig(overrides ?? {});
-  const stagedSqlPath = path.join(projectConfig.tempDir, 'cli-applied.sql');
+  const stagedSqlPath = path.join(context.projectConfig.tempDir, 'cli-applied.sql');
   const defaultFs: SqlfuFsLike = {
     async exists(filePath: string) {
       return fs.access(filePath).then(() => true, () => false);
@@ -201,19 +180,19 @@ async function resolveRuntime(
     async applySchema(sql: string) {
       await fs.mkdir(path.dirname(stagedSqlPath), {recursive: true});
       await fs.writeFile(stagedSqlPath, sql);
-      await runSqlite3def(projectConfig, ['--apply', '--file', stagedSqlPath, projectConfig.dbPath]);
+      await runSqlite3def(context.projectConfig, ['--apply', '--file', stagedSqlPath, context.projectConfig.dbPath]);
     },
     async exportSchema() {
-      return runSqlite3def(projectConfig, ['--export', projectConfig.dbPath]);
+      return runSqlite3def(context.projectConfig, ['--export', context.projectConfig.dbPath]);
     },
   };
 
   return {
-    config: context.config ?? {
-      definitionsPath: projectConfig.definitionsPath,
-      migrationsDir: projectConfig.migrationsDir,
-      snapshotPath: projectConfig.snapshotFile,
-      dbPath: projectConfig.dbPath,
+    config: {
+      definitionsPath: context.projectConfig.definitionsPath,
+      migrationsDir: context.projectConfig.migrationsDir,
+      snapshotPath: context.projectConfig.snapshotFile,
+      dbPath: context.projectConfig.dbPath,
     },
     fs: context.fs ?? defaultFs,
     db: context.db ?? defaultDb,
@@ -260,7 +239,7 @@ export interface SqlfuRouterConfig {
 }
 
 export interface SqlfuRouterContext {
-  readonly config?: SqlfuRouterConfig;
+  readonly projectConfig: SqlfuProjectConfig;
   readonly fs?: SqlfuFsLike;
   readonly db?: SqlfuDatabaseLike;
 }

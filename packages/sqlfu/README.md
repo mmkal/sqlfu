@@ -33,7 +33,7 @@ The default layout is:
 └── sqlfu.config.ts
 ```
 
-You can keep the defaults or point `sqlfu` somewhere else with `sqlfu.config.ts`.
+`sqlfu.config.ts` is required. It defines the project-level paths that the tooling uses.
 
 ## Config
 
@@ -51,13 +51,16 @@ export default defineConfig({
 });
 ```
 
-Useful config fields:
+Required config fields:
 
-- `dbPath`: default database path for `sqlfu migrate ...`
+- `dbPath`: default database path for `sqlfu sync` and migration commands
 - `migrationsDir`: versioned SQL migrations managed by dbmate
 - `snapshotFile`: dbmate schema dump used as the migration baseline snapshot
 - `definitionsPath`: schema source of truth
 - `sqlDir`: directory containing checked-in `.sql` queries
+
+Optional config fields:
+
 - `tempDir`: working directory for downloaded binaries and generated temp databases
 - `tempDbPath`: schema-materialized database used during `sqlfu generate`
 - `typesqlConfigPath`: generated TypeSQL config path
@@ -106,13 +109,6 @@ Fail if the configured database does not match `definitions.sql`:
 
 ```sh
 sqlfu migrate check
-```
-
-If you need to override config for one command, flags still work:
-
-```sh
-sqlfu migrate diff --db-path ./tmp/scratch.db
-sqlfu generate --sql-dir ./src/sql
 ```
 
 ## Migration Model

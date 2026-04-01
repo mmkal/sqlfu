@@ -685,6 +685,7 @@ async function createGenerateFixture(input: {
     dedent`
       export default {
         dbPath: './app.db',
+        migrationsDir: './migrations',
         snapshotFile: './snapshot.sql',
         definitionsPath: './definitions.sql',
         sqlDir: './sql',
@@ -692,6 +693,7 @@ async function createGenerateFixture(input: {
         tempDir: './.sqlfu',
         tempDbPath: './.sqlfu/typegen.db',
         typesqlConfigPath: './typesql.json',
+        sqlite3defBinaryPath: ${JSON.stringify(sqlite3defBinaryPath)},
       };
     `,
   );
@@ -704,10 +706,7 @@ async function createGenerateFixture(input: {
 
   return {
     async generate() {
-      await generateQueryTypes({
-        cwd: root,
-        sqlite3defBinaryPath,
-      });
+      await generateQueryTypes({cwd: root});
     },
     async readFile(relativePath: string) {
       return fs.readFile(path.join(root, relativePath), 'utf8');

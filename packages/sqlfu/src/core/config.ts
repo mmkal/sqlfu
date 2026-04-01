@@ -14,51 +14,35 @@ export function defineConfig(config: SqlfuConfig): SqlfuConfig {
 export async function loadProjectConfig(overrides: ProjectConfigOverrides = {}): Promise<SqlfuProjectConfig> {
   const cwd = path.resolve(overrides.cwd ?? process.cwd());
   const configPath = await resolveConfigPath(cwd, overrides.configPath);
-  const fileConfig = configPath ? await loadConfigFile(configPath) : {};
-  const tsconfigPreferences = await loadTsconfigPreferences(configPath ? path.dirname(configPath) : cwd);
+  const fileConfig = await loadConfigFile(configPath);
+  const tsconfigPreferences = await loadTsconfigPreferences(path.dirname(configPath));
   return resolveProjectConfig(overrides, fileConfig, configPath, tsconfigPreferences);
 }
 
 export function resolveProjectConfig(
   overrides: ProjectConfigOverrides = {},
-  fileConfig: SqlfuConfig = {},
-  configPath?: string,
+  fileConfig: SqlfuConfig,
+  configPath: string,
   tsconfigPreferences: TsconfigPreferences = {},
 ): SqlfuProjectConfig {
   const cwd = path.resolve(overrides.cwd ?? process.cwd());
-  const configDir = configPath ? path.dirname(configPath) : cwd;
-  const tempDir = resolveConfigPathValue(cwd, configDir, overrides.tempDir, fileConfig.tempDir, '.sqlfu');
+  const configDir = path.dirname(configPath);
+  const tempDir = resolveConfigPathValue(cwd, configDir, fileConfig.tempDir ?? '.sqlfu');
 
   return {
     cwd,
     configPath,
-    dbPath: resolveConfigPathValue(cwd, configDir, overrides.dbPath, fileConfig.dbPath, path.join('.sqlfu', 'dev.db')),
-    migrationsDir: resolveConfigPathValue(cwd, configDir, overrides.migrationsDir, fileConfig.migrationsDir, 'migrations'),
-    snapshotFile: resolveConfigPathValue(cwd, configDir, overrides.snapshotFile, fileConfig.snapshotFile, 'snapshot.sql'),
-    definitionsPath: resolveConfigPathValue(cwd, configDir, overrides.definitionsPath, fileConfig.definitionsPath, 'definitions.sql'),
-    sqlDir: resolveConfigPathValue(cwd, configDir, overrides.sqlDir, fileConfig.sqlDir, 'sql'),
-    generatedImportExtension:
-      overrides.generatedImportExtension ??
-      fileConfig.generatedImportExtension ??
-      inferGeneratedImportExtension(tsconfigPreferences),
+    dbPath: resolveConfigPathValue(cwd, configDir, fileConfig.dbPath),
+    migrationsDir: resolveConfigPathValue(cwd, configDir, fileConfig.migrationsDir),
+    snapshotFile: resolveConfigPathValue(cwd, configDir, fileConfig.snapshotFile),
+    definitionsPath: resolveConfigPathValue(cwd, configDir, fileConfig.definitionsPath),
+    sqlDir: resolveConfigPathValue(cwd, configDir, fileConfig.sqlDir),
+    generatedImportExtension: fileConfig.generatedImportExtension ?? inferGeneratedImportExtension(tsconfigPreferences),
     tempDir,
-    tempDbPath: resolveConfigPathValue(
-      cwd,
-      configDir,
-      overrides.tempDbPath,
-      fileConfig.tempDbPath,
-      path.join('.sqlfu', 'typegen.db'),
-    ),
-    typesqlConfigPath: resolveConfigPathValue(
-      cwd,
-      configDir,
-      overrides.typesqlConfigPath,
-      fileConfig.typesqlConfigPath,
-      path.join('.sqlfu', 'typesql.json'),
-    ),
-    sqlite3defVersion: overrides.sqlite3defVersion ?? fileConfig.sqlite3defVersion ?? defaultSqlite3defVersion,
-    sqlite3defBinaryPath:
-      resolveConfigPathValue(cwd, configDir, overrides.sqlite3defBinaryPath, fileConfig.sqlite3defBinaryPath, path.join(tempDir, 'bin', 'sqlite3def')),
+    tempDbPath: resolveConfigPathValue(cwd, configDir, fileConfig.tempDbPath ?? path.join('.sqlfu', 'typegen.db')),
+    typesqlConfigPath: resolveConfigPathValue(cwd, configDir, fileConfig.typesqlConfigPath ?? path.join('.sqlfu', 'typesql.json')),
+    sqlite3defVersion: fileConfig.sqlite3defVersion ?? defaultSqlite3defVersion,
+    sqlite3defBinaryPath: resolveConfigPathValue(cwd, configDir, fileConfig.sqlite3defBinaryPath ?? path.join(tempDir, 'bin', 'sqlite3def')),
   };
 }
 
@@ -66,9 +50,15 @@ type TsconfigPreferences = {
   readonly prefersTsImportExtensions?: boolean;
 };
 
-async function resolveConfigPath(cwd: string, configPath?: string): Promise<string | undefined> {
+async function resolveConfigPath(cwd: string, configPath?: string): Promise<string> {
   if (configPath) {
-    return path.resolve(cwd, configPath);
+    const resolved = path.resolve(cwd, configPath);
+    try {
+      await fs.access(resolved);
+      return resolved;
+    } catch {
+      throw new Error(`No sqlfu config found at ${resolved}`);
+    }
   }
 
   for (const candidate of defaultConfigFileNames) {
@@ -81,7 +71,7 @@ async function resolveConfigPath(cwd: string, configPath?: string): Promise<stri
     }
   }
 
-  return undefined;
+  throw new Error(`No sqlfu config found in ${cwd}. Create sqlfu.config.ts.`);
 }
 
 async function loadConfigFile(configPath: string): Promise<SqlfuConfig> {
@@ -95,6 +85,7 @@ async function loadConfigFile(configPath: string): Promise<SqlfuConfig> {
     throw new Error(`Invalid sqlfu config at ${configPath}: expected a default-exported object.`);
   }
 
+  assertConfigShape(configPath, config);
   return config as SqlfuConfig;
 }
 
@@ -167,20 +158,14 @@ function stripTrailingCommas(value: string): string {
   return value.replace(/,\s*([}\]])/g, '$1');
 }
 
-function resolveConfigPathValue(
-  cwd: string,
-  configDir: string,
-  overrideValue: string | undefined,
-  configValue: string | undefined,
-  fallbackValue: string,
-): string {
-  if (overrideValue) {
-    return path.resolve(cwd, overrideValue);
+function assertConfigShape(configPath: string, config: object): asserts config is SqlfuConfig {
+  for (const field of ['dbPath', 'migrationsDir', 'snapshotFile', 'definitionsPath', 'sqlDir'] as const) {
+    if (!(field in config) || typeof (config as Record<string, unknown>)[field] !== 'string') {
+      throw new Error(`Invalid sqlfu config at ${configPath}: missing required string field "${field}".`);
+    }
   }
+}
 
-  if (configValue) {
-    return path.resolve(configDir, configValue);
-  }
-
-  return path.resolve(cwd, fallbackValue);
+function resolveConfigPathValue(cwd: string, configDir: string, configValue: string): string {
+  return path.resolve(path.isAbsolute(configValue) ? cwd : configDir, configValue);
 }

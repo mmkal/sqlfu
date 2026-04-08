@@ -26,7 +26,10 @@ export function createLibsqlClient(client: LibsqlClientLike): LibsqlClient {
   const executor: AsyncExecutor = {
     async query<TRow extends ResultRow = ResultRow>(query: SqlQuery) {
       const result = await client.execute<TRow>(toStatement(query));
-      return Object.assign(Array.from(result.rows), {
+      const rows = result.rows.map(materializeRow);
+      if (rows.length > 0) return rows;
+
+      return Object.assign(rows, {
         rowsAffected: result.rowsAffected,
         lastInsertRowid: result.lastInsertRowid,
       });
@@ -47,4 +50,8 @@ function toStatement(query: SqlQuery): LibsqlStatementLike {
     sql: query.sql,
     args: [...query.args],
   };
+}
+
+function materializeRow<TRow extends ResultRow>(row: TRow): TRow {
+  return {...row};
 }

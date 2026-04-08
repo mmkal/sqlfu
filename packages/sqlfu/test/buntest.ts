@@ -5,10 +5,10 @@ import {createBunClient} from '../src/client.js';
 
 test('createBunClient works with a real bun:sqlite database', async () => {
   using fixture = createBunFixture(new Database(':memory:'));
-  fixture.db.exec('create table users (id integer primary key, email text not null)');
+  fixture.client.sql.exec`create table users (id integer primary key, email text not null)`;
 
-  fixture.db.query('insert into users (email) values (?)').run('ada@example.com');
-  fixture.db.query('insert into users (email) values (?)').run('grace@example.com');
+  fixture.client.sql.exec`insert into users (email) values (${'ada@example.com'})`;
+  fixture.client.sql.exec`insert into users (email) values (${'grace@example.com'})`;
 
   expect(
     fixture.client.query<{id: number; email: string}>({
@@ -30,7 +30,10 @@ test('createBunClient works with a real bun:sqlite database', async () => {
   expect(typeof writeResult.lastInsertRowid).toMatch(/^(bigint|number|string)$/);
 
   expect(
-    fixture.db.query('select id, email from users where email = ?').all('lin@example.com'),
+    fixture.client.query<{id: number; email: string}>({
+      sql: 'select id, email from users where email = ?',
+      args: ['lin@example.com'],
+    }),
   ).toMatchObject([{id: 3, email: 'lin@example.com'}]);
 
   let error: unknown;

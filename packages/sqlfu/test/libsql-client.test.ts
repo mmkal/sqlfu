@@ -9,23 +9,18 @@ import {createLibsqlClient} from '../src/client.js';
 
 test('createLibsqlClient works with a real @libsql/client database', async () => {
   await using fixture = await createLibsqlFixture(createClient({url: getTmpDbUrl()}));
-  await fixture.raw.execute('create table users (id integer primary key, email text not null)');
+  await fixture.client.sql.exec`create table users (id integer primary key, email text not null)`;
 
-  await fixture.raw.execute({
-    sql: 'insert into users (email) values (?), (?)',
-    args: ['ada@example.com', 'grace@example.com'],
-  });
+  await fixture.client.sql.exec`insert into users (email) values (${'ada@example.com'}), (${'grace@example.com'})`;
 
-  await expect(
-    fixture.client.query<{id: number; email: string}>({
+  expect(
+    await fixture.client.query<{id: number; email: string}>({
       sql: 'select id, email from users where email = ?',
       args: ['ada@example.com'],
-    }).then(normalizeUserRows),
-  ).resolves.toMatchObject([{id: 1, email: 'ada@example.com'}]);
+    }),
+  ).toMatchObject([{id: 1, email: 'ada@example.com'}]);
 
-  await expect(
-    fixture.client.sql<{id: number; email: string}>`select id, email from users order by id`.then(normalizeUserRows),
-  ).resolves.toMatchObject([
+  expect(await fixture.client.sql<{id: number; email: string}>`select id, email from users order by id`).toMatchObject([
     {id: 1, email: 'ada@example.com'},
     {id: 2, email: 'grace@example.com'},
   ]);
@@ -35,16 +30,17 @@ test('createLibsqlClient works with a real @libsql/client database', async () =>
   expect(writeResult.rowsAffected).toBe(1);
   expect(typeof writeResult.lastInsertRowid).toMatch(/^(bigint|number|string)$/);
 
-  await expect(
-    fixture.raw.execute('select id, email from users where email = \'lin@example.com\''),
-  ).resolves.toMatchObject({
-    rows: [{id: 3, email: 'lin@example.com'}],
-  });
+  expect(
+    await fixture.client.query<{id: number; email: string}>({
+      sql: 'select id, email from users where email = ?',
+      args: ['lin@example.com'],
+    }),
+  ).toMatchObject([{id: 3, email: 'lin@example.com'}]);
 });
 
 test('createLibsqlClient turns real sqlite syntax errors into promise rejections for tagged sql', async () => {
   await using fixture = await createLibsqlFixture(createClient({url: getTmpDbUrl()}));
-  await fixture.raw.execute('create table users (id integer primary key, email text not null)');
+  await fixture.client.sql.exec`create table users (id integer primary key, email text not null)`;
 
   await expect(
     fixture.client.sql`selectTYPO from users`.then(
@@ -76,8 +72,4 @@ async function getDbPath(raw: ReturnType<typeof createClient>) {
   const row = result.rows[0] as {file?: string} | undefined;
   if (!row?.file) throw new Error('expected pragma database_list to return the backing file path');
   return row.file;
-}
-
-function normalizeUserRows(rows: ReadonlyArray<{id: number; email: string}>) {
-  return rows.map((row) => ({id: row.id, email: row.email}));
 }

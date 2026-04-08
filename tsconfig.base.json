@@ -3,7 +3,7 @@
     "target": "ESNext",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "lib": ["ESNext"],
+    "lib": ["ESNext", "ESNext.Disposable"],
     "strict": true,
     "declaration": true,
     "declarationMap": true,

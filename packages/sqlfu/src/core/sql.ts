@@ -32,6 +32,16 @@ export class AsyncBoundQuery<TRow extends ResultRow> implements PromiseLike<Quer
       return Promise.reject(error).then(onfulfilled, onrejected);
     }
   }
+
+  catch<TResult = never>(
+    onrejected?: ((reason: unknown) => TResult | PromiseLike<TResult>) | null,
+  ): Promise<QueryResult<TRow> | TResult> {
+    return this.then(undefined, onrejected);
+  }
+
+  finally(onfinally?: (() => void) | null): Promise<QueryResult<TRow>> {
+    return Promise.resolve(this.then((value) => value)).finally(onfinally ?? undefined);
+  }
 }
 
 export class SyncBoundQuery<TRow extends ResultRow> implements PromiseLike<QueryResult<TRow>> {
@@ -52,6 +62,16 @@ export class SyncBoundQuery<TRow extends ResultRow> implements PromiseLike<Query
     } catch (error) {
       return Promise.reject(error).then(onfulfilled, onrejected);
     }
+  }
+
+  catch<TResult = never>(
+    onrejected?: ((reason: unknown) => TResult | PromiseLike<TResult>) | null,
+  ): Promise<QueryResult<TRow> | TResult> {
+    return this.then(undefined, onrejected);
+  }
+
+  finally(onfinally?: (() => void) | null): Promise<QueryResult<TRow>> {
+    return Promise.resolve(this.then((value) => value)).finally(onfinally ?? undefined);
   }
 }
 

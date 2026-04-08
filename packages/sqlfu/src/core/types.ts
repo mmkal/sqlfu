@@ -62,7 +62,7 @@ export interface SyncSqlTag {
   <TRow extends ResultRow = ResultRow>(
     strings: TemplateStringsArray,
     ...values: readonly SqlValue[]
-  ): PromiseLike<QueryResult<TRow>>;
+  ): SqlQueryPromise<TRow>;
   exec<TRow extends ResultRow = ResultRow>(
     strings: TemplateStringsArray,
     ...values: readonly SqlValue[]
@@ -73,7 +73,7 @@ export interface AsyncSqlTag {
   <TRow extends ResultRow = ResultRow>(
     strings: TemplateStringsArray,
     ...values: readonly SqlValue[]
-  ): PromiseLike<QueryResult<TRow>>;
+  ): SqlQueryPromise<TRow>;
   exec<TRow extends ResultRow = ResultRow>(
     strings: TemplateStringsArray,
     ...values: readonly SqlValue[]
@@ -81,6 +81,13 @@ export interface AsyncSqlTag {
 }
 
 export type SqlTag = SyncSqlTag | AsyncSqlTag;
+
+export interface SqlQueryPromise<TRow extends ResultRow = ResultRow> extends PromiseLike<QueryResult<TRow>> {
+  catch<TResult = never>(
+    onrejected?: ((reason: unknown) => TResult | PromiseLike<TResult>) | null,
+  ): Promise<QueryResult<TRow> | TResult>;
+  finally(onfinally?: (() => void) | null): Promise<QueryResult<TRow>>;
+}
 
 export type SqlValue = QueryArg | SqlFragment;
 

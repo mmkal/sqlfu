@@ -42,10 +42,7 @@ test('createLibsqlSyncClient turns real sqlite syntax errors into promise reject
   fixture.client.sql.exec`create table users (id integer primary key, email text not null)`;
 
   await expect(
-    fixture.client.sql`selectTYPO from users`.then(
-      (rows) => rows,
-      (error) => String(error),
-    ),
+    fixture.client.sql`selectTYPO from users`.catch(String),
   ).resolves.toContain('syntax error');
 });
 

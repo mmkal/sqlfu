@@ -68,7 +68,6 @@ test('createLibsqlClient iterates rows', async () => {
 async function createLibsqlFixture(raw: ReturnType<typeof createClient>) {
   const dbPath = await getDbPath(raw);
   return {
-    raw,
     client: createLibsqlClient(raw),
     async [Symbol.asyncDispose]() {
       raw.close();

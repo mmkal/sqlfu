@@ -61,7 +61,6 @@ test('createBunClient iterates rows with native statement iteration', () => {
 
 function createBunFixture(db: InstanceType<typeof Database>) {
   return {
-    db,
     client: createBunClient(db),
     [Symbol.dispose]() {
       db.close();

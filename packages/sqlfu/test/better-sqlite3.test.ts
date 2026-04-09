@@ -60,7 +60,6 @@ test('createBetterSqlite3Client iterates rows with native statement iteration', 
 
 function createBetterSqlite3Fixture(db: InstanceType<typeof BetterSqlite3>) {
   return {
-    db,
     client: createBetterSqlite3Client(db),
     [Symbol.dispose]() {
       db.close();

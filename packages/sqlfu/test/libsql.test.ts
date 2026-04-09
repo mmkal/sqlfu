@@ -61,7 +61,6 @@ test('createLibsqlSyncClient iterates rows', () => {
 
 function createLibsqlFixture(db: LibsqlDatabase) {
   return {
-    db,
     client: createLibsqlSyncClient(db),
     [Symbol.dispose]() {
       db.close();

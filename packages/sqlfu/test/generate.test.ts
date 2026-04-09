@@ -108,18 +108,33 @@ test('generate helpers accept sqlfu adapter clients created from real libraries'
           }
         }
       `,
+      'sql/expo-sqlite.d.ts': dedent`
+        declare module 'expo-sqlite' {
+          export interface SQLiteDatabase {
+            getAllAsync<TRow = unknown>(source: string, params?: readonly unknown[]): Promise<TRow[]>;
+            getEachAsync<TRow = unknown>(source: string, params?: readonly unknown[]): AsyncIterableIterator<TRow>;
+            runAsync(
+              source: string,
+              params?: readonly unknown[],
+            ): Promise<{changes?: number; lastInsertRowId?: string | number | bigint | null}>;
+          }
+        }
+      `,
       'sql/list-posts.sql': `select id, slug from posts;`,
       'sql/usage.ts': dedent`
         import BetterSqlite3 from 'better-sqlite3';
         import {createClient} from '@libsql/client';
-        import {createBetterSqlite3Client, createLibsqlClient} from 'sqlfu';
+        import type {SQLiteDatabase} from 'expo-sqlite';
+        import {createBetterSqlite3Client, createExpoSqliteClient, createLibsqlClient} from 'sqlfu/client';
         import {listPosts} from './list-posts.js';
 
         const sqlite = new BetterSqlite3(':memory:');
         const libsql = createClient({url: 'file:/tmp/sqlfu-generate-usage.db'});
+        const expo = null as unknown as SQLiteDatabase;
 
         void listPosts(createBetterSqlite3Client(sqlite));
         void listPosts(createLibsqlClient(libsql));
+        void listPosts(createExpoSqliteClient(expo));
       `,
     },
   });
@@ -727,6 +742,7 @@ async function createGenerateFixture(input: {
           baseUrl: root,
           paths: {
             sqlfu: [path.join(packageRoot, 'src', 'index.ts')],
+            'sqlfu/client': [path.join(packageRoot, 'src', 'client.ts')],
             '@libsql/client': [path.join(packageRoot, 'node_modules', '@libsql', 'client')],
             'better-sqlite3': [path.join(packageRoot, 'node_modules', 'better-sqlite3')],
           },

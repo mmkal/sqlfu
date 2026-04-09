@@ -7,3 +7,4 @@ export * from './adapters/libsql-client.js';
 export * from './adapters/bun.js';
 export * from './adapters/better-sqlite3.js';
 export * from './adapters/durable-object.js';
+export * from './adapters/expo-sqlite.js';

@@ -14,13 +14,7 @@
     ".": "./dist/index.js",
     "./client": "./dist/client.js",
     "./api": "./dist/api.js",
-    "./cli": "./dist/cli.js",
-    "./d1": "./dist/adapters/d1.js",
-    "./libsql": "./dist/adapters/libsql.js",
-    "./libsql-client": "./dist/adapters/libsql-client.js",
-    "./bun": "./dist/adapters/bun.js",
-    "./better-sqlite3": "./dist/adapters/better-sqlite3.js",
-    "./durable-object": "./dist/adapters/durable-object.js"
+    "./cli": "./dist/cli.js"
   },
   "files": [
     "dist",

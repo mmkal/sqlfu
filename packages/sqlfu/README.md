@@ -145,6 +145,7 @@ Generated TypeSQL outputs stay next to your `.sql` files.
 - `definitions.sql` remains the schema source of truth
 - `snapshot.sql` is the committed snapshot of the last applied migration state
 - `migrations/` is the source of truth for deployment history
+- runtime adapters can be imported from `sqlfu/client`, for example `createExpoSqliteClient`
 - `sqlfu` auto-downloads `sqlite3def` for macOS and Linux into `.sqlfu/`
 - `dbmate` manages the `schema_migrations` table and writes `snapshot.sql`
 - SQLite view typing is still imperfect in TypeSQL, and some expressions such as `substr(...)` are not inferred directly, so `sqlfu` applies a small post-pass to improve generated result types without changing the SQL-first workflow

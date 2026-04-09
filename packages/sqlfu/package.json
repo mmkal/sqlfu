@@ -17,10 +17,7 @@
     "./cli": "./dist/cli.js"
   },
   "files": [
-    "dist",
-    "sql",
-    "definitions.sql",
-    "typesql.json"
+    "dist"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

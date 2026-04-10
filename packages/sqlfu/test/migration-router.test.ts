@@ -160,6 +160,22 @@ test('draft fails when migration metadata is malformed', async () => {
   await expect(fixture.client.draft()).rejects.toThrow(/metadata must be on the first line/i);
 });
 
+test('draft fails when migration status metadata is invalid', async () => {
+  await using fixture = await createMigrationsFixture('invalid-status-metadata', {
+    definitionsSql: dedent`
+      create table person(name text not null);
+    `,
+    migrations: {
+      'migrations/20260410000000_create_person.sql': dedent`
+        -- status: maybe
+        create table person(name text not null);
+      `,
+    },
+  });
+
+  await expect(fixture.client.draft()).rejects.toThrow(/status: draft\|final/i);
+});
+
 test('draft fails when multiple draft migrations exist', async () => {
   await using fixture = await createMigrationsFixture('multiple-drafts', {
     definitionsSql: dedent`
@@ -421,6 +437,102 @@ test('check.noDraft succeeds when no draft exists', async () => {
   });
 
   await expect(fixture.client.check.noDraft()).resolves.toBeUndefined();
+});
+
+test('check.migrationMetadata throws when status metadata is invalid', async () => {
+  await using fixture = await createMigrationsFixture('check-invalid-status', {
+    definitionsSql: dedent`
+      create table person(name text not null);
+    `,
+    migrations: {
+      'migrations/20260410000000_create_person.sql': dedent`
+        -- status: maybe
+        create table person(name text not null);
+      `,
+    },
+  });
+
+  await expect(fixture.client.check.migrationMetadata()).rejects.toThrow(/status: draft\|final/i);
+});
+
+test('check.draftIsLast throws when the draft is not lexically last', async () => {
+  await using fixture = await createMigrationsFixture('check-draft-not-last', {
+    definitionsSql: dedent`
+      create table person(name text not null);
+      create table pet(name text not null);
+      create table toy(name text not null);
+    `,
+    migrations: {
+      'migrations/20260410000000_create_person.sql': dedent`
+        -- status: final
+        create table person(name text not null);
+      `,
+      'migrations/20260410000001_add_pet.sql': dedent`
+        -- status: draft
+        create table pet(name text not null);
+      `,
+      'migrations/20260410000002_add_toy.sql': dedent`
+        -- status: final
+        create table toy(name text not null);
+      `,
+    },
+  });
+
+  await expect(fixture.client.check.draftIsLast()).rejects.toThrow(/lexically last/i);
+});
+
+test('check.draftCount throws when multiple drafts exist', async () => {
+  await using fixture = await createMigrationsFixture('check-multiple-drafts', {
+    definitionsSql: dedent`
+      create table person(name text not null);
+      create table pet(name text not null);
+      create table toy(name text not null);
+    `,
+    migrations: {
+      'migrations/20260410000000_create_person.sql': dedent`
+        -- status: final
+        create table person(name text not null);
+      `,
+      'migrations/20260410000001_add_pet.sql': dedent`
+        -- status: draft
+        create table pet(name text not null);
+      `,
+      'migrations/20260410000002_add_toy.sql': dedent`
+        -- status: draft
+        create table toy(name text not null);
+      `,
+    },
+  });
+
+  await expect(fixture.client.check.draftCount()).rejects.toThrow(/multiple draft migrations exist/i);
+});
+
+test('check.all joins multiple failures together', async () => {
+  await using fixture = await createMigrationsFixture('check-multiple-failures', {
+    definitionsSql: dedent`
+      create table person(name text not null);
+      create table pet(name text not null);
+      create table toy(name text not null);
+    `,
+    migrations: {
+      'migrations/20260410000000_create_person.sql': dedent`
+        -- status: final
+        create table person(name text not null);
+      `,
+      'migrations/20260410000001_add_pet.sql': dedent`
+        -- status: draft
+        create table pet(name text not null);
+      `,
+      'migrations/20260410000002_add_toy.sql': dedent`
+        -- status: draft
+        create table toy(name text not null);
+      `,
+    },
+  });
+
+  await expect(fixture.client.check.all()).rejects.toThrow(
+    /multiple draft migrations exist[\s\S]*draft migration exists/i,
+  );
 });
 
 async function createMigrationsFixture(

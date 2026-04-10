@@ -1,7 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-import {DatabaseSync} from 'node:sqlite';
 import {createRouterClient, os} from '@orpc/server';
 import {z} from 'zod';
 
@@ -197,7 +196,7 @@ function createRuntime(context: SqlfuRouterContext) {
   return {
     projectRoot: context.projectConfig.projectRoot,
     now: () => context.now?.() ?? new Date(),
-    createSqliteFileDatabase: context.createSqliteFileDatabase ?? createNodeSqliteFileDatabase,
+    createSqliteFileDatabase: context.createSqliteFileDatabase,
     readDefinitionsSql: () => fs.readFile(context.projectConfig.definitionsPath, 'utf8'),
     async readMigrations() {
       try {
@@ -343,7 +342,7 @@ async function applyMigrationsToDatabase(
 async function exportSchema(createSqliteFileDatabase: SqliteFileDatabaseFactory, dbPath: string) {
   const database = createSqliteFileDatabase(dbPath);
   try {
-    const rows = database.query(`
+    const rows = await database.query(`
       select sql
       from sqlite_schema
       where sql is not null
@@ -358,7 +357,7 @@ async function exportSchema(createSqliteFileDatabase: SqliteFileDatabaseFactory,
 
 async function ensureDatabaseExists(createSqliteFileDatabase: SqliteFileDatabaseFactory, dbPath: string) {
   const database = createSqliteFileDatabase(dbPath);
-  database.close();
+  await database.close();
 }
 
 async function executeSqlScript(
@@ -372,10 +371,14 @@ async function executeSqlScript(
       if (stripSqlComments(statement).trim() === '') {
         continue;
       }
-      database.execute(statement);
+      try {
+        await database.execute(statement);
+      } catch (error) {
+        throw new Error(summarizeDatabaseError(error));
+      }
     }
   } finally {
-    database.close();
+    await database.close();
   }
 }
 
@@ -480,34 +483,24 @@ function summarizeSqlite3defError(error: unknown) {
   return line.replace(/^\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2} /u, '');
 }
 
+function summarizeDatabaseError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.replace(/^SQLITE_ERROR:\s*/u, '').trim();
+}
+
 export interface SqlfuRouterContext {
   readonly projectConfig: SqlfuProjectConfig;
   readonly now?: () => Date;
-  readonly createSqliteFileDatabase?: SqliteFileDatabaseFactory;
+  readonly createSqliteFileDatabase: SqliteFileDatabaseFactory;
 }
 
 export interface SqliteFileDatabase {
-  query(sql: string): ReadonlyArray<Record<string, unknown>>;
-  execute(sql: string): void;
-  close(): void;
+  query(sql: string): Promise<ReadonlyArray<Record<string, unknown>>>;
+  execute(sql: string): Promise<void>;
+  close(): Promise<void>;
 }
 
 export type SqliteFileDatabaseFactory = (dbPath: string) => SqliteFileDatabase;
-
-function createNodeSqliteFileDatabase(dbPath: string): SqliteFileDatabase {
-  const database = new DatabaseSync(dbPath);
-  return {
-    query(sql: string) {
-      return database.prepare(sql).all() as ReadonlyArray<Record<string, unknown>>;
-    },
-    execute(sql: string) {
-      database.exec(sql);
-    },
-    close() {
-      database.close();
-    },
-  };
-}
 
 interface CheckState {
   readonly runtime: ReturnType<typeof createRuntime>;

@@ -7,6 +7,7 @@ import {createClient} from '@libsql/client';
 import {createRouterClient} from '@orpc/server';
 import {expect, test} from 'vitest';
 
+import type {SqliteFileDatabaseFactory} from '../src/api.js';
 import {router} from '../src/api.js';
 import type {SqlfuProjectConfig} from '../src/core/types.js';
 
@@ -641,6 +642,7 @@ async function createMigrationsFixture(
     context: {
       projectConfig,
       now: () => new Date('2026-04-10T00:00:00.000Z'),
+      createSqliteFileDatabase,
     },
   });
 
@@ -701,32 +703,49 @@ function withTrailingNewline(value: string) {
   return value.endsWith('\n') ? value : `${value}\n`;
 }
 
-async function exportDatabaseSchema(dbPath: string) {
+const createSqliteFileDatabase: SqliteFileDatabaseFactory = (dbPath) => {
   const client = createClient({url: `file:${dbPath}`});
 
+  return {
+    async query(sql: string) {
+      const result = await client.execute(sql);
+      return result.rows.map((row) => ({...row}));
+    },
+    async execute(sql: string) {
+      await client.execute(sql);
+    },
+    async close() {
+      client.close();
+    },
+  };
+};
+
+async function exportDatabaseSchema(dbPath: string) {
+  const client = createSqliteFileDatabase(dbPath);
+
   try {
-    const result = await client.execute(`
+    const result = await client.query(`
       select sql
       from sqlite_schema
       where sql is not null
         and name not like 'sqlite_%'
       order by type, name
     `);
-    return result.rows.map((row) => `${String(row.sql).toLowerCase()};`).join('\n');
+    return result.map((row) => `${String(row.sql).toLowerCase()};`).join('\n');
   } finally {
-    client.close();
+    await client.close();
   }
 }
 
 async function executeDatabaseSql(dbPath: string, sql: string) {
-  const client = createClient({url: `file:${dbPath}`});
+  const client = createSqliteFileDatabase(dbPath);
 
   try {
     for (const statement of sqlStatements(sql)) {
       await client.execute(statement);
     }
   } finally {
-    client.close();
+    await client.close();
   }
 }
 

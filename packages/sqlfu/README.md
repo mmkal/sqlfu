@@ -40,21 +40,41 @@ Create `sqlfu.config.ts` in your project root:
 
 ```ts
 import {defineConfig} from 'sqlfu';
+import {DatabaseSync} from 'node:sqlite';
+import {createNodeSqliteClient} from 'sqlfu/client';
 
 export default defineConfig({
-  dbPath: './db/app.sqlite',
   migrationsDir: './migrations',
   definitionsPath: './definitions.sql',
   sqlDir: './sql',
+  createDatabase(slug) {
+    const database = new DatabaseSync(new URL(`./.sqlfu/${slug}.db`, import.meta.url));
+    return {
+      client: createNodeSqliteClient(database),
+      async [Symbol.asyncDispose]() {
+        database.close();
+      },
+    };
+  },
+  getMainDatabase() {
+    const database = new DatabaseSync(new URL('./db/app.sqlite', import.meta.url));
+    return {
+      client: createNodeSqliteClient(database),
+      async [Symbol.asyncDispose]() {
+        database.close();
+      },
+    };
+  },
 });
 ```
 
 Required config fields:
 
-- `dbPath`: default database path for `sqlfu sync` and migration commands
 - `migrationsDir`: directory containing finalized and draft migration files
 - `definitionsPath`: schema source of truth
 - `sqlDir`: directory containing checked-in `.sql` queries
+- `createDatabase(slug)`: creates scratch databases that `sqlfu` can use for replay, validation, and draft generation
+- `getMainDatabase()`: opens the main database handle used by commands like `sync`, `migrate`, and `generate`
 
 `sqlfu` manages its own temporary files under `.sqlfu/` and uses a fixed bundled `sqlite3def` version internally.
 
@@ -133,7 +153,7 @@ If you want the guarantees a snapshot file would normally provide, run `sqlfu ch
 
 `sqlfu generate`:
 
-1. materializes `definitions.sql` into a temporary SQLite database
+1. exports the schema from your configured main database into a temporary SQLite database for TypeSQL
 2. writes `typesql.json`
 3. runs `typesql compile`
 4. refines generated result types for some SQLite cases that TypeSQL currently misses

@@ -71,10 +71,10 @@ export function getMeaningfulDiffLines(output: string): string[] {
     .filter((line) => line !== 'finished!');
 }
 
-export async function diffSnapshotSqlToDesiredSql(
+export async function diffBaselineSqlToDesiredSql(
   config: Sqlite3defConfig,
   input: {
-    snapshotSql: string;
+    baselineSql: string;
     desiredSql: string;
   },
 ): Promise<string[]> {
@@ -86,10 +86,10 @@ export async function diffSnapshotSqlToDesiredSql(
 
   try {
     await fs.mkdir(workDir, {recursive: true});
-    await fs.writeFile(baselineSqlPath, input.snapshotSql);
+    await fs.writeFile(baselineSqlPath, input.baselineSql);
     await fs.writeFile(definitionsPath, input.desiredSql);
 
-    if (input.snapshotSql.trim()) {
+    if (input.baselineSql.trim()) {
       await runSqlite3def(config, ['--apply', '--file', baselineSqlPath, baselineDbPath]);
     }
 

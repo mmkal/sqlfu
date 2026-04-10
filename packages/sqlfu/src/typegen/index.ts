@@ -6,7 +6,7 @@ import {createClient} from '@libsql/client';
 
 import {loadProjectConfig} from '../core/config.js';
 import {runPackageBinary} from '../core/tooling.js';
-import {materializeSchemaDatabase} from '../migrator/index.js';
+import {materializeSchemaDatabase} from '../schemadiff/index.js';
 
 export async function writeTypesqlConfig(): Promise<string> {
   const config = await loadProjectConfig();

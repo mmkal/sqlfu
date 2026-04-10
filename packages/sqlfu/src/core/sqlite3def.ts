@@ -3,7 +3,7 @@ import path from 'node:path';
 import {spawn} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 
-import {ensureSqlite3defBinary} from '../migrator/binary.js';
+import {ensureSqlite3defBinary} from '../schemadiff/binary.js';
 
 const packageRoot = fileURLToPath(new URL('../../', import.meta.url));
 const sharedSqlite3defDir = path.join(packageRoot, '.sqlfu');
@@ -80,17 +80,17 @@ export async function diffSnapshotSqlToDesiredSql(
 ): Promise<string[]> {
   await fs.mkdir(config.tempDir, {recursive: true});
   const workDir = await fs.mkdtemp(path.join(config.tempDir, 'draft-'));
-  const snapshotPath = path.join(workDir, 'snapshot.sql');
+  const baselineSqlPath = path.join(workDir, 'baseline.sql');
   const definitionsPath = path.join(workDir, 'definitions.sql');
   const baselineDbPath = path.join(workDir, 'baseline.db');
 
   try {
     await fs.mkdir(workDir, {recursive: true});
-    await fs.writeFile(snapshotPath, input.snapshotSql);
+    await fs.writeFile(baselineSqlPath, input.snapshotSql);
     await fs.writeFile(definitionsPath, input.desiredSql);
 
     if (input.snapshotSql.trim()) {
-      await runSqlite3def(config, ['--apply', '--file', snapshotPath, baselineDbPath]);
+      await runSqlite3def(config, ['--apply', '--file', baselineSqlPath, baselineDbPath]);
     }
 
     const diffOutput = await runSqlite3def(config, ['--dry-run', '--file', definitionsPath, baselineDbPath]);

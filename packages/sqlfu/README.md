@@ -7,7 +7,7 @@
 - generated TypeScript wrappers next to those queries
 - versioned SQL migrations without building a full ORM around the database
 
-It is built around `@libsql/client`, `typesql-cli`, `sqlite3def`, and `dbmate`.
+It is built around `@libsql/client`, `typesql-cli`, and `sqlite3def`.
 
 ## Install
 
@@ -26,7 +26,6 @@ The default layout is:
 ├── definitions.sql
 ├── migrations/
 │   └── 20260326120000_add_posts_table.sql
-├── snapshot.sql
 ├── sql/
 │   ├── some-query.sql
 │   └── some-query.ts
@@ -45,7 +44,6 @@ import {defineConfig} from 'sqlfu';
 export default defineConfig({
   dbPath: './db/app.sqlite',
   migrationsDir: './migrations',
-  snapshotFile: './snapshot.sql',
   definitionsPath: './definitions.sql',
   sqlDir: './sql',
 });
@@ -54,8 +52,7 @@ export default defineConfig({
 Required config fields:
 
 - `dbPath`: default database path for `sqlfu sync` and migration commands
-- `migrationsDir`: versioned SQL migrations managed by dbmate
-- `snapshotFile`: dbmate schema dump used as the migration baseline snapshot
+- `migrationsDir`: directory containing finalized and draft migration files
 - `definitionsPath`: schema source of truth
 - `sqlDir`: directory containing checked-in `.sql` queries
 
@@ -69,65 +66,68 @@ Generate query wrappers from your schema and `.sql` files:
 sqlfu generate
 ```
 
-Create a new migration draft from `snapshot.sql` to `definitions.sql`:
+Create or update the draft migration:
 
 ```sh
-sqlfu migrate new --name add_posts_table
+sqlfu draft --name add_posts_table
 ```
 
-Apply pending migrations with dbmate:
+Apply finalized migrations only:
 
 ```sh
-sqlfu migrate up
+sqlfu migrate
 ```
 
-Show migration status:
+Apply finalized migrations plus the draft in a disposable or explicitly in-progress environment:
 
 ```sh
-sqlfu migrate status
+sqlfu migrate --include-draft
 ```
 
-Refresh `snapshot.sql` from the configured database:
+Finalize the current draft after validation:
 
 ```sh
-sqlfu migrate dump-schema
+sqlfu finalize
 ```
 
-Inspect drift between the configured database and `definitions.sql`:
+Run all migration checks:
 
 ```sh
-sqlfu migrate diff
+sqlfu check
 ```
 
-Fail if the configured database does not match `definitions.sql`:
+Run a single named check:
 
 ```sh
-sqlfu migrate check
+sqlfu check no-draft
 ```
 
 ## Migration Model
 
 `sqlfu` uses:
 
-- `dbmate` for versioned migration files, apply/status, and `snapshot.sql`
-- `sqlite3def` only to draft the `migrate:up` section of a new migration from the difference between `snapshot.sql` and `definitions.sql`
+- versioned SQL migration files with explicit `draft`/`final` metadata
+- `sqlite3def` to draft structural SQL from the difference between replayed migration state and `definitions.sql`
 
-That means the production path is versioned migrations, not direct declarative apply.
+That means the production path is replayed versioned migrations, not direct declarative apply.
 
 When you run:
 
 ```sh
-sqlfu migrate new --name add_posts_table
+sqlfu draft --name add_posts_table
 ```
 
 `sqlfu` will:
 
-1. materialize `snapshot.sql` into a temporary SQLite database
-2. diff that baseline against `definitions.sql`
-3. create a dbmate migration file in `migrations/`
-4. prefill the `-- migrate:up` section with the generated SQL draft
+1. replay finalized migrations into a temporary SQLite database
+2. if a draft already exists, replay that too
+3. diff that effective migration state against `definitions.sql`
+4. create or update the single draft migration in `migrations/`
 
 You should still review and edit the generated migration, especially for renames, data backfills, and destructive changes.
+
+There is no committed `snapshot.sql` file.
+If you want the guarantees a snapshot file would normally provide, run `sqlfu check`, which verifies that replayed migrations still reproduce `definitions.sql`.
 
 ## What `generate` Does
 
@@ -143,9 +143,7 @@ Generated TypeSQL outputs stay next to your `.sql` files.
 ## Notes
 
 - `definitions.sql` remains the schema source of truth
-- `snapshot.sql` is the committed snapshot of the last applied migration state
 - `migrations/` is the source of truth for deployment history
 - runtime adapters can be imported from `sqlfu/client`, for example `createExpoSqliteClient`
 - `sqlfu` auto-downloads `sqlite3def` for macOS and Linux into `.sqlfu/`
-- `dbmate` manages the `schema_migrations` table and writes `snapshot.sql`
 - SQLite view typing is still imperfect in TypeSQL, and some expressions such as `substr(...)` are not inferred directly, so `sqlfu` applies a small post-pass to improve generated result types without changing the SQL-first workflow

@@ -2,6 +2,7 @@ import dedent from 'dedent';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+
 import {createClient} from '@libsql/client';
 import {createRouterClient} from '@orpc/server';
 import {expect, test} from 'vitest';
@@ -9,474 +10,387 @@ import {expect, test} from 'vitest';
 import {sqlfuRouter} from '../src/api.js';
 import type {SqlfuProjectConfig} from '../src/core/types.js';
 
-test('draft creates the single mutable migration from finalized history to definitions.sql', async () => {
-  await using project = await createProjectFixture({
+test('draft creates the first draft migration from definitions.sql when there is no migration history yet', async () => {
+  await using fixture = await createMigrationsFixture('first-draft-from-empty-history', {
     definitionsSql: dedent`
-      create table users (id int, email text, nickname text);
-      create table posts (id int, slug text);
+      create table person(name text not null);
     `,
-    snapshotSql: dedent`
-      create table users (id int, email text);
-    `,
-    migrations: {
-      'migrations/20260331090000_create_users.sql': finalMigration(`
-        create table users (id int, email text);
-      `),
-    },
   });
 
-  await project.db.applySchema(`
-    create table users (id int, email text);
+  await fixture.client.draft({name: 'create_person'});
+
+  expect(await fixture.dumpFs()).toMatchInlineSnapshot(`
+    "definitions.sql
+      create table person(name text not null);
+    migrations/
+      20260410000000_create_person.sql
+        -- status: draft
+        create table person(name text not null);
+    "
   `);
-
-  await project.caller.draft({name: 'add_posts'});
-
-  const migrationFiles = await project.fs.readdir('migrations');
-  expect(migrationFiles).toMatchObject([
-    '20260331090000_create_users.sql',
-    expect.stringMatching(/^\d+_add_posts\.sql$/),
-  ]);
-  const draftMigrationPath = `migrations/${migrationFiles.at(-1)!}`;
-  expect(await project.fs.readFile(draftMigrationPath)).toContain('-- status: draft');
-  expect(await project.fs.readFile(draftMigrationPath)).toMatch(/alter table "users" add column "nickname" text;/i);
-  expect(await project.fs.readFile(draftMigrationPath)).toContain('create table posts');
-  expect(await project.fs.readFile(draftMigrationPath)).not.toContain('create table users');
-  expect(await project.fs.readFile('snapshot.sql')).toContain('create table users');
-  expect(await project.db.exportSchema()).toContain('create table users');
 });
 
-test('draft rewrites the existing draft instead of creating a second editable migration', async () => {
-  await using project = await createProjectFixture({
+test('finalize validates the draft and flips only the metadata line in place', async () => {
+  await using fixture = await createMigrationsFixture('finalize-in-place', {
     definitionsSql: dedent`
-      create table users (id int, email text);
-      create table posts (id int, slug text);
-      create index posts_slug_idx on posts(slug);
-    `,
-    snapshotSql: dedent`
-      create table users (id int, email text);
+      create table person(name text not null);
     `,
     migrations: {
-      'migrations/20260331090000_create_users.sql': finalMigration(`
-        create table users (id int, email text);
-      `),
-      'migrations/20260331090001_add_posts.sql': draftMigration(`
-        create table posts (id int, slug text);
-      `),
+      'migrations/20260410000000_create_person.sql': dedent`
+        -- status: draft
+        create table person(name text not null);
+      `,
     },
   });
 
-  await project.db.applySchema(`
-    create table users (id int, email text);
+  await fixture.client.finalize();
+
+  expect(await fixture.dumpFs()).toMatchInlineSnapshot(`
+    "definitions.sql
+      create table person(name text not null);
+    migrations/
+      20260410000000_create_person.sql
+        -- status: final
+        create table person(name text not null);
+    "
   `);
-
-  const beforeFiles = await project.fs.readdir('migrations');
-  await project.caller.draft();
-
-  const afterFiles = await project.fs.readdir('migrations');
-  expect(afterFiles).toMatchObject([
-    '20260331090000_create_users.sql',
-    '20260331090001_add_posts.sql',
-  ]);
-  expect(afterFiles).toEqual(beforeFiles);
-  expect(await project.fs.readFile('migrations/20260331090001_add_posts.sql')).toContain('-- status: draft');
-  expect(await project.fs.readFile('migrations/20260331090001_add_posts.sql')).toContain('create index posts_slug_idx');
 });
 
-test('draft without a name creates a default draft file when none exists yet', async () => {
-  await using project = await createProjectFixture({
+test('draft appends new generated SQL to the existing draft without discarding manual edits', async () => {
+  await using fixture = await createMigrationsFixture('append-to-existing-draft', {
     definitionsSql: dedent`
-      create table users (id int, email text);
-      create table posts (id int, slug text);
-    `,
-    snapshotSql: dedent`
-      create table users (id int, email text);
+      create table person(name text not null);
+      create table pet(name text not null);
+      create index pet_name_idx on pet(name);
     `,
     migrations: {
-      'migrations/20260331090000_create_users.sql': finalMigration(`
-        create table users (id int, email text);
-      `),
+      'migrations/20260410000000_create_person.sql': dedent`
+        -- status: final
+        create table person(name text not null);
+      `,
+      'migrations/20260410000001_add_pet.sql': dedent`
+        -- status: draft
+        create table pet(name text not null);
+        insert into pet(name) values ('spot');
+      `,
     },
   });
 
-  await project.caller.draft();
+  await fixture.client.draft();
 
-  await expect(project.fs.readdir('migrations')).resolves.toMatchObject([
-    '20260331090000_create_users.sql',
-    expect.stringMatching(/^\d+_create_table_posts\.sql$/),
-  ]);
-});
-
-test('draft with a name errors if a draft already exists', async () => {
-  await using project = await createProjectFixture({
-    definitionsSql: dedent`
-      create table users (id int, email text);
-      create table posts (id int, slug text);
-      create index posts_slug_idx on posts(slug);
-    `,
-    snapshotSql: dedent`
-      create table users (id int, email text);
-    `,
-    migrations: {
-      'migrations/20260331090000_create_users.sql': finalMigration(`
-        create table users (id int, email text);
-      `),
-      'migrations/20260331090001_add_posts.sql': draftMigration(`
-        create table posts (id int, slug text);
-      `),
-    },
-  });
-
-  await expect(project.caller.draft({name: 'rename_me'})).rejects.toThrow(/already exists/i);
-});
-
-test('draft finalize flips the migration to final and updates snapshot.sql', async () => {
-  await using project = await createProjectFixture({
-    definitionsSql: dedent`
-      create table users (id int, email text);
-      create table posts (id int, slug text);
-    `,
-    snapshotSql: dedent`
-      create table users (id int, email text);
-    `,
-    migrations: {
-      'migrations/20260331090000_create_users.sql': finalMigration(`
-        create table users (id int, email text);
-      `),
-      'migrations/20260331090001_add_posts.sql': draftMigration(`
-        create table posts (id int, slug text);
-      `),
-    },
-  });
-
-  await project.caller.draft({finalize: true});
-
-  expect(await project.fs.readFile('migrations/20260331090001_add_posts.sql')).toContain('-- status: final');
-  expect(await project.fs.readFile('migrations/20260331090001_add_posts.sql')).not.toContain('-- status: draft');
-  expect(await project.fs.readFile('snapshot.sql')).toContain('create table posts');
-});
-
-test('draft content writes the provided sql instead of generating a sqlite3def diff', async () => {
-  await using project = await createProjectFixture({
-    definitionsSql: dedent`
-      create table users (id int, email text, nickname text);
-      create table posts (id int, slug text);
-    `,
-    snapshotSql: dedent`
-      create table users (id int, email text);
-    `,
-    migrations: {
-      'migrations/20260331090000_create_users.sql': finalMigration(`
-        create table users (id int, email text);
-      `),
-    },
-  });
-
-  await project.caller.draft({content: 'create table audit_log (id int);'});
-
-  const migrationFiles = await project.fs.readdir('migrations');
-  const draftMigrationPath = `migrations/${migrationFiles.at(-1)!}`;
-  expect(await project.fs.readFile(draftMigrationPath)).toContain('create table audit_log (id int);');
-  expect(await project.fs.readFile(draftMigrationPath)).not.toContain('alter table "users" add column "nickname" text;');
-  expect(await project.fs.readFile(draftMigrationPath)).not.toContain('create table posts');
-});
-
-test('migrate refuses to run while a draft migration exists', async () => {
-  await using project = await createProjectFixture({
-    definitionsSql: dedent`
-      create table users (id int, email text);
-      create table posts (id int, slug text);
-    `,
-    snapshotSql: dedent`
-      create table users (id int, email text);
-    `,
-    migrations: {
-      'migrations/20260331090000_create_users.sql': finalMigration(`
-        create table users (id int, email text);
-      `),
-      'migrations/20260331090001_add_posts.sql': draftMigration(`
-        create table posts (id int, slug text);
-      `),
-    },
-  });
-
-  await project.db.applySchema(`
-    create table users (id int, email text);
+  expect(await fixture.dumpFs()).toMatchInlineSnapshot(`
+    "definitions.sql
+      create table person(name text not null);
+      create table pet(name text not null);
+      create index pet_name_idx on pet(name);
+    migrations/
+      20260410000000_create_person.sql
+        -- status: final
+        create table person(name text not null);
+      20260410000001_add_pet.sql
+        -- status: draft
+        create table pet(name text not null);
+        insert into pet(name) values ('spot');
+        
+        create index pet_name_idx on pet(name);
+    "
   `);
-
-  await expect(project.caller.migrate()).rejects.toThrow(/draft/i);
-  expect(await project.db.exportSchema()).toContain('create table users');
-  expect(await project.db.exportSchema()).not.toContain('create table posts');
 });
 
-test('sync fixes a drifted development database without mutating migrations or snapshot.sql', async () => {
-  await using project = await createProjectFixture({
+test('draft is a no-op when the existing draft already matches definitions.sql', async () => {
+  await using fixture = await createMigrationsFixture('draft-no-op', {
     definitionsSql: dedent`
-      create table users (id int, email text);
-      create table posts (id int, slug text);
-    `,
-    snapshotSql: dedent`
-      create table users (id int, email text);
+      create table person(name text not null);
+      create table pet(name text not null);
     `,
     migrations: {
-      'migrations/20260331090000_create_users.sql': finalMigration(`
-        create table users (id int, email text);
-      `),
-      'migrations/20260331090001_add_posts.sql': draftMigration(`
-        create table posts (id int, slug text);
-      `),
+      'migrations/20260410000000_create_person.sql': dedent`
+        -- status: final
+        create table person(name text not null);
+      `,
+      'migrations/20260410000001_add_pet.sql': dedent`
+        -- status: draft
+        create table pet(name text not null);
+      `,
     },
   });
 
-  await project.db.applySchema(`
-    create table users (id int, email text, nickname text);
+  const before = await fixture.readFile('migrations/20260410000001_add_pet.sql');
+
+  await fixture.client.draft();
+
+  expect(await fixture.readFile('migrations/20260410000001_add_pet.sql')).toBe(before);
+});
+
+test('draft fails when the existing draft cannot be replayed', async () => {
+  await using fixture = await createMigrationsFixture('broken-draft', {
+    definitionsSql: dedent`
+      create table person(name text not null);
+      create table pet(name text not null);
+      create index pet_name_idx on pet(name);
+    `,
+    migrations: {
+      'migrations/20260410000000_create_person.sql': dedent`
+        -- status: final
+        create table person(name text not null);
+      `,
+      'migrations/20260410000001_add_pet.sql': dedent`
+        -- status: draft
+        create table pet(name text not null);
+        this is not valid sql;
+      `,
+    },
+  });
+
+  await expect(fixture.client.draft()).rejects.toThrow(/valid sql|syntax/i);
+});
+
+test('migrate requires explicit includeDraft while a draft exists and can include it when requested', async () => {
+  await using fixture = await createMigrationsFixture('migrate-include-draft', {
+    definitionsSql: dedent`
+      create table person(name text not null);
+      create table pet(name text not null);
+    `,
+    migrations: {
+      'migrations/20260410000000_create_person.sql': dedent`
+        -- status: final
+        create table person(name text not null);
+      `,
+      'migrations/20260410000001_add_pet.sql': dedent`
+        -- status: draft
+        create table pet(name text not null);
+      `,
+    },
+  });
+
+  await expect(fixture.client.migrate({includeDraft: false})).rejects.toThrow(/draft/i);
+  expect(await fixture.dumpDbSchema()).toBe('');
+
+  await fixture.client.migrate({includeDraft: true});
+
+  expect(await fixture.dumpDbSchema()).toMatchInlineSnapshot(`
+    "create table person(name text not null);
+    create table pet(name text not null);"
   `);
-
-  const beforeDraft = await project.fs.readFile('migrations/20260331090001_add_posts.sql');
-  const beforeSnapshot = await project.fs.readFile('snapshot.sql');
-
-  await project.caller.sync();
-
-  expect(await project.db.exportSchema()).toContain('create table posts');
-  expect(await project.db.exportSchema()).not.toContain('nickname');
-  expect(await project.fs.readFile('migrations/20260331090001_add_posts.sql')).toBe(beforeDraft);
-  expect(await project.fs.readFile('snapshot.sql')).toBe(beforeSnapshot);
 });
 
-test('check respects injected project config and db even when fs falls back to the default filesystem', async () => {
-  await using project = await createProjectFixture({
+test('draft fails when the draft migration is not lexically last', async () => {
+  await using fixture = await createMigrationsFixture('draft-not-last', {
     definitionsSql: dedent`
-      create table users (id int, email text);
-    `,
-    snapshotSql: dedent`
-      create table users (id int, email text);
+      create table person(name text not null);
+      create table pet(name text not null);
+      create table toy(name text not null);
     `,
     migrations: {
-      'migrations/20260331090000_create_users.sql': finalMigration(`
-        create table users (id int, email text);
-      `),
+      'migrations/20260410000000_create_person.sql': dedent`
+        -- status: final
+        create table person(name text not null);
+      `,
+      'migrations/20260410000001_add_pet.sql': dedent`
+        -- status: draft
+        create table pet(name text not null);
+      `,
+      'migrations/20260410000002_add_toy.sql': dedent`
+        -- status: final
+        create table toy(name text not null);
+      `,
     },
   });
 
-  let exportSchemaCalls = 0;
-  const caller = createRouterClient(sqlfuRouter, {
-    context: {
-      projectConfig: project.projectConfig,
-      db: {
-        async applySchema() {
-          throw new Error('applySchema should not be called');
-        },
-        async exportSchema() {
-          exportSchemaCalls += 1;
-          return dedent`
-            create table users (id int, email text);
-          `;
-        },
-      },
-    },
-  });
-
-  await expect(caller.check()).resolves.toMatchObject({
-    ok: 'ok',
-    desiredVsHistory: 'ok',
-    finalizedVsSnapshot: 'ok',
-    databaseVsDesired: 'ok',
-    databaseVsFinalized: 'ok',
-  });
-  expect(exportSchemaCalls).toBe(1);
+  await expect(fixture.client.draft()).rejects.toThrow(/lexically last|bump/i);
 });
 
-test('check reports where desired schema, finalized history, snapshot, and actual database disagree', async () => {
-  await using project = await createProjectFixture({
+test('draft can bump the existing draft timestamp to restore ordering', async () => {
+  await using fixture = await createMigrationsFixture('draft-bump-timestamp', {
     definitionsSql: dedent`
-      create table users (id int, email text);
-      create table posts (id int, slug text);
-      create index posts_slug_idx on posts(slug);
-    `,
-    snapshotSql: dedent`
-      create table users (id int, email text);
+      create table person(name text not null);
+      create table pet(name text not null);
+      create table toy(name text not null);
     `,
     migrations: {
-      'migrations/20260331090000_create_users.sql': finalMigration(`
-        create table users (id int, email text);
-      `),
-      'migrations/20260331090001_add_posts.sql': draftMigration(`
-        create table posts (id int, slug text);
-      `),
+      'migrations/20260410000000_create_person.sql': dedent`
+        -- status: final
+        create table person(name text not null);
+      `,
+      'migrations/20260410000001_add_pet.sql': dedent`
+        -- status: draft
+        create table pet(name text not null);
+      `,
+      'migrations/20260410000002_add_toy.sql': dedent`
+        -- status: final
+        create table toy(name text not null);
+      `,
     },
   });
 
-  await project.db.applySchema(`
-    create table users (id int, email text, nickname text);
+  await fixture.client.draft({bumpTimestamp: true});
+
+  expect(await fixture.dumpFs()).toMatchInlineSnapshot(`
+    "definitions.sql
+      create table person(name text not null);
+      create table pet(name text not null);
+      create table toy(name text not null);
+    migrations/
+      20260410000000_create_person.sql
+        -- status: final
+        create table person(name text not null);
+      20260410000002_add_toy.sql
+        -- status: final
+        create table toy(name text not null);
+      20260410000003_add_pet.sql
+        -- status: draft
+        create table pet(name text not null);
+    "
   `);
-
-  await expect(project.caller.check()).resolves.toMatchObject({
-    ok: expect.stringMatching(/^failure: /),
-    desiredVsHistory: expect.stringContaining('desired schema'),
-    finalizedVsSnapshot: 'ok',
-    databaseVsDesired: expect.stringContaining('database'),
-    databaseVsFinalized: expect.stringContaining('database'),
-  });
 });
 
-test('draft does not require the actual database to match definitions.sql first', async () => {
-  await using project = await createProjectFixture({
+test('check.all reports that a draft is the only remaining blocker when migrations already match definitions.sql', async () => {
+  await using fixture = await createMigrationsFixture('check-ready-to-finalize', {
     definitionsSql: dedent`
-      create table users (id int, email text, nickname text);
-      create table posts (id int, slug text);
-    `,
-    snapshotSql: dedent`
-      create table users (id int, email text);
+      create table person(name text not null);
+      create table pet(name text not null);
     `,
     migrations: {
-      'migrations/20260331090000_create_users.sql': finalMigration(`
-        create table users (id int, email text);
-      `),
+      'migrations/20260410000000_create_person.sql': dedent`
+        -- status: final
+        create table person(name text not null);
+      `,
+      'migrations/20260410000001_add_pet.sql': dedent`
+        -- status: draft
+        create table pet(name text not null);
+      `,
     },
   });
 
-  await project.db.applySchema(`
-    create table users (id int, email text, nickname text);
-  `);
-
-  await project.caller.draft({name: 'add_posts'});
-
-  const migrationFiles = await project.fs.readdir('migrations');
-  const draftMigrationPath = `migrations/${migrationFiles.at(-1)!}`;
-  expect(await project.fs.readFile(draftMigrationPath)).toContain('-- status: draft');
-  expect(await project.fs.readFile(draftMigrationPath)).toMatch(/alter table "users" add column "nickname" text;/i);
-  expect(await project.fs.readFile(draftMigrationPath)).toContain('create table posts');
-  expect(await project.db.exportSchema()).toContain('nickname');
+  await expect(fixture.client.check.all()).resolves.toMatchObject({
+    ok: false,
+    checks: {
+      draftCount: {ok: true},
+      migrationMetadata: {ok: true},
+      draftIsLast: {ok: true},
+      migrationsMatchDefinitions: {ok: true},
+      noDraft: {ok: false, message: expect.stringMatching(/draft/i)},
+    },
+  });
 });
 
-async function createProjectFixture(input: {
-  definitionsSql: string;
-  snapshotSql: string;
-  migrations: Record<string, string>;
-}) {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'sqlfu-router-'));
-  const fsAdapter = createRealFs(root);
-  await fsAdapter.writeFile('definitions.sql', input.definitionsSql);
-  await fsAdapter.writeFile('snapshot.sql', input.snapshotSql);
-  await fsAdapter.mkdir('migrations');
-  for (const [filePath, contents] of Object.entries(input.migrations)) {
-    await fsAdapter.writeFile(filePath, contents);
-  }
+test('check.noDraft can run just the requested subcheck', async () => {
+  await using fixture = await createMigrationsFixture('check-one-subcheck', {
+    definitionsSql: dedent`
+      create table person(name text not null);
+    `,
+    migrations: {
+      'migrations/20260410000000_create_person.sql': dedent`
+        -- status: final
+        create table person(name text not null);
+      `,
+    },
+  });
 
-  const db = createRealDatabase(path.join(root, 'dev.db'));
+  await expect(fixture.client.check.noDraft()).resolves.toMatchObject({ok: true});
+});
+
+async function createMigrationsFixture(
+  slug: string,
+  input: {
+    definitionsSql: string;
+    migrations?: Record<string, string>;
+  },
+) {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), `sqlfu-${slug}-`));
+  const dbPath = path.join(root, 'dev.db');
   const projectConfig: SqlfuProjectConfig = {
     projectRoot: root,
-    dbPath: path.join(root, 'dev.db'),
+    dbPath,
     migrationsDir: path.join(root, 'migrations'),
-    snapshotFile: path.join(root, 'snapshot.sql'),
     definitionsPath: path.join(root, 'definitions.sql'),
     sqlDir: path.join(root, 'sql'),
     generatedImportExtension: '.js',
   };
-  const context = {
-    projectConfig,
-    fs: fsAdapter,
-    db,
-  };
-  const caller = createRouterClient(sqlfuRouter, {context});
+
+  await fs.mkdir(projectConfig.migrationsDir, {recursive: true});
+  await fs.writeFile(projectConfig.definitionsPath, withTrailingNewline(input.definitionsSql));
+
+  for (const [filePath, contents] of Object.entries(input.migrations ?? {})) {
+    const fullPath = path.join(root, filePath);
+    await fs.mkdir(path.dirname(fullPath), {recursive: true});
+    await fs.writeFile(fullPath, withTrailingNewline(contents));
+  }
+
+  const client = createRouterClient(sqlfuRouter, {
+    context: {
+      projectConfig,
+      now: () => new Date('2026-04-10T00:00:00.000Z'),
+    },
+  });
 
   return {
-    caller,
-    fs: fsAdapter,
-    db,
     root,
     projectConfig,
+    client,
+    async readFile(relativePath: string) {
+      return fs.readFile(path.join(root, relativePath), 'utf8');
+    },
+    async writeFile(relativePath: string, contents: string) {
+      const fullPath = path.join(root, relativePath);
+      await fs.mkdir(path.dirname(fullPath), {recursive: true});
+      await fs.writeFile(fullPath, contents);
+    },
+    async dumpFs() {
+      const lines: string[] = [];
+      await dumpInto(lines, root, '');
+      return `${lines.join('\n')}\n`;
+    },
+    async dumpDbSchema() {
+      return exportDatabaseSchema(dbPath);
+    },
     async [Symbol.asyncDispose]() {
-      await db.close();
       await fs.rm(root, {recursive: true, force: true});
     },
   };
 }
 
-function createRealFs(root: string) {
-  return {
-    async exists(filePath: string) {
-      try {
-        await fs.access(resolvePath(root, filePath));
-        return true;
-      } catch {
-        return false;
-      }
-    },
-    async readFile(filePath: string) {
-      return fs.readFile(resolvePath(root, filePath), 'utf8');
-    },
-    async writeFile(filePath: string, contents: string) {
-      const fullPath = resolvePath(root, filePath);
-      await fs.mkdir(path.dirname(fullPath), {recursive: true});
-      await fs.writeFile(fullPath, contents);
-    },
-    async readdir(dirPath: string) {
-      return (await fs.readdir(resolvePath(root, dirPath))).sort();
-    },
-    async mkdir(dirPath: string) {
-      await fs.mkdir(resolvePath(root, dirPath), {recursive: true});
-    },
-  };
+async function dumpInto(lines: string[], root: string, relativeDir: string) {
+  const dirPath = path.join(root, relativeDir);
+  const entries = (await fs.readdir(dirPath, {withFileTypes: true}))
+    .filter((entry) => entry.name !== 'dev.db')
+    .sort((left, right) => left.name.localeCompare(right.name));
+
+  for (const entry of entries) {
+    const relativePath = path.join(relativeDir, entry.name);
+    const indent = relativeDir.split(path.sep).filter(Boolean).length;
+    const prefix = '  '.repeat(indent);
+    if (entry.isDirectory()) {
+      lines.push(`${prefix}${entry.name}/`);
+      await dumpInto(lines, root, relativePath);
+      continue;
+    }
+
+    lines.push(`${prefix}${entry.name}`);
+    const contents = await fs.readFile(path.join(root, relativePath), 'utf8');
+    for (const line of contents.trimEnd().split('\n')) {
+      lines.push(`${prefix}  ${line}`);
+    }
+  }
 }
 
-function createRealDatabase(dbPath: string) {
+function withTrailingNewline(value: string) {
+  return value.endsWith('\n') ? value : `${value}\n`;
+}
+
+async function exportDatabaseSchema(dbPath: string) {
   const client = createClient({url: `file:${dbPath}`});
 
-  return {
-    async applySchema(sql: string) {
-      const existingObjects = await client.execute(`
-        select type, name
-        from sqlite_schema
-        where name not like 'sqlite_%'
-        order by case type when 'index' then 0 else 1 end, name
-      `);
-
-      for (const row of existingObjects.rows as Array<Record<string, unknown>>) {
-        const type = String(row.type);
-        const name = String(row.name);
-        if (type === 'index') {
-          await client.execute(`drop index if exists "${name}"`);
-          continue;
-        }
-        await client.execute(`drop ${type} if exists "${name}"`);
-      }
-
-      for (const statement of sqlStatements(sql)) {
-        await client.execute(statement);
-      }
-    },
-    async exportSchema() {
-      const result = await client.execute(`
-        select sql
-        from sqlite_schema
-        where sql is not null
-          and name not like 'sqlite_%'
-        order by type, name
-      `);
-      return result.rows.map((row) => String(row.sql).toLowerCase()).join('\n');
-    },
-    async close() {
-      client.close();
-    },
-  };
-}
-
-function finalMigration(upSql: string) {
-  return `-- status: final\n${dedent(upSql)}\n`;
-}
-
-function draftMigration(upSql: string) {
-  return `-- status: draft\n${dedent(upSql)}\n`;
-}
-
-function resolvePath(root: string, filePath: string) {
-  return path.isAbsolute(filePath) ? filePath : path.join(root, filePath);
-}
-
-function sqlStatements(sql: string) {
-  return dedent(sql)
-    .split(';')
-    .map((statement) => statement.trim())
-    .filter(Boolean)
-    .map((statement) => `${statement};`);
+  try {
+    const result = await client.execute(`
+      select sql
+      from sqlite_schema
+      where sql is not null
+        and name not like 'sqlite_%'
+      order by type, name
+    `);
+    return result.rows.map((row) => `${String(row.sql).toLowerCase()};`).join('\n');
+  } finally {
+    client.close();
+  }
 }

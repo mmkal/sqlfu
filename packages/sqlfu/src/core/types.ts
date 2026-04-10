@@ -72,7 +72,6 @@ export type SqlValue = QueryArg | SqlFragment;
 export interface SqlfuConfig {
   readonly dbPath: string;
   readonly migrationsDir: string;
-  readonly snapshotFile: string;
   readonly definitionsPath: string;
   readonly sqlDir: string;
   readonly generatedImportExtension?: '.js' | '.ts';
@@ -82,7 +81,6 @@ export interface SqlfuProjectConfig {
   readonly projectRoot: string;
   readonly dbPath: string;
   readonly migrationsDir: string;
-  readonly snapshotFile: string;
   readonly definitionsPath: string;
   readonly sqlDir: string;
   readonly generatedImportExtension: '.js' | '.ts';

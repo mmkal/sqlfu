@@ -694,7 +694,6 @@ async function createGenerateFixture(input: {
       export default {
         dbPath: './app.db',
         migrationsDir: './migrations',
-        snapshotFile: './snapshot.sql',
         definitionsPath: './definitions.sql',
         sqlDir: './sql',
         ${input.config?.generatedImportExtension ? `generatedImportExtension: '${input.config.generatedImportExtension}',` : ''}

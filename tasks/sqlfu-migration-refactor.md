@@ -23,10 +23,9 @@ Verified currently:
 
 Still to do:
 
-- add missing migration-router specs for the remaining integrity and failure cases
-- decide whether to refactor internal migration/replay helpers out of `api.ts`
-- tighten `sync` semantics around destructive or semantic data migrations
+- decide whether any further behavior changes are actually wanted
 - do a final sweep for obsolete wording and leftover dead code outside the current focused paths
+- optionally extract internal helper code from `api.ts` later if the file starts slowing development down
 
 ## Problem Statement
 
@@ -225,24 +224,27 @@ Exit criteria:
 
 Status:
 
-- partially complete
+- effectively complete
 - covered now:
   - creating the first draft from empty finalized history
   - finalizing by metadata flip only
   - appending to an existing draft after more `definitions.sql` changes
+  - `draft --rewrite` replacing contents in place
   - `draft` failing when the existing draft is broken
+  - malformed metadata and invalid status values
+  - multiple draft cases
   - `draft` failing when the draft is not lexically last
   - `draft --bump-timestamp` repairing order and preserving contents
   - `migrate` requiring explicit `includeDraft`
   - `check` named subchecks and report shape
-  - the case where only `no-draft` fails, indicating readiness to finalize
-- not covered yet:
-  - `draft --rewrite`
-  - invalid metadata cases
-  - multiple-draft cases
-  - `migrations-match-definitions` replay failure vs schema mismatch as distinct tested cases
+  - `migrations-match-definitions` replay failure vs schema mismatch
   - `finalize` failure when replay succeeds but schema still mismatches
-  - `sync` refusing semantic/destructive transitions
+  - the case where only `no-draft` fails, indicating readiness to finalize
+  - `sync` applying to an empty database
+  - `sync` succeeding for a safe additive change
+  - `sync` failing for a semantic/destructive transition with a product-facing error message
+- not covered yet:
+  - no known important gaps at the moment
 
 Exit criteria:
 
@@ -257,10 +259,10 @@ Exit criteria:
 
 Status:
 
-- largely complete
+- complete enough for current needs
 - replayed migrations are now the baseline for `draft`, `finalize`, and `check`
 - `snapshot.sql` is no longer part of the migration model
-- the remaining question is whether the replay/materialization helpers should stay embedded in `api.ts` or move to a focused internal module
+- helper extraction from `api.ts` is explicitly optional cleanup, not a required migration-model milestone
 
 Exit criteria:
 
@@ -281,6 +283,7 @@ Status:
 - draft count, draft ordering, and `bumpTimestamp` behavior are implemented
 - strict first-line status parsing exists
 - still worth adding explicit test coverage for malformed metadata and multiple drafts
+- completed
 
 Exit criteria:
 
@@ -302,6 +305,7 @@ Status:
 - draft replay before append is implemented
 - no-op behavior is implemented
 - `--rewrite` is still missing
+- completed
 
 Exit criteria:
 
@@ -322,6 +326,7 @@ Status:
 - `finalize` mutates only the metadata line
 - `check` is implemented as a sub-router with `all` as the default procedure
 - still worth adding explicit tests around replay failure vs schema mismatch messaging
+- completed
 
 Exit criteria:
 
@@ -344,7 +349,7 @@ Status:
 - snapshot-era config, API paths, router tests, and smoke test have been removed
 - `src/migrator/` has been renamed to `src/schemadiff/`
 - compatibility shims were avoided
-- one last dead-code/terminology sweep is still appropriate after the next test additions
+- a final dead-code/terminology sweep is still appropriate, but there is no longer a known model-level blocker
 
 Exit criteria:
 
@@ -391,12 +396,16 @@ The following old concepts should be removed, not merely deprecated in place:
 
 ## Recommended Next Slices
 
-1. Add missing migration-router specs for:
-   - malformed metadata
-   - multiple drafts
-   - finalize mismatch failure
-   - `migrations-match-definitions` replay failure vs schema mismatch
-2. Decide and implement the `draft --rewrite` behavior.
-3. Define and test `sync` behavior for semantic/destructive schema changes.
-4. Decide whether to extract the replay/materialization helpers from `api.ts` into a focused internal module.
-5. Do a final dead-code and terminology sweep once the above lands.
+1. Do a final dead-code and terminology sweep.
+2. Decide whether any README or docs wording still feels misleading now that the router behavior is stable.
+3. Only extract helper code from `api.ts` if the file becomes painful to change.
+
+## Practical Conclusion
+
+The migration-model refactor is now mostly finished.
+
+If we continue here, the remaining work is cleanup and polish rather than core behavior:
+
+- small docs/readme wording sweep
+- optional internal extraction from `api.ts`
+- any future behavior additions should be driven by a newly discovered product need, not by the original refactor scope

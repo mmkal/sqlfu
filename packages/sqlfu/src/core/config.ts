@@ -4,7 +4,6 @@ import {pathToFileURL} from 'node:url';
 
 import type {SqlfuConfig, SqlfuProjectConfig} from './types.js';
 
-export const defaultSqlite3defVersion = 'v3.10.1';
 const defaultConfigFileNames = ['sqlfu.config.ts', 'sqlfu.config.mjs', 'sqlfu.config.js', 'sqlfu.config.cjs'] as const;
 
 export function defineConfig(config: SqlfuConfig): SqlfuConfig {

@@ -1,10 +1,10 @@
-import Database, {type Database as LibsqlDatabase} from 'libsql';
+import BetterSqlite3 from 'better-sqlite3';
 import {expect, test} from 'vitest';
 
-import {createLibsqlSyncClient} from '../src/client.js';
+import {createBetterSqlite3Client} from '../../src/client.js';
 
-test('createLibsqlSyncClient works with a real libsql database', async () => {
-  using fixture = createLibsqlFixture(new Database(':memory:'));
+test('createBetterSqlite3Client works with a real better-sqlite3 database', async () => {
+  using fixture = createBetterSqlite3Fixture(new BetterSqlite3(':memory:'));
   fixture.client.sql.run`create table users (id integer primary key, email text not null)`;
 
   fixture.client.sql.run`insert into users (email) values (${'ada@example.com'})`;
@@ -36,8 +36,8 @@ test('createLibsqlSyncClient works with a real libsql database', async () => {
   ).toMatchObject([{id: 3, email: 'lin@example.com'}]);
 });
 
-test('createLibsqlSyncClient turns real sqlite syntax errors into promise rejections for tagged sql', async () => {
-  using fixture = createLibsqlFixture(new Database(':memory:'));
+test('createBetterSqlite3Client turns real sqlite syntax errors into promise rejections for tagged sql', async () => {
+  using fixture = createBetterSqlite3Fixture(new BetterSqlite3(':memory:'));
   fixture.client.sql.run`create table users (id integer primary key, email text not null)`;
 
   await expect(
@@ -45,11 +45,10 @@ test('createLibsqlSyncClient turns real sqlite syntax errors into promise reject
   ).resolves.toContain('syntax error');
 });
 
-test('createLibsqlSyncClient iterates rows', () => {
-  using fixture = createLibsqlFixture(new Database(':memory:'));
+test('createBetterSqlite3Client iterates rows with native statement iteration', () => {
+  using fixture = createBetterSqlite3Fixture(new BetterSqlite3(':memory:'));
   fixture.client.sql.run`create table users (id integer primary key, email text not null)`;
-  fixture.client.sql.run`insert into users (email) values (${'ada@example.com'})`;
-  fixture.client.sql.run`insert into users (email) values (${'grace@example.com'})`;
+  fixture.client.sql.run`insert into users (email) values (${'ada@example.com'}), (${'grace@example.com'})`;
 
   expect(
     [...fixture.client.iterate<{id: number; email: string}>({sql: 'select id, email from users order by id', args: []})],
@@ -59,9 +58,9 @@ test('createLibsqlSyncClient iterates rows', () => {
   ]);
 });
 
-function createLibsqlFixture(db: LibsqlDatabase) {
+function createBetterSqlite3Fixture(db: InstanceType<typeof BetterSqlite3>) {
   return {
-    client: createLibsqlSyncClient(db),
+    client: createBetterSqlite3Client(db),
     [Symbol.dispose]() {
       db.close();
     },

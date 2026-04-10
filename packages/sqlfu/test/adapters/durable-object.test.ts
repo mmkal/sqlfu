@@ -7,9 +7,9 @@ import ts from 'typescript';
 import {expect, test} from 'vitest';
 import dedent from 'dedent';
 
-const packageRoot = path.resolve(path.dirname(import.meta.filename), '..');
-declare const createDurableObjectClient: typeof import('../src/index.ts').createDurableObjectClient;
-declare const sql: typeof import('../src/index.ts').sql;
+const packageRoot = path.resolve(path.dirname(import.meta.filename), '../..');
+declare const createDurableObjectClient: typeof import('../../src/index.ts').createDurableObjectClient;
+declare const sql: typeof import('../../src/index.ts').sql;
 
 test('createDurableObjectClient works in a real durable object', async () => {
   await using fixture = await createDOFixture(

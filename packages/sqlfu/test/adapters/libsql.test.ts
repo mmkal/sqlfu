@@ -1,10 +1,10 @@
-import {expect, test} from 'bun:test';
-import {Database} from 'bun:sqlite';
+import Database, {type Database as LibsqlDatabase} from 'libsql';
+import {expect, test} from 'vitest';
 
-import {createBunClient} from '../src/client.js';
+import {createLibsqlSyncClient} from '../../src/client.js';
 
-test('createBunClient works with a real bun:sqlite database', async () => {
-  using fixture = createBunFixture(new Database(':memory:'));
+test('createLibsqlSyncClient works with a real libsql database', async () => {
+  using fixture = createLibsqlFixture(new Database(':memory:'));
   fixture.client.sql.run`create table users (id integer primary key, email text not null)`;
 
   fixture.client.sql.run`insert into users (email) values (${'ada@example.com'})`;
@@ -34,19 +34,19 @@ test('createBunClient works with a real bun:sqlite database', async () => {
       args: ['lin@example.com'],
     }),
   ).toMatchObject([{id: 3, email: 'lin@example.com'}]);
-
-  let error: unknown;
-  try {
-    await fixture.client.sql`selectTYPO from users`;
-  } catch (caught) {
-    error = caught;
-  }
-
-  expect(String(error)).toContain('syntax error');
 });
 
-test('createBunClient iterates rows with native statement iteration', () => {
-  using fixture = createBunFixture(new Database(':memory:'));
+test('createLibsqlSyncClient turns real sqlite syntax errors into promise rejections for tagged sql', async () => {
+  using fixture = createLibsqlFixture(new Database(':memory:'));
+  fixture.client.sql.run`create table users (id integer primary key, email text not null)`;
+
+  await expect(
+    fixture.client.sql`selectTYPO from users`.catch(String),
+  ).resolves.toContain('syntax error');
+});
+
+test('createLibsqlSyncClient iterates rows', () => {
+  using fixture = createLibsqlFixture(new Database(':memory:'));
   fixture.client.sql.run`create table users (id integer primary key, email text not null)`;
   fixture.client.sql.run`insert into users (email) values (${'ada@example.com'})`;
   fixture.client.sql.run`insert into users (email) values (${'grace@example.com'})`;
@@ -59,9 +59,9 @@ test('createBunClient iterates rows with native statement iteration', () => {
   ]);
 });
 
-function createBunFixture(db: InstanceType<typeof Database>) {
+function createLibsqlFixture(db: LibsqlDatabase) {
   return {
-    client: createBunClient(db),
+    client: createLibsqlSyncClient(db),
     [Symbol.dispose]() {
       db.close();
     },

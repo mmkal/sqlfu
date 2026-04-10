@@ -6,9 +6,9 @@ import {Miniflare} from 'miniflare';
 import ts from 'typescript';
 import {expect, test} from 'vitest';
 
-const packageRoot = path.resolve(path.dirname(import.meta.filename), '..');
-declare const createD1Client: typeof import('../src/index.ts').createD1Client;
-declare const sql: typeof import('../src/index.ts').sql;
+const packageRoot = path.resolve(path.dirname(import.meta.filename), '../..');
+declare const createD1Client: typeof import('../../src/index.ts').createD1Client;
+declare const sql: typeof import('../../src/index.ts').sql;
 
 test('createD1Client works in a generated local worker fixture', async () => {
   await using fixture = await createD1Fixture({
@@ -50,7 +50,7 @@ test('createD1Client works in a generated local worker fixture', async () => {
   expect(await fixture.fetch('http://fixture/create')).toMatchObject({ok: true});
   expect(await fixture.fetch('http://fixture/insert?id=1&name=bob')).toMatchObject({ok: true});
   expect(await fixture.fetch('http://fixture/insert?id=2&name=ada')).toMatchObject({ok: true});
-  
+
   const res = await fixture.fetch('http://fixture/list')
   expect(await res.json()).toMatchObject([
     {id: 1, name: 'bob'},

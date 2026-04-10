@@ -3,6 +3,5 @@
   "compilerOptions": {
     "noEmit": true
   },
-  "include": ["src/**/*.ts", "test/**/*.ts", "test/**/*.d.ts"],
-  "exclude": ["test/buntest.ts"]
+  "include": ["src/**/*.ts", "test/**/*.ts", "test/**/*.d.ts"]
 }

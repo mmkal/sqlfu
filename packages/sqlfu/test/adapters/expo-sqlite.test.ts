@@ -9,9 +9,9 @@ import {chromium, type Page} from 'playwright';
 import ts from 'typescript';
 import {expect, test} from 'vitest';
 
-const packageRoot = path.resolve(path.dirname(import.meta.filename), '..');
-declare const createExpoSqliteClient: typeof import('../src/client.ts').createExpoSqliteClient;
-declare const sql: typeof import('../src/client.ts').sql;
+const packageRoot = path.resolve(path.dirname(import.meta.filename), '../..');
+declare const createExpoSqliteClient: typeof import('../../src/client.js').createExpoSqliteClient;
+declare const sql: typeof import('../../src/client.js').sql;
 type ExecaProcess = ReturnType<typeof execa>;
 
 test(

@@ -2,136 +2,170 @@
 
 This document captures the current design direction for `sqlfu`'s migration system.
 
-## Persistent States
+## Core Model
 
-`sqlfu` cares about five persistent states:
+`sqlfu` treats schema and migration history as separate things with separate jobs:
 
 1. `definitions.sql`
    - The desired schema.
-   - This is the thing we want the world to converge to.
+   - This is the only human-authored schema document.
 
-2. The actual database
-   - The real SQLite database file or runtime database.
-   - It may be drifted, partially migrated, hand-edited, or otherwise incorrect.
+2. Finalized migrations
+   - The immutable migration history.
+   - These are applied in filename order.
 
-3. Final migration files
-   - The historical recipe we expect durable environments to apply.
-   - These are immutable once finalized.
-
-4. `snapshot.sql`
-   - A committed snapshot of what replaying all final migrations should produce.
-   - This is the finalized migration baseline.
-
-5. The draft migration
+3. The draft migration
    - At most one mutable migration.
-   - This bridges finalized history to the current desired schema.
+   - If it exists, it must be lexically last.
+   - It is part of the in-progress migration state.
 
-There is also one important non-persistent state:
+4. The actual database
+   - A real SQLite database file or runtime database.
+   - It may be clean, drifted, partially migrated, or hand-edited.
 
-- Ephemeral materialized snapshots
-  - Temporary SQLite databases used during diffing, replay, and consistency checks.
+5. Ephemeral replay databases
+   - Temporary SQLite databases used to replay migrations, validate drafts, and compare against `definitions.sql`.
+
+There is no committed `snapshot.sql` file in this model.
+
+## Why There Is No Snapshot File
+
+`sqlfu` intentionally avoids a committed schema snapshot artifact.
+
+Reasons:
+
+- `definitions.sql` is already the readable schema document people review.
+- A second committed schema file creates drift risk and forces users to understand two schema artifacts.
+- The finalized baseline can be computed mechanically by replaying finalized migrations into a temporary database.
+
+If you want the reassurance a snapshot file would normally provide, run `sqlfu check`.
+That is the explicit way to ask:
+
+- do the migrations replay successfully?
+- does replayed history match `definitions.sql`?
+- is a draft still present?
 
 ## Command Semantics
 
 ### `sqlfu sync`
 
-- Directly make the target database match `definitions.sql`.
-- Good for local development, tests, and ephemeral databases.
-- Does not mutate migrations.
-- Does not mutate `snapshot.sql`.
-
-### `sqlfu migrate`
-
-- Apply finalized migrations to the target database.
-- Fails if a draft migration exists, unless explicitly overridden.
-- Good for production and durable shared environments.
-- May refresh `snapshot.sql` after finalized history changes.
+- Makes the target database match `definitions.sql`.
+- Intended for local development and other disposable databases.
+- Mutates the database only.
+- Does not create or update migration files.
+- Must fail conservatively when a change requires semantic data migration or other manual transition logic.
 
 ### `sqlfu draft`
 
-- Create or update the single draft migration.
-- Diffs the finalized migration baseline against `definitions.sql`.
-- Does not depend on the actual database being clean.
-- Does not mutate `snapshot.sql`.
+- Creates the first draft when no draft exists.
+- Updates the existing draft when one already exists.
+- Does not depend on the current development database being clean.
+- Uses replayed migration state, never the live local database, as its baseline.
 
-## Baseline Rules
+Baseline rules:
 
-`snapshot.sql` represents finalized history only.
+- no draft exists:
+  - diff finalized migrations against `definitions.sql`
+- draft exists:
+  - replay finalized migrations plus the draft
+  - diff that effective migration state against `definitions.sql`
 
-That means:
+If the existing draft no longer replays cleanly, `sqlfu draft` fails.
 
-- `snapshot.sql` changes when finalized migration history changes.
-- `snapshot.sql` does not change when the draft changes.
-- `snapshot.sql` does not change when `sqlfu sync` updates a local database directly.
+If the existing draft is not lexically last, `sqlfu draft` fails unless explicitly told to bump its timestamp.
 
-The draft should always be computed from:
+### `sqlfu migrate`
 
-- replayed final migrations, or `snapshot.sql`
-- compared against `definitions.sql`
+- Applies finalized migrations to the target database.
+- Fails if a draft exists, unless explicitly told to include it.
+- `--include-draft` is the way to exercise the historical path while a draft is still in progress.
 
-The draft should not be computed from:
+### `sqlfu finalize`
 
-- whatever the current local database happens to look like
+- Replays finalized migrations plus the draft in a temporary database.
+- Compares the result to `definitions.sql`.
+- Fails if replay fails or if the resulting schema does not match `definitions.sql`.
+- If validation succeeds, flips the draft metadata from `draft` to `final`.
+- Does not rename the file.
+- Does not rewrite the SQL body.
+- Does not mutate the user's development database.
 
-## Divergence Rules
+## Metadata Rules
 
-Some mismatches are acceptable.
+Every migration file must have strict first-line metadata, for example:
 
-Allowed:
+```sql
+-- status: draft
+```
 
-- The actual database differs from `definitions.sql` during local development.
-- `definitions.sql` differs from finalized migrations while a draft exists.
+The parser may support additional comma-separated metadata, for example:
 
-Not allowed:
+```sql
+-- status: draft, owner: person-table
+```
 
-- Final migrations differ from `snapshot.sql`.
-- In strict CI, `definitions.sql` differs from finalized migrations plus the draft.
-- In migration mode, the database differs from finalized migrations after `sqlfu migrate`.
+The important invariants are:
 
-## Typical Resolution Steps
+- metadata must be on the first line
+- status must be explicit
+- status must be either `draft` or `final`
+- missing or malformed metadata is an error
 
-### `definitions.sql` differs from finalized migrations, and no draft exists
+## Draft Lifecycle
 
-- Run `sqlfu draft`.
+Typical flow:
 
-### `definitions.sql` differs from finalized migrations, and a draft already exists
+1. Edit `definitions.sql`.
+2. Run `sqlfu sync` while doing local schema-driven development.
+3. Run `sqlfu draft` to create or extend the mutable transition program.
+4. Manually edit the draft if the migration needs real data movement or custom sequencing.
+5. Run `sqlfu migrate --include-draft` to exercise the historical path.
+6. Run `sqlfu check`.
+7. If the only failure is `no-draft`, run `sqlfu finalize`.
 
-- Run `sqlfu draft` again to update the draft in place.
-
-### `snapshot.sql` differs from replayed finalized migrations
-
-- Refresh `snapshot.sql` from finalized history.
-
-### The actual database differs from `definitions.sql` in local development
-
-- Run `sqlfu sync`.
-
-### The actual database differs from finalized migrations in migration mode
-
-- If the difference is just pending migrations, run `sqlfu migrate`.
-- If the database has drifted outside migration history, stop and inspect.
+This separation matters because `definitions.sql` describes the destination, but not always the transition.
+For example, splitting `name` into `firstname` and `lastname` may require custom `update` statements that `sqlfu sync` cannot invent safely.
 
 ## Checks
 
-`sqlfu check` should report multiple relationships, not just one boolean:
+`sqlfu check` should run named checks and print a multi-status report.
 
-- desired schema vs finalized migrations plus draft
-- finalized migrations vs `snapshot.sql`
-- actual database vs desired schema in sync mode
-- actual database vs finalized migrations in migration mode
+The current intended checks are:
 
-This can be one command with a structured report, or multiple targeted subcommands.
+- `draft-count`
+  - there are zero or one draft migrations
+- `migration-metadata`
+  - all migration metadata is valid
+- `draft-is-last`
+  - the draft, if present, is lexically last
+- `migrations-match-definitions`
+  - replayed migrations produce the same schema as `definitions.sql`
+  - if a draft exists, it is included in the replay
+  - output should distinguish replay failure from schema mismatch
+- `no-draft`
+  - no draft exists
+
+The plain `sqlfu check` command should be safe for CI because `no-draft` is part of the default set.
+That means a branch with a valid draft will still fail `check`, but usefully:
+
+- if `migrations-match-definitions` passes
+- and `no-draft` is the only failing check
+
+then the repo is effectively ready for `sqlfu finalize`.
 
 ## Non-Goals
 
-- Down migrations are not supported.
-- Multiple drafts are not supported.
-- Git-based draft heuristics are not core behavior.
+- Down migrations
+- Multiple drafts
+- Best-effort merge of generated SQL into hand-edited SQL
+- Using the live local database as the migration-authoring baseline
+- Git-aware default draft detection
 
 ## Extension Points
 
-The default draft policy should be explicit metadata, but `sqlfu` should allow a callback:
+The default status policy is strict first-line metadata parsing.
+Later, `sqlfu` may allow a configurable callback like:
 
-- `migration.status() => 'draft' | 'final'`
+- `migration.status(filePath) => 'draft' | 'final'`
 
-That keeps the default predictable while still allowing custom git-aware or branch-aware behavior.
+But the default behavior should remain predictable and explicit.

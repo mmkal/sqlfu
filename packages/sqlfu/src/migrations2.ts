@@ -10,33 +10,44 @@ import type {SqlfuProjectConfig} from './core/types.js';
 
 const base = os.$context<Migrations2Context>();
 const sqlite3defConfig = createDefaultSqlite3defConfig('migrations2');
-
+const draftInputSchema = z
+  .object({
+    name: z.string().min(1).optional(),
+    bumpTimestamp: z.boolean().optional(),
+  })
+  .optional();
+const migrateInputSchema = z.object({
+  includeDraft: z.boolean(),
+});
 export const migrations2Router = {
-  draft: base
-    .input(
-      z
-        .object({
-          name: z.string().min(1),
-        })
-        .optional(),
-    )
-    .handler(async ({context, input}) => {
+  draft: base.input(draftInputSchema).handler(async ({context, input}) => {
       const runtime = createRuntime(context);
-      const existingMigrations = await runtime.readMigrations();
-      const definitionsSql = await fs.readFile(context.projectConfig.definitionsPath, 'utf8');
+      let existingMigrations = await runtime.readMigrations();
+      const definitionsSql = await runtime.readDefinitionsSql();
       const draftMigrations = existingMigrations.filter((migration) => migration.status === 'draft');
 
       if (draftMigrations.length > 1) {
         throw new Error('multiple draft migrations exist');
       }
 
-      const draft = draftMigrations[0];
-      const baselineSchema = draft
-        ? await materializeSchema(sqlite3defConfig, {
-            projectRoot: context.projectConfig.projectRoot,
-            migrationPaths: existingMigrations.map((migration) => migration.path),
-          })
-        : '';
+      let draft = draftMigrations[0];
+      if (draft && existingMigrations.at(-1)?.fileName !== draft.fileName) {
+        if (input?.bumpTimestamp !== true) {
+          throw new Error('draft migration must be lexically last; rerun with bumpTimestamp: true');
+        }
+
+        const bumpedFileName = `${nextMigrationId(existingMigrations, runtime.now())}_${draft.fileName.replace(/^\d{14}_/u, '')}`;
+        const bumpedPath = path.join(context.projectConfig.migrationsDir, bumpedFileName);
+        await fs.rename(draft.path, bumpedPath);
+        existingMigrations = await runtime.readMigrations();
+        const bumpedDraft = existingMigrations.find((migration) => migration.status === 'draft');
+        if (!bumpedDraft) {
+          throw new Error('draft migration disappeared after bumpTimestamp');
+        }
+        draft = bumpedDraft;
+      }
+
+      const baselineSchema = draft ? await materializeMigrationsSchema(runtime.projectRoot, existingMigrations) : '';
       const diffLines = await diffSnapshotSqlToDesiredSql(sqlite3defConfig, {
         snapshotSql: baselineSchema,
         desiredSql: definitionsSql,
@@ -60,6 +71,26 @@ export const migrations2Router = {
       await fs.writeFile(path.join(context.projectConfig.migrationsDir, fileName), contents);
     }),
 
+  migrate: base.input(migrateInputSchema).handler(async ({context, input}) => {
+    const runtime = createRuntime(context);
+    const existingMigrations = await runtime.readMigrations();
+    const draftMigrations = existingMigrations.filter((migration) => migration.status === 'draft');
+
+    if (draftMigrations.length > 1) {
+      throw new Error('multiple draft migrations exist');
+    }
+
+    if (draftMigrations.length === 1 && !input.includeDraft) {
+      throw new Error('draft migration exists; pass includeDraft: true to apply it');
+    }
+
+    const migrationsToApply = input.includeDraft
+      ? existingMigrations
+      : existingMigrations.filter((migration) => migration.status === 'final');
+
+    await applyMigrationsToDatabase(context.projectConfig.dbPath, migrationsToApply);
+  }),
+
   finalize: base.handler(async ({context}) => {
     const runtime = createRuntime(context);
     const existingMigrations = await runtime.readMigrations();
@@ -74,16 +105,10 @@ export const migrations2Router = {
     }
 
     const draft = draftMigrations[0]!;
-    const definitionsSql = await fs.readFile(context.projectConfig.definitionsPath, 'utf8');
+    const definitionsSql = await runtime.readDefinitionsSql();
     const [definitionsSchema, migrationsSchema] = await Promise.all([
-      materializeSchema(sqlite3defConfig, {
-        projectRoot: context.projectConfig.projectRoot,
-        sql: definitionsSql,
-      }),
-      materializeSchema(sqlite3defConfig, {
-        projectRoot: context.projectConfig.projectRoot,
-        migrationPaths: existingMigrations.map((migration) => migration.path),
-      }),
+      materializeDefinitionsSchema(runtime.projectRoot, definitionsSql),
+      materializeMigrationsSchema(runtime.projectRoot, existingMigrations),
     ]);
 
     if (definitionsSchema !== migrationsSchema) {
@@ -93,6 +118,36 @@ export const migrations2Router = {
     const nextContents = draft.contents.replace(/^--\s*status:\s*draft\b/iu, '-- status: final');
     await fs.writeFile(draft.path, nextContents);
   }),
+
+  check: {
+    all: base.meta({default: true}).handler(async ({context}) => {
+      const checks = await runChecks(createRuntime(context));
+      return {
+        ok: Object.values(checks).every((check) => check.ok),
+        checks,
+      };
+    }),
+
+    draftCount: base.handler(async ({context}) => {
+      return (await runChecks(createRuntime(context))).draftCount;
+    }),
+
+    migrationMetadata: base.handler(async ({context}) => {
+      return (await runChecks(createRuntime(context))).migrationMetadata;
+    }),
+
+    draftIsLast: base.handler(async ({context}) => {
+      return (await runChecks(createRuntime(context))).draftIsLast;
+    }),
+
+    migrationsMatchDefinitions: base.handler(async ({context}) => {
+      return (await runChecks(createRuntime(context))).migrationsMatchDefinitions;
+    }),
+
+    noDraft: base.handler(async ({context}) => {
+      return (await runChecks(createRuntime(context))).noDraft;
+    }),
+  },
 };
 
 export function createMigrations2Caller(context: Migrations2Context) {
@@ -101,7 +156,9 @@ export function createMigrations2Caller(context: Migrations2Context) {
 
 function createRuntime(context: Migrations2Context) {
   return {
+    projectRoot: context.projectConfig.projectRoot,
     now: () => context.now?.() ?? new Date(),
+    readDefinitionsSql: () => fs.readFile(context.projectConfig.definitionsPath, 'utf8'),
     async readMigrations() {
       try {
         const names = (await fs.readdir(context.projectConfig.migrationsDir))
@@ -184,32 +241,32 @@ function slugify(value: string) {
 }
 
 async function materializeSchema(
-  config: {projectRoot: string; tempDir: string},
-  input:
+  projectRoot: string,
+  mode:
     | {
-        projectRoot: string;
-        sql: string;
+        kind: 'definitions';
+        definitionsSql: string;
       }
     | {
-        projectRoot: string;
-        migrationPaths: readonly string[];
+        kind: 'migrations';
+        migrations: readonly {path: string}[];
       },
 ) {
-  await fs.mkdir(config.tempDir, {recursive: true});
-  const workDir = await fs.mkdtemp(path.join(config.tempDir, 'materialize-'));
+  await fs.mkdir(sqlite3defConfig.tempDir, {recursive: true});
+  const workDir = await fs.mkdtemp(path.join(sqlite3defConfig.tempDir, 'materialize-'));
   const dbPath = path.join(workDir, 'schema.db');
 
   try {
-    if ('sql' in input) {
+    if (mode.kind === 'definitions') {
       const sqlPath = path.join(workDir, 'definitions.sql');
-      await fs.writeFile(sqlPath, input.sql);
-      if (input.sql.trim()) {
-        await runSqlite3def({...config, projectRoot: input.projectRoot}, ['--apply', '--file', sqlPath, dbPath]);
+      await fs.writeFile(sqlPath, mode.definitionsSql);
+      if (mode.definitionsSql.trim()) {
+        await runSqlite3def({...sqlite3defConfig, projectRoot}, ['--apply', '--file', sqlPath, dbPath]);
       }
     } else {
       await ensureDatabaseExists(dbPath);
-      for (const migrationPath of input.migrationPaths) {
-        await executeSqlScript(dbPath, await fs.readFile(migrationPath, 'utf8'));
+      for (const migration of mode.migrations) {
+        await executeSqlScript(dbPath, await fs.readFile(migration.path, 'utf8'));
       }
     }
 
@@ -217,6 +274,23 @@ async function materializeSchema(
   } finally {
     await fs.rm(workDir, {recursive: true, force: true});
   }
+}
+
+async function materializeDefinitionsSchema(projectRoot: string, definitionsSql: string) {
+  return materializeSchema(projectRoot, {
+    kind: 'definitions',
+    definitionsSql,
+  });
+}
+
+async function materializeMigrationsSchema(
+  projectRoot: string,
+  migrations: readonly {path: string}[],
+) {
+  return materializeSchema(projectRoot, {
+    kind: 'migrations',
+    migrations,
+  });
 }
 
 async function exportSchema(dbPath: string) {
@@ -254,6 +328,77 @@ async function executeSqlScript(dbPath: string, sql: string) {
   }
 }
 
+async function applyMigrationsToDatabase(
+  dbPath: string,
+  migrations: readonly {path: string}[],
+) {
+  await ensureDatabaseExists(dbPath);
+  for (const migration of migrations) {
+    await executeSqlScript(dbPath, await fs.readFile(migration.path, 'utf8'));
+  }
+}
+
+async function runChecks(runtime: ReturnType<typeof createRuntime>) {
+  const migrations = await runtime.readMigrations();
+  const draftMigrations = migrations.filter((migration) => migration.status === 'draft');
+
+  const draftCount =
+    draftMigrations.length <= 1
+      ? okCheck()
+      : failedCheck('multiple draft migrations exist');
+  const migrationMetadata = checkMigrationMetadata(migrations);
+  const draftIsLast =
+    draftMigrations.length === 0 || migrations.at(-1)?.fileName === draftMigrations[0]?.fileName
+      ? okCheck()
+      : failedCheck('draft migration must be lexically last');
+  const noDraft =
+    draftMigrations.length === 0 ? okCheck() : failedCheck('draft migration exists');
+
+  let migrationsMatchDefinitions: CheckResult;
+  try {
+    const [definitionsSchema, migrationsSchema] = await Promise.all([
+      materializeDefinitionsSchema(runtime.projectRoot, await runtime.readDefinitionsSql()),
+      materializeMigrationsSchema(runtime.projectRoot, migrations),
+    ]);
+
+    migrationsMatchDefinitions =
+      definitionsSchema === migrationsSchema
+        ? okCheck()
+        : failedCheck('replayed migrations do not match definitions.sql');
+  } catch (error) {
+    migrationsMatchDefinitions = failedCheck(
+      `migration replay failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
+  return {
+    draftCount,
+    migrationMetadata,
+    draftIsLast,
+    migrationsMatchDefinitions,
+    noDraft,
+  };
+}
+
+function checkMigrationMetadata(migrations: readonly {contents: string}[]): CheckResult {
+  try {
+    for (const migration of migrations) {
+      parseStatus(migration.contents);
+    }
+    return okCheck();
+  } catch (error) {
+    return failedCheck(error instanceof Error ? error.message : String(error));
+  }
+}
+
+function okCheck(): CheckResult {
+  return {ok: true};
+}
+
+function failedCheck(message: string): CheckResult {
+  return {ok: false, message};
+}
+
 function splitSqlStatements(sql: string) {
   return sql
     .split(';')
@@ -265,4 +410,9 @@ function splitSqlStatements(sql: string) {
 export interface Migrations2Context {
   readonly projectConfig: SqlfuProjectConfig;
   readonly now?: () => Date;
+}
+
+interface CheckResult {
+  readonly ok: boolean;
+  readonly message?: string;
 }

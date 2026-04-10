@@ -122,6 +122,174 @@ test('draft is a no-op when the existing draft already matches definitions.sql',
   expect(await fixture.readFile('migrations/20260410000001_add_pet.sql')).toBe(before);
 });
 
+test('draft fails when the existing draft cannot be replayed', async () => {
+  await using fixture = await createMigrationsFixture('broken-draft', {
+    definitionsSql: dedent`
+      create table person(name text not null);
+      create table pet(name text not null);
+      create index pet_name_idx on pet(name);
+    `,
+    migrations: {
+      'migrations/20260410000000_create_person.sql': dedent`
+        -- status: final
+        create table person(name text not null);
+      `,
+      'migrations/20260410000001_add_pet.sql': dedent`
+        -- status: draft
+        create table pet(name text not null);
+        this is not valid sql;
+      `,
+    },
+  });
+
+  await expect(fixture.client.draft()).rejects.toThrow(/valid sql|syntax/i);
+});
+
+test('migrate requires explicit includeDraft while a draft exists and can include it when requested', async () => {
+  await using fixture = await createMigrationsFixture('migrate-include-draft', {
+    definitionsSql: dedent`
+      create table person(name text not null);
+      create table pet(name text not null);
+    `,
+    migrations: {
+      'migrations/20260410000000_create_person.sql': dedent`
+        -- status: final
+        create table person(name text not null);
+      `,
+      'migrations/20260410000001_add_pet.sql': dedent`
+        -- status: draft
+        create table pet(name text not null);
+      `,
+    },
+  });
+
+  await expect(fixture.client.migrate({includeDraft: false})).rejects.toThrow(/draft/i);
+  expect(await fixture.dumpDbSchema()).toBe('');
+
+  await fixture.client.migrate({includeDraft: true});
+
+  expect(await fixture.dumpDbSchema()).toMatchInlineSnapshot(`
+    "create table person(name text not null);
+    create table pet(name text not null);"
+  `);
+});
+
+test('draft fails when the draft migration is not lexically last', async () => {
+  await using fixture = await createMigrationsFixture('draft-not-last', {
+    definitionsSql: dedent`
+      create table person(name text not null);
+      create table pet(name text not null);
+      create table toy(name text not null);
+    `,
+    migrations: {
+      'migrations/20260410000000_create_person.sql': dedent`
+        -- status: final
+        create table person(name text not null);
+      `,
+      'migrations/20260410000001_add_pet.sql': dedent`
+        -- status: draft
+        create table pet(name text not null);
+      `,
+      'migrations/20260410000002_add_toy.sql': dedent`
+        -- status: final
+        create table toy(name text not null);
+      `,
+    },
+  });
+
+  await expect(fixture.client.draft()).rejects.toThrow(/lexically last|bump/i);
+});
+
+test('draft can bump the existing draft timestamp to restore ordering', async () => {
+  await using fixture = await createMigrationsFixture('draft-bump-timestamp', {
+    definitionsSql: dedent`
+      create table person(name text not null);
+      create table pet(name text not null);
+      create table toy(name text not null);
+    `,
+    migrations: {
+      'migrations/20260410000000_create_person.sql': dedent`
+        -- status: final
+        create table person(name text not null);
+      `,
+      'migrations/20260410000001_add_pet.sql': dedent`
+        -- status: draft
+        create table pet(name text not null);
+      `,
+      'migrations/20260410000002_add_toy.sql': dedent`
+        -- status: final
+        create table toy(name text not null);
+      `,
+    },
+  });
+
+  await fixture.client.draft({bumpTimestamp: true});
+
+  expect(await fixture.dumpFs()).toMatchInlineSnapshot(`
+    "definitions.sql
+      create table person(name text not null);
+      create table pet(name text not null);
+      create table toy(name text not null);
+    migrations/
+      20260410000000_create_person.sql
+        -- status: final
+        create table person(name text not null);
+      20260410000002_add_toy.sql
+        -- status: final
+        create table toy(name text not null);
+      20260410000003_add_pet.sql
+        -- status: draft
+        create table pet(name text not null);
+    "
+  `);
+});
+
+test('check.all reports that a draft is the only remaining blocker when migrations already match definitions.sql', async () => {
+  await using fixture = await createMigrationsFixture('check-ready-to-finalize', {
+    definitionsSql: dedent`
+      create table person(name text not null);
+      create table pet(name text not null);
+    `,
+    migrations: {
+      'migrations/20260410000000_create_person.sql': dedent`
+        -- status: final
+        create table person(name text not null);
+      `,
+      'migrations/20260410000001_add_pet.sql': dedent`
+        -- status: draft
+        create table pet(name text not null);
+      `,
+    },
+  });
+
+  await expect(fixture.client.check.all()).resolves.toMatchObject({
+    ok: false,
+    checks: {
+      draftCount: {ok: true},
+      migrationMetadata: {ok: true},
+      draftIsLast: {ok: true},
+      migrationsMatchDefinitions: {ok: true},
+      noDraft: {ok: false, message: expect.stringMatching(/draft/i)},
+    },
+  });
+});
+
+test('check.noDraft can run just the requested subcheck', async () => {
+  await using fixture = await createMigrationsFixture('check-one-subcheck', {
+    definitionsSql: dedent`
+      create table person(name text not null);
+    `,
+    migrations: {
+      'migrations/20260410000000_create_person.sql': dedent`
+        -- status: final
+        create table person(name text not null);
+      `,
+    },
+  });
+
+  await expect(fixture.client.check.noDraft()).resolves.toMatchObject({ok: true});
+});
+
 async function createMigrationsFixture(
   slug: string,
   input: {
@@ -174,6 +342,9 @@ async function createMigrationsFixture(
       await dumpInto(lines, root, '');
       return `${lines.join('\n')}\n`;
     },
+    async dumpDbSchema() {
+      return exportDatabaseSchema(dbPath);
+    },
     async [Symbol.asyncDispose]() {
       await fs.rm(root, {recursive: true, force: true});
     },
@@ -206,4 +377,21 @@ async function dumpInto(lines: string[], root: string, relativeDir: string) {
 
 function withTrailingNewline(value: string) {
   return value.endsWith('\n') ? value : `${value}\n`;
+}
+
+async function exportDatabaseSchema(dbPath: string) {
+  const client = createClient({url: `file:${dbPath}`});
+
+  try {
+    const result = await client.execute(`
+      select sql
+      from sqlite_schema
+      where sql is not null
+        and name not like 'sqlite_%'
+      order by type, name
+    `);
+    return result.rows.map((row) => `${String(row.sql).toLowerCase()};`).join('\n');
+  } finally {
+    client.close();
+  }
 }

@@ -278,20 +278,11 @@ test('sync fails for a semantic/destructive transition that needs a real migrati
     insert into person(name) values ('Ada Lovelace');
   `);
 
-  let error: Error | undefined;
-  try {
-    await fixture.client.sync();
-  } catch (value) {
-    error = value as Error;
-  }
-
-  expect(error).toBeDefined();
-
-  expect(error!.message).toMatchInlineSnapshot(`
-    "sync could not apply definitions.sql safely to the current database.
+  await expect(fixture.client.sync()).rejects.toMatchInlineSnapshot(`
+    [Error: sync could not apply definitions.sql safely to the current database.
     Create or update a draft migration and test it with \`sqlfu migrate --include-draft\`.
 
-    Cause: SQL logic error: Cannot add a NOT NULL column with default value NULL (1)"
+    Cause: SQL logic error: Cannot add a NOT NULL column with default value NULL (1)]
   `);
 });
 

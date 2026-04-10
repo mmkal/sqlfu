@@ -12,21 +12,6 @@ import {diffSchemaSql} from './schemadiff/index.js';
 import {generateQueryTypes} from './typegen/index.js';
 
 const base = os.$context<SqlfuRouterContext>();
-const draftInputSchema = z
-  .object({
-    name: z.string().min(1).optional(),
-    bumpTimestamp: z.boolean().optional(),
-    rewrite: z.boolean().optional(),
-  })
-  .optional();
-const migrateInputSchema = z.object({
-  includeDraft: z.boolean(),
-});
-
-type DisposableClient = {
-  readonly client: Client;
-  [Symbol.asyncDispose](): Promise<void>;
-};
 
 export const router = {
   generate: base.handler(async () => {
@@ -61,88 +46,97 @@ export const router = {
     }
   }),
 
-  draft: base.input(draftInputSchema).handler(async ({context, input}) => {
-    const runtime = createRuntime(context);
-    let migrations = await runtime.readMigrations();
-    const definitionsSql = await runtime.readDefinitionsSql();
-    const draftMigrations = migrations.filter((migration) => migration.status === 'draft');
+  draft: base
+    .input(
+      z.object({
+        name: z.string().min(1),
+        bumpTimestamp: z.boolean(),
+        rewrite: z.boolean(),
+      }).partial().optional()
+    )
+    .handler(async ({context, input}) => {
+      const runtime = createRuntime(context);
+      let migrations = await runtime.readMigrations();
+      const definitionsSql = await runtime.readDefinitionsSql();
+      const draftMigrations = migrations.filter((migration) => migration.status === 'draft');
 
-    if (draftMigrations.length > 1) {
-      throw new Error('multiple draft migrations exist');
-    }
-
-    let currentDraft = draftMigrations[0];
-    if (currentDraft && migrations.at(-1)?.fileName !== currentDraft.fileName) {
-      if (!input?.bumpTimestamp) {
-        throw new Error('draft migration must be lexically last; rerun with bumpTimestamp: true');
+      if (draftMigrations.length > 1) {
+        throw new Error('multiple draft migrations exist');
       }
 
-      const bumpedFileName = `${nextMigrationId(migrations, runtime.now())}_${currentDraft.fileName.replace(/^[^_]+_/u, '')}`;
-      await fs.rename(currentDraft.path, path.join(context.projectConfig.migrationsDir, bumpedFileName));
-      migrations = await runtime.readMigrations();
-      const bumpedDraft = migrations.find((migration) => migration.status === 'draft');
-      if (!bumpedDraft) {
-        throw new Error('draft migration disappeared after bumpTimestamp');
-      }
-      currentDraft = bumpedDraft;
-    }
+      let currentDraft = draftMigrations[0];
+      if (currentDraft && migrations.at(-1)?.fileName !== currentDraft.fileName) {
+        if (!input?.bumpTimestamp) {
+          throw new Error('draft migration must be lexically last; rerun with bumpTimestamp: true');
+        }
 
-    if (currentDraft && input?.rewrite) {
-      await fs.writeFile(currentDraft.path, '-- status: draft\n');
-      migrations = await runtime.readMigrations();
-      const rewrittenDraft = migrations.find((migration) => migration.status === 'draft');
-      if (!rewrittenDraft) {
-        throw new Error('draft migration disappeared after rewrite');
-      }
-      currentDraft = rewrittenDraft;
-    }
-
-    const baselineSql = currentDraft ? await materializeMigrationsSchema(runtime.projectRoot, migrations) : '';
-    const diffLines = await diffSchemaSql({
-      projectRoot: runtime.projectRoot,
-      baselineSql,
-      desiredSql: definitionsSql,
-    });
-
-    if (currentDraft) {
-      if (diffLines.length) {
-        await fs.writeFile(currentDraft.path, appendMigrationContents(currentDraft.contents, diffLines));
+        const bumpedFileName = `${nextMigrationId(migrations, runtime.now())}_${currentDraft.fileName.replace(/^[^_]+_/u, '')}`;
+        await fs.rename(currentDraft.path, path.join(context.projectConfig.migrationsDir, bumpedFileName));
+        migrations = await runtime.readMigrations();
+        const bumpedDraft = migrations.find((migration) => migration.status === 'draft');
+        if (!bumpedDraft) {
+          throw new Error('draft migration disappeared after bumpTimestamp');
+        }
+        currentDraft = bumpedDraft;
       }
 
-      return;
-    }
+      if (currentDraft && input?.rewrite) {
+        await fs.writeFile(currentDraft.path, '-- status: draft\n');
+        migrations = await runtime.readMigrations();
+        const rewrittenDraft = migrations.find((migration) => migration.status === 'draft');
+        if (!rewrittenDraft) {
+          throw new Error('draft migration disappeared after rewrite');
+        }
+        currentDraft = rewrittenDraft;
+      }
 
-    const fileName = `${nextMigrationId(migrations, runtime.now())}_${slugify(input?.name ?? 'draft')}.sql`;
-    const body = diffLines.length === 0 ? definitionsSql.trim() : diffLines.join('\n');
+      const baselineSql = currentDraft ? await materializeMigrationsSchema(runtime.projectRoot, migrations) : '';
+      const diffLines = await diffSchemaSql({
+        projectRoot: runtime.projectRoot,
+        baselineSql,
+        desiredSql: definitionsSql,
+      });
 
-    await fs.mkdir(context.projectConfig.migrationsDir, {recursive: true});
-    await fs.writeFile(path.join(context.projectConfig.migrationsDir, fileName), `-- status: draft\n${body}\n`);
-  }),
+      if (currentDraft) {
+        if (diffLines.length) {
+          await fs.writeFile(currentDraft.path, appendMigrationContents(currentDraft.contents, diffLines));
+        }
 
-  migrate: base.input(migrateInputSchema).handler(async ({context, input}) => {
-    const runtime = createRuntime(context);
-    const migrations = await runtime.readMigrations();
-    const draftMigrations = migrations.filter((migration) => migration.status === 'draft');
+        return;
+      }
 
-    if (draftMigrations.length > 1) {
-      throw new Error('multiple draft migrations exist');
-    }
+      const fileName = `${nextMigrationId(migrations, runtime.now())}_${slugify(input?.name ?? 'draft')}.sql`;
+      const body = diffLines.length === 0 ? definitionsSql.trim() : diffLines.join('\n');
 
-    if (draftMigrations.length === 1 && !input.includeDraft) {
-      throw new Error('draft migration exists; pass includeDraft: true to apply it');
-    }
+      await fs.mkdir(context.projectConfig.migrationsDir, {recursive: true});
+      await fs.writeFile(path.join(context.projectConfig.migrationsDir, fileName), `-- status: draft\n${body}\n`);
+    }),
 
-    await applyMigrationsToDatabase(runtime.projectConfig.db, input.includeDraft ? migrations : migrations.filter((migration) => migration.status === 'final'));
-  }),
+  migrate: base
+    .input(
+      z.object({
+        includeDraft: z.boolean(),
+      }).partial().optional()
+    )
+    .handler(async ({context, input}) => {
+      const runtime = createRuntime(context);
+      const migrations = await runtime.readMigrations();
+
+      await runChecks(runtime, checkDraftCount, checkDraftIsLast, input?.includeDraft ? () => [] : checkNoDraft);
+
+      await applyMigrationsToDatabase(
+        runtime.projectConfig.db,
+        input?.includeDraft ? migrations : migrations.filter((migration) => migration.status === 'final'),
+      );
+    }),
 
   finalize: base.handler(async ({context}) => {
     const runtime = createRuntime(context);
     const migrations = await runtime.readMigrations();
     const draftMigrations = migrations.filter((migration) => migration.status === 'draft');
 
-    if (draftMigrations.length === 0) {
-      throw new Error('no draft migration exists to finalize');
-    }
+    await runChecks(runtime, checkDraftCount);
+    if (draftMigrations.length === 0) throw new Error('no draft migration exists to finalize');
 
     if (draftMigrations.length > 1) {
       throw new Error('multiple draft migrations exist');
@@ -313,6 +307,11 @@ async function applyMigrationsToDatabase(
   await applyMigrations(database.client, {migrations: await readMigrationInputs(migrations)});
 }
 
+type DisposableClient = {
+  readonly client: Client;
+  [Symbol.asyncDispose](): Promise<void>;
+};
+
 async function createScratchDatabase(projectRoot: string, slug: string): Promise<DisposableClient> {
   const dbPath = path.join(projectRoot, '.sqlfu', `${slug}.db`);
   await fs.mkdir(path.dirname(dbPath), {recursive: true});
@@ -384,19 +383,20 @@ async function runChecks(runtime: ReturnType<typeof createRuntime>, ...checks: r
   }
 }
 
+/** checks you don't have more than one draft */
 function checkDraftCount(state: CheckState): string[] {
   return state.draftMigrations.length <= 1 ? [] : ['multiple draft migrations exist'];
 }
 
 function checkMigrationMetadata(state: CheckState): string[] {
-  try {
-    for (const migration of state.migrations) {
-      parseMigrationStatus(migration.contents);
+  for (const migration of state.migrations) {
+      try {
+        parseMigrationStatus(migration.contents);
+      } catch (error) {
+        return [String(error)];
+      }
     }
-    return [];
-  } catch (error) {
-    return [error instanceof Error ? error.message : String(error)];
-  }
+  return [];
 }
 
 function checkDraftIsLast(state: CheckState): string[] {

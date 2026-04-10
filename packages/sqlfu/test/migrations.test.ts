@@ -622,7 +622,6 @@ async function createMigrationsFixture(
   const dbPath = path.join(root, 'dev.db');
   const projectConfig: SqlfuProjectConfig = {
     projectRoot: root,
-    dbPath,
     migrationsDir: path.join(root, 'migrations'),
     definitionsPath: path.join(root, 'definitions.sql'),
     sqlDir: path.join(root, 'sql'),

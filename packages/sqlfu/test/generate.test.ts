@@ -1,11 +1,12 @@
 import dedent from 'dedent';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import {DatabaseSync} from 'node:sqlite';
 import {fileURLToPath, pathToFileURL} from 'node:url';
-import {createClient} from '@libsql/client';
 import {Project, ts} from 'ts-morph';
 import {expect, test} from 'vitest';
 
+import {createNodeSqliteClient} from '../src/client.js';
 import {generateQueryTypes} from '../src/typegen/index.js';
 import {createTempFixtureRoot, dumpFixtureFs, withTrailingNewline, writeFixtureFiles} from './fs-fixture.js';
 
@@ -667,8 +668,10 @@ async function createGenerateFixture(input: {
   await writeFixtureFiles(root, {
     'definitions.sql': input.definitionsSql,
     'sqlfu.config.ts': dedent`
+      import {DatabaseSync} from 'node:sqlite';
+      import {createNodeSqliteClient} from ${JSON.stringify(pathToFileURL(path.join(packageRoot, 'src', 'client.ts')).href)};
+
       export default {
-        dbPath: './app.db',
         migrationsDir: './migrations',
         definitionsPath: './definitions.sql',
         sqlDir: './sql',
@@ -676,7 +679,13 @@ async function createGenerateFixture(input: {
           throw new Error('unused in generate tests');
         },
         getMainDatabase() {
-          throw new Error('unused in generate tests');
+          const database = new DatabaseSync(new URL('./app.db', import.meta.url));
+          return {
+            client: createNodeSqliteClient(database),
+            async [Symbol.asyncDispose]() {
+              database.close();
+            },
+          };
         },
         ${input.config?.generatedImportExtension ? `generatedImportExtension: '${input.config.generatedImportExtension}',` : ''}
       };
@@ -727,7 +736,6 @@ async function createGenerateFixture(input: {
           paths: {
             sqlfu: [path.join(packageRoot, 'src', 'index.ts')],
             'sqlfu/client': [path.join(packageRoot, 'src', 'client.ts')],
-            '@libsql/client': [path.join(packageRoot, 'node_modules', '@libsql', 'client')],
             'better-sqlite3': [path.join(packageRoot, 'node_modules', 'better-sqlite3')],
           },
           types: ['node'],
@@ -760,14 +768,15 @@ async function inWorkingDirectory<TResult>(cwd: string, fn: () => Promise<TResul
 }
 
 async function applyDefinitionsToDatabase(dbPath: string, definitionsSql: string) {
-  const client = createClient({url: `file:${dbPath}`});
+  const database = new DatabaseSync(dbPath);
+  const client = createNodeSqliteClient(database);
 
   try {
     for (const statement of definitionsSqlStatements(definitionsSql)) {
-      await client.execute(statement);
+      client.run({sql: statement, args: []});
     }
   } finally {
-    client.close();
+    database.close();
   }
 }
 

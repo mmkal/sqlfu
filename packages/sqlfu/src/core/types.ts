@@ -75,7 +75,6 @@ export interface Database {
 }
 
 export interface SqlfuConfig {
-  readonly dbPath: string;
   readonly migrationsDir: string;
   readonly definitionsPath: string;
   readonly sqlDir: string;
@@ -86,7 +85,6 @@ export interface SqlfuConfig {
 
 export interface SqlfuProjectConfig {
   readonly projectRoot: string;
-  readonly dbPath: string;
   readonly migrationsDir: string;
   readonly definitionsPath: string;
   readonly sqlDir: string;

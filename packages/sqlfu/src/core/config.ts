@@ -28,7 +28,6 @@ export function resolveProjectConfig(
 
   return {
     projectRoot: configDir,
-    dbPath: resolveConfigPathValue(configDir, fileConfig.dbPath),
     migrationsDir: resolveConfigPathValue(configDir, fileConfig.migrationsDir),
     definitionsPath: resolveConfigPathValue(configDir, fileConfig.definitionsPath),
     sqlDir: resolveConfigPathValue(configDir, fileConfig.sqlDir),
@@ -141,7 +140,7 @@ function stripTrailingCommas(value: string): string {
 }
 
 function assertConfigShape(configPath: string, config: object): asserts config is SqlfuConfig {
-  for (const field of ['dbPath', 'migrationsDir', 'definitionsPath', 'sqlDir'] as const) {
+  for (const field of ['migrationsDir', 'definitionsPath', 'sqlDir'] as const) {
     if (!(field in config) || typeof (config as Record<string, unknown>)[field] !== 'string') {
       throw new Error(`Invalid sqlfu config at ${configPath}: missing required string field "${field}".`);
     }

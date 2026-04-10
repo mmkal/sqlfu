@@ -1,13 +1,14 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import {DatabaseSync} from 'node:sqlite';
 import {fileURLToPath} from 'node:url';
 
-import {createClient} from '@libsql/client';
-
 import {loadProjectConfig} from '../core/config.js';
+import type {Database, SqlfuProjectConfig} from '../core/types.js';
 import {runPackageBinary} from '../core/tooling.js';
+import {createNodeSqliteClient} from '../client.js';
 
-export async function writeTypesqlConfig(): Promise<string> {
+export async function writeTypesqlConfig(databaseUri: string): Promise<string> {
   const config = await loadProjectConfig();
   const tempDir = path.join(config.projectRoot, '.sqlfu');
   const typesqlConfigPath = path.join(tempDir, 'typesql.json');
@@ -17,7 +18,7 @@ export async function writeTypesqlConfig(): Promise<string> {
     typesqlConfigPath,
     JSON.stringify(
       {
-        databaseUri: config.dbPath,
+        databaseUri,
         sqlDir: relativeToConfigFile(typesqlConfigPath, config.sqlDir),
         client: 'libsql',
         includeCrudTables: [],
@@ -33,10 +34,11 @@ export async function writeTypesqlConfig(): Promise<string> {
 
 export async function generateQueryTypes(): Promise<void> {
   const config = await loadProjectConfig();
+  const databasePath = await materializeTypegenDatabase(config);
   const typesqlConfigPath = path.join(config.projectRoot, '.sqlfu', 'typesql.json');
-  await writeTypesqlConfig();
+  await writeTypesqlConfig(databasePath);
   await runPackageBinary('typesql-cli', ['compile', '--config', typesqlConfigPath], config.projectRoot);
-  await refineGeneratedTypes(config.dbPath, config.sqlDir);
+  await refineGeneratedTypes(databasePath, config.sqlDir);
   // TODO: If we need custom fs support (for example memfs), column-name transforms such as
   // snake_case -> camelCase, direct access to TypeSQL's intermediate descriptors so sqlfu can
   // emit zod/custom nullability-aware output, or a first-class way to expose the generated SQL
@@ -48,7 +50,7 @@ export async function generateQueryTypes(): Promise<void> {
   // depends on consumers having `typesql-cli` available even though it is an internal implementation
   // detail; that's another reason to eventually vendor the TypeSQL pieces we rely on.
   await rewriteGeneratedWrappers(config.sqlDir, config.generatedImportExtension);
-  await writeTypesqlConfig();
+  await writeTypesqlConfig(databasePath);
 }
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(new URL('../../package.json', import.meta.url))));
@@ -86,6 +88,52 @@ async function refineGeneratedTypes(databasePath: string, sqlDir: string): Promi
         ]);
       }),
   );
+}
+
+async function materializeTypegenDatabase(config: SqlfuProjectConfig) {
+  const tempDbPath = path.join(config.projectRoot, '.sqlfu', 'typegen.db');
+  const schemaSql = await exportSchemaFromDatabase(await config.getMainDatabase());
+
+  await fs.mkdir(path.dirname(tempDbPath), {recursive: true});
+  await fs.rm(tempDbPath, {force: true});
+  await fs.rm(`${tempDbPath}-shm`, {force: true});
+  await fs.rm(`${tempDbPath}-wal`, {force: true});
+
+  const database = new DatabaseSync(tempDbPath);
+  const client = createNodeSqliteClient(database);
+
+  try {
+    for (const statement of splitSqlStatements(schemaSql)) {
+      client.run({sql: statement, args: []});
+    }
+  } finally {
+    database.close();
+  }
+
+  return tempDbPath;
+}
+
+async function exportSchemaFromDatabase(database: Database) {
+  await using ownedDatabase = database;
+  const rows = await ownedDatabase.client.all<{sql: string | null}>({
+    sql: `
+      select sql
+      from sqlite_schema
+      where sql is not null
+        and name not like 'sqlite_%'
+      order by type, name
+    `,
+    args: [],
+  });
+  return rows.map((row) => `${String(row.sql).toLowerCase()};`).join('\n');
+}
+
+function splitSqlStatements(sql: string) {
+  return sql
+    .split(';')
+    .map((statement) => statement.trim())
+    .filter(Boolean)
+    .map((statement) => `${statement};`);
 }
 
 async function rewriteGeneratedWrappers(sqlDir: string, generatedImportExtension: '.js' | '.ts'): Promise<void> {
@@ -304,23 +352,24 @@ function indent(text: string): string {
 }
 
 async function loadSchema(databasePath: string): Promise<ReadonlyMap<string, RelationInfo>> {
-  const client = createClient({url: `file:${databasePath}`});
+  const database = new DatabaseSync(databasePath);
+  const client = createNodeSqliteClient(database);
 
   try {
-    const schemaResult = await client.execute({
+    const schemaResult = client.all<{name: string; type: string; sql: string | null}>({
       sql: `
-        SELECT name, type, sql
-        FROM sqlite_schema
-        WHERE type IN ('table', 'view')
-          AND name NOT LIKE 'sqlite_%'
-        ORDER BY name
+        select name, type, sql
+        from sqlite_schema
+        where type in ('table', 'view')
+          and name not like 'sqlite_%'
+        order by name
       `,
       args: [],
     });
 
     const relations = new Map<string, RelationInfo>();
 
-    for (const row of schemaResult.rows as Array<Record<string, unknown>>) {
+    for (const row of schemaResult) {
       const name = String(row.name);
       const kind = row.type === 'view' ? 'view' : 'table';
       const columns = await loadRelationColumns(client, name);
@@ -350,22 +399,22 @@ async function loadSchema(databasePath: string): Promise<ReadonlyMap<string, Rel
 
     return relations;
   } finally {
-    client.close();
+    database.close();
   }
 }
 
 async function loadRelationColumns(
-  client: ReturnType<typeof createClient>,
+  client: ReturnType<typeof createNodeSqliteClient>,
   relationName: string,
 ): Promise<ReadonlyMap<string, TsColumn>> {
-  const pragmaResult = await client.execute({
+  const pragmaResult = client.all<Record<string, unknown>>({
     sql: `PRAGMA table_xinfo("${escapeSqliteIdentifier(relationName)}")`,
     args: [],
   });
 
   const columns = new Map<string, TsColumn>();
 
-  for (const row of pragmaResult.rows as Array<Record<string, unknown>>) {
+  for (const row of pragmaResult) {
     if (Number(row.hidden ?? 0) !== 0) {
       continue;
     }

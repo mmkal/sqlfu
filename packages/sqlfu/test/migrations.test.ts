@@ -1,6 +1,5 @@
 import dedent from 'dedent';
 import fs from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
 
 import {createClient} from '@libsql/client';
@@ -10,6 +9,7 @@ import {expect, test} from 'vitest';
 import {router} from '../src/api.js';
 import {createLibsqlClient} from '../src/client.js';
 import type {Database, SqlfuProjectConfig} from '../src/core/types.js';
+import {createTempFixtureRoot, dumpFixtureFs, withTrailingNewline, writeFixtureFiles} from './fs-fixture.js';
 
 test('draft creates the first draft migration from definitions.sql when there is no migration history yet', async () => {
   await using fixture = await createMigrationsFixture('first-draft-from-empty-history', {
@@ -618,7 +618,7 @@ async function createMigrationsFixture(
     migrations?: Record<string, string>;
   },
 ) {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), `sqlfu-${slug}-`));
+  const root = await createTempFixtureRoot(slug);
   const dbPath = path.join(root, 'dev.db');
   const projectConfig: SqlfuProjectConfig = {
     projectRoot: root,
@@ -631,14 +631,10 @@ async function createMigrationsFixture(
     generatedImportExtension: '.js',
   };
 
-  await fs.mkdir(projectConfig.migrationsDir, {recursive: true});
-  await fs.writeFile(projectConfig.definitionsPath, withTrailingNewline(input.definitionsSql));
-
-  for (const [filePath, contents] of Object.entries(input.migrations ?? {})) {
-    const fullPath = path.join(root, filePath);
-    await fs.mkdir(path.dirname(fullPath), {recursive: true});
-    await fs.writeFile(fullPath, withTrailingNewline(contents));
-  }
+  await writeFixtureFiles(root, {
+    'definitions.sql': input.definitionsSql,
+    ...(input.migrations ?? {}),
+  });
 
   const client = createRouterClient(router, {
     context: {
@@ -660,9 +656,7 @@ async function createMigrationsFixture(
       await fs.writeFile(fullPath, contents);
     },
     async dumpFs() {
-      const lines: string[] = [];
-      await dumpInto(lines, root, '');
-      return `${lines.join('\n')}\n`;
+      return dumpFixtureFs(root, {ignoredNames: ['dev.db', '.sqlfu']});
     },
     async dumpDbSchema() {
       return exportDatabaseSchema(dbPath);
@@ -674,34 +668,6 @@ async function createMigrationsFixture(
       await fs.rm(root, {recursive: true, force: true});
     },
   };
-}
-
-async function dumpInto(lines: string[], root: string, relativeDir: string) {
-  const dirPath = path.join(root, relativeDir);
-  const entries = (await fs.readdir(dirPath, {withFileTypes: true}))
-    .filter((entry) => entry.name !== 'dev.db' && entry.name !== '.sqlfu')
-    .sort((left, right) => left.name.localeCompare(right.name));
-
-  for (const entry of entries) {
-    const relativePath = path.join(relativeDir, entry.name);
-    const indent = relativeDir.split(path.sep).filter(Boolean).length;
-    const prefix = '  '.repeat(indent);
-    if (entry.isDirectory()) {
-      lines.push(`${prefix}${entry.name}/`);
-      await dumpInto(lines, root, relativePath);
-      continue;
-    }
-
-    lines.push(`${prefix}${entry.name}`);
-    const contents = await fs.readFile(path.join(root, relativePath), 'utf8');
-    for (const line of contents.trimEnd().split('\n')) {
-      lines.push(`${prefix}  ${line}`);
-    }
-  }
-}
-
-function withTrailingNewline(value: string) {
-  return value.endsWith('\n') ? value : `${value}\n`;
 }
 
 async function createLibsqlDatabase(dbPath: string): Promise<Database> {

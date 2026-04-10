@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-import {createRouterClient, os} from '@orpc/server';
+import {os} from '@orpc/server';
 import {z} from 'zod';
 
 import type {Database, SqlfuProjectConfig} from './core/types.js';

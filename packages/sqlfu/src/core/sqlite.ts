@@ -17,11 +17,7 @@ export async function extractSchema(client: Client, schemaName = 'main'): Promis
 
 export async function runSqlStatements(client: Client, sql: string): Promise<void> {
   for (const statement of splitSqlStatements(sql)) {
-    try {
-      await client.run({sql: statement, args: []});
-    } catch (error) {
-      throw new Error(summarizeDatabaseError(error));
-    }
+    await client.run({sql: statement, args: []});
   }
 }
 

@@ -244,6 +244,29 @@ test('migrate requires explicit includeDraft while a draft exists and can includ
   `);
 });
 
+test('migrate applies only newly added finalized migrations on the second run', async () => {
+  await using fixture = await createMigrationsFixture('migrate-replays-without-migrations-table');
+
+  await fixture.writeMigration('add_person', dedent`
+    -- status: final
+    create table person(name text not null);
+  `);
+
+  await fixture.client.migrate();
+
+  await fixture.writeMigration('add_pet', dedent`
+    -- status: final
+    create table pet(name text not null, species text not null);
+  `);
+
+  await fixture.client.migrate();
+
+  expect(await fixture.dumpDbSchema()).toMatchInlineSnapshot(`
+    "create table person(name text not null);
+    create table pet(name text not null, species text not null);"
+  `);
+});
+
 test('sync applies definitions.sql into an empty database', async () => {
   await using fixture = await createMigrationsFixture('sync-empty-db', {
     definitionsSql: dedent`
@@ -620,9 +643,9 @@ test('check.all joins multiple failures together', async () => {
 async function createMigrationsFixture(
   slug: string,
   input: {
-    definitionsSql: string;
+    definitionsSql?: string;
     migrations?: Record<string, string>;
-  },
+  } = {},
 ) {
   const root = await createTempFixtureRoot(slug);
   const dbPath = path.join(root, 'dev.db');
@@ -650,7 +673,7 @@ async function createMigrationsFixture(
   );
 
   await writeFixtureFiles(root, {
-    'definitions.sql': input.definitionsSql,
+    'definitions.sql': input.definitionsSql || '',
     ...migrations,
   });
 
@@ -680,6 +703,9 @@ async function createMigrationsFixture(
     },
     async readMigration(name: string) {
       return this.readFile(await this.globOne(`migrations/*${name}*`));
+    },
+    async writeMigration(name: string, content: string) {
+      await this.writeFile(`migrations/${getMigrationPrefix(fakeNow())}_${name}.sql`, content);
     },
     async dumpFs() {
       return dumpFixtureFs(root, {ignoredNames: ['dev.db', '.sqlfu']});

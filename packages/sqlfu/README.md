@@ -149,7 +149,7 @@ The commands each reconcile a different part of that model. "Smart" ones use sch
 
 For the full model and mismatch tables, see [docs/migration-model.md](./docs/migration-model.md).
 
-## Deliberate Exclusions
+## Opinions imposed
 
 `sqlfu` deliberately leaves out a few migration features that are common elsewhere:
 
@@ -161,6 +161,11 @@ They tend not to be exercised regularly, which means they are usually unverified
 
 **No JavaScript migrations**
 There are legitimate use cases, but they also make migrations harder to reason about, harder to inspect, and easier to couple to application code. `sqlfu` stays SQL-first for now. This may be revisited later if a clear use case justifies the extra complexity.
+
+**Migration naming**
+Migrations are generated with a timestamp prefix, based on the ISO-8601 format, with colons replaced by periods. The "Z" is followed by an underscore so you can easily convert to a date fairly easily in javascript if you need to: `new Date(filename.split('_').replace(/T(\d\d)\.(\d\d))\./, 'T$1:$2:')`. The suffix of the migration file can be anything path-safe. This project uses snake-case the suffixes.
+
+The name of the migration, if created using `sqlfu draft`, will be based on the statements in the generated diff. It can be changed manually before it has been run, but there should usually be no need to.
 
 ## What `generate` Does
 

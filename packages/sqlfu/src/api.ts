@@ -40,7 +40,7 @@ export const router = {
         `This command fails if semantic or destructive changes are required. You can run 'sqlfu draft' to create a migration file with the necessary changes.`,
     })
     .handler(async ({context}) => {
-      const definitionsSql = await fs.readFile(context.config.definitionsPath, 'utf8');
+      const definitionsSql = await readDefinitionsSql(context.config.definitionsPath);
       await using database = await openMainDevDatabase(context.config.db);
       const baselineSql = await extractSchema(database.client);
       try {
@@ -176,7 +176,7 @@ function createRuntime(context: SqlfuRouterContext) {
   return {
     config: context.config,
     now: () => context.now?.() ?? new Date(),
-    readDefinitionsSql: () => fs.readFile(context.config.definitionsPath, 'utf8'),
+    readDefinitionsSql: () => readDefinitionsSql(context.config.definitionsPath),
     async readMigrations() {
       try {
         const fileNames = (await fs.readdir(context.config.migrationsDir))
@@ -198,6 +198,17 @@ function createRuntime(context: SqlfuRouterContext) {
       }
     },
   };
+}
+
+async function readDefinitionsSql(definitionsPath: string) {
+  try {
+    return await fs.readFile(definitionsPath, 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      throw new Error('definitions.sql not found');
+    }
+    throw error;
+  }
 }
 
 export function getMigrationPrefix(now: Date) {

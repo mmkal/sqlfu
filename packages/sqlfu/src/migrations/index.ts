@@ -74,9 +74,20 @@ export async function applyMigrations(client: Client, params: {
 
   for (const historical of applied) {
     const current = byName.get(historical.name);
-    if (!current || current.content !== historical.content) {
-      throw new Error('migration history does not match migrations');
+    if (!current) {
+      throw new Error(`deleted applied migration: ${historical.name}`);
     }
+    if (current.content !== historical.content) {
+      throw new Error(`edited applied migration: ${historical.name}`);
+    }
+  }
+
+  const appliedNames = applied.map((migration) => migration.name);
+  const expectedAppliedPrefix = params.migrations
+    .slice(0, applied.length)
+    .map((migration) => migrationName(migration));
+  if (appliedNames.some((name, index) => name !== expectedAppliedPrefix[index])) {
+    throw new Error('migration history is not a prefix of migrations');
   }
 
   for (const migration of params.migrations) {

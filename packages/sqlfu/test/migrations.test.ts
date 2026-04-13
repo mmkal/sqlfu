@@ -1,17 +1,16 @@
 import dedent from 'dedent';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import {DatabaseSync} from 'node:sqlite';
 
-import {createClient} from '@libsql/client';
 import {createRouterClient} from '@orpc/server';
 import {describe, expect, test} from 'vitest';
 
 import {getMigrationPrefix, router} from '../src/api.js';
-import {createLibsqlClient, createNodeSqliteClient} from '../src/client.js';
+import {createNodeSqliteClient} from '../src/client.js';
 import {extractSchema, runSqlStatements} from '../src/core/sqlite.js';
 import type {Client, SqlfuProjectConfig} from '../src/core/types.js';
 import {createTempFixtureRoot, dumpFixtureFs, writeFixtureFiles} from './fs-fixture.js';
-import { DatabaseSync } from 'node:sqlite';
 
 type DisposableClient = {
   readonly client: Client;
@@ -21,19 +20,17 @@ type DisposableClient = {
 describe('draft', () => {
   test('creates the first migration from definitions.sql when there is no migration history yet', async () => {
     await using fixture = await createMigrationsFixture('first-migration-from-empty-history', {
-      desiredSchema: dedent`
-        create table person(name text not null);
-      `,
+      desiredSchema: `create table person(name text)`,
     });
 
     await fixture.api.draft();
 
     expect(await fixture.dumpFs()).toMatchInlineSnapshot(`
       "definitions.sql
-        create table person(name text not null);
+        create table person(name text)
       migrations/
         2026-04-10T00.00.00.000Z_create_table_person.sql
-          create table person(name text not null);
+          create table person(name text);
       "
     `);
   });
@@ -41,13 +38,11 @@ describe('draft', () => {
   test('creates the next migration from the replayed baseline', async () => {
     await using fixture = await createMigrationsFixture('next-migration-from-baseline', {
       desiredSchema: dedent`
-        create table person(name text not null);
-        create table pet(name text not null);
+        create table person(name text);
+        create table pet(name text);
       `,
       migrations: {
-        create_person: dedent`
-          create table person(name text not null);
-        `,
+        create_person: `create table person(name text)`,
       },
     });
 
@@ -55,26 +50,22 @@ describe('draft', () => {
 
     expect(await fixture.dumpFs()).toMatchInlineSnapshot(`
       "definitions.sql
-        create table person(name text not null);
-        create table pet(name text not null);
+        create table person(name text);
+        create table pet(name text);
       migrations/
         2026-04-10T00.00.00.000Z_create_person.sql
-          create table person(name text not null);
+          create table person(name text)
         2026-04-10T01.00.00.000Z_create_table_pet.sql
-          create table pet(name text not null);
+          create table pet(name text);
       "
     `);
   });
 
   test('is a no-op when replayed migrations already match definitions.sql', async () => {
     await using fixture = await createMigrationsFixture('draft-no-op', {
-      desiredSchema: dedent`
-        create table person(name text not null);
-      `,
+      desiredSchema: `create table person(name text)`,
       migrations: {
-        create_person: dedent`
-          create table person(name text not null);
-        `,
+        create_person: `create table person(name text)`,
       },
     });
 
@@ -84,37 +75,161 @@ describe('draft', () => {
 
     expect(await fixture.listMigrationFiles()).toEqual(before);
   });
+
+  test('uses an explicit name override when provided', async () => {
+    await using fixture = await createMigrationsFixture('draft-explicit-name', {
+      desiredSchema: `create table person(name text)`,
+    });
+
+    await fixture.api.draft({name: 'add people'});
+
+    expect(await fixture.listMigrationFiles()).toEqual([
+      'migrations/2026-04-10T00.00.00.000Z_add_people.sql',
+    ]);
+  });
+
+  test('drafts destructive changes without enabling destructive apply', async () => {
+    await using fixture = await createMigrationsFixture('draft-destructive-change', {
+      desiredSchema: `create table person(name text)`,
+      migrations: {
+        create_person: `create table person(name text)`,
+        create_pet: `create table pet(name text)`,
+      },
+    });
+
+    await fixture.api.draft();
+
+    const draftedMigration = (await fixture.listMigrationFiles()).at(-1)!;
+
+    expect(await fixture.readFile(draftedMigration)).toMatchInlineSnapshot(`
+      "-- Skipped: DROP TABLE "pet";
+      "
+    `);
+  });
+
+  test('fails clearly when definitions.sql is missing', async () => {
+    await using fixture = await createMigrationsFixture('draft-missing-definitions', {
+      desiredSchema: `create table person(name text)`,
+    });
+
+    await fs.rm(path.join(fixture.root, 'definitions.sql'));
+
+    await expect(fixture.api.draft()).rejects.toMatchInlineSnapshot(`
+      [Error: definitions.sql not found]
+    `);
+  });
 });
 
 describe('migrate', () => {
   test('applies only newly added migrations on the second run', async () => {
     await using fixture = await createMigrationsFixture('migrate-replays-without-migrations-table');
 
-    await fixture.writeMigration('add_person', dedent`
-      create table person(name text not null);
-    `);
+    await fixture.writeMigration('add_person', `create table person(name text)`);
 
     await fixture.api.migrate();
 
-    await fixture.writeMigration('add_pet', dedent`
-      create table pet(name text not null, species text not null);
-    `);
+    await fixture.writeMigration('add_pet', `create table pet(name text, species text)`);
 
     await fixture.api.migrate();
 
-    expect(await fixture.dumpDbSchema()).toMatchInlineSnapshot(`
-      "create table person(name text not null);
-      create table pet(name text not null, species text not null);"
+    expect(await extractSchema(fixture.db)).toMatchInlineSnapshot(`
+      "create table person(name text);
+      create table pet(name text, species text);"
+    `);
+  });
+
+  test('fails when an applied migration was edited after apply', async () => {
+    await using fixture = await createMigrationsFixture('migrate-edited-after-apply', {
+      migrations: {
+        create_person: `create table person(name text)`,
+      },
+    });
+
+    await fixture.api.migrate();
+    await fixture.writeFile(await fixture.globOne('migrations/*create_person.sql'), `create table person(first_name text, last_name text)`);
+
+    await expect(fixture.api.migrate()).rejects.toMatchInlineSnapshot(`
+      [Error: edited applied migration: 2026-04-10T00.00.00.000Z_create_person]
+    `);
+  });
+
+  test('fails when an applied migration file was deleted after apply', async () => {
+    await using fixture = await createMigrationsFixture('migrate-deleted-after-apply', {
+      migrations: {
+        create_person: `create table person(name text)`,
+      },
+    });
+
+    await fixture.api.migrate();
+    await fs.rm(path.join(fixture.root, await fixture.globOne('migrations/*create_person.sql')));
+
+    await expect(fixture.api.migrate()).rejects.toMatchInlineSnapshot(`
+      [Error: deleted applied migration: 2026-04-10T00.00.00.000Z_create_person]
+    `);
+  });
+
+  test('is a no-op when there are no pending migrations', async () => {
+    await using fixture = await createMigrationsFixture('migrate-no-op', {
+      migrations: {
+        create_person: `create table person(name text)`,
+      },
+    });
+
+    await fixture.api.migrate();
+    const before = await fixture.readMigrationHistory();
+
+    await fixture.api.migrate();
+
+    expect(await fixture.readMigrationHistory()).toMatchObject(before);
+  });
+
+  test('applies migrations in filename order', async () => {
+    await using fixture = await createMigrationsFixture('migrate-filename-order');
+
+    await fixture.writeFile('migrations/2026-04-10T01.00.00.000Z_insert_person.sql', `insert into person(name) values ('alice')`);
+    await fixture.writeFile('migrations/2026-04-10T00.00.00.000Z_create_person.sql', `create table person(name text)`);
+
+    await fixture.api.migrate();
+
+    expect(await fixture.db.sql`select name from person order by name`).toMatchObject([
+      {name: 'alice'},
+    ]);
+  });
+
+  test('fails when a newly introduced migration sorts before the latest applied migration', async () => {
+    await using fixture = await createMigrationsFixture('migrate-earlier-migration-added-later', {
+      migrations: {
+        create_person: `create table person(name text)`,
+        create_pet: `create table pet(name text)`,
+      },
+    });
+
+    await fixture.api.migrate();
+    await fixture.writeFile('migrations/2026-04-10T00.30.00.000Z_create_toy.sql', `create table toy(name text)`);
+
+    await expect(fixture.api.migrate()).rejects.toMatchInlineSnapshot(`
+      [Error: migration history is not a prefix of migrations]
     `);
   });
 });
 
 describe('check recommendations', () => {
+  test('passes when desired schema, migrations, migration history, and live schema all agree', async () => {
+    await using fixture = await createMigrationsFixture('check-happy-path', {
+      desiredSchema: `create table person(name text)`,
+      migrations: {
+        create_person: `create table person(name text)`,
+      },
+    });
+
+    await fixture.api.migrate();
+
+    await expect(fixture.api.check.all()).resolves.toBeUndefined();
+  });
+
   test('recommends draft for repo drift only', async () => {
     await using fixture = await createMigrationsFixture('check-repo-drift-only', {
-      desiredSchema: dedent`
-        create table person(name text not null);
-      `,
+      desiredSchema: `create table person(name text)`,
     });
 
     await expect(fixture.api.check.all()).rejects.toMatchInlineSnapshot(`
@@ -126,13 +241,9 @@ describe('check recommendations', () => {
 
   test('recommends migrate for pending migrations only', async () => {
     await using fixture = await createMigrationsFixture('check-pending-migrations-only', {
-      desiredSchema: dedent`
-        create table person(name text not null);
-      `,
+      desiredSchema: `create table person(name text)`,
       migrations: {
-        create_person: dedent`
-          create table person(name text not null);
-        `,
+        create_person: `create table person(name text)`,
       },
     });
 
@@ -145,18 +256,14 @@ describe('check recommendations', () => {
 
   test('recommends baseline for schema drift when live schema already matches a known target', async () => {
     await using fixture = await createMigrationsFixture('check-schema-drift-only', {
-      desiredSchema: dedent`
-        create table person(name text not null);
-      `,
+      desiredSchema: `create table person(name text)`,
       migrations: {
-        create_person: dedent`
-          create table person(name text not null);
-        `,
+        create_person: `create table person(name text)`,
       },
     });
 
-    await fixture.writeDbSql(`
-      create table person(name text not null);
+    await runSqlStatements(fixture.db, `
+      create table person(name text)
     `);
 
     await expect(fixture.api.check.all()).rejects.toMatchInlineSnapshot(`
@@ -166,25 +273,81 @@ describe('check recommendations', () => {
       Recommendation: run \`sqlfu baseline 2026-04-10T00.00.00.000Z_create_person\`.]
     `);
   });
+
+  test('prefers repo drift recommendations over downstream mismatches', async () => {
+    await using fixture = await createMigrationsFixture('check-repo-drift-wins', {
+      desiredSchema: dedent`
+        create table person(name text);
+        create table pet(name text);
+      `,
+      migrations: {
+        create_person: `create table person(name text)`,
+      },
+    });
+
+    await runSqlStatements(fixture.db, `
+      create table person(name text);
+      create table toy(name text);
+    `);
+
+    await expect(fixture.api.check.all()).rejects.toMatchInlineSnapshot(`
+      [Error: Repo Drift
+      Desired Schema does not match Migrations.
+      Recommendation: run \`sqlfu draft\`.]
+    `);
+  });
+
+  test('prefers history drift recommendations over pending migrations and schema drift', async () => {
+    await using fixture = await createMigrationsFixture('check-history-drift-wins', {
+      desiredSchema: dedent`
+        create table person(name text);
+        create table pet(name text);
+      `,
+      migrations: {
+        create_person: `create table person(name text)`,
+        create_pet: `create table pet(name text)`,
+      },
+    });
+
+    await fixture.api.migrate();
+    await runSqlStatements(fixture.db, `
+      create table toy(name text);
+    `);
+    await fixture.writeFile(await fixture.globOne('migrations/*create_person.sql'), `create table person(first_name text, last_name text)`);
+
+    await expect(fixture.api.check.all()).rejects.toMatchInlineSnapshot(`
+      [Error: History Drift
+      Migration History does not match Migrations.
+      Edited applied migration: 2026-04-10T00.00.00.000Z_create_person
+      Recommended Goto Target: 2026-04-10T00.00.00.000Z_create_person
+      Recommendation: restore the original migration from git, or run \`sqlfu goto 2026-04-10T00.00.00.000Z_create_person\` if you want to reconcile this database to the current repo state.]
+    `);
+  });
+
+  test('fails clearly when definitions.sql is missing', async () => {
+    await using fixture = await createMigrationsFixture('check-missing-definitions', {
+      desiredSchema: `create table person(name text)`,
+    });
+
+    await fs.rm(path.join(fixture.root, 'definitions.sql'));
+
+    await expect(fixture.api.check.all()).rejects.toMatchInlineSnapshot(`
+      [Error: definitions.sql not found]
+    `);
+  });
 });
 
 describe('history drift recommendations', () => {
   test('pinpoints the applied migration that was edited after apply', async () => {
     await using fixture = await createMigrationsFixture('check-history-drift-edited-migration', {
-      desiredSchema: dedent`
-        create table person(first_name text not null, last_name text not null);
-      `,
+      desiredSchema: `create table person(first_name text, last_name text)`,
       migrations: {
-        create_person: dedent`
-          create table person(name text not null);
-        `,
+        create_person: `create table person(name text)`,
       },
     });
 
     await fixture.api.migrate();
-    await fixture.writeFile(await fixture.globOne('migrations/*create_person.sql'), dedent`
-      create table person(first_name text not null, last_name text not null);
-    `);
+    await fixture.writeFile(await fixture.globOne('migrations/*create_person.sql'), `create table person(first_name text, last_name text)`);
 
     await expect(fixture.api.check.all()).rejects.toMatchInlineSnapshot(`
       [Error: History Drift
@@ -197,18 +360,14 @@ describe('history drift recommendations', () => {
 
   test('recommends baseline only when history drift exists but live schema already matches a current target', async () => {
     await using fixture = await createMigrationsFixture('check-history-drift-baseline-only', {
-      desiredSchema: dedent`
-        create table person(name text not null);
-      `,
+      desiredSchema: `create table person(name text)`,
       migrations: {
-        create_person: dedent`
-          create table person(name text not null);
-        `,
+        create_person: `create table person(name text)`,
       },
     });
 
     await fixture.api.migrate();
-    await fixture.writeDbSql(dedent`
+    await runSqlStatements(fixture.db, dedent`
       update sqlfu_migrations
       set content = 'oops this is wrong'
     `);
@@ -224,13 +383,9 @@ describe('history drift recommendations', () => {
 
   test('pinpoints an applied migration file that has been deleted', async () => {
     await using fixture = await createMigrationsFixture('check-history-drift-deleted-migration', {
-      desiredSchema: dedent`
-        create table person(name text not null);
-      `,
+      desiredSchema: `create table person(name text)`,
       migrations: {
-        create_person: dedent`
-          create table person(name text not null);
-        `,
+        create_person: `create table person(name text)`,
       },
     });
 
@@ -249,27 +404,75 @@ describe('history drift recommendations', () => {
 describe('baseline', () => {
   test('updates migration history only for the exact target', async () => {
     await using fixture = await createMigrationsFixture('baseline-exact-target', {
-      desiredSchema: dedent`
-        create table person(name text not null);
-      `,
+      desiredSchema: `create table person(name text)`,
       migrations: {
-        create_person: dedent`
-          create table person(name text not null);
-        `,
+        create_person: `create table person(name text)`,
       },
     });
 
-    await fixture.writeDbSql(`
-      create table person(name text not null);
+    await runSqlStatements(fixture.db, `
+      create table person(name text)
     `);
 
     await fixture.api.baseline({target: '2026-04-10T00.00.00.000Z_create_person'});
 
-    expect(await fixture.dumpDbSchema()).toMatchInlineSnapshot(`
-      "create table person(name text not null);"
+    expect(await extractSchema(fixture.db)).toMatchInlineSnapshot(`
+      "create table person(name text);"
     `);
     expect(await fixture.migrationNames()).toEqual([
       "create_person",
+    ]);
+  });
+
+  test('rejects an unknown exact target', async () => {
+    await using fixture = await createMigrationsFixture('baseline-unknown-target', {
+      migrations: {
+        create_person: `create table person(name text)`,
+      },
+    });
+
+    await expect(fixture.api.baseline({target: 'does_not_exist'})).rejects.toMatchInlineSnapshot(`
+      [Error: migration does_not_exist not found]
+    `);
+  });
+
+  test('truncates migration history to the requested earlier target', async () => {
+    await using fixture = await createMigrationsFixture('baseline-truncates-history', {
+      migrations: {
+        create_person: `create table person(name text)`,
+        create_pet: `create table pet(name text)`,
+      },
+    });
+
+    await fixture.api.migrate();
+
+    await fixture.api.baseline({target: '2026-04-10T00.00.00.000Z_create_person'});
+
+    expect(await fixture.migrationNames()).toEqual([
+      "create_person",
+    ]);
+  });
+
+  test('does not change live schema when baselining to a later target', async () => {
+    await using fixture = await createMigrationsFixture('baseline-does-not-touch-live-schema', {
+      migrations: {
+        create_person: `create table person(name text)`,
+        create_pet: `create table pet(name text)`,
+      },
+    });
+
+    await runSqlStatements(fixture.db, `
+      create table person(name text)
+    `);
+
+    await fixture.api.baseline({target: '2026-04-10T01.00.00.000Z_create_pet'});
+
+    expect(await extractSchema(fixture.db)).toMatchInlineSnapshot(`
+      "create table person(name text);"
+    `);
+    expect(await fixture.migrationNames()).toEqual([
+      "create_person",
+      "create_pet",
     ]);
   });
 });
@@ -278,19 +481,15 @@ describe('goto', () => {
   test('updates live schema and migration history to the exact target', async () => {
     await using fixture = await createMigrationsFixture('goto-exact-target', {
       migrations: {
-        create_person: dedent`
-          create table person(name text not null);
-        `,
-        create_pet: dedent`
-          create table pet(name text not null);
-        `,
+        create_person: `create table person(name text)`,
+        create_pet: `create table pet(name text)`,
       },
     });
 
-    await fixture.writeDbSql(`
-      create table person(name text not null);
-      create table pet(name text not null);
-      create table toy(name text not null);
+    await runSqlStatements(fixture.db, `
+      create table person(name text);
+      create table pet(name text);
+      create table toy(name text);
       insert into person(name) values ('alice');
       insert into pet(name) values ('fido');
       insert into toy(name) values ('ball');
@@ -298,8 +497,8 @@ describe('goto', () => {
 
     await fixture.api.goto({target: path.parse(await fixture.globOne('*/*create_person*')).name});
 
-    expect(await fixture.dumpDbSchema()).toMatchInlineSnapshot(`
-      "create table person(name text not null);"
+    expect(await extractSchema(fixture.db)).toMatchInlineSnapshot(`
+      "create table person(name text);"
     `);
     expect(await fixture.migrationNames()).toEqual([
       "create_person",
@@ -310,9 +509,9 @@ describe('goto', () => {
 
     await fixture.api.goto({target: path.parse(await fixture.globOne('*/*create_pet*')).name});
 
-    expect(await fixture.dumpDbSchema()).toMatchInlineSnapshot(`
-      "create table person(name text not null);
-      create table pet(name text not null);"
+    expect(await extractSchema(fixture.db)).toMatchInlineSnapshot(`
+      "create table person(name text);
+      create table pet(name text);"
     `);
     expect(await fixture.migrationNames()).toEqual([
       "create_person",
@@ -323,6 +522,108 @@ describe('goto', () => {
     ]);
     // original pets got dropped when we did goto person
     expect(await fixture.db.sql`select name from pet order by name`).toMatchObject([]);
+  });
+
+  test('rejects an unknown exact target', async () => {
+    await using fixture = await createMigrationsFixture('goto-unknown-target', {
+      migrations: {
+        create_person: `create table person(name text)`,
+      },
+    });
+
+    await expect(fixture.api.goto({target: 'does_not_exist'})).rejects.toMatchInlineSnapshot(`
+      [Error: migration does_not_exist not found]
+    `);
+  });
+
+  test('fails clearly when it cannot produce a valid transition to the target', async () => {
+    await using fixture = await createMigrationsFixture('goto-impossible-transition', {
+      migrations: {
+        broken_target: `this is not valid sql`,
+      },
+    });
+
+    await expect(fixture.api.goto({target: '2026-04-10T00.00.00.000Z_broken_target'})).rejects.toMatchInlineSnapshot(`
+      [Error: near "this": syntax error]
+    `);
+  });
+
+  test('preserves surviving data while other schema objects change', async () => {
+    await using fixture = await createMigrationsFixture('goto-preserves-data-through-other-object-changes', {
+      migrations: {
+        create_person: `create table person(name text)`,
+        add_person_name_idx: `create index person_name_idx on person(name)`,
+      },
+    });
+
+    await runSqlStatements(fixture.db, `
+      create table person(name text);
+      create table toy(name text);
+      insert into person(name) values ('alice');
+      insert into toy(name) values ('ball');
+    `);
+
+    await fixture.api.goto({target: '2026-04-10T01.00.00.000Z_add_person_name_idx'});
+
+    expect(await extractSchema(fixture.db)).toMatchInlineSnapshot(`
+      "create index person_name_idx on person(name);
+      create table person(name text);"
+    `);
+    expect(await fixture.db.sql`select name from person order by name`).toMatchObject([
+      {name: 'alice'},
+    ]);
+  });
+});
+
+describe('sync', () => {
+  test('applies a safe additive change', async () => {
+    await using fixture = await createMigrationsFixture('sync-additive-change', {
+      desiredSchema: `create table person(name text, nickname text)`,
+    });
+
+    await runSqlStatements(fixture.db, `
+      create table person(name text);
+      insert into person(name) values ('ada');
+    `);
+
+    await fixture.api.sync();
+
+    expect(await extractSchema(fixture.db)).toMatchInlineSnapshot(`
+      "create table person(name text, "nickname" text);"
+    `);
+    expect(await fixture.db.sql`select name, nickname from person order by name`).toMatchObject([
+      {name: 'ada', nickname: null},
+    ]);
+  });
+
+  test('fails for an unsafe semantic change and recommends draft plus migrate', async () => {
+    await using fixture = await createMigrationsFixture('sync-semantic-failure', {
+      desiredSchema: `create table person(id integer primary key, name text)`,
+    });
+
+    await runSqlStatements(fixture.db, `
+      create table person(name text);
+      insert into person(name) values ('Ada Lovelace');
+    `);
+
+    await expect(fixture.api.sync()).rejects.toMatchInlineSnapshot(`
+      [Error: sync could not apply definitions.sql safely to the current database.
+      Create a migration with \`sqlfu draft\`, edit it if needed, then run \`sqlfu migrate\`.
+
+      Cause: Cannot add a NOT NULL column with default value NULL]
+    `);
+  });
+
+  test('fails clearly when definitions.sql is missing', async () => {
+    await using fixture = await createMigrationsFixture('sync-missing-definitions', {
+      desiredSchema: `create table person(name text)`,
+    });
+
+    await fs.rm(path.join(fixture.root, 'definitions.sql'));
+
+    await expect(fixture.api.sync()).rejects.toMatchInlineSnapshot(`
+      [Error: definitions.sql not found]
+    `);
   });
 });
 
@@ -399,12 +700,6 @@ async function createMigrationsFixture(
     async dumpFs() {
       return dumpFixtureFs(root, {ignoredNames: ['dev.db', '.sqlfu']});
     },
-    async dumpDbSchema() {
-      return exportDatabaseSchema(dbPath);
-    },
-    async writeDbSql(sql: string) {
-      await executeDatabaseSql(dbPath, sql);
-    },
     async readMigrationHistory() {
       return readMigrationHistory(dbPath);
     },
@@ -418,31 +713,20 @@ async function createMigrationsFixture(
   };
 }
 
-async function createLibsqlDatabase(dbPath: string): Promise<DisposableClient> {
+async function createNodeSqliteDatabase(dbPath: string): Promise<DisposableClient> {
   await fs.mkdir(path.dirname(dbPath), {recursive: true});
-  const client = createClient({url: `file:${dbPath}`});
-  const sqlfuClient = createLibsqlClient(client);
+  const database = new DatabaseSync(dbPath);
 
   return {
-    client: sqlfuClient,
+    client: createNodeSqliteClient(database),
     async [Symbol.asyncDispose]() {
-      client.close();
+      database.close();
     },
   } satisfies DisposableClient;
 }
 
-async function exportDatabaseSchema(dbPath: string) {
-  await using database = await createLibsqlDatabase(dbPath);
-  return extractSchema(database.client);
-}
-
-async function executeDatabaseSql(dbPath: string, sql: string) {
-  await using database = await createLibsqlDatabase(dbPath);
-  await runSqlStatements(database.client, dedent(sql));
-}
-
 async function readMigrationHistory(dbPath: string) {
-  await using database = await createLibsqlDatabase(dbPath);
+  await using database = await createNodeSqliteDatabase(dbPath);
   try {
     return await database.client.all<{name: string; content: string}>({
       sql: `

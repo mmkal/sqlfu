@@ -283,8 +283,8 @@ h3 {
   width: 100%;
   border-radius: 1rem;
   border: 1px solid var(--line);
-  background: rgba(70, 49, 21, 0.95);
-  color: #f5ead7;
+  background: transparent;
+  color: var(--text);
   padding: 1rem;
   overflow: auto;
   white-space: pre-wrap;
@@ -300,17 +300,15 @@ h3 {
 .cm-editor {
   max-width: 100%;
   width: 100%;
-  border-radius: 1rem;
-  border: 1px solid var(--line);
-  background: rgba(70, 49, 21, 0.95);
+  border-radius: 0.25rem;
+  /* border: 1px solid var(--line); */
   overflow: hidden;
 }
 
 .cm-scroller {
   min-height: 16rem;
   font-family: "IBM Plex Mono", "SFMono-Regular", "Menlo", monospace;
-  padding-top: 1rem;
-  padding-bottom: 1rem;
+  padding: 0;
 }
 
 .cm-content,

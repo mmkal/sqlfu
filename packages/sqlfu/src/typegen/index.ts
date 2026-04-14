@@ -128,24 +128,10 @@ async function materializeTypegenDatabase(config: SqlfuProjectConfig) {
 
 async function openMainDevDatabase(dbPath: string): Promise<DisposableClient> {
   await fs.mkdir(path.dirname(dbPath), {recursive: true});
-  const runtime = process.env.SQLFU_SQLITE_RUNTIME
-    ?? ('Bun' in globalThis ? 'bun' : 'node');
+  const runtime = 'Bun' in globalThis ? 'bun' : 'node';
 
   if (runtime === 'bun') {
-    const moduleName = 'bun:sqlite';
-    const {Database} = await import(moduleName) as {
-      Database: new (path: string) => {
-        close(): void;
-        query(query: string): {
-          all(...params: readonly unknown[]): Record<string, unknown>[];
-          iterate(...params: readonly unknown[]): IterableIterator<Record<string, unknown>>;
-        };
-        run(query: string, params?: readonly unknown[]): {
-          readonly changes?: number;
-          readonly lastInsertRowid?: string | number | bigint | null;
-        };
-      };
-    };
+    const {Database} = await import('bun:sqlite' as any)
     const database = new Database(dbPath);
     return {
       client: createBunClient(database as Parameters<typeof createBunClient>[0]),
@@ -155,20 +141,7 @@ async function openMainDevDatabase(dbPath: string): Promise<DisposableClient> {
     };
   }
 
-  const moduleName = 'node:sqlite';
-  const {DatabaseSync} = await import(moduleName) as {
-    DatabaseSync: new (path: string) => {
-      close(): void;
-      prepare(query: string): {
-        all(...params: readonly unknown[]): Record<string, unknown>[];
-        iterate(...params: readonly unknown[]): IterableIterator<Record<string, unknown>>;
-        run(...params: readonly unknown[]): {
-          readonly changes?: number | bigint;
-          readonly lastInsertRowid?: string | number | bigint | null;
-        };
-      };
-    };
-  };
+  const {DatabaseSync} = await import('node:sqlite')
   const database = new DatabaseSync(dbPath);
   return {
     client: createNodeSqliteClient(database as Parameters<typeof createNodeSqliteClient>[0]),

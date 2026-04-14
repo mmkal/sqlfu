@@ -24,7 +24,7 @@ test('diffSchemaSql includes a drop when destructive changes are allowed', async
 
   expect(diff).toMatchInlineSnapshot(`
     [
-      "DROP TABLE \"b\";",
+      "drop table \"b\";",
     ]
   `);
 });
@@ -55,8 +55,8 @@ test('diffSchemaSql still includes drops when the target schema also contains sq
       "content text not null,",
       "applied_at text not null",
       ");",
-      "DROP TABLE \"pet\";",
-      "DROP TABLE \"toy\";",
+      "drop table \"pet\";",
+      "drop table \"toy\";",
     ]
   `);
 });
@@ -97,8 +97,8 @@ test('the goto shape works when destructive drops are explicitly enabled', async
 
     expect(diff).toMatchInlineSnapshot(`
       [
-        "DROP TABLE \"pet\";",
-        "DROP TABLE \"toy\";",
+        "drop table \"pet\";",
+        "drop table \"toy\";",
       ]
     `);
 
@@ -112,13 +112,40 @@ test('the goto shape works when destructive drops are explicitly enabled', async
   }
 });
 
-test('diffSchemaSql currently misses stricter column constraints in sqlite', async () => {
-  const diff = await diffSchemaSql({
-    projectRoot: process.cwd(),
-    baselineSql: `create table a(b text);`,
-    desiredSql: `create table a(b text not null unique);`,
-    allowDestructive: true,
-  });
+test('diffSchemaSql rebuilds a table when sqlite needs semantic constraint changes', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'sqlfu-schemadiff-rebuild-'));
+  const liveDbPath = path.join(root, 'live.db');
+  const targetDbPath = path.join(root, 'target.db');
 
-  expect(diff).toEqual([]);
+  const liveDb = new DatabaseSync(liveDbPath);
+  const targetDb = new DatabaseSync(targetDbPath);
+
+  try {
+    const liveClient = createNodeSqliteClient(liveDb);
+    const targetClient = createNodeSqliteClient(targetDb);
+
+    await liveClient.raw(`
+      create table a(b text);
+      insert into a(b) values ('alpha');
+    `);
+    await targetClient.raw(`create table a(b text not null unique);`);
+
+    const diff = await diffSchemaSql({
+      projectRoot: process.cwd(),
+      baselineSql: await extractSchema(liveClient),
+      desiredSql: await extractSchema(targetClient),
+      allowDestructive: true,
+    });
+
+    expect(diff).not.toEqual([]);
+
+    await liveClient.raw(diff.join('\n'));
+
+    expect(await extractSchema(liveClient)).toBe(await extractSchema(targetClient));
+    await expect(liveClient.sql`select b from a`).resolves.toMatchObject([{b: 'alpha'}]);
+  } finally {
+    liveDb.close();
+    targetDb.close();
+    await fs.rm(root, {recursive: true, force: true});
+  }
 });

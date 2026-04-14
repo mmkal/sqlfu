@@ -7,7 +7,7 @@ import {z} from 'zod';
 
 import type {Client, SqlfuProjectConfig} from './core/types.js';
 import {createBunClient, createNodeSqliteClient, migrationNickname} from './client.js';
-import {extractSchema, inspectSchemaFingerprint} from './core/sqlite.js';
+import {extractSchema} from './core/sqlite.js';
 import {
   applyMigrations,
   baselineMigrationHistory,
@@ -17,6 +17,7 @@ import {
   type Migration,
 } from './migrations/index.js';
 import {diffSchemaSql} from './schemadiff/index.js';
+import {inspectSqliteSchemaSql, schemasEqual} from './schemadiff/sqlite-native.js';
 import {generateQueryTypes} from './typegen/index.js';
 
 const base = os.$context<SqlfuRouterContext>();
@@ -627,42 +628,31 @@ async function findRecommendedTarget(config: SqlfuProjectConfig, migrations: rea
 }
 
 async function compareSchemas(config: SqlfuProjectConfig, left: string, right: string) {
-  const [leftToRight, rightToLeft] = await Promise.all([
-    diffSchemaSql({
-      projectRoot: config.projectRoot,
-      baselineSql: left,
-      desiredSql: right,
-      allowDestructive: true,
-    }),
-    diffSchemaSql({
-      projectRoot: config.projectRoot,
-      baselineSql: right,
-      desiredSql: left,
-      allowDestructive: true,
-    }),
+  const [leftInspected, rightInspected] = await Promise.all([
+    inspectSqliteSchemaSql(config, left),
+    inspectSqliteSchemaSql(config, right),
   ]);
 
-  if (leftToRight.length !== 0 || rightToLeft.length !== 0) {
-    return {
-      isDifferent: true,
-      isSyncable: leftToRight.length !== 0,
-    };
+  const isDifferent = !schemasEqual(leftInspected, rightInspected);
+  let isSyncable = false;
+  if (isDifferent) {
+    try {
+      const syncPlan = await diffSchemaSql({
+        projectRoot: config.projectRoot,
+        baselineSql: right,
+        desiredSql: left,
+        allowDestructive: true,
+      });
+      isSyncable = syncPlan.length > 0;
+    } catch {
+      isSyncable = false;
+    }
   }
 
-  const leftFingerprint = await materializeSchemaFingerprint(config, left);
-  const rightFingerprint = await materializeSchemaFingerprint(config, right);
   return {
-    isDifferent: JSON.stringify(leftFingerprint) !== JSON.stringify(rightFingerprint),
-    isSyncable: false,
+    isDifferent,
+    isSyncable,
   };
-}
-
-async function materializeSchemaFingerprint(config: SqlfuProjectConfig, sql: string) {
-  await using database = await createScratchDatabase(config, 'materialize-fingerprint');
-  if (sql.trim()) {
-    await database.client.raw(sql);
-  }
-  return await inspectSchemaFingerprint(database.client);
 }
 
 function summarizeSqlite3defError(error: unknown) {

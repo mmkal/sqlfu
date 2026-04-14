@@ -22,7 +22,7 @@ describe('draft edge cases', () => {
     const draftedMigration = (await fixture.listMigrationFiles()).at(-1)!;
 
     expect(await fixture.readFile(draftedMigration)).toMatchInlineSnapshot(`
-      "DROP TABLE "pet";
+      "drop table "pet";
       "
     `);
   });

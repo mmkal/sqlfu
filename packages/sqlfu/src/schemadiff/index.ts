@@ -1,4 +1,4 @@
-import {createDefaultSqlite3defConfig, diffBaselineSqlToDesiredSql} from './sqlite3def.js';
+import {diffBaselineSqlToDesiredSqlNative} from './sqlite-native.js';
 
 export async function diffSchemaSql(input: {
   projectRoot: string;
@@ -6,7 +6,7 @@ export async function diffSchemaSql(input: {
   desiredSql: string;
   allowDestructive: boolean;
 }): Promise<string[]> {
-  return diffBaselineSqlToDesiredSql(projectConfigForRoot(input.projectRoot), {
+  return diffBaselineSqlToDesiredSqlNative(projectConfigForRoot(input.projectRoot), {
     baselineSql: input.baselineSql,
     desiredSql: input.desiredSql,
     allowDestructive: input.allowDestructive,
@@ -15,7 +15,6 @@ export async function diffSchemaSql(input: {
 
 function projectConfigForRoot(projectRoot: string) {
   return {
-    ...createDefaultSqlite3defConfig('project'),
     projectRoot,
   };
 }

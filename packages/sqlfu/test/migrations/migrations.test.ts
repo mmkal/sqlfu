@@ -167,7 +167,11 @@ describe('check recommendations', () => {
     await expect(fixture.api.check.all()).rejects.toMatchInlineSnapshot(`
       [Error: Schema Drift
       Live Schema does not match Migration History.
-      Recommendation: run \`sqlfu goto <target>\`.]
+      Recommendation: run \`sqlfu goto <target>\`.
+
+      Sync Drift
+      Desired Schema does not match Live Schema.
+      Recommendation: run \`sqlfu sync\`.]
     `);
   });
 
@@ -397,6 +401,26 @@ describe('sync', () => {
     ]);
   });
 
+  test('applies a semantic table rebuild when existing data already satisfies the stronger shape', async () => {
+    await using fixture = await createMigrationsFixture('sync-semantic-rebuild', {
+      desiredSchema: `create table person(name text not null unique)`,
+    });
+
+    await fixture.db.raw(`
+      create table person(name text);
+      insert into person(name) values ('ada');
+    `);
+
+    await fixture.api.sync();
+
+    expect(await extractSchema(fixture.db)).toMatchInlineSnapshot(`
+      "create table person(name text not null unique);"
+    `);
+    await expect(fixture.db.sql`select name from person order by name`).resolves.toMatchObject([
+      {name: 'ada'},
+    ]);
+  });
+
   test('fails for an unsafe semantic change and recommends draft plus migrate', async () => {
     await using fixture = await createMigrationsFixture('sync-semantic-failure', {
       desiredSchema: `create table person(id integer primary key, name text)`,
@@ -411,7 +435,7 @@ describe('sync', () => {
       [Error: sync could not apply definitions.sql safely to the current database.
       Create a migration with \`sqlfu draft\`, edit it if needed, then run \`sqlfu migrate\`.
 
-      Cause: Cannot add a NOT NULL column with default value NULL]
+      Cause: automatic table rebuild for person would invent values for new primary key columns: id]
     `);
   });
 });

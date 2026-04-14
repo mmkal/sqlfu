@@ -140,6 +140,13 @@ h3 {
   align-items: flex-start;
 }
 
+.panel-header-actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
 .split-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -157,6 +164,20 @@ h3 {
 .card-title {
   margin-bottom: 0.9rem;
   font-weight: 700;
+}
+
+.card-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.inline-editor {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
 .pill-row {
@@ -228,6 +249,23 @@ h3 {
   cursor: pointer;
 }
 
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.icon-button.danger {
+  color: var(--accent-strong);
+}
+
 .button.primary {
   background: linear-gradient(135deg, var(--accent), var(--accent-strong));
   color: white;
@@ -241,6 +279,7 @@ h3 {
 
 .sql-editor,
 .code-block {
+  max-width: 100%;
   width: 100%;
   border-radius: 1rem;
   border: 1px solid var(--line);
@@ -248,11 +287,18 @@ h3 {
   color: #f5ead7;
   padding: 1rem;
   overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .sql-editor {
   min-height: 16rem;
   resize: vertical;
+}
+
+.inline-editor input {
+  min-width: 18rem;
 }
 
 .code-block.error {

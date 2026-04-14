@@ -9,13 +9,17 @@ import {
   QueryClient,
   QueryClientProvider,
   useMutation,
+  useQuery,
   useSuspenseQuery,
 } from '@tanstack/react-query';
 
+import {migrationNickname} from 'sqlfu/naming';
 import type {QueryCatalog, QueryCatalogEntry} from 'sqlfu/experimental';
 import type {
+  QueryFileMutationResponse,
   QueryExecutionResponse,
   SaveSqlResponse,
+  SqlAnalysisResponse,
   SqlRunnerResponse,
   StudioRelation,
   StudioSchemaResponse,
@@ -62,11 +66,6 @@ function Studio() {
           <a className={route.kind === 'sql' ? 'nav-link active' : 'nav-link'} href="#sql">
             SQL runner
           </a>
-          {catalogQuery.data.queries.length > 0 ? (
-            <a className={route.kind === 'query' ? 'nav-link active' : 'nav-link'} href={`#query/${selectedQuery?.id ?? catalogQuery.data.queries[0]!.id}`}>
-              Generated queries
-            </a>
-          ) : null}
         </nav>
 
         <nav className="sidebar-block">
@@ -177,12 +176,18 @@ function TablePanel(input: {
 function SqlRunnerPanel() {
   const [draft, setDraft] = useLocalStorageState<SqlRunnerDraft>('sqlfu-ui/sql-runner-draft', {
     defaultValue: {
-      name: 'scratch-query',
       sql: `select name, type\nfrom sqlite_schema\nwhere name not like 'sqlite_%'\norder by type, name;`,
       params: {},
     },
   });
-  const detectedParamsSchema = buildSqlRunnerParamsSchema(draft.sql);
+  const analysisQuery = useQuery({
+    queryKey: ['sql-analysis', draft.sql],
+    queryFn: () => postJson<SqlAnalysisResponse>('/api/sql/analyze', {sql: draft.sql}),
+    placeholderData: (previousData) => previousData,
+    enabled: draft.sql.trim().length > 0,
+  });
+  const detectedParamsSchema = (analysisQuery.data?.paramsSchema as RJSFSchema | undefined) ?? buildSqlRunnerParamsSchema(draft.sql);
+  const sanitizedParams = sanitizeFormData(draft.params, detectedParamsSchema);
   const runMutation = useMutation({
     mutationFn: (body: {sql: string; params?: unknown}) =>
       postJson<SqlRunnerResponse>('/api/sql', body),
@@ -191,6 +196,29 @@ function SqlRunnerPanel() {
     mutationFn: (body: {name: string; sql: string}) =>
       postJson<SaveSqlResponse>('/api/sql/save', body),
   });
+  const handleSave = async () => {
+    const suggestedName = slugifyPromptName(migrationNickname(draft.sql));
+    const providedName = window.prompt('Save query as', suggestedName);
+    if (providedName == null) {
+      return;
+    }
+
+    const name = slugifyPromptName(providedName);
+    if (!name) {
+      return;
+    }
+
+    const result = await saveMutation.mutateAsync({name, sql: draft.sql});
+    await queryClient.fetchQuery({
+      queryKey: ['catalog'],
+      queryFn: () => fetchJson<QueryCatalog>('/api/catalog'),
+    });
+    const queryId = result.savedPath.split('/').pop()?.replace(/\.sql$/, '');
+    if (!queryId) {
+      throw new Error(`Could not derive query id from saved path: ${result.savedPath}`);
+    }
+    window.location.hash = `#query/${encodeURIComponent(queryId)}`;
+  };
 
   return (
     <QueryWorkbench
@@ -198,14 +226,13 @@ function SqlRunnerPanel() {
       title="SQL runner"
       sql={draft.sql}
       editable
-      queryName={draft.name}
+      workbenchKey={`sql:${draft.sql}`}
       paramsSchema={detectedParamsSchema}
-      paramsData={draft.params}
-      onQueryNameChange={(name) => setDraft({...draft, name})}
+      paramsData={sanitizedParams}
       onSqlChange={(sql) => setDraft({...draft, sql})}
-      onParamsChange={(params) => setDraft({...draft, params})}
-      onRun={() => runMutation.mutate({sql: draft.sql, params: draft.params})}
-      onSave={() => saveMutation.mutate({name: draft.name, sql: draft.sql})}
+      onParamsChange={(params) => setDraft({...draft, params: sanitizeFormData(params, detectedParamsSchema)})}
+      onRun={() => runMutation.mutate({sql: draft.sql, params: sanitizedParams})}
+      onSave={handleSave}
       running={runMutation.isPending || saveMutation.isPending}
       executionError={runMutation.error ?? saveMutation.error}
       executionResult={runMutation.data}
@@ -238,22 +265,136 @@ function QueryPanel(input: {
     );
   }
 
+  const entry = input.entry;
+
   const mutation = useMutation({
     mutationFn: (body: {data?: unknown; params?: unknown}) =>
-      postJson<QueryExecutionResponse>(`/api/query/${encodeURIComponent(input.entry.id)}`, body),
+      postJson<QueryExecutionResponse>(`/api/query/${encodeURIComponent(entry.id)}`, body),
   });
+  const [renameDraft, setRenameDraft] = useLocalStorageState(`sqlfu-ui/query-rename/${entry.id}`, {
+    defaultValue: entry.id,
+  });
+  const [sqlDraft, setSqlDraft] = useLocalStorageState(`sqlfu-ui/query-sql/${entry.id}`, {
+    defaultValue: entry.sql,
+  });
+  const [renameMode, setRenameMode] = useLocalStorageState(`sqlfu-ui/query-rename-mode/${entry.id}`, {
+    defaultValue: false,
+  });
+  const [sqlEditMode, setSqlEditMode] = useLocalStorageState(`sqlfu-ui/query-sql-edit-mode/${entry.id}`, {
+    defaultValue: false,
+  });
+  const renameMutation = useMutation({
+    mutationFn: (body: {name: string}) =>
+      fetchJson<QueryFileMutationResponse>(`/api/query/${encodeURIComponent(entry.id)}`, {
+        method: 'PATCH',
+        body,
+      }),
+  });
+  const updateMutation = useMutation({
+    mutationFn: (body: {sql: string}) =>
+      fetchJson<QueryFileMutationResponse>(`/api/query/${encodeURIComponent(entry.id)}`, {
+        method: 'PUT',
+        body,
+      }),
+  });
+  const deleteMutation = useMutation({
+    mutationFn: () =>
+      fetchJson<QueryFileMutationResponse>(`/api/query/${encodeURIComponent(entry.id)}`, {
+        method: 'DELETE',
+      }),
+  });
+  const handleRename = async () => {
+    const result = await renameMutation.mutateAsync({name: renameDraft});
+    setRenameMode(false);
+    await queryClient.fetchQuery({
+      queryKey: ['catalog'],
+      queryFn: () => fetchJson<QueryCatalog>('/api/catalog'),
+    });
+    window.location.hash = `#query/${encodeURIComponent(result.id)}`;
+  };
+  const handleSqlSave = async () => {
+    const result = await updateMutation.mutateAsync({sql: sqlDraft});
+    setSqlEditMode(false);
+    await queryClient.fetchQuery({
+      queryKey: ['catalog'],
+      queryFn: () => fetchJson<QueryCatalog>('/api/catalog'),
+    });
+    window.location.hash = `#query/${encodeURIComponent(result.id)}`;
+  };
+  const handleDelete = async () => {
+    if (!window.confirm(`Delete query "${entry.id}"?`)) {
+      return;
+    }
+    await deleteMutation.mutateAsync();
+    const catalog = await queryClient.fetchQuery({
+      queryKey: ['catalog'],
+      queryFn: () => fetchJson<QueryCatalog>('/api/catalog'),
+    });
+    const nextQuery = catalog.queries.find((entry) => entry.kind === 'query');
+    window.location.hash = nextQuery ? `#query/${encodeURIComponent(nextQuery.id)}` : '#sql';
+  };
 
   return (
     <QueryWorkbench
-      eyebrow={input.entry.queryType.toLowerCase()}
-      title={input.entry.id}
-      sql={input.entry.sql}
-      paramsSchema={buildExecutionSchema(input.entry)}
+      workbenchKey={entry.id}
+      eyebrow={entry.queryType.toLowerCase()}
+      title={renameMode ? renameDraft : entry.id}
+      titleEditor={renameMode ? (
+        <div className="inline-editor">
+          <input
+            aria-label="Query title"
+            value={renameDraft}
+            onChange={(event) => setRenameDraft(event.currentTarget.value)}
+          />
+          <button className="button primary" type="button" aria-label="Confirm query rename" onClick={handleRename}>
+            Save
+          </button>
+          <button className="button" type="button" onClick={() => {
+            setRenameDraft(entry.id);
+            setRenameMode(false);
+          }}>
+            Cancel
+          </button>
+        </div>
+      ) : undefined}
+      titleActions={!renameMode ? (
+        <>
+          <button className="icon-button" type="button" aria-label="Rename query" onClick={() => setRenameMode(true)}>
+            ✎
+          </button>
+          <button className="icon-button danger" type="button" aria-label="Delete query" onClick={handleDelete}>
+            🗑
+          </button>
+        </>
+      ) : undefined}
+      sql={sqlEditMode ? sqlDraft : entry.sql}
+      paramsSchema={buildExecutionSchema(entry)}
       paramsData={undefined}
+      sqlReadonlyActions={!sqlEditMode ? (
+        <button className="icon-button" type="button" aria-label="Edit query SQL" onClick={() => setSqlEditMode(true)}>
+          ✎
+        </button>
+      ) : undefined}
+      sqlEditorLabel="Query SQL editor"
+      sqlEditorActions={sqlEditMode ? (
+        <div className="actions">
+          <button className="button primary" type="button" aria-label="Confirm query SQL edit" onClick={handleSqlSave}>
+            Save
+          </button>
+          <button className="button" type="button" onClick={() => {
+            setSqlDraft(entry.sql);
+            setSqlEditMode(false);
+          }}>
+            Cancel
+          </button>
+        </div>
+      ) : undefined}
+      editable={sqlEditMode}
+      onSqlChange={setSqlDraft}
       readonlyMeta={
         <>
           <span className="pill">{input.entry.resultMode}</span>
-          <span className="pill">{input.entry.sqlFile}</span>
+          <span className="pill">{entry.sqlFile}</span>
         </>
       }
       onRun={(formData) =>
@@ -261,8 +402,8 @@ function QueryPanel(input: {
           data: isRecord(formData) && isRecord(formData.data) ? formData.data : undefined,
           params: isRecord(formData) && isRecord(formData.params) ? formData.params : undefined,
         })}
-      running={mutation.isPending}
-      executionError={mutation.error}
+      running={mutation.isPending || renameMutation.isPending || updateMutation.isPending || deleteMutation.isPending}
+      executionError={mutation.error ?? renameMutation.error ?? updateMutation.error ?? deleteMutation.error}
       executionResult={mutation.data}
       emptyMessage="Submit form data to execute the query."
       runLabel="Run generated query"
@@ -271,15 +412,19 @@ function QueryPanel(input: {
 }
 
 function QueryWorkbench(input: {
+  workbenchKey?: string;
   eyebrow: string;
   title: string;
+  titleEditor?: ReactNode;
+  titleActions?: ReactNode;
   sql: string;
   editable?: boolean;
-  queryName?: string;
   paramsSchema?: RJSFSchema;
   paramsData?: Record<string, unknown>;
   readonlyMeta?: ReactNode;
-  onQueryNameChange?: (value: string) => void;
+  sqlReadonlyActions?: ReactNode;
+  sqlEditorLabel?: string;
+  sqlEditorActions?: ReactNode;
   onSqlChange?: (value: string) => void;
   onParamsChange?: (value: Record<string, unknown>) => void;
   onRun: (formData?: unknown) => void;
@@ -297,33 +442,32 @@ function QueryWorkbench(input: {
       <header className="panel-header">
         <div>
           <div className="eyebrow">{input.eyebrow}</div>
-          <h2>{input.title}</h2>
+          {input.titleEditor ?? <h2>{input.title}</h2>}
         </div>
-        {input.readonlyMeta ? <div className="pill-row">{input.readonlyMeta}</div> : null}
+        <div className="panel-header-actions">
+          {input.readonlyMeta ? <div className="pill-row">{input.readonlyMeta}</div> : null}
+          {input.titleActions ? <div className="pill-row">{input.titleActions}</div> : null}
+        </div>
       </header>
 
       <div className="split-grid">
         <section className="card">
-          <div className="card-title">SQL</div>
+          <div className="card-title-row">
+            <div className="card-title">SQL</div>
+            {input.sqlReadonlyActions}
+          </div>
           {input.editable ? (
             <div className="stack">
               <label className="form-label">
-                <span>Query name</span>
-                <input
-                  aria-label="Query name"
-                  value={input.queryName ?? ''}
-                  onChange={(event) => input.onQueryNameChange?.(event.currentTarget.value)}
-                />
-              </label>
-              <label className="form-label">
-                <span>SQL editor</span>
+                <span>{input.sqlEditorLabel ?? 'SQL editor'}</span>
                 <textarea
                   className="sql-editor"
-                  aria-label="SQL editor"
+                  aria-label={input.sqlEditorLabel ?? 'SQL editor'}
                   value={input.sql}
                   onChange={(event) => input.onSqlChange?.(event.currentTarget.value)}
                 />
               </label>
+              {input.sqlEditorActions}
             </div>
           ) : (
             <pre className="code-block">{input.sql}</pre>
@@ -335,6 +479,7 @@ function QueryWorkbench(input: {
           <div className="form-stack">
             {input.paramsSchema ? (
               <Form
+                key={input.workbenchKey}
                 schema={input.paramsSchema}
                 formData={input.paramsData}
                 validator={validator}
@@ -555,6 +700,19 @@ function buildSqlRunnerParamsSchema(sql: string): RJSFSchema | undefined {
   };
 }
 
+function sanitizeFormData(
+  formData: Record<string, unknown> | undefined,
+  schema: RJSFSchema | undefined,
+): Record<string, unknown> {
+  if (!formData || !schema || !isRecord(schema.properties)) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(formData).filter(([key]) => key in schema.properties!),
+  );
+}
+
 function detectNamedParameters(sql: string) {
   const matches = sql.matchAll(/(^|[^\w])[:@$]([A-Za-z_][A-Za-z0-9_]*)/g);
   const names = new Set<string>();
@@ -565,17 +723,36 @@ function detectNamedParameters(sql: string) {
 }
 
 type SqlRunnerDraft = {
-  readonly name: string;
   readonly sql: string;
   readonly params: Record<string, unknown>;
 };
+
+function slugifyPromptName(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-async function fetchJson<TValue>(url: string): Promise<TValue> {
-  const response = await fetch(url);
+async function fetchJson<TValue>(
+  url: string,
+  input?: {
+    method: string;
+    body?: unknown;
+  },
+): Promise<TValue> {
+  const response = await fetch(url, {
+    method: input?.method,
+    headers: input?.body === undefined ? undefined : {
+      'content-type': 'application/json',
+    },
+    body: input?.body === undefined ? undefined : JSON.stringify(input.body),
+  });
   if (!response.ok) {
     throw new Error(await response.text());
   }

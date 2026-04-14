@@ -3,6 +3,18 @@ export type QueryCatalog = {
   readonly queries: readonly QueryCatalogEntry[];
 };
 
+export type AdHocQueryAnalysis = {
+  readonly sql: string;
+  readonly queryType: 'Select' | 'Insert' | 'Update' | 'Delete' | 'Copy';
+  readonly multipleRowsResult: boolean;
+  readonly resultMode: 'many' | 'nullableOne' | 'one' | 'metadata';
+  readonly args: readonly QueryCatalogArgument[];
+  readonly dataSchema?: JsonSchemaObject;
+  readonly paramsSchema?: JsonSchemaObject;
+  readonly resultSchema: JsonSchemaObject;
+  readonly columns: readonly QueryCatalogField[];
+};
+
 export type QueryCatalogEntry =
   | {
     readonly kind: 'query';

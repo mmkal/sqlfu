@@ -1,3 +1,5 @@
+import type {JsonSchemaObject} from 'sqlfu/experimental';
+
 export type StudioSchemaResponse = {
   readonly relations: readonly StudioRelation[];
 };
@@ -40,4 +42,13 @@ export type SqlRunnerResponse = QueryExecutionResponse & {
 
 export type SaveSqlResponse = {
   readonly savedPath: string;
+};
+
+export type SqlAnalysisResponse = {
+  readonly paramsSchema?: JsonSchemaObject;
+};
+
+export type QueryFileMutationResponse = {
+  readonly id: string;
+  readonly sqlFile: string;
 };

@@ -19,13 +19,65 @@ test('table browser, sql runner, and generated query form work against a live fi
   await expect(page.getByText('Hello World')).toBeVisible();
 });
 
+test('switching between saved queries does not leak form state between schemas', async ({page}) => {
+  await page.goto('/#query/find-post-by-slug');
+
+  await page.getByLabel('slug').fill('hello-world');
+  await page.getByRole('button', {name: 'Run generated query'}).click();
+  await expect(page.getByText('Hello World')).toBeVisible();
+
+  await page.getByRole('link', {name: /list-post-cards/i}).click();
+  await expect(page.getByText("'findPostBySlug params' must NOT have additional properties")).toHaveCount(0);
+  await page.getByRole('button', {name: 'Run generated query'}).click();
+  await expect(page.getByText('Draft Notes')).toBeVisible();
+});
+
+test('saved queries can be renamed, edited, and deleted from the query view', async ({page}) => {
+  const projectSqlDir = path.join(import.meta.dirname, 'projects', 'fixture-project', 'sql');
+  const originalPath = path.join(projectSqlDir, 'list-post-cards.sql');
+  const renamedPath = path.join(projectSqlDir, 'list-post-cards-renamed.sql');
+
+  await fs.rm(renamedPath, {force: true});
+
+  await page.goto('/#query/list-post-cards');
+
+  await page.getByRole('button', {name: 'Rename query'}).click();
+  await page.getByLabel('Query title').fill('list-post-cards-renamed');
+  await page.getByRole('button', {name: 'Confirm query rename'}).click();
+
+  await expect(page).toHaveURL(/#query\/list-post-cards-renamed$/);
+  await expect(page.getByRole('heading', {name: 'list-post-cards-renamed'})).toBeVisible();
+  await expect(fs.access(renamedPath).then(() => true, () => false)).resolves.toBe(true);
+  await expect(fs.access(originalPath).then(() => true, () => false)).resolves.toBe(false);
+
+  await page.getByRole('button', {name: 'Edit query SQL'}).click();
+  await page.getByLabel('Query SQL editor').fill(`
+    select id, slug, title
+    from posts
+    where slug = :slug
+    limit 1;
+  `);
+  await page.getByRole('button', {name: 'Confirm query SQL edit'}).click();
+
+  await expect(page.getByLabel('slug')).toBeVisible();
+  await page.getByLabel('slug').fill('hello-world');
+  await page.getByRole('button', {name: 'Run generated query'}).click();
+  await expect(page.getByText('Hello World')).toBeVisible();
+  await expect(fs.readFile(renamedPath, 'utf8')).resolves.toContain('where slug = :slug');
+
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByRole('button', {name: 'Delete query'}).click();
+
+  await expect(page).toHaveURL(/#query\/find-post-by-slug$/);
+  await expect(page.getByRole('link', {name: /list-post-cards-renamed/i})).toHaveCount(0);
+  await expect(fs.access(renamedPath).then(() => true, () => false)).resolves.toBe(false);
+});
+
 test('sql runner executes a named-parameter query and saves it to disk', async ({page}) => {
   const savedQueryPath = path.join(import.meta.dirname, 'projects', 'fixture-project', 'sql', 'find-hello-world.sql');
   await fs.rm(savedQueryPath, {force: true});
 
   await page.goto('/#sql');
-
-  await page.getByLabel('Query name').fill('find-hello-world');
   await page.getByLabel('SQL editor').fill(`
     select id, slug, title
     from posts
@@ -38,15 +90,17 @@ test('sql runner executes a named-parameter query and saves it to disk', async (
   await page.getByRole('button', {name: 'Run SQL'}).click();
   await expect(page.getByText('Hello World')).toBeVisible();
 
+  page.once('dialog', (dialog) => dialog.accept('find-hello-world'));
   await page.getByRole('button', {name: 'Save query'}).click();
-  await expect(page.getByText('Saved as sql/find-hello-world.sql')).toBeVisible();
+  await expect(page).toHaveURL(/#query\/find-hello-world$/);
+  await expect(page.getByRole('heading', {name: 'find-hello-world'})).toBeVisible();
+  await expect(page.getByText('sql/find-hello-world.sql')).toBeVisible();
   await expect(fs.readFile(savedQueryPath, 'utf8')).resolves.toContain('where slug = :slug');
 });
 
 test('sql runner draft survives a reload via local storage', async ({page}) => {
   await page.goto('/#sql');
 
-  await page.getByLabel('Query name').fill('persisted-draft');
   await page.getByLabel('SQL editor').fill(`
     select id, slug
     from posts
@@ -58,7 +112,87 @@ test('sql runner draft survives a reload via local storage', async ({page}) => {
 
   await page.reload();
 
-  await expect(page.getByLabel('Query name')).toHaveValue('persisted-draft');
   await expect(page.getByLabel('SQL editor')).toContainText('where slug = :slug');
   await expect(page.getByLabel('slug')).toHaveValue('draft-notes');
+});
+
+test('sql runner drops stale parameter values when the SQL parameter names change', async ({page}) => {
+  await page.addInitScript(() => window.localStorage.clear());
+  await page.goto('/#sql');
+
+  await page.getByLabel('SQL editor').fill(`
+    select id, slug
+    from posts
+    where slug = :slug
+    limit 1;
+  `);
+  await expect(page.getByLabel('slug')).toBeVisible();
+  await page.getByLabel('slug').fill('hello-world');
+
+  await page.getByLabel('SQL editor').fill(`
+    select id, slug
+    from posts
+    where slug = :sluggggg
+    limit 1;
+  `);
+  await expect(page.getByText("'sqlRunner params' must NOT have additional properties")).toHaveCount(0);
+  await expect(page.getByLabel('sluggggg')).toBeVisible();
+});
+
+test('sql runner infers numeric parameter types from SQL analysis', async ({page}) => {
+  await page.goto('/#sql');
+
+  await page.getByLabel('SQL editor').fill(`
+    select id, slug, title
+    from posts
+    where id = :id
+    limit 1;
+  `);
+
+  await expect(page.getByRole('spinbutton', {name: 'id'})).toBeVisible();
+  await page.getByRole('spinbutton', {name: 'id'}).fill('1');
+  await page.getByRole('button', {name: 'Run SQL'}).click();
+  await expect(page.getByText('Hello World')).toBeVisible();
+});
+
+test('sql runner surfaces clean errors without blowing out page width', async ({page}) => {
+  await page.goto('/#sql');
+
+  await page.getByLabel('SQL editor').fill(`select '${'x'.repeat(4000)}' as payload;`);
+  page.once('dialog', (dialog) => dialog.accept('   '));
+  await page.getByRole('button', {name: 'Save query'}).click();
+
+  const error = page.locator('.code-block.error');
+  await expect(error).toHaveCount(0);
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
+    .toBeLessThan(1600);
+});
+
+test('sql runner suggests a generated name in the save prompt and does not save on cancel', async ({page}) => {
+  const cancelledSavePath = path.join(import.meta.dirname, 'projects', 'fixture-project', 'sql', 'from-posts.sql');
+  await fs.rm(cancelledSavePath, {force: true});
+
+  await page.goto('/#sql');
+  await page.getByLabel('SQL editor').fill(`
+    select *
+    from posts
+    limit 1;
+  `);
+
+  let promptMessage = '';
+  let promptDefaultValue: string | undefined;
+  page.once('dialog', async (dialog) => {
+    promptMessage = dialog.message();
+    promptDefaultValue = dialog.defaultValue();
+    await dialog.dismiss();
+  });
+  await page.getByRole('button', {name: 'Save query'}).click();
+
+  await expect.poll(async () => fs.access(cancelledSavePath).then(() => true, () => false)).toBe(false);
+  expect({message: promptMessage, defaultValue: promptDefaultValue}).toMatchObject({
+    message: 'Save query as',
+    defaultValue: 'from-posts',
+  });
+  await expect(page).toHaveURL(/#sql$/);
 });

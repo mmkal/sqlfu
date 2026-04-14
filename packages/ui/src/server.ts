@@ -3,8 +3,8 @@ import path from 'node:path';
 import {Database} from 'bun:sqlite';
 
 import type {QueryCatalog, QueryCatalogEntry, QueryArg, SqlfuProjectConfig} from 'sqlfu/experimental';
-import {createBunClient, loadProjectConfig, splitSqlStatements} from 'sqlfu/experimental';
-import type {SaveSqlResponse, StudioColumn, StudioRelation, StudioSchemaResponse, TableRowsResponse} from './shared.js';
+import {analyzeAdHocSqlForConfig, createBunClient, loadProjectConfig, splitSqlStatements} from 'sqlfu/experimental';
+import type {QueryFileMutationResponse, SaveSqlResponse, SqlAnalysisResponse, StudioColumn, StudioRelation, StudioSchemaResponse, TableRowsResponse} from './shared.js';
 
 const clientEntryPath = path.join(import.meta.dir, 'client.tsx');
 const stylesPath = path.join(import.meta.dir, 'styles.css');
@@ -21,53 +21,85 @@ export async function startSqlfuUiServer(input: {
   const server = Bun.serve({
     port: input.port ?? 3017,
     async fetch(request: Request) {
-      const url = new URL(request.url);
+      try {
+        const url = new URL(request.url);
 
-      if (url.pathname === '/api/schema') {
-        return json(await getSchemaResponse(config.db));
+        if (url.pathname === '/api/schema') {
+          return json(await getSchemaResponse(config.db));
+        }
+
+        if (url.pathname === '/api/catalog') {
+          return json(await loadCatalog(config));
+        }
+
+        if (url.pathname.startsWith('/api/table/')) {
+          const relationName = decodeURIComponent(url.pathname.replace('/api/table/', ''));
+          const page = Number(url.searchParams.get('page') ?? '0');
+          return json(await getTableRows(config.db, relationName, Number.isFinite(page) ? page : 0));
+        }
+
+        if (url.pathname === '/api/sql' && request.method === 'POST') {
+          const body = await request.json() as {sql?: unknown; params?: unknown};
+          return json(await executeSql(config.db, {
+            sql: typeof body.sql === 'string' ? body.sql : '',
+            params: body.params,
+          }));
+        }
+
+        if (url.pathname === '/api/sql/analyze' && request.method === 'POST') {
+          const body = await request.json() as {sql?: unknown};
+          return json(await analyzeSql(config, {
+            sql: typeof body.sql === 'string' ? body.sql : '',
+          }));
+        }
+
+        if (url.pathname === '/api/sql/save' && request.method === 'POST') {
+          const body = await request.json() as {sql?: unknown; name?: unknown};
+          return json(await saveSqlQuery(config, {
+            sql: typeof body.sql === 'string' ? body.sql : '',
+            name: typeof body.name === 'string' ? body.name : '',
+          }));
+        }
+
+        if (url.pathname.startsWith('/api/query/') && request.method === 'POST') {
+          const queryId = decodeURIComponent(url.pathname.replace('/api/query/', ''));
+          const body = await request.json() as {data?: Record<string, unknown>; params?: Record<string, unknown>};
+          return json(await executeCatalogQuery(config, queryId, body));
+        }
+
+        if (url.pathname.startsWith('/api/query/') && request.method === 'PUT') {
+          const queryId = decodeURIComponent(url.pathname.replace('/api/query/', ''));
+          const body = await request.json() as {sql?: unknown};
+          return json(await updateQueryFile(config, queryId, {
+            sql: typeof body.sql === 'string' ? body.sql : '',
+          }));
+        }
+
+        if (url.pathname.startsWith('/api/query/') && request.method === 'PATCH') {
+          const queryId = decodeURIComponent(url.pathname.replace('/api/query/', ''));
+          const body = await request.json() as {name?: unknown};
+          return json(await renameQueryFile(config, queryId, {
+            name: typeof body.name === 'string' ? body.name : '',
+          }));
+        }
+
+        if (url.pathname.startsWith('/api/query/') && request.method === 'DELETE') {
+          const queryId = decodeURIComponent(url.pathname.replace('/api/query/', ''));
+          return json(await deleteQueryFile(config, queryId));
+        }
+
+        if (url.pathname === '/assets/app.js') {
+          return javascript(await buildClientBundle());
+        }
+
+        if (url.pathname === '/assets/app.css') {
+          return css(await fs.readFile(stylesPath, 'utf8'));
+        }
+
+        return html(renderIndexHtml());
+      } catch (error) {
+        return apiError(error);
       }
-
-      if (url.pathname === '/api/catalog') {
-        return json(await loadCatalog(config));
-      }
-
-      if (url.pathname.startsWith('/api/table/')) {
-        const relationName = decodeURIComponent(url.pathname.replace('/api/table/', ''));
-        const page = Number(url.searchParams.get('page') ?? '0');
-        return json(await getTableRows(config.db, relationName, Number.isFinite(page) ? page : 0));
-      }
-
-      if (url.pathname === '/api/sql' && request.method === 'POST') {
-        const body = await request.json() as {sql?: unknown; params?: unknown};
-        return json(await executeSql(config.db, {
-          sql: typeof body.sql === 'string' ? body.sql : '',
-          params: body.params,
-        }));
-      }
-
-      if (url.pathname === '/api/sql/save' && request.method === 'POST') {
-        const body = await request.json() as {sql?: unknown; name?: unknown};
-        return json(await saveSqlQuery(config, {
-          sql: typeof body.sql === 'string' ? body.sql : '',
-          name: typeof body.name === 'string' ? body.name : '',
-        }));
-      }
-
-      if (url.pathname.startsWith('/api/query/') && request.method === 'POST') {
-        const queryId = decodeURIComponent(url.pathname.replace('/api/query/', ''));
-        const body = await request.json() as {data?: Record<string, unknown>; params?: Record<string, unknown>};
-        return json(await executeCatalogQuery(config, queryId, body));
-      }
-
-      if (url.pathname === '/assets/app.js') {
-        return javascript(await buildClientBundle());
-      }
-
-      if (url.pathname === '/assets/app.css') {
-        return css(await fs.readFile(stylesPath, 'utf8'));
-      }
-
-      return html(renderIndexHtml());
     },
   });
 
@@ -113,6 +145,26 @@ async function loadCatalog(config: SqlfuProjectConfig): Promise<QueryCatalog> {
   return JSON.parse(await fs.readFile(catalogPath, 'utf8')) as QueryCatalog;
 }
 
+async function analyzeSql(
+  config: SqlfuProjectConfig,
+  input: {
+    sql: string;
+  },
+): Promise<SqlAnalysisResponse> {
+  if (!input.sql.trim()) {
+    return {};
+  }
+
+  try {
+    const analysis = await analyzeAdHocSqlForConfig(config, input.sql);
+    return {
+      paramsSchema: analysis.paramsSchema,
+    };
+  } catch {
+    return {};
+  }
+}
+
 async function executeCatalogQuery(
   config: SqlfuProjectConfig,
   queryId: string,
@@ -150,6 +202,72 @@ async function executeCatalogQuery(
   } finally {
     database.close();
   }
+}
+
+async function renameQueryFile(
+  config: SqlfuProjectConfig,
+  queryId: string,
+  input: {
+    name: string;
+  },
+): Promise<QueryFileMutationResponse> {
+  const query = await loadWritableQuery(config, queryId);
+  const nextId = slugifyQueryName(input.name);
+  if (!nextId) {
+    throw new Error('Query name is required');
+  }
+
+  const nextRelativePath = `sql/${nextId}.sql`;
+  const nextPath = path.join(config.projectRoot, nextRelativePath);
+  await fs.rename(path.join(config.projectRoot, query.sqlFile), nextPath);
+  await generateCatalogForProject(config.projectRoot);
+  return {
+    id: nextId,
+    sqlFile: nextRelativePath,
+  };
+}
+
+async function updateQueryFile(
+  config: SqlfuProjectConfig,
+  queryId: string,
+  input: {
+    sql: string;
+  },
+): Promise<QueryFileMutationResponse> {
+  const query = await loadWritableQuery(config, queryId);
+  const sql = input.sql.trim();
+  if (!sql) {
+    throw new Error('SQL is required');
+  }
+
+  await fs.writeFile(path.join(config.projectRoot, query.sqlFile), `${sql}\n`);
+  await generateCatalogForProject(config.projectRoot);
+  return {
+    id: query.id,
+    sqlFile: query.sqlFile,
+  };
+}
+
+async function deleteQueryFile(
+  config: SqlfuProjectConfig,
+  queryId: string,
+): Promise<QueryFileMutationResponse> {
+  const query = await loadWritableQuery(config, queryId);
+  await fs.rm(path.join(config.projectRoot, query.sqlFile), {force: true});
+  await generateCatalogForProject(config.projectRoot);
+  return {
+    id: query.id,
+    sqlFile: query.sqlFile,
+  };
+}
+
+async function loadWritableQuery(config: SqlfuProjectConfig, queryId: string) {
+  const catalog = await loadCatalog(config);
+  const query = catalog.queries.find((entry) => entry.id === queryId);
+  if (!query || query.kind !== 'query') {
+    throw new Error(`Unknown query: ${queryId}`);
+  }
+  return query;
 }
 
 function encodeArgument(
@@ -427,6 +545,16 @@ function javascript(value: string) {
   return new Response(value, {
     headers: {
       'content-type': 'text/javascript; charset=utf-8',
+    },
+  });
+}
+
+function apiError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return new Response(message, {
+    status: 400,
+    headers: {
+      'content-type': 'text/plain; charset=utf-8',
     },
   });
 }

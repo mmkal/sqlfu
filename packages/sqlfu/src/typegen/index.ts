@@ -3,6 +3,7 @@ import path from 'node:path';
 
 import {analyzeVendoredTypesqlQueries} from './analyze-vendored-typesql.js';
 import type {
+  AdHocQueryAnalysis,
   JsonSchema,
   JsonSchemaObject,
   QueryCatalog,
@@ -16,6 +17,7 @@ import {extractSchema} from '../core/sqlite.js';
 import {createBunClient, createNodeSqliteClient} from '../client.js';
 
 export type {
+  AdHocQueryAnalysis,
   JsonSchema,
   JsonSchemaObject,
   QueryCatalog,
@@ -61,6 +63,31 @@ export async function generateQueryTypesForConfig(config: SqlfuProjectConfig): P
 
   await writeGeneratedBarrel(config.sqlDir, queryFiles, config.generatedImportExtension);
   await writeQueryCatalog(config, queryFiles, queryAnalyses, schema);
+}
+
+export async function analyzeAdHocSqlForConfig(
+  config: SqlfuProjectConfig,
+  sql: string,
+): Promise<AdHocQueryAnalysis> {
+  const databasePath = await materializeTypegenDatabase(config);
+  const schema = await loadSchema(databasePath);
+  const [analysis] = await analyzeVendoredTypesqlQueries(databasePath, [
+    {
+      sqlPath: path.join(config.sqlDir, '__sql_runner__.sql'),
+      sqlContent: sql,
+    },
+  ]);
+
+  if (!analysis) {
+    throw new Error('Missing vendored TypeSQL analysis for ad hoc SQL');
+  }
+
+  if (!analysis.ok) {
+    throw new Error(analysis.error.description);
+  }
+
+  const descriptor = refineDescriptor(analysis.descriptor, sql, schema);
+  return toAdHocQueryAnalysis(descriptor);
 }
 
 type DisposableClient = {
@@ -237,6 +264,26 @@ async function writeQueryCatalog(
   const outputPath = path.join(config.projectRoot, '.sqlfu', 'query-catalog.json');
   await fs.mkdir(path.dirname(outputPath), {recursive: true});
   await fs.writeFile(outputPath, JSON.stringify(catalog, null, 2) + '\n');
+}
+
+function toAdHocQueryAnalysis(descriptor: GeneratedQueryDescriptor): AdHocQueryAnalysis {
+  const columns = getResultFields(descriptor).map((field) => toCatalogField(field));
+  const args = [
+    ...(descriptor.data ?? []).map((field) => toCatalogArgument('data', field)),
+    ...descriptor.parameters.map((field) => toCatalogArgument('params', field)),
+  ];
+
+  return {
+    sql: descriptor.sql,
+    queryType: descriptor.queryType,
+    multipleRowsResult: descriptor.multipleRowsResult,
+    resultMode: getResultMode(descriptor),
+    args,
+    dataSchema: descriptor.data?.length ? objectSchema('sqlRunner data', descriptor.data) : undefined,
+    paramsSchema: descriptor.parameters.length ? objectSchema('sqlRunner params', descriptor.parameters) : undefined,
+    resultSchema: objectSchema('sqlRunner result', getResultFields(descriptor), {fieldKind: 'result'}),
+    columns,
+  };
 }
 
 function renderQueryWrapper(input: {

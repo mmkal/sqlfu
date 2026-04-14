@@ -15,6 +15,7 @@
     "./client": "./dist/client.js",
     "./api": "./dist/api.js",
     "./cli": "./dist/cli.js",
+    "./naming": "./src/core/naming.ts",
     "./experimental": "./src/experimental.ts"
   },
   "files": [

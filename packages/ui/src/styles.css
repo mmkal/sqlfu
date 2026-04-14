@@ -331,6 +331,15 @@ h3 {
   gap: 1rem;
 }
 
+.schema-card.ok {
+  border-color: rgba(45, 126, 68, 0.25);
+  background: rgba(242, 255, 245, 0.92);
+}
+
+.schema-card.warn {
+  border-color: rgba(178, 76, 43, 0.22);
+}
+
 form fieldset {
   border: 0;
   padding: 0;

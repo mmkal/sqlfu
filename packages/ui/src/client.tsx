@@ -19,6 +19,7 @@ import type {
   QueryFileMutationResponse,
   QueryExecutionResponse,
   SaveSqlResponse,
+  SchemaCheckResponse,
   SqlAnalysisResponse,
   SqlEditorDiagnostic,
   SqlRunnerResponse,
@@ -50,6 +51,10 @@ function Studio() {
     queryKey: ['catalog'],
     queryFn: () => fetchJson<QueryCatalog>('/api/catalog'),
   });
+  const schemaCheckQuery = useSuspenseQuery({
+    queryKey: ['schema-check'],
+    queryFn: () => fetchJson<SchemaCheckResponse>('/api/schema/check'),
+  });
 
   const selectedTable = selectTable(route, schemaQuery.data.relations);
   const selectedQuery = selectQuery(route, catalogQuery.data.queries);
@@ -64,6 +69,9 @@ function Studio() {
 
         <nav className="sidebar-block">
           <div className="section-title">Tools</div>
+          <a className={route.kind === 'schema' ? 'nav-link active' : 'nav-link'} href="#schema">
+            Schema
+          </a>
           <a className={route.kind === 'sql' ? 'nav-link active' : 'nav-link'} href="#sql">
             SQL runner
           </a>
@@ -99,7 +107,12 @@ function Studio() {
       </aside>
 
       <main className="main">
-        {route.kind === 'sql' ? (
+        {route.kind === 'schema' ? (
+          <SchemaPanel
+            projectRoot={schemaQuery.data.projectRoot}
+            check={schemaCheckQuery.data}
+          />
+        ) : route.kind === 'sql' ? (
           <SqlRunnerPanel relations={schemaQuery.data.relations} />
         ) : route.kind === 'query' && selectedQuery ? (
           <QueryPanel entry={selectedQuery} relations={schemaQuery.data.relations} />
@@ -110,6 +123,60 @@ function Studio() {
         )}
       </main>
     </Shell>
+  );
+}
+
+function SchemaPanel(input: {
+  projectRoot: string;
+  check: SchemaCheckResponse;
+}) {
+  const runCommandMutation = useMutation({
+    mutationFn: (body: {command: string}) =>
+      postJson<{ok: true}>('/api/schema/command', body),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({queryKey: ['schema-check']});
+    },
+  });
+
+  return (
+    <section className="panel">
+      <header className="panel-header">
+        <div>
+          <h2>Schema</h2>
+          <p className="muted">{input.projectRoot}</p>
+        </div>
+      </header>
+
+      <div className="stack">
+        {input.check.cards.map((card) => (
+          <section key={card.key} className={`card schema-card ${card.ok ? 'ok' : 'warn'}`}>
+            <div className="card-title">{card.ok ? card.okTitle : card.title}</div>
+            {!card.ok ? <p>{card.summary}</p> : null}
+            {!card.ok && card.recommendation ? <p className="muted">{card.recommendation}</p> : null}
+            {!card.ok && card.commands && card.commands.length > 0 ? (
+              <div className="actions">
+                {card.commands.map((command) => (
+                  <button
+                    key={command}
+                    className="button"
+                    type="button"
+                    aria-label={command}
+                    onClick={() => {
+                      if (!window.confirm(`Run ${command}?`)) {
+                        return;
+                      }
+                      runCommandMutation.mutate({command});
+                    }}
+                  >
+                    {command}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </section>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -661,6 +728,9 @@ function parseHash(hash: string): Route {
   }
 
   const [kind, first, second] = value.split('/').map(decodeURIComponent);
+  if (kind === 'schema') {
+    return {kind: 'schema'};
+  }
   if (kind === 'sql') {
     return {kind: 'sql'};
   }
@@ -809,6 +879,9 @@ async function postJson<TValue>(url: string, body: unknown): Promise<TValue> {
 type Route =
   | {
     readonly kind: 'home';
+  }
+  | {
+    readonly kind: 'schema';
   }
   | {
     readonly kind: 'sql';

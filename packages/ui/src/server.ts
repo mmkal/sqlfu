@@ -2,9 +2,9 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {Database} from 'bun:sqlite';
 
-import type {QueryCatalog, QueryCatalogEntry, QueryArg, SqlfuProjectConfig} from 'sqlfu/experimental';
-import {analyzeAdHocSqlForConfig, createBunClient, loadProjectConfig, splitSqlStatements} from 'sqlfu/experimental';
-import type {QueryFileMutationResponse, SaveSqlResponse, SqlAnalysisResponse, SqlEditorDiagnostic, StudioColumn, StudioRelation, StudioSchemaResponse, TableRowsResponse} from './shared.js';
+import type {QueryCatalog, QueryCatalogEntry, QueryArg, SqlfuProjectConfig, SqlfuRouterContext} from 'sqlfu/experimental';
+import {analyzeAdHocSqlForConfig, createBunClient, getCheckProblems, loadProjectConfig, runSqlfuCommand, splitSqlStatements} from 'sqlfu/experimental';
+import type {QueryFileMutationResponse, SaveSqlResponse, SchemaCheckCard, SchemaCheckResponse, SqlAnalysisResponse, SqlEditorDiagnostic, StudioColumn, StudioRelation, StudioSchemaResponse, TableRowsResponse} from './shared.js';
 
 const clientEntryPath = path.join(import.meta.dir, 'client.tsx');
 const stylesPath = path.join(import.meta.dir, 'styles.css');
@@ -30,6 +30,10 @@ export async function startSqlfuUiServer(input: {
 
         if (url.pathname === '/api/catalog') {
           return json(await loadCatalog(config));
+        }
+
+        if (url.pathname === '/api/schema/check') {
+          return json(await getSchemaCheckResponse(config));
         }
 
         if (url.pathname.startsWith('/api/table/')) {
@@ -58,6 +62,13 @@ export async function startSqlfuUiServer(input: {
           return json(await saveSqlQuery(config, {
             sql: typeof body.sql === 'string' ? body.sql : '',
             name: typeof body.name === 'string' ? body.name : '',
+          }));
+        }
+
+        if (url.pathname === '/api/schema/command' && request.method === 'POST') {
+          const body = await request.json() as {command?: unknown};
+          return json(await runSchemaCommand(config, {
+            command: typeof body.command === 'string' ? body.command : '',
           }));
         }
 
@@ -166,6 +177,84 @@ async function analyzeSql(
       diagnostics: [toSqlEditorDiagnostic(input.sql, error)],
     };
   }
+}
+
+async function getSchemaCheckResponse(config: SqlfuProjectConfig): Promise<SchemaCheckResponse> {
+  const problems = await getCheckProblems(toSqlfuRouterContext(config));
+  return {
+    cards: buildSchemaCheckCards(problems),
+  };
+}
+
+async function runSchemaCommand(
+  config: SqlfuProjectConfig,
+  input: {
+    command: string;
+  },
+) {
+  if (!input.command.trim()) {
+    throw new Error('Command is required');
+  }
+
+  await runSqlfuCommand(toSqlfuRouterContext(config), input.command);
+  return {
+    ok: true,
+  } as const;
+}
+
+function toSqlfuRouterContext(config: SqlfuProjectConfig): SqlfuRouterContext {
+  return {config};
+}
+
+function buildSchemaCheckCards(problems: readonly string[]): readonly SchemaCheckCard[] {
+  const mismatchByTitle = new Map<string, {
+    readonly summary: string;
+    readonly recommendation?: string;
+    readonly commands: readonly string[];
+  }>();
+
+  if (problems.length > 0) {
+    const [title, summary, ...rest] = problems;
+    const recommendation = rest.find((line) => line.startsWith('Recommendation:'));
+    mismatchByTitle.set(title ?? '', {
+      summary: summary ?? '',
+      recommendation,
+      commands: extractCommands(rest),
+    });
+  }
+
+  return [
+    toSchemaCheckCard('repoDrift', 'Repo Drift', '✅ No Repo Drift', mismatchByTitle.get('Repo Drift')),
+    toSchemaCheckCard('pendingMigrations', 'Pending Migrations', '✅ No Pending Migrations', mismatchByTitle.get('Pending Migrations')),
+    toSchemaCheckCard('historyDrift', 'History Drift', '✅ No History Drift', mismatchByTitle.get('History Drift')),
+    toSchemaCheckCard('schemaDrift', 'Schema Drift', '✅ No Schema Drift', mismatchByTitle.get('Schema Drift')),
+  ];
+}
+
+function toSchemaCheckCard(
+  key: SchemaCheckCard['key'],
+  title: string,
+  okTitle: string,
+  mismatch: {
+    readonly summary: string;
+    readonly recommendation?: string;
+    readonly commands: readonly string[];
+  } | undefined,
+): SchemaCheckCard {
+  return {
+    key,
+    title,
+    okTitle,
+    ok: !mismatch,
+    summary: mismatch?.summary ?? '',
+    recommendation: mismatch?.recommendation,
+    commands: mismatch?.commands ?? [],
+  };
+}
+
+function extractCommands(lines: readonly string[]) {
+  return [...new Set(lines.flatMap((line) => [...line.matchAll(/`(sqlfu [^`]+)`/g)].map((match) => match[1]!)))]
+    .filter((command) => !/[<>]/.test(command));
 }
 
 function toSqlEditorDiagnostic(sql: string, error: unknown): SqlEditorDiagnostic {

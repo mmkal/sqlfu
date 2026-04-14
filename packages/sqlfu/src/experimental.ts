@@ -3,6 +3,8 @@ export {defineConfig, loadProjectConfig} from './core/config.js';
 export {migrationNickname} from './core/naming.js';
 export {splitSqlStatements} from './core/sqlite.js';
 export type {QueryArg, SqlfuProjectConfig} from './core/types.js';
+export {getCheckProblems, runSqlfuCommand} from './api.js';
+export type {SqlfuRouterContext} from './api.js';
 export {
   analyzeAdHocSqlForConfig,
   generateQueryTypes,

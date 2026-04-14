@@ -1,12 +1,11 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import {DatabaseSync} from 'node:sqlite';
 
 import {os} from '@orpc/server';
 import {z} from 'zod';
 
 import type {Client, SqlfuProjectConfig} from './core/types.js';
-import {createNodeSqliteClient, migrationNickname} from './client.js';
+import {createBunClient, createNodeSqliteClient, migrationNickname} from './client.js';
 import {extractSchema} from './core/sqlite.js';
 import {
   applyMigrations,
@@ -222,6 +221,49 @@ export const router = {
   },
 };
 
+export async function getCheckProblems(context: SqlfuRouterContext): Promise<readonly string[]> {
+  const result = await analyzeDatabase(createRuntime(context));
+  return result.problems;
+}
+
+export async function runSqlfuCommand(context: SqlfuRouterContext, command: string): Promise<void> {
+  const normalized = command.trim();
+
+  if (normalized === 'sqlfu draft') {
+    await draftSql(context, {});
+    return;
+  }
+
+  if (normalized === 'sqlfu migrate') {
+    await migrateSql(context);
+    return;
+  }
+
+  if (normalized.startsWith('sqlfu baseline ')) {
+    await baselineSql(context, {
+      target: normalized.replace(/^sqlfu baseline /u, '').trim(),
+    });
+    return;
+  }
+
+  if (normalized.startsWith('sqlfu goto ')) {
+    await gotoSql(context, {
+      target: normalized.replace(/^sqlfu goto /u, '').trim(),
+    });
+    return;
+  }
+
+  if (normalized === 'sqlfu check') {
+    const result = await analyzeDatabase(createRuntime(context));
+    if (result.problems.length > 0) {
+      throw new Error(result.problems.join('\n'));
+    }
+    return;
+  }
+
+  throw new Error(`Unsupported sqlfu command: ${command}`);
+}
+
 function createRuntime(context: SqlfuRouterContext) {
   return {
     config: context.config,
@@ -259,6 +301,61 @@ async function readDefinitionsSql(definitionsPath: string) {
     }
     throw error;
   }
+}
+
+async function draftSql(context: SqlfuRouterContext, input?: {name?: string}) {
+  const runtime = createRuntime(context);
+  const migrations = await runtime.readMigrations();
+  const definitionsSql = await runtime.readDefinitionsSql();
+  const baselineSql = migrations.length === 0 ? '' : await materializeMigrationsSchema(runtime.config, migrations);
+  const diffLines = await diffSchemaSql({
+    projectRoot: runtime.config.projectRoot,
+    baselineSql,
+    desiredSql: definitionsSql,
+    enableDrop: false,
+  });
+
+  if (diffLines.length === 0) {
+    return;
+  }
+
+  const body = diffLines.join('\n').trim();
+  const fileName = `${getMigrationPrefix(runtime.now())}_${slugify(input?.name ?? migrationNickname(body))}.sql`;
+  await fs.mkdir(context.config.migrationsDir, {recursive: true});
+  await fs.writeFile(path.join(context.config.migrationsDir, fileName), `${body}\n`);
+}
+
+async function migrateSql(context: SqlfuRouterContext) {
+  const migrations = await createRuntime(context).readMigrations();
+  await applyMigrationsToDatabase(context.config.db, migrations);
+}
+
+async function baselineSql(context: SqlfuRouterContext, input: {target: string}) {
+  const migrations = await createRuntime(context).readMigrations();
+  await using database = await openMainDevDatabase(context.config.db);
+  await baselineMigrationHistory(database.client, {migrations, target: input.target});
+}
+
+async function gotoSql(context: SqlfuRouterContext, input: {target: string}) {
+  const runtime = createRuntime(context);
+  const migrations = await runtime.readMigrations();
+  const targetMigrations = getMigrationsThroughTarget(migrations, input.target);
+  const targetSchema = await materializeMigrationsSchema(runtime.config, targetMigrations);
+
+  await using database = await openMainDevDatabase(context.config.db);
+  const liveSchema = await extractSchema(database.client);
+  const diffLines = await diffSchemaSql({
+    projectRoot: runtime.config.projectRoot,
+    baselineSql: liveSchema,
+    desiredSql: targetSchema,
+    enableDrop: true,
+  });
+  await database.client.transaction(async (tx) => {
+    if (diffLines.length > 0) {
+      await tx.raw(diffLines.join('\n'));
+    }
+    await replaceMigrationHistory(tx, targetMigrations);
+  });
 }
 
 export function getMigrationPrefix(now: Date) {
@@ -307,11 +404,11 @@ type DisposableClient = {
 async function createScratchDatabase(config: SqlfuProjectConfig, slug: string): Promise<DisposableClient> {
   const dbPath = path.join(config.projectRoot, '.sqlfu', `${slug}.db`);
   await fs.mkdir(path.dirname(dbPath), {recursive: true});
-  const database = new DatabaseSync(dbPath);
+  const database = await openSqliteDatabase(dbPath);
   return {
-    client: createNodeSqliteClient(database),
+    client: database.client,
     async [Symbol.asyncDispose]() {
-      database.close();
+      await database[Symbol.asyncDispose]();
       await Promise.allSettled([
         fs.rm(dbPath, {force: true}),
         fs.rm(`${dbPath}-shm`, {force: true}),
@@ -324,9 +421,25 @@ async function createScratchDatabase(config: SqlfuProjectConfig, slug: string): 
 
 async function openMainDevDatabase(dbPath: string): Promise<DisposableClient> {
   await fs.mkdir(path.dirname(dbPath), {recursive: true});
+  return openSqliteDatabase(dbPath);
+}
+
+async function openSqliteDatabase(dbPath: string): Promise<DisposableClient> {
+  if ('Bun' in globalThis) {
+    const {Database} = await import('bun:sqlite' as any);
+    const database = new Database(dbPath);
+    return {
+      client: createBunClient(database as Parameters<typeof createBunClient>[0]),
+      async [Symbol.asyncDispose]() {
+        database.close();
+      },
+    };
+  }
+
+  const {DatabaseSync} = await import('node:sqlite');
   const database = new DatabaseSync(dbPath);
   return {
-    client: createNodeSqliteClient(database),
+    client: createNodeSqliteClient(database as Parameters<typeof createNodeSqliteClient>[0]),
     async [Symbol.asyncDispose]() {
       database.close();
     },

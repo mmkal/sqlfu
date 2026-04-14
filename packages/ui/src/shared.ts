@@ -5,6 +5,20 @@ export type StudioSchemaResponse = {
   readonly relations: readonly StudioRelation[];
 };
 
+export type SchemaCheckCard = {
+  readonly key: 'repoDrift' | 'pendingMigrations' | 'historyDrift' | 'schemaDrift';
+  readonly title: string;
+  readonly okTitle: string;
+  readonly ok: boolean;
+  readonly summary: string;
+  readonly recommendation?: string;
+  readonly commands?: readonly string[];
+};
+
+export type SchemaCheckResponse = {
+  readonly cards: readonly SchemaCheckCard[];
+};
+
 export type StudioRelation = {
   readonly name: string;
   readonly kind: 'table' | 'view';

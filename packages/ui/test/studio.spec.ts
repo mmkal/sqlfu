@@ -3,6 +3,30 @@ import path from 'node:path';
 
 import {expect, test} from '@playwright/test';
 
+test('schema page shows mismatch cards and can run the recommended sqlfu draft command', async ({page}) => {
+  const migrationsDir = path.join(import.meta.dirname, 'projects', 'fixture-project', 'migrations');
+
+  await page.goto('/#schema');
+
+  await expect(page.getByRole('heading', {name: 'Schema'})).toBeVisible();
+  await expect(page.getByText('Repo Drift')).toBeVisible();
+  await expect(page.getByText('Desired Schema does not match Migrations.')).toBeVisible();
+  await expect(page.getByText('✅ No Pending Migrations')).toBeVisible();
+  await expect(page.getByText('✅ No History Drift')).toBeVisible();
+  await expect(page.getByText('✅ No Schema Drift')).toBeVisible();
+
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByRole('button', {name: 'sqlfu draft'}).click();
+
+  await expect.poll(async () => {
+    try {
+      return (await fs.readdir(migrationsDir)).filter((name) => name.endsWith('.sql')).length;
+    } catch {
+      return 0;
+    }
+  }).toBe(1);
+});
+
 test('table browser, sql runner, and generated query form work against a live fixture project', async ({page}) => {
   await page.goto('/');
 

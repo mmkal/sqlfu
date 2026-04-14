@@ -344,6 +344,26 @@ h3 {
   align-items: start;
 }
 
+.authority-desired {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.authority-migrations {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.authority-history {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.authority-live {
+  grid-column: 1;
+  grid-row: 2;
+}
+
 .migration-item summary {
   display: flex;
   align-items: center;

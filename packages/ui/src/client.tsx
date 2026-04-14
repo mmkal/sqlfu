@@ -186,7 +186,7 @@ function SchemaPanel(input: {
       </div>
 
       <div className="split-grid authorities-grid">
-        <section className="card">
+        <section className="card authority-card authority-desired">
           <h3 className="card-title">Desired Schema</h3>
           <SqlCodeMirror
             value={input.authorities.desiredSchemaSql}
@@ -197,7 +197,7 @@ function SchemaPanel(input: {
           />
         </section>
 
-        <section className="card">
+        <section className="card authority-card authority-migrations">
           <h3 className="card-title">Migrations</h3>
           {input.authorities.migrations.length === 0 ? (
             <p className="muted">No migrations.</p>
@@ -227,7 +227,7 @@ function SchemaPanel(input: {
           )}
         </section>
 
-        <section className="card">
+        <section className="card authority-card authority-history">
           <h3 className="card-title">Migration History</h3>
           {input.authorities.migrationHistory.length === 0 ? (
             <p className="muted">No applied migrations.</p>
@@ -242,7 +242,7 @@ function SchemaPanel(input: {
           )}
         </section>
 
-        <section className="card">
+        <section className="card authority-card authority-live">
           <h3 className="card-title">Live Schema</h3>
           <SqlCodeMirror
             value={input.authorities.liveSchemaSql}

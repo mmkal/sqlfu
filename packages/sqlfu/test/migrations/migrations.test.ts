@@ -153,7 +153,7 @@ describe('check recommendations', () => {
     await expect(fixture.api.check.all()).resolves.toBeUndefined();
   });
 
-  test('detects stricter live column constraints as schema drift and sync drift', async () => {
+  test('detects stricter live column constraints as schema drift without recommending sync', async () => {
     await using fixture = await createMigrationsFixture('check-live-has-stricter-column-constraints', {
       desiredSchema: `create table a(b text)`,
       migrations: {
@@ -167,11 +167,7 @@ describe('check recommendations', () => {
     await expect(fixture.api.check.all()).rejects.toMatchInlineSnapshot(`
       [Error: Schema Drift
       Live Schema does not match Migration History.
-      Recommendation: run \`sqlfu goto <target>\`.
-
-      Sync Drift
-      Desired Schema does not match Live Schema.
-      Recommendation: run \`sqlfu sync\`.]
+      Recommendation: run \`sqlfu goto <target>\`.]
     `);
   });
 

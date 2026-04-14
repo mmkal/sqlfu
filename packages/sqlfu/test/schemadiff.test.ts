@@ -111,3 +111,14 @@ test('the goto shape works when destructive drops are explicitly enabled', async
     await fs.rm(root, {recursive: true, force: true});
   }
 });
+
+test('diffSchemaSql currently misses stricter column constraints in sqlite', async () => {
+  const diff = await diffSchemaSql({
+    projectRoot: process.cwd(),
+    baselineSql: `create table a(b text);`,
+    desiredSql: `create table a(b text not null unique);`,
+    allowDestructive: true,
+  });
+
+  expect(diff).toEqual([]);
+});

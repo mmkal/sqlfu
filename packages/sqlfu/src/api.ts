@@ -193,7 +193,7 @@ export const router = {
         materializeDefinitionsSchema(runtime.config, await runtime.readDefinitionsSql()),
         materializeMigrationsSchema(runtime.config, await runtime.readMigrations()),
       ]);
-      if (!(await schemasEqual(runtime.config, definitionsSchema, migrationsSchema))) {
+      if ((await compareSchemas(runtime.config, definitionsSchema, migrationsSchema)).isDifferent) {
         throw new Error('replayed migrations do not match definitions.sql');
       }
     }),
@@ -502,7 +502,7 @@ async function analyzeDatabase(runtime: ReturnType<typeof createRuntime>) {
   const appliedNames = new Set(applied.map((migration) => migration.name));
   const migrationByName = new Map(migrations.map((migration) => [migrationName(migration), migration]));
 
-  const hasRepoDrift = !(await schemasEqual(runtime.config, desiredSchema, migrationsSchema));
+  const repoDrift = await compareSchemas(runtime.config, desiredSchema, migrationsSchema);
   const historyMismatch = findHistoryMismatch(applied, migrationByName);
   const hasPendingMigrations = !historyMismatch && migrations.some((migration) => !appliedNames.has(migrationName(migration)));
 
@@ -510,8 +510,8 @@ async function analyzeDatabase(runtime: ReturnType<typeof createRuntime>) {
     .map((historical) => migrationByName.get(historical.name))
     .filter((migration): migration is Migration => Boolean(migration));
   const historicalSchema = await materializeMigrationsSchema(runtime.config, historicalMigrations);
-  const hasSchemaDrift = !(await schemasEqual(runtime.config, historicalSchema, liveSchema));
-  const hasSchemaNotCurrent = !(await schemasEqual(runtime.config, desiredSchema, liveSchema));
+  const schemaDrift = await compareSchemas(runtime.config, historicalSchema, liveSchema);
+  const syncDrift = await compareSchemas(runtime.config, desiredSchema, liveSchema);
   const recommendedTarget = await findRecommendedTarget(runtime.config, migrations, liveSchema);
   const mismatches: CheckMismatch[] = [];
 
@@ -526,7 +526,7 @@ async function analyzeDatabase(runtime: ReturnType<typeof createRuntime>) {
           `Recommended Baseline Target: ${recommendedTarget}`,
           `Recommendation: restore the original migration from git, or run \`sqlfu baseline ${recommendedTarget}\` if you want to keep the current live schema.`,
         ]
-        : hasSchemaNotCurrent
+        : syncDrift.isDifferent
           ? [
             `Recommended Goto Target: ${historyMismatch.name}`,
             `Recommendation: restore the original migration from git, or run \`sqlfu goto ${historyMismatch.name}\` if you want to reconcile this database to the current repo state.`,
@@ -545,13 +545,13 @@ async function analyzeDatabase(runtime: ReturnType<typeof createRuntime>) {
     });
   }
 
-  if (hasRepoDrift) {
+  if (repoDrift.isDifferent) {
     mismatches.push({
       name: 'Repo Drift',
       lines: [
         'Repo Drift',
         'Desired Schema does not match Migrations.',
-        hasSchemaNotCurrent
+        syncDrift.isDifferent
           ? 'Recommendation: run `sqlfu draft` (reviewable migration).'
           : 'Recommendation: run `sqlfu draft` (reviewable migration). Then maybe `sqlfu baseline <new-migration>` for a synced dev db.',
       ],
@@ -571,7 +571,7 @@ async function analyzeDatabase(runtime: ReturnType<typeof createRuntime>) {
     });
   }
 
-  if (!historyMismatch && hasSchemaDrift) {
+  if (!historyMismatch && schemaDrift.isDifferent) {
     mismatches.push({
       name: 'Schema Drift',
       lines: [
@@ -585,7 +585,7 @@ async function analyzeDatabase(runtime: ReturnType<typeof createRuntime>) {
     });
   }
 
-  if (hasSchemaNotCurrent) {
+  if (syncDrift.isDifferent && syncDrift.isSyncable) {
     mismatches.push({
       name: 'Sync Drift',
       lines: [
@@ -619,14 +619,14 @@ async function findRecommendedTarget(config: SqlfuProjectConfig, migrations: rea
   for (let index = 0; index < migrations.length; index += 1) {
     const candidate = migrations.slice(0, index + 1);
     const candidateSchema = await materializeMigrationsSchema(config, candidate);
-    if (await schemasEqual(config, candidateSchema, liveSchema)) {
+    if (!(await compareSchemas(config, candidateSchema, liveSchema)).isDifferent) {
       return migrationName(candidate.at(-1)!);
     }
   }
   return null;
 }
 
-async function schemasEqual(config: SqlfuProjectConfig, left: string, right: string) {
+async function compareSchemas(config: SqlfuProjectConfig, left: string, right: string) {
   const [leftToRight, rightToLeft] = await Promise.all([
     diffSchemaSql({
       projectRoot: config.projectRoot,
@@ -643,12 +643,18 @@ async function schemasEqual(config: SqlfuProjectConfig, left: string, right: str
   ]);
 
   if (leftToRight.length !== 0 || rightToLeft.length !== 0) {
-    return false;
+    return {
+      isDifferent: true,
+      isSyncable: leftToRight.length !== 0,
+    };
   }
 
   const leftFingerprint = await materializeSchemaFingerprint(config, left);
   const rightFingerprint = await materializeSchemaFingerprint(config, right);
-  return JSON.stringify(leftFingerprint) === JSON.stringify(rightFingerprint);
+  return {
+    isDifferent: JSON.stringify(leftFingerprint) !== JSON.stringify(rightFingerprint),
+    isSyncable: false,
+  };
 }
 
 async function materializeSchemaFingerprint(config: SqlfuProjectConfig, sql: string) {

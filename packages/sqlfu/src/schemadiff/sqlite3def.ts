@@ -5,6 +5,10 @@ import {fileURLToPath} from 'node:url';
 
 import {ensureSqlite3defBinary} from './binary.js';
 
+/**
+ * Legacy sqlite3def helpers kept only for direct binary-backed utilities.
+ * Schema diff correctness now lives in `sqlite-native.ts`.
+ */
 const packageRoot = fileURLToPath(new URL('../../', import.meta.url));
 const sharedSqlite3defDir = path.join(packageRoot, '.sqlfu');
 
@@ -51,60 +55,6 @@ export async function runSqlite3def(config: Sqlite3defConfig, args: readonly str
 
     child.on('error', reject);
   });
-}
-
-export function getMeaningfulDiffLines(output: string): string[] {
-  if (/Nothing is modified/i.test(output)) {
-    return [];
-  }
-
-  return output
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .filter((line) => line !== '-- dry run --')
-    .filter((line) => line !== 'BEGIN;')
-    .filter((line) => line !== 'COMMIT;')
-    .filter((line) => line !== 'DROP TABLE "schema_migrations";')
-    .filter((line) => line !== '-- Skipped: DROP TABLE "schema_migrations";')
-    .filter((line) => !/^-- Skipped: DROP TABLE ".*_fts_(data|idx|content|docsize|config)";$/i.test(line))
-    .filter((line) => line !== 'finished!');
-}
-
-export async function diffBaselineSqlToDesiredSql(
-  config: Sqlite3defConfig,
-  input: {
-    baselineSql: string;
-    desiredSql: string;
-    allowDestructive: boolean;
-  },
-): Promise<string[]> {
-  await fs.mkdir(config.tempDir, {recursive: true});
-  const workDir = await fs.mkdtemp(path.join(config.tempDir, 'schemadiff-'));
-  const baselineSqlPath = path.join(workDir, 'baseline.sql');
-  const definitionsPath = path.join(workDir, 'definitions.sql');
-  const baselineDbPath = path.join(workDir, 'baseline.db');
-
-  try {
-    await fs.mkdir(workDir, {recursive: true});
-    await fs.writeFile(baselineSqlPath, input.baselineSql);
-    await fs.writeFile(definitionsPath, input.desiredSql);
-
-    if (input.baselineSql.trim()) {
-      await runSqlite3def(config, ['--apply', '--file', baselineSqlPath, baselineDbPath]);
-    }
-
-    const diffOutput = await runSqlite3def(config, [
-      '--dry-run',
-      '--file',
-      definitionsPath,
-      ...(input.allowDestructive ? ['--enable-drop'] : []),
-      baselineDbPath,
-    ]);
-    return getMeaningfulDiffLines(diffOutput);
-  } finally {
-    await fs.rm(workDir, {recursive: true, force: true});
-  }
 }
 
 export async function applySchemaFile(input: {

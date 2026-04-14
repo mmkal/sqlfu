@@ -92,13 +92,13 @@ Build a SQLite equivalent of a small `schemainspect`.
 
 Start with only these object types:
 
-- [ ] tables
-- [ ] columns
-- [ ] primary keys
-- [ ] unique constraints / unique indexes
-- [ ] non-unique indexes
-- [ ] foreign keys
-- [ ] views
+- [x] tables
+- [x] columns
+- [x] primary keys
+- [x] unique constraints / unique indexes
+- [x] non-unique indexes
+- [x] foreign keys
+- [x] views
 
 Do not start with:
 
@@ -145,15 +145,15 @@ Implementation note:
 
 Before generating migration SQL, build confidence that inspected schemas compare correctly.
 
-- [ ] Create SQLite inspector tests for semantic equality / inequality
-- [ ] Keep or improve the quoted-identifier equivalence behavior
+- [x] Create SQLite inspector tests for semantic equality / inequality
+- [x] Keep or improve the quoted-identifier equivalence behavior
 - [ ] Make sure these cases are covered:
-  - [ ] quoted vs unquoted simple identifiers
-  - [ ] `not null`
-  - [ ] `unique`
-  - [ ] composite indexes
+  - [x] quoted vs unquoted simple identifiers
+  - [x] `not null`
+  - [x] `unique`
+  - [x] composite indexes
   - [ ] view definition changes
-  - [ ] foreign key changes
+  - [x] foreign key changes
 
 ### Phase 3: Statement Planning
 
@@ -161,20 +161,20 @@ Build a `migra`-style diff planner for SQLite-inspected objects.
 
 Start with changes that are easiest to express and verify:
 
-- [ ] create table
-- [ ] drop table
-- [ ] add column
-- [ ] create index
-- [ ] drop index
-- [ ] create view
-- [ ] drop view
+- [x] create table
+- [x] drop table
+- [x] add column
+- [x] create index
+- [x] drop index
+- [x] create view
+- [x] drop view
 
 Then handle rebuild-required table changes explicitly:
 
-- [ ] column `not null` changes
-- [ ] unique changes
+- [x] column `not null` changes
+- [x] unique changes
 - [ ] primary key changes
-- [ ] column drops
+- [x] column drops
 - [ ] column type changes where SQLite requires table rebuild
 
 Important:
@@ -206,9 +206,9 @@ Core SQLite-relevant fixtures:
 
 - [ ] `generated`
 - [ ] `generated_added`
-- [ ] `constraints`
-- [ ] `multi_column_index`
-- [ ] `dependencies`
+- [x] `constraints`
+- [x] `multi_column_index`
+- [x] `dependencies`
 - [ ] `dependencies2`
 - [ ] `dependencies3`
 - [ ] `dependencies4`
@@ -248,11 +248,11 @@ For each skipped fixture family, write:
 
 After the new engine has enough fixture coverage:
 
-- [ ] switch `check()` to use the new SQLite diff/equality path everywhere
-- [ ] switch `draft` to use the new diff planner
-- [ ] switch `sync` to use the new diff planner
-- [ ] switch `goto` to use the new diff planner
-- [ ] remove now-redundant workaround logic in `api.ts`
+- [x] switch `check()` to use the new SQLite diff/equality path everywhere
+- [x] switch `draft` to use the new diff planner
+- [x] switch `sync` to use the new diff planner
+- [x] switch `goto` to use the new diff planner
+- [x] remove now-redundant workaround logic in `api.ts`
 - [ ] delete `sqlite3def` integration if there is no longer a good reason to keep it
 
 Do not delete the old code before there is replacement coverage.
@@ -390,7 +390,10 @@ This is the minimum model the implementation should target. Expand only when tes
 
 Use this section to record fixture-family decisions as you go.
 
-- None yet.
+- `constraints`: meaningful for SQLite. Ported as a stricter-column-shape rebuild fixture (`text` -> `text not null unique`).
+- `multi_column_index`: meaningful for SQLite. Ported as explicit multi-column unique index creation on an existing table.
+- `dependencies`: meaningful for SQLite. Ported as topologically ordered table creation via a foreign-key dependency.
+- `dependencies2` / `dependencies3` / `dependencies4`: not ported yet. Likely worth adapting around SQLite view ordering and more complex FK chains rather than copying the PostgreSQL fixtures literally.
 
 ## Work Log
 
@@ -399,3 +402,7 @@ Append short dated notes here as you work.
 - 2026-04-15: Task file created.
 - 2026-04-15: Read the referenced `pgkit` schemainspect/migra files and the current `sqlfu` sqlite schemadiff path. Confirmed `diffSchemaSql` is still a thin `sqlite3def` wrapper and `check()` has a separate fingerprint fallback.
 - 2026-04-15: Chose a SQLite-native plan: inspect two scratch databases semantically, then emit direct SQLite migration SQL with explicit table rebuild sequences where needed.
+- 2026-04-15: Replaced `diffSchemaSql` with a SQLite-native inspected-schema planner in `packages/sqlfu/src/schemadiff/sqlite-native.ts`.
+- 2026-04-15: `check()` now compares inspected SQLite schemas directly and no longer falls back to the old schema fingerprint workaround.
+- 2026-04-15: Added end-to-end regression coverage for semantic rebuilds in `schemadiff` and migration tests, including preserved-data rebuilds and explicit failure for unsupported automatic primary-key introduction.
+- 2026-04-15: Added a pgkit-inspired SQLite fixture harness with initial `constraints`, `multi_column_index`, and `dependencies` fixtures.

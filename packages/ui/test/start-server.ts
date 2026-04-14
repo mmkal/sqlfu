@@ -29,11 +29,14 @@ await new Promise(() => {});
 
 async function ensureProjectFiles(targetRoot: string) {
   await fs.mkdir(projectsRoot, {recursive: true});
+  if (resetDb) {
+    await fs.rm(targetRoot, {recursive: true, force: true});
+  }
   try {
     await fs.access(targetRoot);
-  } catch {
-    await fs.cp(templateRoot, targetRoot, {recursive: true});
-  }
+    return;
+  } catch {}
+  await fs.cp(templateRoot, targetRoot, {recursive: true});
 }
 
 async function ensureDatabase(

@@ -16,7 +16,8 @@
     "@tanstack/react-query": "^5.90.5",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "sqlfu": "workspace:*"
+    "sqlfu": "workspace:*",
+    "use-local-storage-state": "^19.5.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",

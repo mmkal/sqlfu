@@ -37,3 +37,7 @@ export type QueryExecutionResponse = {
 export type SqlRunnerResponse = QueryExecutionResponse & {
   readonly sql: string;
 };
+
+export type SaveSqlResponse = {
+  readonly savedPath: string;
+};

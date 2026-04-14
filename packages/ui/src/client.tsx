@@ -4,6 +4,7 @@ import {createRoot} from 'react-dom/client';
 import Form from '@rjsf/core';
 import type {RJSFSchema} from '@rjsf/utils';
 import validator from '@rjsf/validator-ajv8';
+import useLocalStorageState from 'use-local-storage-state';
 import {
   QueryClient,
   QueryClientProvider,
@@ -14,6 +15,7 @@ import {
 import type {QueryCatalog, QueryCatalogEntry} from 'sqlfu/experimental';
 import type {
   QueryExecutionResponse,
+  SaveSqlResponse,
   SqlRunnerResponse,
   StudioRelation,
   StudioSchemaResponse,
@@ -173,50 +175,45 @@ function TablePanel(input: {
 }
 
 function SqlRunnerPanel() {
-  const mutation = useMutation({
-    mutationFn: (sql: string) =>
-      postJson<SqlRunnerResponse>('/api/sql', {sql}),
+  const [draft, setDraft] = useLocalStorageState<SqlRunnerDraft>('sqlfu-ui/sql-runner-draft', {
+    defaultValue: {
+      name: 'scratch-query',
+      sql: `select name, type\nfrom sqlite_schema\nwhere name not like 'sqlite_%'\norder by type, name;`,
+      params: {},
+    },
+  });
+  const detectedParamsSchema = buildSqlRunnerParamsSchema(draft.sql);
+  const runMutation = useMutation({
+    mutationFn: (body: {sql: string; params?: unknown}) =>
+      postJson<SqlRunnerResponse>('/api/sql', body),
+  });
+  const saveMutation = useMutation({
+    mutationFn: (body: {name: string; sql: string}) =>
+      postJson<SaveSqlResponse>('/api/sql/save', body),
   });
 
   return (
-    <section className="panel">
-      <header className="panel-header">
-        <div>
-          <div className="eyebrow">Tool</div>
-          <h2>SQL runner</h2>
-        </div>
-      </header>
-
-      <section className="card">
-        <form
-          className="stack"
-          onSubmit={(event) => {
-            event.preventDefault();
-            const form = event.currentTarget;
-            const data = new globalThis.FormData(form);
-            mutation.mutate(String(data.get('sql') ?? ''));
-          }}
-        >
-          <textarea
-            className="sql-editor"
-            name="sql"
-            defaultValue={`select name, type\nfrom sqlite_schema\nwhere name not like 'sqlite_%'\norder by type, name;`}
-          />
-          <div className="actions">
-            <button className="button primary" type="submit">
-              Run SQL
-            </button>
-          </div>
-        </form>
-      </section>
-
-      <section className="card">
-        <div className="card-title">Result</div>
-        {mutation.isPending ? <p>Running…</p> : null}
-        {mutation.error ? <ErrorView error={mutation.error} /> : null}
-        {mutation.data ? <ExecutionResult result={mutation.data} /> : <p className="muted">Submit SQL to inspect rows or metadata.</p>}
-      </section>
-    </section>
+    <QueryWorkbench
+      eyebrow="Tool"
+      title="SQL runner"
+      sql={draft.sql}
+      editable
+      queryName={draft.name}
+      paramsSchema={detectedParamsSchema}
+      paramsData={draft.params}
+      onQueryNameChange={(name) => setDraft({...draft, name})}
+      onSqlChange={(sql) => setDraft({...draft, sql})}
+      onParamsChange={(params) => setDraft({...draft, params})}
+      onRun={() => runMutation.mutate({sql: draft.sql, params: draft.params})}
+      onSave={() => saveMutation.mutate({name: draft.name, sql: draft.sql})}
+      running={runMutation.isPending || saveMutation.isPending}
+      executionError={runMutation.error ?? saveMutation.error}
+      executionResult={runMutation.data}
+      successMessage={saveMutation.data ? `Saved as ${saveMutation.data.savedPath}` : undefined}
+      emptyMessage="Submit SQL to inspect rows or metadata."
+      runLabel="Run SQL"
+      saveLabel="Save query"
+    />
   );
 }
 
@@ -247,45 +244,129 @@ function QueryPanel(input: {
   });
 
   return (
+    <QueryWorkbench
+      eyebrow={input.entry.queryType.toLowerCase()}
+      title={input.entry.id}
+      sql={input.entry.sql}
+      paramsSchema={buildExecutionSchema(input.entry)}
+      paramsData={undefined}
+      readonlyMeta={
+        <>
+          <span className="pill">{input.entry.resultMode}</span>
+          <span className="pill">{input.entry.sqlFile}</span>
+        </>
+      }
+      onRun={(formData) =>
+        mutation.mutate({
+          data: isRecord(formData) && isRecord(formData.data) ? formData.data : undefined,
+          params: isRecord(formData) && isRecord(formData.params) ? formData.params : undefined,
+        })}
+      running={mutation.isPending}
+      executionError={mutation.error}
+      executionResult={mutation.data}
+      emptyMessage="Submit form data to execute the query."
+      runLabel="Run generated query"
+    />
+  );
+}
+
+function QueryWorkbench(input: {
+  eyebrow: string;
+  title: string;
+  sql: string;
+  editable?: boolean;
+  queryName?: string;
+  paramsSchema?: RJSFSchema;
+  paramsData?: Record<string, unknown>;
+  readonlyMeta?: ReactNode;
+  onQueryNameChange?: (value: string) => void;
+  onSqlChange?: (value: string) => void;
+  onParamsChange?: (value: Record<string, unknown>) => void;
+  onRun: (formData?: unknown) => void;
+  onSave?: () => void;
+  running: boolean;
+  executionError: unknown;
+  executionResult?: QueryExecutionResponse | SqlRunnerResponse;
+  successMessage?: string;
+  emptyMessage: string;
+  runLabel: string;
+  saveLabel?: string;
+}) {
+  return (
     <section className="panel">
       <header className="panel-header">
         <div>
-          <div className="eyebrow">{input.entry.queryType.toLowerCase()}</div>
-          <h2>{input.entry.id}</h2>
+          <div className="eyebrow">{input.eyebrow}</div>
+          <h2>{input.title}</h2>
         </div>
-        <div className="pill-row">
-          <span className="pill">{input.entry.resultMode}</span>
-          <span className="pill">{input.entry.sqlFile}</span>
-        </div>
+        {input.readonlyMeta ? <div className="pill-row">{input.readonlyMeta}</div> : null}
       </header>
 
       <div className="split-grid">
         <section className="card">
           <div className="card-title">SQL</div>
-          <pre className="code-block">{input.entry.sql}</pre>
+          {input.editable ? (
+            <div className="stack">
+              <label className="form-label">
+                <span>Query name</span>
+                <input
+                  aria-label="Query name"
+                  value={input.queryName ?? ''}
+                  onChange={(event) => input.onQueryNameChange?.(event.currentTarget.value)}
+                />
+              </label>
+              <label className="form-label">
+                <span>SQL editor</span>
+                <textarea
+                  className="sql-editor"
+                  aria-label="SQL editor"
+                  value={input.sql}
+                  onChange={(event) => input.onSqlChange?.(event.currentTarget.value)}
+                />
+              </label>
+            </div>
+          ) : (
+            <pre className="code-block">{input.sql}</pre>
+          )}
         </section>
 
         <section className="card">
           <div className="card-title">Run query</div>
           <div className="form-stack">
-            {input.entry.dataSchema || input.entry.paramsSchema ? (
+            {input.paramsSchema ? (
               <Form
-                schema={buildExecutionSchema(input.entry)}
+                schema={input.paramsSchema}
+                formData={input.paramsData}
                 validator={validator}
-                onSubmit={({formData}) =>
-                  mutation.mutate({
-                    data: isRecord(formData) && isRecord(formData.data) ? formData.data : undefined,
-                    params: isRecord(formData) && isRecord(formData.params) ? formData.params : undefined,
-                  })}
+                onChange={({formData}) => input.onParamsChange?.(isRecord(formData) ? formData : {})}
+                onSubmit={({formData}) => input.onRun(formData)}
               >
-                <button className="button primary" type="submit">
-                  Run generated query
-                </button>
+                <div className="actions">
+                  <button className="button primary" type="submit">
+                    {input.runLabel}
+                  </button>
+                  {input.onSave ? (
+                    <button
+                      className="button"
+                      type="button"
+                      onClick={() => input.onSave?.()}
+                    >
+                      {input.saveLabel}
+                    </button>
+                  ) : null}
+                </div>
               </Form>
             ) : (
-              <button className="button primary" type="button" onClick={() => mutation.mutate({})}>
-                Run generated query
-              </button>
+              <div className="actions">
+                <button className="button primary" type="button" onClick={() => input.onRun(undefined)}>
+                  {input.runLabel}
+                </button>
+                {input.onSave ? (
+                  <button className="button" type="button" onClick={() => input.onSave?.()}>
+                    {input.saveLabel}
+                  </button>
+                ) : null}
+              </div>
             )}
           </div>
         </section>
@@ -293,9 +374,10 @@ function QueryPanel(input: {
 
       <section className="card">
         <div className="card-title">Result</div>
-        {mutation.isPending ? <p>Running…</p> : null}
-        {mutation.error ? <ErrorView error={mutation.error} /> : null}
-        {mutation.data ? <ExecutionResult result={mutation.data} /> : <p className="muted">Submit form data to execute the query.</p>}
+        {input.running ? <p>Running…</p> : null}
+        {input.executionError ? <ErrorView error={input.executionError} /> : null}
+        {input.successMessage ? <p>{input.successMessage}</p> : null}
+        {input.executionResult ? <ExecutionResult result={input.executionResult} /> : <p className="muted">{input.emptyMessage}</p>}
       </section>
     </section>
   );
@@ -458,6 +540,35 @@ function buildExecutionSchema(entry: Extract<QueryCatalogEntry, {kind: 'query'}>
     additionalProperties: false,
   };
 }
+
+function buildSqlRunnerParamsSchema(sql: string): RJSFSchema | undefined {
+  const parameterNames = [...detectNamedParameters(sql)];
+  if (parameterNames.length === 0) {
+    return undefined;
+  }
+
+  return {
+    type: 'object',
+    properties: Object.fromEntries(parameterNames.map((name) => [name, {type: 'string', title: name}])),
+    required: parameterNames,
+    additionalProperties: false,
+  };
+}
+
+function detectNamedParameters(sql: string) {
+  const matches = sql.matchAll(/(^|[^\w])[:@$]([A-Za-z_][A-Za-z0-9_]*)/g);
+  const names = new Set<string>();
+  for (const match of matches) {
+    names.add(match[2]!);
+  }
+  return names;
+}
+
+type SqlRunnerDraft = {
+  readonly name: string;
+  readonly sql: string;
+  readonly params: Record<string, unknown>;
+};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;

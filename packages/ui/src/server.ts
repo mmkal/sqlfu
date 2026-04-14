@@ -4,7 +4,7 @@ import {Database} from 'bun:sqlite';
 
 import type {QueryCatalog, QueryCatalogEntry, QueryArg, SqlfuProjectConfig} from 'sqlfu/experimental';
 import {createBunClient, loadProjectConfig, splitSqlStatements} from 'sqlfu/experimental';
-import type {StudioColumn, StudioRelation, StudioSchemaResponse, TableRowsResponse} from './shared.js';
+import type {SaveSqlResponse, StudioColumn, StudioRelation, StudioSchemaResponse, TableRowsResponse} from './shared.js';
 
 const clientEntryPath = path.join(import.meta.dir, 'client.tsx');
 const stylesPath = path.join(import.meta.dir, 'styles.css');
@@ -38,8 +38,19 @@ export async function startSqlfuUiServer(input: {
       }
 
       if (url.pathname === '/api/sql' && request.method === 'POST') {
-        const body = await request.json() as {sql?: unknown};
-        return json(await executeSql(config.db, typeof body.sql === 'string' ? body.sql : ''));
+        const body = await request.json() as {sql?: unknown; params?: unknown};
+        return json(await executeSql(config.db, {
+          sql: typeof body.sql === 'string' ? body.sql : '',
+          params: body.params,
+        }));
+      }
+
+      if (url.pathname === '/api/sql/save' && request.method === 'POST') {
+        const body = await request.json() as {sql?: unknown; name?: unknown};
+        return json(await saveSqlQuery(config, {
+          sql: typeof body.sql === 'string' ? body.sql : '',
+          name: typeof body.name === 'string' ? body.name : '',
+        }));
       }
 
       if (url.pathname.startsWith('/api/query/') && request.method === 'POST') {
@@ -258,20 +269,26 @@ async function getTableRows(dbPath: string, relationName: string, page: number):
   }
 }
 
-async function executeSql(dbPath: string, sql: string) {
-  const trimmedSql = sql.trim();
+async function executeSql(
+  dbPath: string,
+  input: {
+    sql: string;
+    params: unknown;
+  },
+) {
+  const trimmedSql = input.sql.trim();
   if (!trimmedSql) {
     throw new Error('SQL is required');
   }
 
   const statements = splitSqlStatements(trimmedSql);
+  const params = normalizeSqlRunnerParams(input.params);
   const database = new Database(dbPath);
-  const client = createBunClient(database);
 
   try {
     if (statements.length === 1) {
       try {
-        const rows = client.all<Record<string, unknown>>({sql: statements[0]!, args: []});
+        const rows = database.query<Record<string, unknown>, any>(statements[0]!).all(params as never);
         return {
           sql: trimmedSql,
           mode: 'rows',
@@ -283,11 +300,82 @@ async function executeSql(dbPath: string, sql: string) {
     return {
       sql: trimmedSql,
       mode: 'metadata',
-      metadata: client.raw(trimmedSql),
+      metadata: runSqlStatement(database, trimmedSql, params),
     } as const;
   } finally {
     database.close();
   }
+}
+
+async function saveSqlQuery(
+  config: SqlfuProjectConfig,
+  input: {
+    sql: string;
+    name: string;
+  },
+): Promise<SaveSqlResponse> {
+  const sql = input.sql.trim();
+  if (!sql) {
+    throw new Error('SQL is required');
+  }
+
+  const baseName = slugifyQueryName(input.name);
+  if (!baseName) {
+    throw new Error('Query name is required');
+  }
+
+  const relativePath = `sql/${baseName}.sql`;
+  const targetPath = path.join(config.projectRoot, relativePath);
+  await fs.mkdir(path.dirname(targetPath), {recursive: true});
+  await fs.writeFile(targetPath, `${sql}\n`);
+  await generateCatalogForProject(config.projectRoot);
+  return {savedPath: relativePath};
+}
+
+function slugifyQueryName(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function normalizeSqlRunnerParams(value: unknown): Record<string, unknown> | readonly unknown[] | undefined {
+  if (value == null || value === '') {
+    return undefined;
+  }
+  if (Array.isArray(value)) {
+    return value;
+  }
+  if (typeof value === 'object') {
+    return expandNamedParameters(value as Record<string, unknown>);
+  }
+  throw new Error('SQL runner params must be an object or array');
+}
+
+function expandNamedParameters(input: Record<string, unknown>) {
+  const output: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(input)) {
+    output[key] = value;
+    if (!/^[\:\@\$\?]/.test(key)) {
+      output[`:${key}`] = value;
+      output[`@${key}`] = value;
+      output[`$${key}`] = value;
+    }
+  }
+  return output;
+}
+
+function runSqlStatement(
+  database: Database,
+  sql: string,
+  params: Record<string, unknown> | readonly unknown[] | undefined,
+) {
+  const result = database.run(sql, params as never);
+  return {
+    rowsAffected: result.changes,
+    lastInsertRowid: result.lastInsertRowid,
+  };
 }
 
 function materializeRow(row: Record<string, unknown>) {

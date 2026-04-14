@@ -51,7 +51,7 @@ test('saved queries can be renamed, edited, and deleted from the query view', as
   await expect(fs.access(originalPath).then(() => true, () => false)).resolves.toBe(false);
 
   await page.getByRole('button', {name: 'Edit query SQL'}).click();
-  await page.getByLabel('Query SQL editor').fill(`
+  await replaceCodeMirrorText(page, 'Query SQL editor', `
     select id, slug, title
     from posts
     where slug = :slug
@@ -78,7 +78,7 @@ test('sql runner executes a named-parameter query and saves it to disk', async (
   await fs.rm(savedQueryPath, {force: true});
 
   await page.goto('/#sql');
-  await page.getByLabel('SQL editor').fill(`
+  await replaceCodeMirrorText(page, 'SQL editor', `
     select id, slug, title
     from posts
     where slug = :slug
@@ -101,7 +101,7 @@ test('sql runner executes a named-parameter query and saves it to disk', async (
 test('sql runner draft survives a reload via local storage', async ({page}) => {
   await page.goto('/#sql');
 
-  await page.getByLabel('SQL editor').fill(`
+  await replaceCodeMirrorText(page, 'SQL editor', `
     select id, slug
     from posts
     where slug = :slug
@@ -112,7 +112,7 @@ test('sql runner draft survives a reload via local storage', async ({page}) => {
 
   await page.reload();
 
-  await expect(page.getByLabel('SQL editor')).toContainText('where slug = :slug');
+  await expect(await readCodeMirrorText(page, 'SQL editor')).toContain('where slug = :slug');
   await expect(page.getByLabel('slug')).toHaveValue('draft-notes');
 });
 
@@ -120,7 +120,7 @@ test('sql runner drops stale parameter values when the SQL parameter names chang
   await page.addInitScript(() => window.localStorage.clear());
   await page.goto('/#sql');
 
-  await page.getByLabel('SQL editor').fill(`
+  await replaceCodeMirrorText(page, 'SQL editor', `
     select id, slug
     from posts
     where slug = :slug
@@ -129,7 +129,7 @@ test('sql runner drops stale parameter values when the SQL parameter names chang
   await expect(page.getByLabel('slug')).toBeVisible();
   await page.getByLabel('slug').fill('hello-world');
 
-  await page.getByLabel('SQL editor').fill(`
+  await replaceCodeMirrorText(page, 'SQL editor', `
     select id, slug
     from posts
     where slug = :sluggggg
@@ -139,10 +139,47 @@ test('sql runner drops stale parameter values when the SQL parameter names chang
   await expect(page.getByLabel('sluggggg')).toBeVisible();
 });
 
+test('sql runner provides syntax highlighting and schema autocomplete', async ({page}) => {
+  await page.addInitScript(() => window.localStorage.clear());
+  await page.goto('/#sql');
+
+  const editor = page.locator('.cm-editor');
+  await expect(editor).toBeVisible();
+  await expect.poll(() => editor.locator('.cm-content span').count()).toBeGreaterThan(0);
+
+  await replaceCodeMirrorText(page, 'SQL editor', 'select * from po');
+  await page.keyboard.press('Control+Space');
+
+  const completion = page.locator('.cm-tooltip-autocomplete');
+  await expect(completion).toBeVisible();
+  await expect(completion).toContainText('posts');
+  const selectedOption = page.locator('.cm-tooltip-autocomplete [aria-selected="true"]').first();
+  const selectedLabel = (await selectedOption.textContent())?.trim() ?? '';
+  await page.keyboard.press('Tab');
+  await expect(await readCodeMirrorText(page, 'SQL editor')).toContain(`select * from ${selectedLabel}`);
+});
+
+test('sql runner executes from the editor with cmd-or-ctrl-enter', async ({page}) => {
+  await page.addInitScript(() => window.localStorage.clear());
+  await page.goto('/#sql');
+
+  await replaceCodeMirrorText(page, 'SQL editor', `
+    select id, slug, title
+    from posts
+    where slug = :slug
+    limit 1;
+  `);
+
+  await page.getByLabel('slug').fill('hello-world');
+  await page.locator('[aria-label="SQL editor"] .cm-content').click();
+  await page.keyboard.press(`${process.platform === 'darwin' ? 'Meta' : 'Control'}+Enter`);
+  await expect(page.getByText('Hello World')).toBeVisible();
+});
+
 test('sql runner infers numeric parameter types from SQL analysis', async ({page}) => {
   await page.goto('/#sql');
 
-  await page.getByLabel('SQL editor').fill(`
+  await replaceCodeMirrorText(page, 'SQL editor', `
     select id, slug, title
     from posts
     where id = :id
@@ -158,7 +195,7 @@ test('sql runner infers numeric parameter types from SQL analysis', async ({page
 test('sql runner surfaces clean errors without blowing out page width', async ({page}) => {
   await page.goto('/#sql');
 
-  await page.getByLabel('SQL editor').fill(`select '${'x'.repeat(4000)}' as payload;`);
+  await replaceCodeMirrorText(page, 'SQL editor', `select '${'x'.repeat(4000)}' as payload;`);
   page.once('dialog', (dialog) => dialog.accept('   '));
   await page.getByRole('button', {name: 'Save query'}).click();
 
@@ -174,7 +211,7 @@ test('sql runner suggests a generated name in the save prompt and does not save 
   await fs.rm(cancelledSavePath, {force: true});
 
   await page.goto('/#sql');
-  await page.getByLabel('SQL editor').fill(`
+  await replaceCodeMirrorText(page, 'SQL editor', `
     select *
     from posts
     limit 1;
@@ -196,3 +233,14 @@ test('sql runner suggests a generated name in the save prompt and does not save 
   });
   await expect(page).toHaveURL(/#sql$/);
 });
+
+async function replaceCodeMirrorText(page: any, ariaLabel: string, value: string) {
+  const content = page.locator(`[aria-label="${ariaLabel}"] .cm-content`);
+  await content.click();
+  await page.keyboard.press(`${process.platform === 'darwin' ? 'Meta' : 'Control'}+a`);
+  await page.keyboard.type(value);
+}
+
+async function readCodeMirrorText(page: any, ariaLabel: string) {
+  return (await page.locator(`[aria-label="${ariaLabel}"] .cm-content`).textContent()) ?? '';
+}

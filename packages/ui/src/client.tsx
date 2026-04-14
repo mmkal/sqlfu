@@ -25,6 +25,7 @@ import type {
   StudioSchemaResponse,
   TableRowsResponse,
 } from './shared.js';
+import {SqlCodeMirror} from './sql-codemirror.js';
 
 const queryClient = new QueryClient();
 
@@ -99,9 +100,9 @@ function Studio() {
 
       <main className="main">
         {route.kind === 'sql' ? (
-          <SqlRunnerPanel />
+          <SqlRunnerPanel relations={schemaQuery.data.relations} />
         ) : route.kind === 'query' && selectedQuery ? (
-          <QueryPanel entry={selectedQuery} />
+          <QueryPanel entry={selectedQuery} relations={schemaQuery.data.relations} />
         ) : selectedTable ? (
           <TablePanel relation={selectedTable} page={route.kind === 'table' ? route.page : 0} />
         ) : (
@@ -173,7 +174,9 @@ function TablePanel(input: {
   );
 }
 
-function SqlRunnerPanel() {
+function SqlRunnerPanel(input: {
+  relations: readonly StudioRelation[];
+}) {
   const [draft, setDraft] = useLocalStorageState<SqlRunnerDraft>('sqlfu-ui/sql-runner-draft', {
     defaultValue: {
       sql: `select name, type\nfrom sqlite_schema\nwhere name not like 'sqlite_%'\norder by type, name;`,
@@ -227,6 +230,8 @@ function SqlRunnerPanel() {
       sql={draft.sql}
       editable
       workbenchKey={`sql:${draft.sql}`}
+      sqlEditorRelations={input.relations}
+      sqlEditorOnExecute={() => runMutation.mutate({sql: draft.sql, params: sanitizedParams})}
       paramsSchema={detectedParamsSchema}
       paramsData={sanitizedParams}
       onSqlChange={(sql) => setDraft({...draft, sql})}
@@ -246,6 +251,7 @@ function SqlRunnerPanel() {
 
 function QueryPanel(input: {
   entry: QueryCatalogEntry;
+  relations: readonly StudioRelation[];
 }) {
   if (input.entry.kind === 'error') {
     return (
@@ -370,6 +376,7 @@ function QueryPanel(input: {
       sql={sqlEditMode ? sqlDraft : entry.sql}
       paramsSchema={buildExecutionSchema(entry)}
       paramsData={undefined}
+      sqlEditorRelations={input.relations}
       sqlReadonlyActions={!sqlEditMode ? (
         <button className="icon-button" type="button" aria-label="Edit query SQL" onClick={() => setSqlEditMode(true)}>
           ✎
@@ -419,6 +426,8 @@ function QueryWorkbench(input: {
   titleActions?: ReactNode;
   sql: string;
   editable?: boolean;
+  sqlEditorRelations?: readonly StudioRelation[];
+  sqlEditorOnExecute?: (value: string) => void;
   paramsSchema?: RJSFSchema;
   paramsData?: Record<string, unknown>;
   readonlyMeta?: ReactNode;
@@ -460,11 +469,12 @@ function QueryWorkbench(input: {
             <div className="stack">
               <label className="form-label">
                 <span>{input.sqlEditorLabel ?? 'SQL editor'}</span>
-                <textarea
-                  className="sql-editor"
-                  aria-label={input.sqlEditorLabel ?? 'SQL editor'}
+                <SqlCodeMirror
                   value={input.sql}
-                  onChange={(event) => input.onSqlChange?.(event.currentTarget.value)}
+                  ariaLabel={input.sqlEditorLabel ?? 'SQL editor'}
+                  relations={input.sqlEditorRelations ?? []}
+                  onExecute={input.sqlEditorOnExecute}
+                  onChange={(value) => input.onSqlChange?.(value)}
                 />
               </label>
               {input.sqlEditorActions}

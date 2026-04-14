@@ -76,7 +76,7 @@ export async function diffBaselineSqlToDesiredSql(
   input: {
     baselineSql: string;
     desiredSql: string;
-    enableDrop: boolean;
+    allowDestructive: boolean;
   },
 ): Promise<string[]> {
   await fs.mkdir(config.tempDir, {recursive: true});
@@ -98,7 +98,7 @@ export async function diffBaselineSqlToDesiredSql(
       '--dry-run',
       '--file',
       definitionsPath,
-      ...(input.enableDrop ? ['--enable-drop'] : []),
+      ...(input.allowDestructive ? ['--enable-drop'] : []),
       baselineDbPath,
     ]);
     return getMeaningfulDiffLines(diffOutput);

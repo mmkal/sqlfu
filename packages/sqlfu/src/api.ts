@@ -6,7 +6,7 @@ import {z} from 'zod';
 
 import type {Client, SqlfuProjectConfig} from './core/types.js';
 import {createBunClient, createNodeSqliteClient, migrationNickname} from './client.js';
-import {extractSchema, splitSqlStatements} from './core/sqlite.js';
+import {extractSchema} from './core/sqlite.js';
 import {
   applyMigrations,
   baselineMigrationHistory,
@@ -61,7 +61,7 @@ export const router = {
         projectRoot: runtime.config.projectRoot,
         baselineSql,
         desiredSql: definitionsSql,
-        enableDrop: false,
+        allowDestructive: true,
       });
 
       if (diffLines.length === 0) {
@@ -164,7 +164,7 @@ export const router = {
         projectRoot: runtime.config.projectRoot,
         baselineSql: liveSchema,
         desiredSql: targetSchema,
-        enableDrop: true,
+        allowDestructive: true,
       });
       await database.client.transaction(async (tx) => {
         if (diffLines.length > 0) {
@@ -192,7 +192,7 @@ export const router = {
         materializeDefinitionsSchema(runtime.config, await runtime.readDefinitionsSql()),
         materializeMigrationsSchema(runtime.config, await runtime.readMigrations()),
       ]);
-      if (!schemasEqual(definitionsSchema, migrationsSchema)) {
+      if (!(await schemasEqual(runtime.config, definitionsSchema, migrationsSchema))) {
         throw new Error('replayed migrations do not match definitions.sql');
       }
     }),
@@ -320,7 +320,7 @@ async function draftSql(context: SqlfuRouterContext, input?: {name?: string}) {
     projectRoot: runtime.config.projectRoot,
     baselineSql,
     desiredSql: definitionsSql,
-    enableDrop: false,
+    allowDestructive: true,
   });
 
   if (diffLines.length === 0) {
@@ -342,7 +342,7 @@ async function syncSql(context: SqlfuRouterContext) {
       projectRoot: context.config.projectRoot,
       baselineSql,
       desiredSql: definitionsSql,
-      enableDrop: true,
+      allowDestructive: true,
     });
 
     if (diffLines.length === 0) {
@@ -387,7 +387,7 @@ async function gotoSql(context: SqlfuRouterContext, input: {target: string}) {
     projectRoot: runtime.config.projectRoot,
     baselineSql: liveSchema,
     desiredSql: targetSchema,
-    enableDrop: true,
+    allowDestructive: true,
   });
   await database.client.transaction(async (tx) => {
     if (diffLines.length > 0) {
@@ -501,7 +501,7 @@ async function analyzeDatabase(runtime: ReturnType<typeof createRuntime>) {
   const appliedNames = new Set(applied.map((migration) => migration.name));
   const migrationByName = new Map(migrations.map((migration) => [migrationName(migration), migration]));
 
-  const hasRepoDrift = !schemasEqual(desiredSchema, migrationsSchema);
+  const hasRepoDrift = !(await schemasEqual(runtime.config, desiredSchema, migrationsSchema));
   const historyMismatch = findHistoryMismatch(applied, migrationByName);
   const hasPendingMigrations = !historyMismatch && migrations.some((migration) => !appliedNames.has(migrationName(migration)));
 
@@ -509,8 +509,8 @@ async function analyzeDatabase(runtime: ReturnType<typeof createRuntime>) {
     .map((historical) => migrationByName.get(historical.name))
     .filter((migration): migration is Migration => Boolean(migration));
   const historicalSchema = await materializeMigrationsSchema(runtime.config, historicalMigrations);
-  const hasSchemaDrift = !schemasEqual(historicalSchema, liveSchema);
-  const hasSchemaNotCurrent = !schemasEqual(desiredSchema, liveSchema);
+  const hasSchemaDrift = !(await schemasEqual(runtime.config, historicalSchema, liveSchema));
+  const hasSchemaNotCurrent = !(await schemasEqual(runtime.config, desiredSchema, liveSchema));
   const recommendedTarget = await findRecommendedTarget(runtime.config, migrations, liveSchema);
   const mismatches: CheckMismatch[] = [];
 
@@ -616,22 +616,30 @@ async function findRecommendedTarget(config: SqlfuProjectConfig, migrations: rea
   for (let index = 0; index < migrations.length; index += 1) {
     const candidate = migrations.slice(0, index + 1);
     const candidateSchema = await materializeMigrationsSchema(config, candidate);
-    if (schemasEqual(candidateSchema, liveSchema)) {
+    if (await schemasEqual(config, candidateSchema, liveSchema)) {
       return migrationName(candidate.at(-1)!);
     }
   }
   return null;
 }
 
-function schemasEqual(left: string, right: string) {
-  return normalizeSchemaSql(left) === normalizeSchemaSql(right);
-}
+async function schemasEqual(config: SqlfuProjectConfig, left: string, right: string) {
+  const [leftToRight, rightToLeft] = await Promise.all([
+    diffSchemaSql({
+      projectRoot: config.projectRoot,
+      baselineSql: left,
+      desiredSql: right,
+      allowDestructive: true,
+    }),
+    diffSchemaSql({
+      projectRoot: config.projectRoot,
+      baselineSql: right,
+      desiredSql: left,
+      allowDestructive: true,
+    }),
+  ]);
 
-function normalizeSchemaSql(sql: string) {
-  return splitSqlStatements(sql)
-    .map((statement: string) => statement.replace(/\s+/g, ' ').trim())
-    .filter(Boolean)
-    .join('\n');
+  return leftToRight.length === 0 && rightToLeft.length === 0;
 }
 
 function summarizeSqlite3defError(error: unknown) {

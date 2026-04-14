@@ -8,7 +8,7 @@ import {extractSchema} from '../../src/core/sqlite.js';
 import {createMigrationsFixture} from './fixture.js';
 
 describe('draft edge cases', () => {
-  test('drafts destructive changes without enabling destructive apply', async () => {
+  test('drafts destructive changes', async () => {
     await using fixture = await createMigrationsFixture('draft-destructive-change', {
       desiredSchema: `create table person(name text)`,
       migrations: {
@@ -22,7 +22,7 @@ describe('draft edge cases', () => {
     const draftedMigration = (await fixture.listMigrationFiles()).at(-1)!;
 
     expect(await fixture.readFile(draftedMigration)).toMatchInlineSnapshot(`
-      "-- Skipped: DROP TABLE "pet";
+      "DROP TABLE "pet";
       "
     `);
   });

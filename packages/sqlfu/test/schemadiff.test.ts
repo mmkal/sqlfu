@@ -9,7 +9,7 @@ import {extractSchema} from '../src/core/sqlite.js';
 import {applyMigrations} from '../src/migrations/index.js';
 import {diffSchemaSql} from '../src/schemadiff/index.js';
 
-test('diffSchemaSql includes a drop when the target schema removes a table', async () => {
+test('diffSchemaSql includes a drop when destructive changes are allowed', async () => {
   const diff = await diffSchemaSql({
     projectRoot: process.cwd(),
     baselineSql: `
@@ -19,12 +19,12 @@ test('diffSchemaSql includes a drop when the target schema removes a table', asy
     desiredSql: `
       create table a(x int);
     `,
-    enableDrop: false,
+    allowDestructive: true,
   });
 
   expect(diff).toMatchInlineSnapshot(`
     [
-      "-- Skipped: DROP TABLE "b";",
+      "DROP TABLE \"b\";",
     ]
   `);
 });
@@ -45,7 +45,7 @@ test('diffSchemaSql still includes drops when the target schema also contains sq
         applied_at text not null
       );
     `,
-    enableDrop: false,
+    allowDestructive: true,
   });
 
   expect(diff).toMatchInlineSnapshot(`
@@ -55,8 +55,8 @@ test('diffSchemaSql still includes drops when the target schema also contains sq
       "content text not null,",
       "applied_at text not null",
       ");",
-      "-- Skipped: DROP TABLE "pet";",
-      "-- Skipped: DROP TABLE "toy";",
+      "DROP TABLE \"pet\";",
+      "DROP TABLE \"toy\";",
     ]
   `);
 });
@@ -92,7 +92,7 @@ test('the goto shape works when destructive drops are explicitly enabled', async
       projectRoot: process.cwd(),
       baselineSql: await extractSchema(liveClient),
       desiredSql: await extractSchema(targetClient),
-      enableDrop: true,
+      allowDestructive: true,
     });
 
     expect(diff).toMatchInlineSnapshot(`

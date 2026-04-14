@@ -4,12 +4,12 @@ export async function diffSchemaSql(input: {
   projectRoot: string;
   baselineSql: string;
   desiredSql: string;
-  enableDrop: boolean;
+  allowDestructive: boolean;
 }): Promise<string[]> {
   return diffBaselineSqlToDesiredSql(projectConfigForRoot(input.projectRoot), {
     baselineSql: input.baselineSql,
     desiredSql: input.desiredSql,
-    enableDrop: input.enableDrop,
+    allowDestructive: input.allowDestructive,
   });
 }
 

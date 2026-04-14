@@ -139,6 +139,20 @@ describe('check recommendations', () => {
     await expect(fixture.api.check.all()).resolves.toBeUndefined();
   });
 
+  test('passes when live schema quotes a simple identifier that desired schema leaves unquoted', async () => {
+    await using fixture = await createMigrationsFixture('check-quoted-identifier-happy-path', {
+      desiredSchema: `create table foo(id int, a int)`,
+      migrations: {
+        create_foo: `create table foo(id int, a int)`,
+      },
+    });
+
+    await fixture.db.raw(`create table foo(id int, "a" int)`);
+    await fixture.api.baseline({target: '2026-04-10T00.00.00.000Z_create_foo'});
+
+    await expect(fixture.api.check.all()).resolves.toBeUndefined();
+  });
+
   test('recommends draft for repo drift only', async () => {
     await using fixture = await createMigrationsFixture('check-repo-drift-only', {
       desiredSchema: `create table person(name text)`,

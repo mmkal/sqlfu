@@ -90,6 +90,7 @@ test('desired schema can be edited and saved, and sync is disabled while it is d
   `);
 
   await expect(page.getByRole('button', {name: 'Save Desired Schema'})).toBeVisible();
+  await expect.poll(() => readCodeMirrorText(page, 'Desired Schema editor')).toContain('create view published_posts as');
 
   await page.getByRole('button', {name: 'Save Desired Schema'}).click();
   await expect(fs.readFile(definitionsPath, 'utf8')).resolves.toContain('create view published_posts as');
@@ -148,6 +149,24 @@ from posts;
   await gotoButton.click();
   await expect.poll(() => readCodeMirrorText(page, 'Live Schema editor')).toContain('create view post_titles as');
   await expect(page.getByText('✅ No History Drift')).toBeVisible();
+});
+
+test('schema command failures stay visible next to the failing command button', async ({page}) => {
+  await using _project = await preserveSchemaProjectState(path.join(import.meta.dirname, 'projects', 'fixture-project'));
+
+  await page.goto('/#schema');
+
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByRole('button', {name: 'sqlfu draft'}).click();
+
+  const migrateButton = page.getByRole('button', {name: 'sqlfu migrate'});
+  await expect(migrateButton).toBeVisible();
+
+  page.once('dialog', (dialog) => dialog.accept());
+  await migrateButton.click();
+
+  await expect(page.getByText(/table posts already exists/i)).toBeVisible();
+  await expect(page.locator('.schema-command-error').filter({hasText: 'table posts already exists'})).toBeVisible();
 });
 
 test('table browser, sql runner, and generated query form work against a live fixture project', async ({page}) => {

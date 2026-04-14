@@ -137,6 +137,12 @@ function SchemaPanel(input: {
   check: SchemaCheckResponse;
   authorities: SchemaAuthoritiesResponse;
 }) {
+  const [commandErrors, setCommandErrors] = useLocalStorageState<Record<string, string>>(
+    `sqlfu-ui/schema-command-errors/${input.projectName}`,
+    {
+      defaultValue: {},
+    },
+  );
   const [desiredSchemaDraft, setDesiredSchemaDraft] = useLocalStorageState(
     `sqlfu-ui/schema-desired/${input.projectName}`,
     {
@@ -146,12 +152,26 @@ function SchemaPanel(input: {
   const runCommandMutation = useMutation({
     mutationFn: (body: {command: string}) =>
       postJson<{ok: true}>('/api/schema/command', body),
+    onMutate: (variables) => {
+      setCommandErrors((current) => {
+        const next = {...(current ?? {})};
+        delete next[variables.command];
+        return next;
+      });
+    },
     onSuccess: async () => {
+      setCommandErrors({});
       await Promise.all([
         queryClient.refetchQueries({queryKey: ['schema']}),
         queryClient.refetchQueries({queryKey: ['schema-check']}),
         queryClient.refetchQueries({queryKey: ['schema-authorities']}),
       ]);
+    },
+    onError: (error, variables) => {
+      setCommandErrors((current) => ({
+        ...(current ?? {}),
+        [variables.command]: error instanceof Error ? error.message : String(error),
+      }));
     },
   });
   const saveDesiredSchemaMutation = useMutation({
@@ -198,17 +218,21 @@ function SchemaPanel(input: {
             {!card.ok && card.commands && card.commands.length > 0 ? (
               <div className="actions">
                 {card.commands.map((command) => (
-                  <button
-                    key={command}
-                    className="button"
-                    type="button"
-                    aria-label={command}
-                    onClick={() => {
-                      handleSchemaCommand(command);
-                    }}
-                  >
-                    {command}
-                  </button>
+                  <div key={command} className="schema-command">
+                    <button
+                      className="button"
+                      type="button"
+                      aria-label={command}
+                      onClick={() => {
+                        handleSchemaCommand(command);
+                      }}
+                    >
+                      {command}
+                    </button>
+                    {commandErrors?.[command] ? (
+                      <span className="schema-command-error">{commandErrors[command]}</span>
+                    ) : null}
+                  </div>
                 ))}
               </div>
             ) : null}

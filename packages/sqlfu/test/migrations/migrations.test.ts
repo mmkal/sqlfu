@@ -207,7 +207,7 @@ describe('check recommendations', () => {
       Migration History is behind Migrations.
 
       Sync Drift
-      Desired Schema does not match Live Schema.
+      Live Schema is behind Desired Schema. Applying pending migrations would resolve this.
 
       Recommended next actions
       - \`sqlfu migrate\` Apply pending migrations to the database.]
@@ -363,7 +363,7 @@ describe('check recommendations', () => {
       Migration History is behind Migrations.
 
       Sync Drift
-      Desired Schema does not match Live Schema.
+      Live Schema is behind Desired Schema. Applying pending migrations would resolve this.
 
       Recommended next actions
       - \`sqlfu migrate\` Apply pending migrations to the database.]

@@ -504,6 +504,7 @@ function buildSchemaCheckCards(
   analysis: CheckAnalysis,
 ): readonly SchemaCheckCard[] {
   const mismatchByKind = new Map(analysis.mismatches.map((mismatch) => [mismatch.kind, mismatch]));
+  const recommendationKinds = new Set(analysis.recommendations.map((recommendation) => recommendation.kind));
 
   return [
     toSchemaCheckCard(
@@ -540,6 +541,8 @@ function buildSchemaCheckCards(
       '✅ No Sync Drift',
       'Desired Schema matches Live Schema.',
       mismatchByKind.get('syncDrift'),
+      recommendationKinds,
+      mismatchByKind,
     ),
   ];
 }
@@ -559,12 +562,21 @@ function toSchemaCheckCard(
   okTitle: string,
   explainer: string,
   mismatch: {
+    readonly kind: SchemaCheckCard['key'];
     readonly summary: string;
     readonly details: readonly string[];
   } | undefined,
+  recommendationKinds?: ReadonlySet<string>,
+  mismatchByKind?: ReadonlyMap<string, {
+    readonly kind: SchemaCheckCard['key'];
+    readonly summary: string;
+    readonly details: readonly string[];
+  }>,
 ): SchemaCheckCard {
+  const variant = getSchemaCheckCardVariant(key, mismatch, recommendationKinds, mismatchByKind);
   return {
     key,
+    variant,
     title,
     okTitle,
     explainer,
@@ -572,6 +584,35 @@ function toSchemaCheckCard(
     summary: mismatch?.summary ?? '',
     details: mismatch?.details ?? [],
   };
+}
+
+function getSchemaCheckCardVariant(
+  key: SchemaCheckCard['key'],
+  mismatch: {
+    readonly kind: SchemaCheckCard['key'];
+    readonly summary: string;
+    readonly details: readonly string[];
+  } | undefined,
+  recommendationKinds: ReadonlySet<string> = new Set(),
+  mismatchByKind: ReadonlyMap<string, {
+    readonly kind: SchemaCheckCard['key'];
+    readonly summary: string;
+    readonly details: readonly string[];
+  }> = new Map(),
+): SchemaCheckCard['variant'] {
+  if (!mismatch) {
+    return 'ok';
+  }
+
+  if (
+    key === 'syncDrift'
+    && mismatchByKind.has('pendingMigrations')
+    && !recommendationKinds.has('sync')
+  ) {
+    return 'info';
+  }
+
+  return 'warn';
 }
 
 function parseMigrationId(id: string) {

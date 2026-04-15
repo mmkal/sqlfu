@@ -701,10 +701,14 @@ async function analyzeDatabase(runtime: ReturnType<typeof createRuntime>) {
   }
 
   if (syncDrift.isDifferent && syncDrift.isSyncable) {
+    const pendingMigrationsWouldResolveSyncDrift = mismatches.length === 1
+      && mismatches[0]?.kind === 'pendingMigrations';
     mismatches.push({
       kind: 'syncDrift',
       title: 'Sync Drift',
-      summary: 'Desired Schema does not match Live Schema.',
+      summary: pendingMigrationsWouldResolveSyncDrift
+        ? 'Live Schema is behind Desired Schema. Applying pending migrations would resolve this.'
+        : 'Desired Schema does not match Live Schema.',
       details: [],
     });
 

@@ -691,6 +691,11 @@ h3 {
   border-color: rgba(178, 76, 43, 0.22);
 }
 
+.schema-card.info {
+  border-color: rgba(45, 111, 148, 0.22);
+  background: rgba(238, 248, 255, 0.94);
+}
+
 .schema-card.recommendations {
   border-color: rgba(138, 104, 24, 0.22);
   background: rgba(255, 247, 222, 0.94);
@@ -728,6 +733,10 @@ h3 {
 
 .schema-card-status.warn {
   color: var(--accent-strong);
+}
+
+.schema-card-status.info {
+  color: #2d6f94;
 }
 
 .schema-card-status.recommendations {

@@ -214,11 +214,11 @@ function SchemaPanel(input: {
           </section>
         ) : null}
         {input.check.cards.map((card) => (
-          <section key={card.key} className={`card schema-card compact ${card.ok ? 'ok' : 'warn'}`}>
+          <section key={card.key} className={`card schema-card compact ${card.variant}`}>
             <div className="card-title-row schema-card-title-row">
               <h3 className="card-title">
-                <span className={`schema-card-status ${card.ok ? 'ok' : 'warn'}`} aria-hidden="true">
-                  {card.ok ? '✅' : '⚠'}
+                <span className={`schema-card-status ${card.variant}`} aria-hidden="true">
+                  {getSchemaCardStatusIcon(card)}
                 </span>
                 {getSchemaCardLabel(card)}
               </h3>
@@ -1606,6 +1606,17 @@ function formatSchemaRecommendationLabel(
 
 function getSchemaCardLabel(card: SchemaCheckResponse['cards'][number]) {
   return (card.ok ? card.okTitle : card.title).replace(/^[^\p{L}\p{N}]+\s*/u, '');
+}
+
+function getSchemaCardStatusIcon(card: SchemaCheckResponse['cards'][number]) {
+  switch (card.variant) {
+    case 'ok':
+      return '✅';
+    case 'info':
+      return 'ℹ';
+    case 'warn':
+      return '⚠';
+  }
 }
 
 function isSameValue(left: unknown, right: unknown) {

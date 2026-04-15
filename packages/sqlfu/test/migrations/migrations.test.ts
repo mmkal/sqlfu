@@ -306,8 +306,8 @@ describe('check recommendations', () => {
       Desired Schema does not match Live Schema.
 
       Recommended next actions
-      - run \`sqlfu draft\` (reviewable migration).
-      - run \`sqlfu baseline 2026-04-10T00.00.00.000Z_create_abc\`.]
+      - run \`sqlfu draft\` to create a reviewable migration (fixes the repo by recording the desired schema change as a migration).
+      - run \`sqlfu baseline 2026-04-10T00.00.00.000Z_create_abc\` (fixes this database by recording that it already matches that migration prefix).]
     `);
   });
 

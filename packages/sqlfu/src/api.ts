@@ -606,24 +606,32 @@ async function analyzeDatabase(runtime: ReturnType<typeof createRuntime>) {
     if (historyMismatch.kind === 'deleted') {
       addRecommendation(recommendations, {
         kind: 'restoreMissingMigration',
-        summary: 'restore the missing migration from git.',
+        summary: 'restore the missing migration from version control.',
       });
     } else if (recommendedBaselineTarget) {
       addRecommendation(recommendations, {
-        kind: 'restoreOriginalMigrationOrBaseline',
+        kind: 'restoreOriginalMigration',
+        summary: 'restore the original migration from version control.',
+      });
+      addRecommendation(recommendations, {
+        kind: 'baseline',
         command: `sqlfu baseline ${recommendedBaselineTarget}`,
-        summary: `restore the original migration from git, or run \`sqlfu baseline ${recommendedBaselineTarget}\` if you want to keep the current live schema.`,
+        summary: `run \`sqlfu baseline ${recommendedBaselineTarget}\` to keep the current live schema.`,
       });
     } else if (syncDrift.isDifferent) {
       addRecommendation(recommendations, {
-        kind: 'restoreOriginalMigrationOrGoto',
+        kind: 'restoreOriginalMigration',
+        summary: 'restore the original migration from version control.',
+      });
+      addRecommendation(recommendations, {
+        kind: 'goto',
         command: `sqlfu goto ${historyMismatch.name}`,
-        summary: `restore the original migration from git, or run \`sqlfu goto ${historyMismatch.name}\` if you want to reconcile this database to the current repo state.`,
+        summary: `run \`sqlfu goto ${historyMismatch.name}\` to reconcile this database to the current repo state.`,
       });
     } else {
       addRecommendation(recommendations, {
         kind: 'restoreOriginalMigration',
-        summary: 'restore the original migration from git.',
+        summary: 'restore the original migration from version control.',
       });
     }
   }
@@ -638,7 +646,7 @@ async function analyzeDatabase(runtime: ReturnType<typeof createRuntime>) {
     addRecommendation(recommendations, {
       kind: 'draft',
       command: 'sqlfu draft',
-      summary: 'run `sqlfu draft` (reviewable migration).',
+      summary: 'run `sqlfu draft` to create a reviewable migration.',
     });
   }
 
@@ -706,7 +714,10 @@ async function analyzeDatabase(runtime: ReturnType<typeof createRuntime>) {
     }
   }
 
-  return {mismatches, recommendations};
+  return {
+    mismatches,
+    recommendations: withRecommendationExplainers(recommendations),
+  };
 }
 
 function findHistoryMismatch(
@@ -803,8 +814,7 @@ export type CheckRecommendation = {
     | 'sync'
     | 'restoreMissingMigration'
     | 'restoreOriginalMigration'
-    | 'restoreOriginalMigrationOrGoto'
-    | 'restoreOriginalMigrationOrBaseline';
+    ;
   readonly summary: string;
   readonly command?: string;
 };
@@ -820,6 +830,39 @@ function addRecommendation(target: CheckRecommendation[], recommendation: CheckR
     return;
   }
   target.push(recommendation);
+}
+
+function withRecommendationExplainers(recommendations: readonly CheckRecommendation[]): readonly CheckRecommendation[] {
+  if (recommendations.length < 2) {
+    return recommendations;
+  }
+
+  // Rule: if multiple next actions survive analysis, each one must explain in
+  // parentheses what it fixes so users can choose between repo-level and
+  // database-level actions without guessing.
+  return recommendations.map((recommendation) => ({
+    ...recommendation,
+    summary: `${recommendation.summary.replace(/\.$/u, '')} (${getRecommendationExplainer(recommendation)}).`,
+  }));
+}
+
+function getRecommendationExplainer(recommendation: CheckRecommendation) {
+  switch (recommendation.kind) {
+    case 'draft':
+      return 'fixes the repo by recording the desired schema change as a migration';
+    case 'migrate':
+      return 'fixes this database by applying the pending migrations';
+    case 'baseline':
+      return 'fixes this database by recording that it already matches that migration prefix';
+    case 'goto':
+      return 'fixes this database by moving it to that migration target';
+    case 'sync':
+      return 'fixes this database directly from desired schema for local dev';
+    case 'restoreMissingMigration':
+      return 'fixes the repo by restoring the migration chain that migration history already points at';
+    case 'restoreOriginalMigration':
+      return 'fixes the repo by restoring the migration file that migration history already points at';
+  }
 }
 
 function formatCheckFailure(analysis: CheckAnalysis) {

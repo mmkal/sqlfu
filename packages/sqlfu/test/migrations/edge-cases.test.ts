@@ -267,8 +267,9 @@ describe('check recommendation edge cases', () => {
       Desired Schema does not match Live Schema.
 
       Recommended next actions
-      - restore the original migration from git, or run \`sqlfu goto 2026-04-10T00.00.00.000Z_create_person\` if you want to reconcile this database to the current repo state.
-      - run \`sqlfu draft\` (reviewable migration).]
+      - restore the original migration from version control (fixes the repo by restoring the migration file that migration history already points at).
+      - run \`sqlfu goto 2026-04-10T00.00.00.000Z_create_person\` to reconcile this database to the current repo state (fixes this database by moving it to that migration target).
+      - run \`sqlfu draft\` to create a reviewable migration (fixes the repo by recording the desired schema change as a migration).]
     `);
   });
 
@@ -306,7 +307,8 @@ describe('history drift recommendations', () => {
       Desired Schema does not match Live Schema.
 
       Recommended next actions
-      - restore the original migration from git, or run \`sqlfu goto 2026-04-10T00.00.00.000Z_create_person\` if you want to reconcile this database to the current repo state.]
+      - restore the original migration from version control (fixes the repo by restoring the migration file that migration history already points at).
+      - run \`sqlfu goto 2026-04-10T00.00.00.000Z_create_person\` to reconcile this database to the current repo state (fixes this database by moving it to that migration target).]
     `);
   });
 
@@ -330,7 +332,8 @@ describe('history drift recommendations', () => {
       Applied migration checksum mismatch: 2026-04-10T00.00.00.000Z_create_person
 
       Recommended next actions
-      - restore the original migration from git, or run \`sqlfu baseline 2026-04-10T00.00.00.000Z_create_person\` if you want to keep the current live schema.]
+      - restore the original migration from version control (fixes the repo by restoring the migration file that migration history already points at).
+      - run \`sqlfu baseline 2026-04-10T00.00.00.000Z_create_person\` to keep the current live schema (fixes this database by recording that it already matches that migration prefix).]
     `);
   });
 
@@ -354,8 +357,8 @@ describe('history drift recommendations', () => {
       Desired Schema does not match Migrations.
 
       Recommended next actions
-      - restore the missing migration from git.
-      - run \`sqlfu draft\` (reviewable migration).]
+      - restore the missing migration from version control (fixes the repo by restoring the migration chain that migration history already points at).
+      - run \`sqlfu draft\` to create a reviewable migration (fixes the repo by recording the desired schema change as a migration).]
     `);
   });
 });

@@ -24,7 +24,7 @@ async function loadDatabaseConstructor(): Promise<new (databaseUri: string) => D
 	return DatabaseSync as unknown as new (databaseUri: string) => DatabaseType;
 }
 
-export async function createSqliteClient(client: 'better-sqlite3' | 'bun:sqlite' | 'd1' | 'libsql', databaseUri: string, attachList: string[], loadExtensions: string[]): Promise<Result<DatabaseClient, TypeSqlError>> {
+export async function createSqliteClient(client: 'sqlite' | 'better-sqlite3' | 'bun:sqlite' | 'd1' | 'libsql', databaseUri: string, attachList: string[], loadExtensions: string[]): Promise<Result<DatabaseClient, TypeSqlError>> {
 	const DatabaseConstructor = await loadDatabaseConstructor();
 	const db = new DatabaseConstructor(databaseUri);
 	for (const attach of attachList) {

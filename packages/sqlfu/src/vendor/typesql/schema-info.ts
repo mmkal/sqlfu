@@ -11,6 +11,7 @@ export type SchemaInfo = {
 
 export async function createClient(databaseUri: string, dialect: TypeSqlDialect, attach?: string[], loadExtensions?: string[]): Promise<Result<DatabaseClient, TypeSqlError>> {
 	switch (dialect) {
+		case 'sqlite':
 		case 'better-sqlite3':
 		case 'bun:sqlite':
 		case 'd1':
@@ -27,6 +28,7 @@ export async function createClient(databaseUri: string, dialect: TypeSqlDialect,
 
 export async function loadSchemaInfo(databaseClient: DatabaseClient, _schemas?: string[]): Promise<Result<SchemaInfo, TypeSqlError>> {
 	switch (databaseClient.type) {
+		case 'sqlite':
 		case 'better-sqlite3':
 		case 'libsql':
 		case 'bun:sqlite':
@@ -47,6 +49,7 @@ export async function loadSchemaInfo(databaseClient: DatabaseClient, _schemas?: 
 
 export async function loadTableSchema(databaseClient: DatabaseClient, _tableName: string): Promise<Result<ColumnSchema[], TypeSqlError>> {
 	switch (databaseClient.type) {
+		case 'sqlite':
 		case 'better-sqlite3':
 		case 'libsql':
 		case 'bun:sqlite':
@@ -63,6 +66,9 @@ export async function loadTableSchema(databaseClient: DatabaseClient, _tableName
 
 export async function closeClient(db: DatabaseClient) {
 	switch (db.type) {
+		case 'sqlite':
+			db.client.close();
+			return;
 		case 'better-sqlite3':
 			db.client.close();
 			return;
@@ -84,6 +90,7 @@ export async function closeClient(db: DatabaseClient) {
 
 export async function selectTables(databaseClient: DatabaseClient): Promise<Either<TypeSqlError, Table[]>> {
 	switch (databaseClient.type) {
+		case 'sqlite':
 		case 'better-sqlite3':
 		case 'libsql':
 		case 'bun:sqlite':

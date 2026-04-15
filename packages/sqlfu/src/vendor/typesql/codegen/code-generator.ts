@@ -47,6 +47,7 @@ export async function generateTypeScriptContent(params: {
 	const { client, queryName, sqlContent, schemaInfo, isCrudFile } = params;
 
 	switch (client.type) {
+		case 'sqlite':
 		case 'better-sqlite3':
 		case 'bun:sqlite':
 		case 'libsql':

@@ -30,7 +30,7 @@ export type SqlfuQueryAnalysis =
 	};
 
 export async function analyzeSqliteQueries(databaseUri: string, queries: readonly SqlfuQueryInput[]): Promise<readonly SqlfuQueryAnalysis[]> {
-	const databaseClientResult = await createClient(databaseUri, 'libsql');
+	const databaseClientResult = await createClient(databaseUri, 'sqlite');
 	if (databaseClientResult.isErr()) {
 		throw new Error(databaseClientResult.error.description);
 	}

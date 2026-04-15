@@ -7,7 +7,7 @@
 - generated TypeScript wrappers next to those queries
 - versioned SQL migrations without building a full ORM around the database
 
-It is built around `@libsql/client`, `typesql-cli`, and a native inspected-schema SQLite diff engine.
+It keeps schema design in `definitions.sql`, queries in checked-in `.sql` files, and migrations as explicit SQL files, with tooling to generate typed wrappers and check drift between repo state and a live dev database.
 
 ## Install
 
@@ -173,9 +173,8 @@ The name of the migration, if created using `sqlfu draft`, will be based on the 
 `sqlfu generate`:
 
 1. exports the schema from your configured main database into a temporary SQLite database for TypeSQL
-2. writes `typesql.json`
-3. runs `typesql compile`
-4. refines generated result types for some SQLite cases that TypeSQL currently misses
+2. generates TypeScript wrappers next to those `.sql` files
+3. refines generated result types for some SQLite cases that TypeSQL currently misses
 
 Generated TypeSQL outputs stay next to your `.sql` files.
 

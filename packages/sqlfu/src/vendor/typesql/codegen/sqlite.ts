@@ -8,6 +8,7 @@ import type {
 	CrudQueryType,
 	D1Dialect,
 	LibSqlClient,
+	NativeSqliteDialect,
 	ParameterDef,
 	QueryType,
 	SQLiteClient,
@@ -48,7 +49,7 @@ type MapFunctionParams = {
 }
 
 export function validateAndGenerateCode(
-	client: SQLiteDialect | LibSqlClient | BunDialect | D1Dialect,
+	client: NativeSqliteDialect | SQLiteDialect | LibSqlClient | BunDialect | D1Dialect,
 	sql: string,
 	queryName: string,
 	sqliteDbSchema: ColumnSchema[],
@@ -63,7 +64,7 @@ export function validateAndGenerateCode(
 }
 
 export function validateAndDescribeQuery(
-	client: SQLiteDialect | LibSqlClient | BunDialect | D1Dialect,
+	client: NativeSqliteDialect | SQLiteDialect | LibSqlClient | BunDialect | D1Dialect,
 	sql: string,
 	sqliteDbSchema: ColumnSchema[]
 ): Either<TypeSqlError, TsDescriptor> {
@@ -248,6 +249,7 @@ function getInsertUpdateResult(client: SQLiteClient) {
 	];
 
 	switch (client) {
+		case 'sqlite':
 		case 'better-sqlite3':
 		case 'bun:sqlite':
 			return sqliteInsertColumns;
@@ -347,7 +349,7 @@ function generateCodeFromTsDescriptor(client: SQLiteClient, queryName: string, t
 		tsDescriptor.dynamicQuery2 == null ? tsDescriptor.parameters : mapToDynamicParams(tsDescriptor.parameters)
 	);
 
-	let functionArguments = client === 'better-sqlite3' || client === 'bun:sqlite'
+	let functionArguments = client === 'sqlite' || client === 'better-sqlite3' || client === 'bun:sqlite'
 		? 'db: Database'
 		: client === 'd1'
 			? 'db: D1Database'
@@ -391,7 +393,7 @@ function generateCodeFromTsDescriptor(client: SQLiteClient, queryName: string, t
 		writer.write(`export ${asyncModified}function ${camelCaseName}(${functionArguments}): ${returnTypeModifier}`).block(() => {
 			writer.blankLine();
 			writer.writeLine('const { sql, paramsValues } = buildSql(params);');
-			if (client === 'better-sqlite3') {
+			if (client === 'sqlite' || client === 'better-sqlite3') {
 				writer.write('return db.prepare(sql)').newLine();
 				writer.indent().write('.raw(true)').newLine();
 				writer.indent().write('.all(paramsValues)').newLine();
@@ -560,7 +562,7 @@ function generateCodeFromTsDescriptor(client: SQLiteClient, queryName: string, t
 		relations.forEach((relation, index) => {
 			const relationType = generateRelationType(capitalizedName, relation.name);
 			if (index === 0) {
-				if (client === 'better-sqlite3' || client === 'bun:sqlite') {
+				if (client === 'sqlite' || client === 'better-sqlite3' || client === 'bun:sqlite') {
 					writer.write(`export function ${camelCaseName}Nested(${functionArguments}): ${relationType}[]`).block(() => {
 						const params = tsDescriptor.parameters.length > 0 ? ', params' : '';
 						writer.writeLine(`const selectResult = ${camelCaseName}(db${params});`);
@@ -633,7 +635,7 @@ function writeExecutSelectCrudBlock(
 	writer.indent().write(`FROM ${tableName}`).newLine();
 	writer.indent().write(`WHERE ${idColumn} = ?\``).newLine();
 	writer.blankLine();
-	if (client === 'better-sqlite3') {
+	if (client === 'sqlite' || client === 'better-sqlite3') {
 		writer.write('return db.prepare(sql)').newLine();
 		writer.indent().write('.raw(true)').newLine();
 		writer.indent().write(`.all(${queryParams})`).newLine();
@@ -671,7 +673,7 @@ function writeExecuteInsertCrudBlock(
 	writer.indent().write(`? \`INSERT INTO ${tableName} DEFAULT VALUES\``).newLine();
 	writer.indent().write(`: \`INSERT INTO ${tableName}(\${columns.join(',')}) VALUES(\${columns.map(_ => '?').join(',')})\``).newLine();
 	writer.blankLine();
-	if (client === 'better-sqlite3') {
+	if (client === 'sqlite' || client === 'better-sqlite3') {
 		writer.write('return db.prepare(sql)').newLine();
 		writer.indent().write(`.run(values) as ${resultTypeName};`);
 	} else if (client === 'bun:sqlite') {
@@ -706,7 +708,7 @@ function writeExecuteUpdateCrudBlock(
 	writer.indent().write(`SET \${columns.map(col => \`\${col} = ?\`).join(', ')}`).newLine();
 	writer.indent().write(`WHERE ${idColumn} = ?\``).newLine();
 	writer.blankLine();
-	if (client === 'better-sqlite3') {
+	if (client === 'sqlite' || client === 'better-sqlite3') {
 		writer.write('return db.prepare(sql)').newLine();
 		writer.indent().write(`.run(values) as ${resultTypeName};`);
 	} else if (client === 'bun:sqlite') {
@@ -736,7 +738,7 @@ function writeExecutDeleteCrudBlock(
 	writer.indent().write(`FROM ${tableName}`).newLine();
 	writer.indent().write(`WHERE ${idColumn} = ?\``).newLine();
 	writer.blankLine();
-	if (client === 'better-sqlite3') {
+	if (client === 'sqlite' || client === 'better-sqlite3') {
 		writer.write('return db.prepare(sql)').newLine();
 		writer.indent().write(`.run(${queryParams}) as ${resultTypeName};`).newLine();
 	} else if (client === 'bun:sqlite') {
@@ -782,6 +784,12 @@ function toDriver(variableName: string, param: TsParameterDescriptor): string {
 
 function writeImports(writer: CodeBlockWriter, client: SQLiteClient, isDynamicQuery: boolean) {
 	switch (client) {
+		case 'sqlite':
+			writer.writeLine(`import type { DatabaseSync as Database } from 'node:sqlite';`);
+			if (isDynamicQuery) {
+				writer.writeLine(`import { EOL } from 'os';`);
+			}
+			return;
 		case 'better-sqlite3':
 			writer.writeLine(`import type { Database } from 'better-sqlite3';`);
 			if (isDynamicQuery) {
@@ -842,6 +850,7 @@ function writeExecFunction(writer: CodeBlockWriter, client: SQLiteClient, params
 	}
 
 	switch (client) {
+		case 'sqlite':
 		case 'better-sqlite3':
 			const betterSqliteArgs = 'db: Database' + restParameters;
 			if (queryType === 'Select' || returning) {

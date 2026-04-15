@@ -1,7 +1,7 @@
 {
   "name": "sqlfu",
   "version": "0.0.0",
-  "description": "Slim SQLite tooling around libsql, D1, typesql, and sqldef",
+  "description": "Slim SQLite tooling around native SQLite, D1, typesql, and sqldef",
   "repository": {
     "type": "git",
     "url": "https://github.com/mmkal/sqlfu.git"
@@ -34,13 +34,12 @@
   },
   "dependencies": {
     "@clack/prompts": "^1.2.0",
-    "@libsql/client": "^0.17.2",
     "@orpc/server": "^1.13.13",
-    "dbmate": "^2.31.0",
     "trpc-cli": "^0.14.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@libsql/client": "^0.17.2",
     "@types/node": "^24.5.2",
     "better-sqlite3": "^12.8.0",
     "dedent": "^1.7.2",

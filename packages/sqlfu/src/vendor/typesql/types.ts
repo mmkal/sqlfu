@@ -125,11 +125,11 @@ export type NamedParamWithType = NamedParamInfo & { typeOid: number };
 
 export type CamelCaseName = Brand<string, 'CamelCase'>;
 
-export type DatabaseClient = MySqlDialect | SQLiteDialect | LibSqlClient | BunDialect | D1Dialect | PgDielect;
+export type DatabaseClient = MySqlDialect | NativeSqliteDialect | SQLiteDialect | LibSqlClient | BunDialect | D1Dialect | PgDielect;
 
 export type TypeSqlDialect = DatabaseClient['type'];
 
-export type SQLiteClient = SQLiteDialect['type'] | LibSqlClient['type'] | BunDialect['type'] | D1Dialect['type'];
+export type SQLiteClient = NativeSqliteDialect['type'] | SQLiteDialect['type'] | LibSqlClient['type'] | BunDialect['type'] | D1Dialect['type'];
 export type MySqlClient = MySqlDialect['type'];
 
 export type MySqlDialect = {
@@ -138,6 +138,11 @@ export type MySqlDialect = {
 	databaseVersion: string;
 	schema: string;
 	isVersion8: boolean;
+};
+
+export type NativeSqliteDialect = {
+	type: 'sqlite';
+	client: DatabaseSync;
 };
 
 export type SQLiteDialect = {

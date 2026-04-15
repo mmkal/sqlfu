@@ -16,8 +16,8 @@ What is already verified:
 
 What still needs work next:
 1. Improve query typing quality from TypeSQL.
-   - Right now `packages/sqlfu/sql/list-post-summaries.ts` still emits mostly `any` fields.
-   - Investigate whether this is because of the current query shape, the use of the `libsql` client mode, or a missing TypeSQL configuration option.
+   - Some generated wrappers still emit overly broad field types.
+   - Investigate whether this is because of the current query shape or a missing sqlite inference pass.
    - Aim to get more specific result types without abandoning the current SQL-first approach.
 2. Decide whether any further migration-model cleanup is worth it.
    - `api.ts` still holds most of the replay/materialization helpers.

@@ -37,8 +37,8 @@ progress:
 - [x] add a thin public `formatSql()` wrapper with `dialect` support and `sqlite` default
 - [x] add fixture-driven formatter tests with `#region` blocks and `-- output: <unchanged>`
 - [x] add initial sqlite fixture coverage
-- [ ] import a broad set of fixture cases from `sql-formatter`
-- [ ] import a broad set of fixture cases from `prettier-plugin-sql-cst`
+- [~] import a broad set of fixture cases from `sql-formatter`
+- [~] import a broad set of fixture cases from `prettier-plugin-sql-cst`
 - [ ] add update/writeback support for fixture outputs
 - [ ] start applying sqlfu-specific printer preferences on top of upstream behavior
 
@@ -48,3 +48,5 @@ notes:
 - vendoring is still the right shape because we expect local printer changes, especially around over-eager newline insertion
 - current `pnpm --filter sqlfu test --run test/formatter.test.ts` passes
 - current package `typecheck` / `build` are still blocked by an unrelated existing error in `packages/sqlfu/src/vendor/small-utils.ts`
+- imported fixture cases are now split by upstream source so later divergence is easier to reason about
+- imported coverage now includes sqlite-specific statements, option cases, comments, CTEs, and simple select/DDL shapes

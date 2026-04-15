@@ -1,0 +1,1 @@
+the ui uses a fetchJson to hit its API. let's move it to an orpc backend.

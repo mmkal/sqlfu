@@ -1,3 +1,4 @@
+import {createHash} from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
@@ -14,7 +15,7 @@ export const test = base.extend<{
   projectUrl: string;
 }>({
   slug: async ({}, use, testInfo) => {
-    const slug = slugify(testInfo.title);
+    const slug = slugify(testInfo.titlePath.join(' > '));
     await use(slug);
   },
   projectDir: async ({slug}, use) => {
@@ -47,12 +48,18 @@ export const test = base.extend<{
 export {expect} from '@playwright/test';
 
 function slugify(value: string) {
-  const slug = value
+  const words = value
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
-    .slice(0, 80);
+    .split('-')
+    .filter(Boolean)
+    .slice(0, 3);
+
+  const prefix = words.join('-').replace(/^-+|-+$/g, '');
+  const hash = createHash('sha1').update(value).digest('hex').slice(0, 7);
+  const slug = `${prefix}-${hash}`.replace(/^-+|-+$/g, '');
 
   if (!slug) {
     throw new Error(`Could not derive slug from test title: ${value}`);

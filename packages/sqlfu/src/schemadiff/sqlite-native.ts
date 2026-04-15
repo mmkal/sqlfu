@@ -72,6 +72,9 @@ export async function diffBaselineSqlToDesiredSqlNative(
     allowDestructive: boolean;
   },
 ): Promise<string[]> {
+  assertNoUnsupportedSqlText(input.baselineSql, 'baselineSql');
+  assertNoUnsupportedSqlText(input.desiredSql, 'desiredSql');
+
   await using baseline = await createScratchDatabase(config, 'baseline');
   await using desired = await createScratchDatabase(config, 'desired');
 
@@ -107,6 +110,8 @@ export async function inspectSqliteSchemaSql(
 }
 
 export async function inspectSqliteSchema(client: Client, schemaName = 'main'): Promise<SqliteInspectedDatabase> {
+  await assertNoUnsupportedSchemaFeatures(client, schemaName);
+
   const objects = await client.all<{
     readonly type: 'table' | 'view';
     readonly name: string;
@@ -688,6 +693,61 @@ function toComparableSchema(schema: SqliteInspectedDatabase) {
         ]),
     ),
   };
+}
+
+async function assertNoUnsupportedSchemaFeatures(client: Client, schemaName: string): Promise<void> {
+  const triggers = await client.all<{readonly name: string}>({
+    sql: `
+      select name
+      from ${schemaName}.sqlite_schema
+      where type = 'trigger'
+        and name not like 'sqlite_%'
+      order by name
+    `,
+    args: [],
+  });
+
+  if (triggers.length > 0) {
+    throw new Error(`sqlite triggers are not supported by the native schema diff engine yet: ${triggers.map(row => row.name).join(', ')}`);
+  }
+
+  const unsupportedSqlRows = await client.all<{
+    readonly type: string;
+    readonly name: string;
+    readonly sql: string | null;
+  }>({
+    sql: `
+      select type, name, sql
+      from ${schemaName}.sqlite_schema
+      where sql is not null
+        and name not like 'sqlite_%'
+      order by type, name
+    `,
+    args: [],
+  });
+
+  for (const row of unsupportedSqlRows) {
+    const normalizedSql = row.sql?.toLowerCase() ?? '';
+    if (/\bcollate\b/u.test(normalizedSql)) {
+      throw new Error(`sqlite collations are not supported by the native schema diff engine yet: ${row.type} ${row.name}`);
+    }
+    if (/^create\s+virtual\s+table\b/u.test(normalizedSql)) {
+      throw new Error(`sqlite virtual tables are not supported by the native schema diff engine yet: ${row.name}`);
+    }
+  }
+}
+
+function assertNoUnsupportedSqlText(sql: string, source: 'baselineSql' | 'desiredSql'): void {
+  const normalizedSql = sql.toLowerCase();
+  if (/\bcreate\s+trigger\b/u.test(normalizedSql)) {
+    throw new Error(`sqlite triggers are not supported by the native schema diff engine yet: found trigger sql in ${source}`);
+  }
+  if (/\bcollate\b/u.test(normalizedSql)) {
+    throw new Error(`sqlite collations are not supported by the native schema diff engine yet: found collate in ${source}`);
+  }
+  if (/\bcreate\s+virtual\s+table\b/u.test(normalizedSql)) {
+    throw new Error(`sqlite virtual tables are not supported by the native schema diff engine yet: found virtual table sql in ${source}`);
+  }
 }
 
 async function applySchemaSql(client: Client, sql: string): Promise<void> {

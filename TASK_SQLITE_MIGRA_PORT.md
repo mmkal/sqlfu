@@ -152,7 +152,7 @@ Before generating migration SQL, build confidence that inspected schemas compare
   - [x] `not null`
   - [x] `unique`
   - [x] composite indexes
-  - [ ] view definition changes
+  - [x] view definition changes
   - [x] foreign key changes
 
 ### Phase 3: Statement Planning
@@ -204,14 +204,14 @@ Work in this order.
 
 Core SQLite-relevant fixtures:
 
-- [ ] `generated`
-- [ ] `generated_added`
-- [x] `constraints`
-- [x] `multi_column_index`
-- [x] `dependencies`
-- [ ] `dependencies2`
-- [ ] `dependencies3`
-- [ ] `dependencies4`
+- [x] `generated` - ported as a rebuild that moves a generated stored column from one logical column to another
+- [x] `generated_added` - ported as a rebuild where a plain column becomes a generated stored column
+- [x] `constraints` - ported as a table-rebuild fixture for `text` -> `text not null unique`
+- [x] `multi_column_index` - ported as explicit multi-column unique index creation on an existing table
+- [x] `dependencies` - ported as FK-ordered table creation from an empty baseline
+- [x] `dependencies2` - ported as table-to-view replacement with a dependent view preserved across the transition
+- [x] `dependencies3` - ported as dependent view recreation around an `add column` plus quoted-identifier view names
+- [x] `dependencies4` - ported as chained view creation after replacing an unrelated table with a new table/view stack
 
 SQLite-maybe fixtures, only if meaningful:
 
@@ -222,22 +222,22 @@ SQLite-maybe fixtures, only if meaningful:
 
 Probably no real SQLite analogue. Do not fake them. Instead add a documented skip note in this fil explaining why it doesn't make sense to port them (or, if it *does* make sense after all, implement then move them to another section with a note explaining):
 
-- [ ] `enumdefaults`
-- [ ] `enumdeps`
-- [ ] `extversions`
-- [ ] `singleschema`
-- [ ] `singleschema_ext`
-- [ ] `excludeschema`
-- [ ] `excludemultipleschemas`
-- [ ] `inherit`
-- [ ] `inherit2`
-- [ ] `partitioning`
-- [ ] `privileges`
-- [ ] `rls`
-- [ ] `rls2`
-- [ ] `seq`
-- [ ] `everything`
-- [ ] `identitycols`
+- [x] `enumdefaults` - skipped: SQLite has no first-class enum type/default dependency model; rough analogue is plain `check (...)` constraints, already covered elsewhere
+- [x] `enumdeps` - skipped: SQLite has no enum objects with dependency ordering; rough analogue is generated-column / FK dependency fixtures
+- [x] `extversions` - skipped: SQLite has no extension version management comparable to PostgreSQL; rough analogue would be loadable-extension smoke tests outside schema diffing
+- [x] `singleschema` - skipped: SQLite does not use PostgreSQL-style named schemas as a core diff unit; rough analogue would be `main`/`temp`/attached-db scope, which `sqlfu` does not model
+- [x] `singleschema_ext` - skipped: same reason as `singleschema`, plus SQLite has no extension DDL analogue here
+- [x] `excludeschema` - skipped: SQLite has no schema-qualified filtering model worth porting in this engine
+- [x] `excludemultipleschemas` - skipped: same as `excludeschema`
+- [x] `inherit` - skipped: SQLite table inheritance does not exist; rough analogue is table rebuild / view layering, already covered separately
+- [x] `inherit2` - skipped: same as `inherit`
+- [x] `partitioning` - skipped: SQLite has no built-in table partitioning feature analogous to PostgreSQL partitions; rough analogue would be trigger/view sharding, which is application-level
+- [x] `privileges` - skipped: SQLite has no GRANT/REVOKE object privilege model inside the schema
+- [x] `rls` - skipped: SQLite has no row-level security feature
+- [x] `rls2` - skipped: same as `rls`
+- [x] `seq` - skipped: SQLite has no standalone sequence objects; rough analogue is `rowid` / `autoincrement`, which is table-local
+- [x] `everything` - skipped: this is a PostgreSQL omnibus fixture with many non-SQLite feature classes; the SQLite approach should stay split into targeted fixtures
+- [x] `identitycols` - skipped: SQLite has no PostgreSQL identity-column DDL; rough analogue is integer primary key / rowid behavior, not a separate schema object
 
 For each skipped fixture family, write:
 
@@ -253,7 +253,7 @@ After the new engine has enough fixture coverage:
 - [x] switch `sync` to use the new diff planner
 - [x] switch `goto` to use the new diff planner
 - [x] remove now-redundant workaround logic in `api.ts`
-- [ ] delete `sqlite3def` integration if there is no longer a good reason to keep it
+- [x] delete `sqlite3def` integration if there is no longer a good reason to keep it
 
 Do not delete the old code before there is replacement coverage.
 
@@ -283,7 +283,7 @@ Use test-first development.
 Testing layers:
 
 - [ ] unit-ish tests for SQLite inspector object extraction
-- [ ] fixture-driven diff tests for inspected-schema changes
+- [x] fixture-driven diff tests for inspected-schema changes
 - [ ] integration tests proving `check`, `draft`, `sync`, and `goto` use the new engine correctly
 
 Important test rule:
@@ -393,7 +393,12 @@ Use this section to record fixture-family decisions as you go.
 - `constraints`: meaningful for SQLite. Ported as a stricter-column-shape rebuild fixture (`text` -> `text not null unique`).
 - `multi_column_index`: meaningful for SQLite. Ported as explicit multi-column unique index creation on an existing table.
 - `dependencies`: meaningful for SQLite. Ported as topologically ordered table creation via a foreign-key dependency.
-- `dependencies2` / `dependencies3` / `dependencies4`: not ported yet. Likely worth adapting around SQLite view ordering and more complex FK chains rather than copying the PostgreSQL fixtures literally.
+- `generated`: meaningful for SQLite because generated stored columns are real schema state. Ported as rebuild fixtures.
+- `generated_added`: meaningful for SQLite for the same reason as `generated`. Ported as a plain-column -> generated-column rebuild.
+- `dependencies2`: meaningful for SQLite. Ported as a table-to-view replacement while keeping a dependent view alive.
+- `dependencies3`: meaningful for SQLite. Ported as dependent view recreation around a table shape change plus awkward quoted identifiers.
+- `dependencies4`: partially meaningful for SQLite. Ported as a chained view stack without PostgreSQL materialized views or indexes-on-views.
+- `enumdefaults`, `enumdeps`, `extversions`, `singleschema`, `singleschema_ext`, `excludeschema`, `excludemultipleschemas`, `inherit`, `inherit2`, `partitioning`, `privileges`, `rls`, `rls2`, `seq`, `everything`, `identitycols`: documented skips because the underlying PostgreSQL feature class does not exist in SQLite in a meaningful like-for-like way.
 
 ## Work Log
 
@@ -406,3 +411,7 @@ Append short dated notes here as you work.
 - 2026-04-15: `check()` now compares inspected SQLite schemas directly and no longer falls back to the old schema fingerprint workaround.
 - 2026-04-15: Added end-to-end regression coverage for semantic rebuilds in `schemadiff` and migration tests, including preserved-data rebuilds and explicit failure for unsupported automatic primary-key introduction.
 - 2026-04-15: Added a pgkit-inspired SQLite fixture harness with initial `constraints`, `multi_column_index`, and `dependencies` fixtures.
+- 2026-04-15: Expanded the SQLite fixture harness with `generated`, `generated_added`, `dependencies2`, `dependencies3`, and `dependencies4`.
+- 2026-04-15: Documented explicit skip reasons for PostgreSQL-only fixture families so the remaining unchecked Phase 4 items are the genuinely SQLite-meaningful ones.
+- 2026-04-15: Added explicit unsupported-feature failures for triggers, collations, and virtual tables so unsupported SQLite features fail honestly instead of diffing silently.
+- 2026-04-15: Deleted the remaining `sqlite3def` wrapper and binary-downloader files after confirming nothing still imported them.

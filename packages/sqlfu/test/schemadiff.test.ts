@@ -149,3 +149,34 @@ test('diffSchemaSql rebuilds a table when sqlite needs semantic constraint chang
     await fs.rm(root, {recursive: true, force: true});
   }
 });
+
+test('diffSchemaSql fails honestly for sqlite triggers', async () => {
+  await expect(
+    diffSchemaSql({
+      projectRoot: process.cwd(),
+      baselineSql: `
+        create table person(name text);
+        create trigger person_insert_log after insert on person begin
+          select 1;
+        end;
+      `,
+      desiredSql: `create table person(name text, nickname text);`,
+      allowDestructive: true,
+    }),
+  ).rejects.toThrowErrorMatchingInlineSnapshot(
+    `[Error: sqlite triggers are not supported by the native schema diff engine yet: found trigger sql in baselineSql]`,
+  );
+});
+
+test('diffSchemaSql fails honestly for sqlite collations', async () => {
+  await expect(
+    diffSchemaSql({
+      projectRoot: process.cwd(),
+      baselineSql: `create table person(name text collate nocase);`,
+      desiredSql: `create table person(name text);`,
+      allowDestructive: true,
+    }),
+  ).rejects.toThrowErrorMatchingInlineSnapshot(
+    `[Error: sqlite collations are not supported by the native schema diff engine yet: found collate in baselineSql]`,
+  );
+});

@@ -36,6 +36,7 @@ export type QueryCatalogEntry =
     readonly id: string;
     readonly sqlFile: string;
     readonly functionName: string;
+    readonly sql: string;
     readonly error: {
       readonly name: string;
       readonly description: string;

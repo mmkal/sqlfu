@@ -582,7 +582,7 @@ async function deleteQueryFile(
 async function loadWritableQuery(config: SqlfuProjectConfig, queryId: string) {
   const catalog = await loadCatalog(config);
   const query = catalog.queries.find((entry) => entry.id === queryId);
-  if (!query || query.kind !== 'query') {
+  if (!query) {
     throw new Error(`Unknown query: ${queryId}`);
   }
   return query;

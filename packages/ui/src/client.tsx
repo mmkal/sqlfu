@@ -681,24 +681,6 @@ function QueryPanel(input: {
   entry: QueryCatalogEntry;
   relations: readonly StudioRelation[];
 }) {
-  if (input.entry.kind === 'error') {
-    return (
-      <section className="panel">
-        <header className="panel-header">
-          <div>
-            <div className="eyebrow">Generated query</div>
-            <h2>{input.entry.id}</h2>
-          </div>
-        </header>
-        <section className="card">
-          <div className="card-title">Query error</div>
-          <p>{input.entry.error.name}</p>
-          <pre className="code-block">{input.entry.error.description}</pre>
-        </section>
-      </section>
-    );
-  }
-
   const entry = input.entry;
 
   const mutation = useMutation({
@@ -807,7 +789,7 @@ function QueryPanel(input: {
         </>
       ) : undefined}
       sql={sqlEditMode ? sqlDraft : entry.sql}
-      paramsSchema={buildExecutionSchema(entry)}
+      paramsSchema={entry.kind === 'query' ? buildExecutionSchema(entry) : undefined}
       paramsData={undefined}
       sqlEditorRelations={input.relations}
       sqlEditorDiagnostics={sqlEditMode ? analysisQuery.data?.diagnostics : undefined}
@@ -833,11 +815,18 @@ function QueryPanel(input: {
       editable={sqlEditMode}
       onSqlChange={setSqlDraft}
       readonlyMeta={
-        <>
-          <span className="pill">{entry.queryType.toLowerCase()}</span>
-          <span className="pill">{input.entry.resultMode}</span>
-          <span className="pill">{entry.sqlFile}</span>
-        </>
+        entry.kind === 'query' ? (
+          <>
+            <span className="pill">{entry.queryType.toLowerCase()}</span>
+            <span className="pill">{entry.resultMode}</span>
+            <span className="pill">{entry.sqlFile}</span>
+          </>
+        ) : (
+          <>
+            <span className="pill">invalid sql</span>
+            <span className="pill">{entry.sqlFile}</span>
+          </>
+        )
       }
       onRun={(formData) =>
         mutation.mutate({
@@ -845,9 +834,15 @@ function QueryPanel(input: {
           params: isRecord(formData) && isRecord(formData.params) ? formData.params : undefined,
         })}
       running={mutation.isPending || renameMutation.isPending || updateMutation.isPending || deleteMutation.isPending}
-      executionError={mutation.error ?? renameMutation.error ?? updateMutation.error ?? deleteMutation.error}
+      executionError={
+        mutation.error
+        ?? renameMutation.error
+        ?? updateMutation.error
+        ?? deleteMutation.error
+        ?? (entry.kind === 'error' && !sqlEditMode ? new Error(`Query error\n${entry.error.name}\n\n${entry.error.description}`) : undefined)
+      }
       executionResult={mutation.data}
-      emptyMessage="Submit form data to execute the query."
+      emptyMessage={entry.kind === 'query' ? 'Submit form data to execute the query.' : 'Edit the SQL to repair this saved query.'}
       runLabel="Run generated query"
       paramsCardTitle="Params"
     />

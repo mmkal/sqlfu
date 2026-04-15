@@ -454,6 +454,39 @@ test('saved queries can be renamed, edited, and deleted from the query view', as
   await expect(fs.access(renamedPath).then(() => true, () => false)).resolves.toBe(false);
 });
 
+test('invalid saved queries still show editable sql', async ({page}) => {
+  await using _project = await preserveSchemaProjectState(path.join(import.meta.dirname, 'projects', 'fixture-project'));
+  const queryPath = path.join(import.meta.dirname, 'projects', 'fixture-project', 'sql', 'find-post-by-slug.sql');
+
+  await fs.writeFile(queryPath, `
+    select id, slug, title
+    from posts_broken
+    where slug = :slug
+    limit 1;
+  `);
+
+  await page.goto('/#query/find-post-by-slug');
+
+  await expect(page.getByText('Query error')).toBeVisible();
+  await expect(page.getByText('no such table: posts_broken')).toBeVisible();
+  await expect(page.getByText('from posts_broken')).toBeVisible();
+  await expect(page.getByRole('button', {name: 'Edit query SQL'})).toBeVisible();
+
+  await page.getByRole('button', {name: 'Edit query SQL'}).click();
+  await replaceCodeMirrorText(page, 'Query SQL editor', `
+    select id, slug, title
+    from posts
+    where slug = :slug
+    limit 1;
+  `);
+  await page.getByRole('button', {name: 'Confirm query SQL edit'}).click();
+
+  await expect(page.getByLabel('slug')).toBeVisible();
+  await page.getByLabel('slug').fill('hello-world');
+  await page.getByRole('button', {name: 'Run generated query'}).click();
+  await expect(page.getByText('Hello World')).toBeVisible();
+});
+
 test('sql runner executes a named-parameter query and saves it to disk', async ({page}) => {
   const savedQueryPath = path.join(import.meta.dirname, 'projects', 'fixture-project', 'sql', 'find-hello-world.sql');
   await fs.rm(savedQueryPath, {force: true});

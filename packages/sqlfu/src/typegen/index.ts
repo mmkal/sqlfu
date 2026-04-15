@@ -228,6 +228,7 @@ async function writeQueryCatalog(
         id,
         sqlFile: path.relative(config.projectRoot, queryFile.sqlPath).split(path.sep).join('/'),
         functionName,
+        sql: queryFile.sqlContent,
         error: analysis.error,
       };
     }

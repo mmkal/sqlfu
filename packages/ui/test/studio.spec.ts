@@ -334,6 +334,22 @@ test('clicking a sql runner result cell shows the full cell content below the ta
   await expect(selectedCellPanel).toContainText('First post body');
 });
 
+test('views created from the sql runner can be browsed without crashing the app', async ({page}) => {
+  await page.goto('/#sql');
+
+  await replaceCodeMirrorText(page, 'SQL editor', `
+    create view recent_migrations as
+    select *
+    from sqlfu_migrations;
+  `);
+  await page.getByRole('button', {name: 'Run SQL'}).click();
+
+  await page.getByRole('link', {name: 'recent_migrations view'}).click();
+  await expect(page).toHaveURL(/#table\/recent_migrations$/);
+  await expect(page.getByRole('heading', {name: 'recent_migrations'})).toBeVisible();
+  await expect(page.getByText('No rows.')).toBeVisible();
+});
+
 test('clicking a saved query result cell shows the full cell content below the table', async ({page}) => {
   await page.goto('/#query/list-post-cards');
 
@@ -898,6 +914,17 @@ test('sql runner surfaces clean errors without blowing out page width', async ({
   await expect
     .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
     .toBeLessThan(1600);
+});
+
+test('sql runner surfaces duplicate ddl errors instead of a generic internal error', async ({page}) => {
+  await page.goto('/#sql');
+
+  await replaceCodeMirrorText(page, 'SQL editor', 'create view duplicate_view as select * from sqlfu_migrations;');
+  await page.getByRole('button', {name: 'Run SQL'}).click();
+  await page.getByRole('button', {name: 'Run SQL'}).click();
+
+  await expect(page.locator('.code-block.error')).toContainText('view duplicate_view already exists');
+  await expect(page.locator('.code-block.error')).not.toContainText('Internal server error');
 });
 
 test('sql runner suggests a generated name in the save prompt and does not save on cancel', async ({page, projectDir}) => {

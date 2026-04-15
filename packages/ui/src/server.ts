@@ -210,22 +210,26 @@ const uiRouter = {
         const database = new DatabaseSync(context.config.db);
 
         try {
-          if (statements.length === 1) {
-            try {
-              const rows = executePreparedAll<Record<string, unknown>>(database.prepare(statements[0]!), params);
-              return {
-                sql: trimmedSql,
-                mode: 'rows' as const,
-                rows: rows.map(materializeRow),
-              };
-            } catch {}
-          }
+          try {
+            if (statements.length === 1) {
+              try {
+                const rows = executePreparedAll<Record<string, unknown>>(database.prepare(statements[0]!), params);
+                return {
+                  sql: trimmedSql,
+                  mode: 'rows' as const,
+                  rows: rows.map(materializeRow),
+                };
+              } catch {}
+            }
 
-          return {
-            sql: trimmedSql,
-            mode: 'metadata' as const,
-            metadata: runSqlStatement(database, trimmedSql, params),
-          };
+            return {
+              sql: trimmedSql,
+              mode: 'metadata' as const,
+              metadata: runSqlStatement(database, trimmedSql, params),
+            };
+          } catch (error) {
+            throw toClientError(error);
+          }
         } finally {
           database.close();
         }
@@ -813,7 +817,9 @@ async function getTableRows(dbPath: string, relationName: string, page: number):
       page: safePage,
       pageSize,
       editable: relation.type === 'table',
-      rowKeys: materializedRows.map((row) => buildTableRowKey(row, primaryKeyColumns)),
+      rowKeys: relation.type === 'table'
+        ? materializedRows.map((row) => buildTableRowKey(row, primaryKeyColumns))
+        : [],
       columns,
       rows: materializedRows.map(stripInternalRowValues),
     };

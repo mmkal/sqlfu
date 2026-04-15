@@ -3,15 +3,16 @@ import http from 'node:http';
 import path from 'node:path';
 import {spawn} from 'node:child_process';
 import {DatabaseSync} from 'node:sqlite';
-import {fileURLToPath} from 'node:url';
+import {fileURLToPath, pathToFileURL} from 'node:url';
 import {ORPCError, os} from '@orpc/server';
 import {RPCHandler} from '@orpc/server/fetch';
 import type {ViteDevServer} from 'vite';
 import {createServer as createViteServer} from 'vite';
 import {z} from 'zod';
+import {resolveProjectConfig} from '../../sqlfu/src/core/config.ts';
 
 import type {QueryCatalog, QueryCatalogEntry, QueryArg, SqlfuProjectConfig} from 'sqlfu/experimental';
-import {analyzeAdHocSqlForConfig, getCheckMismatches, getMigrationResultantSchema, getSchemaAuthorities, loadProjectConfig, runSqlfuCommand, splitSqlStatements, writeDefinitionsSql} from 'sqlfu/experimental';
+import {analyzeAdHocSqlForConfig, getCheckMismatches, getMigrationResultantSchema, getSchemaAuthorities, runSqlfuCommand, splitSqlStatements, writeDefinitionsSql} from 'sqlfu/experimental';
 import {createNodeSqliteClient} from 'sqlfu/client';
 import type {QueryExecutionResponse, SchemaCheckCard, SqlAnalysisResponse, SqlEditorDiagnostic, StudioColumn, TableRowKey, TableRowsResponse} from './shared.js';
 
@@ -24,6 +25,11 @@ const generateCatalogScriptPath = path.join(sourceDir, 'generate-catalog.ts');
 type UiRouterContext = {
   config: SqlfuProjectConfig;
 };
+
+type ProjectResolver = (request: {
+  readonly host: string;
+  readonly projectHeader?: string;
+}) => Promise<SqlfuProjectConfig>;
 
 const uiBase = os.$context<UiRouterContext>();
 const rowRecordSchema = z.record(z.string(), z.unknown());
@@ -355,10 +361,18 @@ export type UiRouter = typeof uiRouter;
 export async function startSqlfuUiServer(input: {
   port?: number;
   projectRoot?: string;
+  defaultProjectName?: string;
+  projectsRoot?: string;
+  templateRoot?: string;
   dev?: boolean;
 }) {
-  const projectRoot = path.resolve(input.projectRoot ?? process.cwd());
-  const config = await loadProjectConfigFrom(projectRoot);
+  const resolveProject = input.projectRoot
+    ? createFixedProjectResolver(path.resolve(input.projectRoot))
+    : createSubdomainProjectResolver({
+        projectsRoot: path.resolve(input.projectsRoot ?? path.join(packageRoot, 'test', 'projects')),
+        templateRoot: path.resolve(input.templateRoot ?? path.join(packageRoot, 'test', 'template-project')),
+        defaultProjectName: input.defaultProjectName ?? 'dev-project',
+      });
   const rpcHandler = new RPCHandler(uiRouter);
   const httpServer = http.createServer();
   const vite = input.dev
@@ -377,6 +391,10 @@ export async function startSqlfuUiServer(input: {
   httpServer.on('request', async (req, res) => {
     try {
       const url = new URL(req.url ?? '/', `http://${req.headers.host ?? '127.0.0.1'}`);
+      const config = await resolveProject({
+        host: req.headers.host ?? url.host,
+        projectHeader: headerValue(req.headers['x-sqlfu-project']),
+      });
 
       if (url.pathname.startsWith('/api/rpc')) {
         const request = await toWebRequest(req, url);
@@ -435,6 +453,9 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
   const dev = process.argv.includes('--dev');
   const server = await startSqlfuUiServer({
     projectRoot,
+    defaultProjectName: readOption('--default-project') ?? undefined,
+    projectsRoot: readOption('--projects-root') ?? undefined,
+    templateRoot: readOption('--template-root') ?? undefined,
     port: port ? Number(port) : undefined,
     dev,
   });
@@ -1139,14 +1160,148 @@ async function runCommand(command: readonly string[], cwd: string) {
   }
 }
 
-async function loadProjectConfigFrom(projectRoot: string) {
-  const previousCwd = process.cwd();
-  process.chdir(projectRoot);
+function createFixedProjectResolver(projectRoot: string): ProjectResolver {
+  let configPromise: Promise<SqlfuProjectConfig> | undefined;
+  return async () => {
+    configPromise ??= loadProjectConfigFrom(projectRoot);
+    return await configPromise;
+  };
+}
+
+function createSubdomainProjectResolver(input: {
+  projectsRoot: string;
+  templateRoot: string;
+  defaultProjectName: string;
+}): ProjectResolver {
+  const initPromises = new Map<string, Promise<SqlfuProjectConfig>>();
+
+  return async ({host, projectHeader}) => {
+    const projectName = projectNameFromRequest({
+      host,
+      projectHeader,
+      defaultProjectName: input.defaultProjectName,
+    });
+    const existing = initPromises.get(projectName);
+    if (existing) {
+      return await existing;
+    }
+
+    const next = ensureProjectConfig({
+      projectName,
+      projectsRoot: input.projectsRoot,
+      templateRoot: input.templateRoot,
+    }).finally(() => {
+      initPromises.delete(projectName);
+    });
+    initPromises.set(projectName, next);
+    return await next;
+  };
+}
+
+async function ensureProjectConfig(input: {
+  projectName: string;
+  projectsRoot: string;
+  templateRoot: string;
+}) {
+  const projectRoot = path.join(input.projectsRoot, input.projectName);
+  await ensureProjectFiles({
+    projectRoot,
+    projectsRoot: input.projectsRoot,
+    templateRoot: input.templateRoot,
+  });
+  await ensureDatabase(projectRoot);
+  return await loadProjectConfigFrom(projectRoot);
+}
+
+async function ensureProjectFiles(input: {
+  projectRoot: string;
+  projectsRoot: string;
+  templateRoot: string;
+}) {
+  await fs.mkdir(input.projectsRoot, {recursive: true});
   try {
-    return await loadProjectConfig();
+    await fs.access(input.projectRoot);
+    return;
+  } catch {}
+  await fs.cp(input.templateRoot, input.projectRoot, {recursive: true});
+}
+
+async function ensureDatabase(projectRoot: string) {
+  const dbPath = path.join(projectRoot, 'app.db');
+  try {
+    await fs.access(dbPath);
+    return;
+  } catch {}
+
+  const database = new DatabaseSync(dbPath);
+  try {
+    const definitionsSql = await fs.readFile(path.join(projectRoot, 'definitions.sql'), 'utf8');
+    database.exec(definitionsSql);
+    database.exec(`
+      insert into posts (slug, title, body, published) values
+        ('hello-world', 'Hello World', 'First post body', 1),
+        ('draft-notes', 'Draft Notes', 'Unpublished notes', 0);
+    `);
   } finally {
-    process.chdir(previousCwd);
+    database.close();
   }
+}
+
+async function loadProjectConfigFrom(projectRoot: string) {
+  const configPath = path.join(projectRoot, 'sqlfu.config.ts');
+  const configModule = await importConfigFile(configPath);
+  return resolveProjectConfig(configModule, configPath);
+}
+
+async function importConfigFile(configPath: string) {
+  const moduleUrl = new URL(pathToFileURL(configPath).href);
+  moduleUrl.searchParams.set('t', String(Date.now()));
+  const loaded = await import(moduleUrl.href);
+  const config = loaded.default ?? loaded.config ?? loaded;
+
+  if (!config || typeof config !== 'object' || Array.isArray(config)) {
+    throw new Error(`Invalid sqlfu config at ${configPath}: expected a default-exported object.`);
+  }
+
+  return config as {
+    readonly db: string;
+    readonly migrationsDir: string;
+    readonly definitionsPath: string;
+    readonly sqlDir: string;
+    readonly generatedImportExtension?: '.js' | '.ts';
+  };
+}
+
+function projectNameFromRequest(input: {
+  host: string;
+  projectHeader?: string;
+  defaultProjectName: string;
+}) {
+  const projectName = input.projectHeader?.trim();
+  if (projectName) {
+    if (!/^[a-z0-9-]+$/.test(projectName)) {
+      throw new Error(`Invalid project name in x-sqlfu-project header: ${projectName}`);
+    }
+    return projectName;
+  }
+
+  return projectNameFromHost(input.host, input.defaultProjectName);
+}
+
+function projectNameFromHost(host: string, defaultProjectName: string) {
+  const hostname = host.split(':')[0] ?? host;
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    return defaultProjectName;
+  }
+  if (!hostname.endsWith('.localhost')) {
+    throw new Error(`Unsupported host: ${host}`);
+  }
+
+  const projectName = hostname.slice(0, -'.localhost'.length);
+  if (!/^[a-z0-9-]+$/.test(projectName)) {
+    throw new Error(`Invalid project name in host: ${host}`);
+  }
+  return projectName;
 }
 
 async function toWebRequest(req: http.IncomingMessage, url: URL) {
@@ -1275,4 +1430,11 @@ async function readIncomingMessage(req: http.IncomingMessage) {
     chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
   }
   return Buffer.concat(chunks);
+}
+
+function headerValue(value: string | string[] | undefined) {
+  if (Array.isArray(value)) {
+    return value[0];
+  }
+  return value;
 }

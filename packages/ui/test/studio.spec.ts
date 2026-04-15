@@ -1,13 +1,14 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-import {expect, test} from '@playwright/test';
+import type {Locator, Page} from '@playwright/test';
 
-test('schema page shows mismatch cards and can run the recommended sqlfu draft command', async ({page}) => {
-  await using _project = await preserveSchemaProjectState(path.join(import.meta.dirname, 'projects', 'fixture-project'));
-  const migrationsDir = path.join(import.meta.dirname, 'projects', 'fixture-project', 'migrations');
+import {expect, test} from './fixture.ts';
 
-  await page.goto('/#schema');
+test('schema page shows mismatch cards and can run the recommended sqlfu draft command', async ({page, projectRoot, projectUrl}) => {
+  const migrationsDir = path.join(projectRoot, 'migrations');
+
+  await gotoProjectPage(page, projectUrl, '/#schema');
 
   await expect(page.getByRole('heading', {name: 'Schema', exact: true})).toBeVisible();
   await expect(page.getByRole('heading', {name: 'Repo Drift'})).toBeVisible();
@@ -24,8 +25,7 @@ test('schema page shows mismatch cards and can run the recommended sqlfu draft c
     'Live Schema▾',
   ]);
 
-  page.once('dialog', (dialog) => dialog.accept());
-  await page.getByRole('button', {name: 'sqlfu draft'}).click();
+  await confirmAndRunSchemaCommand(page, page.getByRole('button', {name: 'sqlfu draft'}));
 
   await expect.poll(async () => {
     try {
@@ -54,13 +54,10 @@ test('schema page shows mismatch cards and can run the recommended sqlfu draft c
   await expect(await readCodeMirrorText(page, 'Live Schema editor')).toContain('create table posts');
 });
 
-test('migration details show content and metadata tabs in the migrations card', async ({page}) => {
-  await using _project = await preserveSchemaProjectState(path.join(import.meta.dirname, 'projects', 'fixture-project'));
+test('migration details show content and metadata tabs in the migrations card', async ({page, projectUrl}) => {
+  await gotoProjectPage(page, projectUrl, '/#schema');
 
-  await page.goto('/#schema');
-
-  page.once('dialog', (dialog) => dialog.accept());
-  await page.getByRole('button', {name: 'sqlfu draft'}).click();
+  await confirmAndRunSchemaCommand(page, page.getByRole('button', {name: 'sqlfu draft'}));
 
   const migrationItem = page.locator('.authority-migrations .migration-item').first();
   await migrationItem.getByRole('button').first().click();
@@ -77,13 +74,10 @@ test('migration details show content and metadata tabs in the migrations card', 
   await expect(await readCodeMirrorText(migrationDetail, 'Migration metadata')).toContain('applied_at: null');
 });
 
-test('migration details lazily load the resultant schema tab', async ({page}) => {
-  await using _project = await preserveSchemaProjectState(path.join(import.meta.dirname, 'projects', 'fixture-project'));
+test('migration details lazily load the resultant schema tab', async ({page, projectUrl}) => {
+  await gotoProjectPage(page, projectUrl, '/#schema');
 
-  await page.goto('/#schema');
-
-  page.once('dialog', (dialog) => dialog.accept());
-  await page.getByRole('button', {name: 'sqlfu draft'}).click();
+  await confirmAndRunSchemaCommand(page, page.getByRole('button', {name: 'sqlfu draft'}));
 
   const migrationDetail = page.locator('.authority-migrations .migration-item').first().locator('.migration-detail');
   await page.locator('.authority-migrations .migration-item').first().getByRole('button').first().click();
@@ -96,15 +90,11 @@ test('migration details lazily load the resultant schema tab', async ({page}) =>
   await expect(await readCodeMirrorText(migrationDetail, 'Migration resultant schema')).toContain('create table posts');
 });
 
-test('migration history rows use the same migration detail view', async ({page}) => {
-  await using _project = await preserveSchemaProjectState(path.join(import.meta.dirname, 'projects', 'fixture-project'));
+test('migration history rows use the same migration detail view', async ({page, projectUrl}) => {
+  await gotoProjectPage(page, projectUrl, '/#schema');
 
-  await page.goto('/#schema');
-
-  page.once('dialog', (dialog) => dialog.accept());
-  await page.getByRole('button', {name: 'sqlfu draft'}).click();
-  page.once('dialog', (dialog) => dialog.accept());
-  await page.getByRole('button', {name: /sqlfu baseline /}).first().click();
+  await confirmAndRunSchemaCommand(page, page.getByRole('button', {name: 'sqlfu draft'}));
+  await confirmAndRunSchemaCommand(page, page.getByRole('button', {name: /sqlfu baseline /}).first());
 
   const historyItem = page.locator('.authority-history .migration-item').first();
   await historyItem.getByRole('button').first().click();
@@ -121,16 +111,13 @@ test('migration history rows use the same migration detail view', async ({page})
   await expect(historyItem).not.toContainText('Applied');
 });
 
-test('migration history shows an integrity warning when applied content no longer matches the repo', async ({page}) => {
-  await using _project = await preserveSchemaProjectState(path.join(import.meta.dirname, 'projects', 'fixture-project'));
-  const migrationsDir = path.join(import.meta.dirname, 'projects', 'fixture-project', 'migrations');
+test('migration history shows an integrity warning when applied content no longer matches the repo', async ({page, projectRoot, projectUrl}) => {
+  const migrationsDir = path.join(projectRoot, 'migrations');
 
-  await page.goto('/#schema');
+  await gotoProjectPage(page, projectUrl, '/#schema');
 
-  page.once('dialog', (dialog) => dialog.accept());
-  await page.getByRole('button', {name: 'sqlfu draft'}).click();
-  page.once('dialog', (dialog) => dialog.accept());
-  await page.getByRole('button', {name: /sqlfu baseline /}).first().click();
+  await confirmAndRunSchemaCommand(page, page.getByRole('button', {name: 'sqlfu draft'}));
+  await confirmAndRunSchemaCommand(page, page.getByRole('button', {name: /sqlfu baseline /}).first());
 
   const [migrationFileName] = (await fs.readdir(migrationsDir)).filter((name) => name.endsWith('.sql'));
   await fs.appendFile(path.join(migrationsDir, migrationFileName!), `\n-- drifted after apply\n`);
@@ -146,17 +133,13 @@ test('migration history shows an integrity warning when applied content no longe
   await expect(await readCodeMirrorText(migrationDetail, 'Migration metadata')).toContain('integrity: checksum mismatch');
 });
 
-test('desired schema can be edited and saved, and sync is disabled while it is dirty', async ({page}) => {
-  await using _project = await preserveSchemaProjectState(path.join(import.meta.dirname, 'projects', 'fixture-project'));
-  const projectRoot = path.join(import.meta.dirname, 'projects', 'fixture-project');
+test('desired schema can be edited and saved, and sync is disabled while it is dirty', async ({page, projectRoot, projectUrl}) => {
   const definitionsPath = path.join(projectRoot, 'definitions.sql');
 
-  await page.goto('/#schema');
+  await gotoProjectPage(page, projectUrl, '/#schema');
 
-  page.once('dialog', (dialog) => dialog.accept());
-  await page.getByRole('button', {name: 'sqlfu draft'}).click();
-  page.once('dialog', (dialog) => dialog.accept());
-  await page.getByRole('button', {name: /sqlfu baseline /}).first().click();
+  await confirmAndRunSchemaCommand(page, page.getByRole('button', {name: 'sqlfu draft'}));
+  await confirmAndRunSchemaCommand(page, page.getByRole('button', {name: /sqlfu baseline /}).first());
   await expect(page.getByText('✅ No Repo Drift')).toBeVisible();
 
   await expect(page.getByRole('button', {name: 'Save Desired Schema'})).toHaveCount(0);
@@ -188,34 +171,26 @@ test('desired schema can be edited and saved, and sync is disabled while it is d
   await expect(page.getByText('Repo Drift')).toBeVisible();
 });
 
-test('history to live flow shows a baseline action when check recommends it', async ({page}) => {
-  await using _project = await preserveSchemaProjectState(path.join(import.meta.dirname, 'projects', 'fixture-project'));
+test('history to live flow shows a baseline action when check recommends it', async ({page, projectUrl}) => {
+  await gotoProjectPage(page, projectUrl, '/#schema');
 
-  await page.goto('/#schema');
-
-  page.once('dialog', (dialog) => dialog.accept());
-  await page.getByRole('button', {name: 'sqlfu draft'}).click();
+  await confirmAndRunSchemaCommand(page, page.getByRole('button', {name: 'sqlfu draft'}));
 
   const baselineButton = page.getByRole('button', {name: /sqlfu baseline /}).first();
   await expect(baselineButton).toBeVisible();
 
-  page.once('dialog', (dialog) => dialog.accept());
-  await baselineButton.click();
+  await confirmAndRunSchemaCommand(page, baselineButton);
   await expect(page.getByText('✅ No History Drift')).toBeVisible();
 });
 
-test('history to live flow shows a goto action when check recommends it', async ({page}) => {
-  await using _project = await preserveSchemaProjectState(path.join(import.meta.dirname, 'projects', 'fixture-project'));
-  const projectRoot = path.join(import.meta.dirname, 'projects', 'fixture-project');
+test('history to live flow shows a goto action when check recommends it', async ({page, projectRoot, projectUrl}) => {
   const migrationsDir = path.join(projectRoot, 'migrations');
   const definitionsPath = path.join(projectRoot, 'definitions.sql');
 
-  await page.goto('/#schema');
+  await gotoProjectPage(page, projectUrl, '/#schema');
 
-  page.once('dialog', (dialog) => dialog.accept());
-  await page.getByRole('button', {name: 'sqlfu draft'}).click();
-  page.once('dialog', (dialog) => dialog.accept());
-  await page.getByRole('button', {name: /sqlfu baseline /}).first().click();
+  await confirmAndRunSchemaCommand(page, page.getByRole('button', {name: 'sqlfu draft'}));
+  await confirmAndRunSchemaCommand(page, page.getByRole('button', {name: /sqlfu baseline /}).first());
 
   const [migrationFileName] = (await fs.readdir(migrationsDir)).filter((name) => name.endsWith('.sql'));
   await fs.appendFile(path.join(migrationsDir, migrationFileName!), `
@@ -236,16 +211,13 @@ from posts;
   const gotoButton = page.getByRole('button', {name: /sqlfu goto /});
   await expect(gotoButton).toBeVisible();
 
-  page.once('dialog', (dialog) => dialog.accept());
-  await gotoButton.click();
+  await confirmAndRunSchemaCommand(page, gotoButton);
   await expect.poll(() => readCodeMirrorText(page, 'Live Schema editor')).toContain('create view post_titles as');
   await expect(page.getByText('✅ No History Drift')).toBeVisible();
 });
 
-test('schema command failures stay visible next to the failing command button', async ({page}) => {
-  await using _project = await preserveSchemaProjectState(path.join(import.meta.dirname, 'projects', 'fixture-project'));
-
-  await page.goto('/#schema');
+test('schema command failures stay visible next to the failing command button', async ({page, projectUrl}) => {
+  await gotoProjectPage(page, projectUrl, '/#schema');
 
   await replaceCodeMirrorText(page, 'Desired Schema editor', `
     create table posts (
@@ -264,17 +236,16 @@ test('schema command failures stay visible next to the failing command button', 
   await expect.poll(() => readCodeMirrorText(page, 'Desired Schema editor')).toContain('birthdate text not null');
   await page.getByRole('button', {name: 'Save Desired Schema'}).click();
 
-  page.once('dialog', (dialog) => dialog.accept());
   const syncButton = page.getByRole('button', {name: 'sqlfu sync'});
   await expect(syncButton).toBeVisible();
-  await syncButton.click();
+  await confirmAndRunSchemaCommand(page, syncButton);
 
   await expect(page.getByText(/cannot add a not null column with default value null/i)).toBeVisible();
   await expect(page.locator('.schema-command-error').filter({hasText: 'Cannot add a NOT NULL column with default value NULL'})).toBeVisible();
 });
 
-test('table browser, sql runner, and generated query form work against a live fixture project', async ({page}) => {
-  await page.goto('/');
+test('table browser, sql runner, and generated query form work against a live fixture project', async ({page, projectUrl}) => {
+  await gotoProjectPage(page, projectUrl, '/');
 
   await expect(page.getByRole('heading', {name: 'posts'})).toBeVisible();
   await expect(page.getByText('hello-world')).toBeVisible();
@@ -289,8 +260,8 @@ test('table browser, sql runner, and generated query form work against a live fi
   await expect(page.getByText('Hello World')).toBeVisible();
 });
 
-test('relation page is data-first with foldable secondary panels', async ({page}) => {
-  await page.goto('/#table/posts');
+test('relation page is data-first with foldable secondary panels', async ({page, projectUrl}) => {
+  await gotoProjectPage(page, projectUrl, '/#table/posts');
 
   await expect(page.getByRole('heading', {name: 'posts'})).toBeVisible();
   await expect(page.getByText('hello-world')).toBeVisible();
@@ -303,15 +274,15 @@ test('relation page is data-first with foldable secondary panels', async ({page}
   await expect(page.getByLabel('Relation definition editor')).toBeVisible();
 });
 
-test('relation rows render in a sheet-style grid', async ({page}) => {
-  await page.goto('/#table/posts');
+test('relation rows render in a sheet-style grid', async ({page, projectUrl}) => {
+  await gotoProjectPage(page, projectUrl, '/#table/posts');
 
   await expect(page.locator('.reactgrid')).toBeVisible();
   await expect(page.locator('.reactgrid [data-cell-rowidx="1"][data-cell-colidx="2"]')).toContainText('hello-world');
 });
 
-test('clicking a relation cell shows the full cell content below the table', async ({page}) => {
-  await page.goto('/#table/posts');
+test('clicking a relation cell shows the full cell content below the table', async ({page, projectUrl}) => {
+  await gotoProjectPage(page, projectUrl, '/#table/posts');
 
   await page.locator('.reactgrid [data-cell-rowidx="1"][data-cell-colidx="4"]').click();
   const selectedCellPanel = page.locator('.selected-cell-panel');
@@ -320,8 +291,8 @@ test('clicking a relation cell shows the full cell content below the table', asy
   await expect(selectedCellPanel).toContainText('First post body');
 });
 
-test('clicking a sql runner result cell shows the full cell content below the table', async ({page}) => {
-  await page.goto('/#sql');
+test('clicking a sql runner result cell shows the full cell content below the table', async ({page, projectUrl}) => {
+  await gotoProjectPage(page, projectUrl, '/#sql');
 
   await replaceCodeMirrorText(page, 'SQL editor', `
     select body
@@ -337,8 +308,8 @@ test('clicking a sql runner result cell shows the full cell content below the ta
   await expect(selectedCellPanel).toContainText('First post body');
 });
 
-test('clicking a saved query result cell shows the full cell content below the table', async ({page}) => {
-  await page.goto('/#query/list-post-cards');
+test('clicking a saved query result cell shows the full cell content below the table', async ({page, projectUrl}) => {
+  await gotoProjectPage(page, projectUrl, '/#query/list-post-cards');
 
   await page.getByRole('button', {name: 'Run generated query'}).click();
   await page.locator('.reactgrid [data-cell-rowidx="1"][data-cell-colidx="3"]').click();
@@ -348,10 +319,8 @@ test('clicking a saved query result cell shows the full cell content below the t
   await expect(selectedCellPanel).toContainText('Hello World');
 });
 
-test('relation rows can be edited and saved from the grid', async ({page}) => {
-  await using _project = await preserveSchemaProjectState(path.join(import.meta.dirname, 'projects', 'fixture-project'));
-
-  await page.goto('/#table/posts');
+test('relation rows can be edited and saved from the grid', async ({page, projectUrl}) => {
+  await gotoProjectPage(page, projectUrl, '/#table/posts');
 
   const titleCell = page.locator('.reactgrid [data-cell-rowidx="1"][data-cell-colidx="3"]');
   await titleCell.click();
@@ -379,10 +348,8 @@ test('relation rows can be edited and saved from the grid', async ({page}) => {
   await expect(page.locator('.reactgrid [data-cell-rowidx="1"][data-cell-colidx="3"]')).toContainText('Hello World Revised');
 });
 
-test('relation rows can be appended from the grid', async ({page}) => {
-  await using _project = await preserveSchemaProjectState(path.join(import.meta.dirname, 'projects', 'fixture-project'));
-
-  await page.goto('/#table/posts');
+test('relation rows can be appended from the grid', async ({page, projectUrl}) => {
+  await gotoProjectPage(page, projectUrl, '/#table/posts');
 
   await page.locator('.reactgrid [data-cell-rowidx="3"][data-cell-colidx="2"]').click();
   await expect(page.locator('.selected-cell-panel')).toContainText('Cell: slug, row 3');
@@ -427,10 +394,8 @@ test('relation rows can be appended from the grid', async ({page}) => {
   await expect(page.locator('.reactgrid [data-cell-rowidx="3"][data-cell-colidx="3"]')).toContainText('Brand New Post');
 });
 
-test('relation rows can be selected and deleted from the grid', async ({page}) => {
-  await using _project = await preserveSchemaProjectState(path.join(import.meta.dirname, 'projects', 'fixture-project'));
-
-  await page.goto('/#table/posts');
+test('relation rows can be selected and deleted from the grid', async ({page, projectUrl}) => {
+  await gotoProjectPage(page, projectUrl, '/#table/posts');
 
   const firstRowHeader = page.locator('.reactgrid [data-cell-rowidx="1"][data-cell-colidx="0"]');
   await expect(firstRowHeader).toContainText('1');
@@ -456,16 +421,14 @@ test('relation rows can be selected and deleted from the grid', async ({page}) =
   await expect(page.getByText('hello-world')).toHaveCount(0);
 });
 
-test('appended rows focus the clicked cell and allow editing primary key columns', async ({page}) => {
-  await using _project = await preserveSchemaProjectState(path.join(import.meta.dirname, 'projects', 'fixture-project'));
-
-  await page.goto('/#schema');
+test('appended rows focus the clicked cell and allow editing primary key columns', async ({page, projectUrl}) => {
+  await gotoProjectPage(page, projectUrl, '/#schema');
   page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('button', {name: 'sqlfu draft'}).click();
   page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('button', {name: /sqlfu baseline /}).first().click();
 
-  await page.goto('/#table/sqlfu_migrations');
+  await gotoProjectPage(page, projectUrl, '/#table/sqlfu_migrations');
   await page.locator('.reactgrid [data-cell-rowidx="2"][data-cell-colidx="1"]').click();
   await expect(page.locator('.selected-cell-panel')).toContainText('Cell: name, row 2');
 
@@ -474,10 +437,8 @@ test('appended rows focus the clicked cell and allow editing primary key columns
   await expect(page.locator('.reactgrid [data-cell-rowidx="2"][data-cell-colidx="1"]')).toContainText('manual_migration');
 });
 
-test('relation rows can discard dirty cell changes', async ({page}) => {
-  await using _project = await preserveSchemaProjectState(path.join(import.meta.dirname, 'projects', 'fixture-project'));
-
-  await page.goto('/#table/posts');
+test('relation rows can discard dirty cell changes', async ({page, projectUrl}) => {
+  await gotoProjectPage(page, projectUrl, '/#table/posts');
 
   const titleCell = page.locator('.reactgrid [data-cell-rowidx="1"][data-cell-colidx="3"]');
   await titleCell.click();
@@ -502,10 +463,8 @@ test('relation rows can discard dirty cell changes', async ({page}) => {
   await expect(page.locator('.reactgrid [data-cell-rowidx="1"][data-cell-colidx="3"]')).not.toHaveClass(/dirty/);
 });
 
-test('relation grid supports undo and redo controls', async ({page}) => {
-  await using _project = await preserveSchemaProjectState(path.join(import.meta.dirname, 'projects', 'fixture-project'));
-
-  await page.goto('/#table/posts');
+test('relation grid supports undo and redo controls', async ({page, projectUrl}) => {
+  await gotoProjectPage(page, projectUrl, '/#table/posts');
 
   const titleCell = page.locator('.reactgrid [data-cell-rowidx="1"][data-cell-colidx="3"]');
   await titleCell.click();
@@ -531,7 +490,7 @@ test('relation grid supports undo and redo controls', async ({page}) => {
   await expect(page.getByRole('button', {name: 'Save changes'})).toBeVisible();
 });
 
-test('stale relation draft state is ignored when it does not match the fetched table shape', async ({page}) => {
+test('stale relation draft state is ignored when it does not match the fetched table shape', async ({page, projectUrl}) => {
   await page.addInitScript(() => {
     window.localStorage.setItem(
       'sqlfu-ui/table-draft/posts/0',
@@ -539,17 +498,15 @@ test('stale relation draft state is ignored when it does not match the fetched t
     );
   });
 
-  await page.goto('/#table/posts');
+  await gotoProjectPage(page, projectUrl, '/#table/posts');
 
   await expect(page.locator('.reactgrid [data-cell-rowidx="1"][data-cell-colidx="2"]')).toContainText('hello-world');
   await expect(page.getByRole('button', {name: 'Save changes'})).toHaveCount(0);
   await expect(page.getByRole('button', {name: 'Discard changes'})).toHaveCount(0);
 });
 
-test('dirty relation cells show original, draft, and diff modes in the cell panel', async ({page}) => {
-  await using _project = await preserveSchemaProjectState(path.join(import.meta.dirname, 'projects', 'fixture-project'));
-
-  await page.goto('/#table/posts');
+test('dirty relation cells show original, draft, and diff modes in the cell panel', async ({page, projectUrl}) => {
+  await gotoProjectPage(page, projectUrl, '/#table/posts');
 
   const titleCell = page.locator('.reactgrid [data-cell-rowidx="1"][data-cell-colidx="3"]');
   await titleCell.click();
@@ -578,8 +535,8 @@ test('dirty relation cells show original, draft, and diff modes in the cell pane
   await expect(selectedCellPanel).toContainText('Hello World Dirty');
 });
 
-test('switching between saved queries does not leak form state between schemas', async ({page}) => {
-  await page.goto('/#query/find-post-by-slug');
+test('switching between saved queries does not leak form state between schemas', async ({page, projectUrl}) => {
+  await gotoProjectPage(page, projectUrl, '/#query/find-post-by-slug');
 
   await page.getByLabel('slug').fill('hello-world');
   await page.getByRole('button', {name: 'Run generated query'}).click();
@@ -591,14 +548,14 @@ test('switching between saved queries does not leak form state between schemas',
   await expect(page.getByText('Draft Notes')).toBeVisible();
 });
 
-test('saved queries can be renamed, edited, and deleted from the query view', async ({page}) => {
-  const projectSqlDir = path.join(import.meta.dirname, 'projects', 'fixture-project', 'sql');
+test('saved queries can be renamed, edited, and deleted from the query view', async ({page, projectRoot, projectUrl}) => {
+  const projectSqlDir = path.join(projectRoot, 'sql');
   const originalPath = path.join(projectSqlDir, 'list-post-cards.sql');
   const renamedPath = path.join(projectSqlDir, 'list-post-cards-renamed.sql');
 
   await fs.rm(renamedPath, {force: true});
 
-  await page.goto('/#query/list-post-cards');
+  await gotoProjectPage(page, projectUrl, '/#query/list-post-cards');
 
   await page.getByRole('button', {name: 'Rename query'}).click();
   await page.getByLabel('Query title').fill('list-post-cards-renamed');
@@ -632,9 +589,8 @@ test('saved queries can be renamed, edited, and deleted from the query view', as
   await expect(fs.access(renamedPath).then(() => true, () => false)).resolves.toBe(false);
 });
 
-test('invalid saved queries still show editable sql', async ({page}) => {
-  await using _project = await preserveSchemaProjectState(path.join(import.meta.dirname, 'projects', 'fixture-project'));
-  const queryPath = path.join(import.meta.dirname, 'projects', 'fixture-project', 'sql', 'find-post-by-slug.sql');
+test('invalid saved queries still show editable sql', async ({page, projectRoot, projectUrl}) => {
+  const queryPath = path.join(projectRoot, 'sql', 'find-post-by-slug.sql');
 
   await fs.writeFile(queryPath, `
     select id, slug, title
@@ -643,7 +599,7 @@ test('invalid saved queries still show editable sql', async ({page}) => {
     limit 1;
   `);
 
-  await page.goto('/#query/find-post-by-slug');
+  await gotoProjectPage(page, projectUrl, '/#query/find-post-by-slug');
 
   await expect(page.getByText('Query error')).toBeVisible();
   await expect(page.getByText('no such table: posts_broken')).toBeVisible();
@@ -665,11 +621,11 @@ test('invalid saved queries still show editable sql', async ({page}) => {
   await expect(page.getByText('Hello World')).toBeVisible();
 });
 
-test('sql runner executes a named-parameter query and saves it to disk', async ({page}) => {
-  const savedQueryPath = path.join(import.meta.dirname, 'projects', 'fixture-project', 'sql', 'find-hello-world.sql');
+test('sql runner executes a named-parameter query and saves it to disk', async ({page, projectRoot, projectUrl}) => {
+  const savedQueryPath = path.join(projectRoot, 'sql', 'find-hello-world.sql');
   await fs.rm(savedQueryPath, {force: true});
 
-  await page.goto('/#sql');
+  await gotoProjectPage(page, projectUrl, '/#sql');
   await replaceCodeMirrorText(page, 'SQL editor', `
     select id, slug, title
     from posts
@@ -690,19 +646,17 @@ test('sql runner executes a named-parameter query and saves it to disk', async (
   await expect(fs.readFile(savedQueryPath, 'utf8')).resolves.toContain('where slug = :slug');
 });
 
-test('sql runner understands sqlfu_migrations and suggests a non-noisy saved name', async ({page}) => {
-  await using _project = await preserveSchemaProjectState(path.join(import.meta.dirname, 'projects', 'fixture-project'));
-  const projectRoot = path.join(import.meta.dirname, 'projects', 'fixture-project');
+test('sql runner understands sqlfu_migrations and suggests a non-noisy saved name', async ({page, projectRoot, projectUrl}) => {
   const savedQueryPath = path.join(projectRoot, 'sql', 'list-sqlfu-migrations.sql');
   await fs.rm(savedQueryPath, {force: true});
 
-  await page.goto('/#schema');
+  await gotoProjectPage(page, projectUrl, '/#schema');
   page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('button', {name: 'sqlfu draft'}).click();
   page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('button', {name: /sqlfu baseline /}).first().click();
 
-  await page.goto('/#sql');
+  await gotoProjectPage(page, projectUrl, '/#sql');
   await replaceCodeMirrorText(page, 'SQL editor', `
     select *
     from sqlfu_migrations
@@ -729,13 +683,11 @@ test('sql runner understands sqlfu_migrations and suggests a non-noisy saved nam
   await expect(page.getByText('no such table: sqlfu_migrations')).toHaveCount(0);
 });
 
-test('schema queries are invalidated after sql runs, saved query runs, and relation saves', async ({page}) => {
-  await using _project = await preserveSchemaProjectState(path.join(import.meta.dirname, 'projects', 'fixture-project'));
-
-  await page.goto('/#schema');
+test('schema queries are invalidated after sql runs, saved query runs, and relation saves', async ({page, projectUrl}) => {
+  await gotoProjectPage(page, projectUrl, '/#schema');
   await expect(page.getByRole('heading', {name: 'Schema', exact: true})).toBeVisible();
 
-  await page.goto('/#sql');
+  await gotoProjectPage(page, projectUrl, '/#sql');
   await replaceCodeMirrorText(page, 'SQL editor', `
     select id, slug
     from posts
@@ -746,13 +698,13 @@ test('schema queries are invalidated after sql runs, saved query runs, and relat
     page.getByRole('button', {name: 'Run SQL'}).click(),
   ]);
 
-  await page.goto('/#query/list-post-cards');
+  await gotoProjectPage(page, projectUrl, '/#query/list-post-cards');
   await Promise.all([
     page.waitForResponse((response) => response.url().includes('/api/rpc/schema/') && response.ok()),
     page.getByRole('button', {name: 'Run generated query'}).click(),
   ]);
 
-  await page.goto('/#table/posts');
+  await gotoProjectPage(page, projectUrl, '/#table/posts');
   const titleCell = page.locator('.reactgrid [data-cell-rowidx="1"][data-cell-colidx="3"]');
   await titleCell.click();
   await page.keyboard.press('Enter');
@@ -770,8 +722,8 @@ test('schema queries are invalidated after sql runs, saved query runs, and relat
   ]);
 });
 
-test('sql runner draft survives a reload via local storage', async ({page}) => {
-  await page.goto('/#sql');
+test('sql runner draft survives a reload via local storage', async ({page, projectUrl}) => {
+  await gotoProjectPage(page, projectUrl, '/#sql');
 
   await replaceCodeMirrorText(page, 'SQL editor', `
     select id, slug
@@ -788,9 +740,9 @@ test('sql runner draft survives a reload via local storage', async ({page}) => {
   await expect(page.getByLabel('slug')).toHaveValue('draft-notes');
 });
 
-test('sql runner drops stale parameter values when the SQL parameter names change', async ({page}) => {
+test('sql runner drops stale parameter values when the SQL parameter names change', async ({page, projectUrl}) => {
   await page.addInitScript(() => window.localStorage.clear());
-  await page.goto('/#sql');
+  await gotoProjectPage(page, projectUrl, '/#sql');
 
   await replaceCodeMirrorText(page, 'SQL editor', `
     select id, slug
@@ -811,9 +763,9 @@ test('sql runner drops stale parameter values when the SQL parameter names chang
   await expect(page.getByLabel('sluggggg')).toBeVisible();
 });
 
-test('sql runner provides syntax highlighting and schema autocomplete', async ({page}) => {
+test('sql runner provides syntax highlighting and schema autocomplete', async ({page, projectUrl}) => {
   await page.addInitScript(() => window.localStorage.clear());
-  await page.goto('/#sql');
+  await gotoProjectPage(page, projectUrl, '/#sql');
 
   const editor = page.locator('.cm-editor');
   await expect(editor).toBeVisible();
@@ -831,18 +783,18 @@ test('sql runner provides syntax highlighting and schema autocomplete', async ({
   await expect(await readCodeMirrorText(page, 'SQL editor')).toContain(`select * from ${selectedLabel}`);
 });
 
-test('sql runner shows inline analysis diagnostics before execution', async ({page}) => {
+test('sql runner shows inline analysis diagnostics before execution', async ({page, projectUrl}) => {
   await page.addInitScript(() => window.localStorage.clear());
-  await page.goto('/#sql');
+  await gotoProjectPage(page, projectUrl, '/#sql');
 
   await replaceCodeMirrorText(page, 'SQL editor', 'select * fro posts');
 
   await expect.poll(() => page.locator('.cm-lintRange-error').count()).toBeGreaterThan(0);
 });
 
-test('saved query edit mode shows inline analysis diagnostics before saving', async ({page}) => {
+test('saved query edit mode shows inline analysis diagnostics before saving', async ({page, projectUrl}) => {
   await page.addInitScript(() => window.localStorage.clear());
-  await page.goto('/#query/list-post-cards');
+  await gotoProjectPage(page, projectUrl, '/#query/list-post-cards');
 
   await page.getByRole('button', {name: 'Edit query SQL'}).click();
   await replaceCodeMirrorText(page, 'Query SQL editor', 'select * fro posts');
@@ -850,9 +802,9 @@ test('saved query edit mode shows inline analysis diagnostics before saving', as
   await expect.poll(() => page.locator('.cm-lintRange-error').count()).toBeGreaterThan(0);
 });
 
-test('sql runner keeps line numbers aligned with editor lines', async ({page}) => {
+test('sql runner keeps line numbers aligned with editor lines', async ({page, projectUrl}) => {
   await page.addInitScript(() => window.localStorage.clear());
-  await page.goto('/#sql');
+  await gotoProjectPage(page, projectUrl, '/#sql');
 
   await replaceCodeMirrorText(page, 'SQL editor', 'select *\nfrom posts\nwhere posts.slug like :slug');
 
@@ -875,9 +827,9 @@ test('sql runner keeps line numbers aligned with editor lines', async ({page}) =
   expect(Math.abs((lineNumberOneBox?.y ?? 0) - (firstLineBox?.y ?? 0))).toBeLessThanOrEqual(4);
 });
 
-test('sql runner executes from the editor with cmd-or-ctrl-enter', async ({page}) => {
+test('sql runner executes from the editor with cmd-or-ctrl-enter', async ({page, projectUrl}) => {
   await page.addInitScript(() => window.localStorage.clear());
-  await page.goto('/#sql');
+  await gotoProjectPage(page, projectUrl, '/#sql');
 
   await replaceCodeMirrorText(page, 'SQL editor', `
     select id, slug, title
@@ -892,8 +844,8 @@ test('sql runner executes from the editor with cmd-or-ctrl-enter', async ({page}
   await expect(page.getByText('Hello World')).toBeVisible();
 });
 
-test('sql runner infers numeric parameter types from SQL analysis', async ({page}) => {
-  await page.goto('/#sql');
+test('sql runner infers numeric parameter types from SQL analysis', async ({page, projectUrl}) => {
+  await gotoProjectPage(page, projectUrl, '/#sql');
 
   await replaceCodeMirrorText(page, 'SQL editor', `
     select id, slug, title
@@ -908,8 +860,8 @@ test('sql runner infers numeric parameter types from SQL analysis', async ({page
   await expect(page.getByText('Hello World')).toBeVisible();
 });
 
-test('sql runner surfaces clean errors without blowing out page width', async ({page}) => {
-  await page.goto('/#sql');
+test('sql runner surfaces clean errors without blowing out page width', async ({page, projectUrl}) => {
+  await gotoProjectPage(page, projectUrl, '/#sql');
 
   await replaceCodeMirrorText(page, 'SQL editor', `select '${'x'.repeat(4000)}' as payload;`);
   page.once('dialog', (dialog) => dialog.accept('   '));
@@ -922,11 +874,11 @@ test('sql runner surfaces clean errors without blowing out page width', async ({
     .toBeLessThan(1600);
 });
 
-test('sql runner suggests a generated name in the save prompt and does not save on cancel', async ({page}) => {
-  const cancelledSavePath = path.join(import.meta.dirname, 'projects', 'fixture-project', 'sql', 'from-posts.sql');
+test('sql runner suggests a generated name in the save prompt and does not save on cancel', async ({page, projectRoot, projectUrl}) => {
+  const cancelledSavePath = path.join(projectRoot, 'sql', 'from-posts.sql');
   await fs.rm(cancelledSavePath, {force: true});
 
-  await page.goto('/#sql');
+  await gotoProjectPage(page, projectUrl, '/#sql');
   await replaceCodeMirrorText(page, 'SQL editor', `
     select *
     from posts
@@ -950,10 +902,22 @@ test('sql runner suggests a generated name in the save prompt and does not save 
   await expect(page).toHaveURL(/#sql$/);
 });
 
+async function confirmAndRunSchemaCommand(page: Page, button: Locator) {
+  page.once('dialog', (dialog) => dialog.accept());
+  await Promise.all([
+    page.waitForResponse((response) => response.url().includes('/api/rpc/schema/command')),
+    button.click(),
+  ]);
+}
+
 async function replaceCodeMirrorText(page: any, ariaLabel: string, value: string) {
   const content = page.locator(`[aria-label="${ariaLabel}"] .cm-content`);
   await content.click();
   await content.fill(value);
+}
+
+async function gotoProjectPage(page: any, projectUrl: string, route: string) {
+  await page.goto(new URL(route, `${projectUrl}/`).href);
 }
 
 async function readCodeMirrorText(page: any, ariaLabel: string) {
@@ -981,43 +945,4 @@ async function fillGridTextCell(page: any, rowIndex: number, columnIndex: number
   await cell.click();
   await page.keyboard.type(value);
   await page.keyboard.press('Enter');
-}
-
-async function preserveSchemaProjectState(projectRoot: string) {
-  const snapshotRoot = path.join(import.meta.dirname, '.tmp', `${path.basename(projectRoot)}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-  const targets = [
-    'definitions.sql',
-    'migrations',
-    'app.db',
-    '.sqlfu',
-  ] as const;
-
-  await fs.mkdir(path.dirname(snapshotRoot), {recursive: true});
-  await fs.mkdir(snapshotRoot, {recursive: true});
-  for (const target of targets) {
-    const sourcePath = path.join(projectRoot, target);
-    try {
-      await fs.cp(sourcePath, path.join(snapshotRoot, target), {recursive: true});
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        throw error;
-      }
-    }
-  }
-
-  return {
-    async [Symbol.asyncDispose]() {
-      for (const target of targets) {
-        await fs.rm(path.join(projectRoot, target), {recursive: true, force: true});
-        try {
-          await fs.cp(path.join(snapshotRoot, target), path.join(projectRoot, target), {recursive: true});
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-            throw error;
-          }
-        }
-      }
-      await fs.rm(snapshotRoot, {recursive: true, force: true});
-    },
-  };
 }

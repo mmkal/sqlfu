@@ -127,6 +127,10 @@ export function rawSqlWithSqlSplittingSync(
   runOne: (query: {sql: string; args: readonly QueryArg[]}) => {rowsAffected?: number; lastInsertRowid?: string | number | bigint | null},
   sql: string,
 ) {
+  if (!sql.trim()) {
+    return {};
+  }
+
   const statements = splitSqlStatements(sql);
   if (statements.length <= 1) {
     return runOne({sql, args: []});
@@ -143,6 +147,10 @@ export async function rawSqlWithSqlSplittingAsync(
   runOne: (query: {sql: string; args: readonly QueryArg[]}) => Promise<{rowsAffected?: number; lastInsertRowid?: string | number | bigint | null}>,
   sql: string,
 ) {
+  if (!sql.trim()) {
+    return {};
+  }
+
   const statements = splitSqlStatements(sql);
   if (statements.length <= 1) {
     return runOne({sql, args: []});

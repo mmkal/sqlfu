@@ -1,0 +1,1 @@
+a similar confirm concept to pgkit, which in the CLI, shows you some text, which could optionally be editable (e.g. for "sql that will run as a result of this command") or in the UI could use SSE cleverness or an HTTP stream to show a modal, which could *also* be editable.

@@ -93,6 +93,13 @@ test('createNodeSqliteClient.raw runs trigger definitions with begin/end bodies'
   ).toMatchObject([{email: 'ada@example.com'}]);
 });
 
+test('createNodeSqliteClient.raw ignores empty sql', () => {
+  using fixture = createNodeSqliteFixture(new DatabaseSync(':memory:'));
+
+  expect(() => fixture.client.raw('')).not.toThrow();
+  expect(() => fixture.client.raw('   \n\t  ')).not.toThrow();
+});
+
 function createNodeSqliteFixture(db: DatabaseSync) {
   return {
     client: createNodeSqliteClient(db),

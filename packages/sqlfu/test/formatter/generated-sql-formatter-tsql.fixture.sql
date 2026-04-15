@@ -4,8 +4,6 @@
 -- input:
 SELECT [my column] FROM [my table];
 -- output:
-SELECT
-  [my column]
-FROM
-  [my table];
+select [my column]
+from [my table];
 -- #endregion

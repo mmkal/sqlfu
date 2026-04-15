@@ -5,12 +5,9 @@
 -- input:
 select * From tbl WHERE x > 0
 -- output:
-select
-  *
-From
-  tbl
-WHERE
-  x > 0
+select *
+From tbl
+WHERE x > 0
 -- #endregion
 
 -- #region: keywordCase lower lowercases reserved words
@@ -18,27 +15,20 @@ WHERE
 -- input:
 select * From tbl WHERE x > 0
 -- output:
-select
-  *
-from
-  tbl
-where
-  x > 0
+select *
+from tbl
+where x > 0
 -- #endregion
 
 -- #region: linesBetweenQueries defaults to one blank line
 -- input:
 SELECT * FROM foo; SELECT * FROM bar;
 -- output:
-SELECT
-  *
-FROM
-  foo;
+select *
+from foo;
 
-SELECT
-  *
-FROM
-  bar;
+select *
+from bar;
 -- #endregion
 
 -- #region: linesBetweenQueries can be zero
@@ -46,14 +36,10 @@ FROM
 -- input:
 SELECT * FROM foo; SELECT * FROM bar;
 -- output:
-SELECT
-  *
-FROM
-  foo;
-SELECT
-  *
-FROM
-  bar;
+select *
+from foo;
+select *
+from bar;
 -- #endregion
 
 -- #region: linesBetweenQueries can be two
@@ -61,25 +47,21 @@ FROM
 -- input:
 SELECT * FROM foo; SELECT * FROM bar;
 -- output:
-SELECT
-  *
-FROM
-  foo;
+select *
+from foo;
 
 
-SELECT
-  *
-FROM
-  bar;
+select *
+from bar;
 -- #endregion
 
 -- #region: replace into syntax formats as sqlite dml
 -- input:
 REPLACE INTO tbl VALUES (1,'Leopard'),(2,'Dog');
 -- output:
-REPLACE INTO
+replace into
   tbl
-VALUES
+values
   (1, 'Leopard'),
   (2, 'Dog');
 -- #endregion
@@ -88,30 +70,31 @@ VALUES
 -- input:
 INSERT INTO tbl VALUES (1,'Leopard') ON CONFLICT DO UPDATE SET foo=1;
 -- output:
-INSERT INTO
+insert into
   tbl
-VALUES
+values
   (1, 'Leopard')
-ON CONFLICT DO UPDATE
-SET
+on conflict do update
+set
   foo = 1;
 -- #endregion
 
 -- #region: short create table stays on one line
 -- input:
 CREATE TABLE tbl (a INT PRIMARY KEY, b TEXT);
--- output: <unchanged>
+-- output:
+create table tbl (a int primary key, b text);
 -- #endregion
 
 -- #region: long create table breaks across lines
 -- input:
 CREATE TABLE tbl (a INT PRIMARY KEY, b TEXT, c INT NOT NULL, doggie INT NOT NULL);
 -- output:
-CREATE TABLE tbl (
-  a INT PRIMARY KEY,
-  b TEXT,
-  c INT NOT NULL,
-  doggie INT NOT NULL
+create table tbl (
+  a int primary key,
+  b text,
+  c int not null,
+  doggie int not null
 );
 -- #endregion
 
@@ -120,10 +103,8 @@ CREATE TABLE tbl (
 SELECT a--comment, here
 FROM b--comment
 -- output:
-SELECT
-  a --comment, here
-FROM
-  b --comment
+select a --comment, here
+from b --comment
 -- #endregion
 
 -- #region: first line comments in file stay intact
@@ -142,19 +123,16 @@ WITH cte_1(id, parent_id) AS (
 )
 SELECT id, parent_id FROM cte_1;
 -- output:
-WITH
-  cte_1 (id, parent_id) AS (
-    SELECT
+with
+  cte_1 (id, parent_id) as (
+    select
       id,
       parent_id
-    FROM
+    from
       tab1
-    WHERE
-      parent_id IS NULL
+    where
+      parent_id is null
   )
-SELECT
-  id,
-  parent_id
-FROM
-  cte_1;
+select id, parent_id
+from cte_1;
 -- #endregion

@@ -4,8 +4,7 @@
 -- input:
 SELECT a && b || c
 -- output:
-SELECT
-  a && b || c
+select a && b || c
 -- #endregion
 
 -- #region: prettier-plugin-sql-cst / test / select / limiting.test: formats LIMIT ... ROWS EXAMINED
@@ -17,10 +16,7 @@ LIMIT
   25, 100
   ROWS EXAMINED 1000
 -- output:
-SELECT
-  *
-FROM
-  tbl
-LIMIT
-  25, 100 ROWS EXAMINED 1000
+select *
+from tbl
+limit 25, 100 rows examined 1000
 -- #endregion

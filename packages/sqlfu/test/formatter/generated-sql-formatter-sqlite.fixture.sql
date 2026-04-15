@@ -5,13 +5,13 @@
 ALTER TABLE t ALTER COLUMN foo SET DATA TYPE VARCHAR;
          ALTER TABLE t ALTER COLUMN foo SET NOT NULL;
 -- output:
-ALTER TABLE t ALTER COLUMN foo
-SET
-  DATA TYPE VARCHAR;
+alter table t alter column foo
+set
+  data type varchar;
 
-ALTER TABLE t ALTER COLUMN foo
-SET
-  NOT NULL;
+alter table t alter column foo
+set
+  not null;
 -- #endregion
 
 -- #region: sql-formatter / test / behavesLikeDb2Formatter: formats only minus-minus as a line comment
@@ -22,714 +22,110 @@ SET
       MyTable;
     
 -- output:
-SELECT
-  col
-FROM
+select col
+from
   -- This is a comment
-  MyTable;
+  mytable;
 -- #endregion
 
 -- #region: sql-formatter / test / behavesLikeDb2Formatter: supports @, #, $ characters anywhere inside identifiers
 -- input:
 SELECT @foo, #bar, $zap, fo@o, ba#2, za$3
--- error:
--- Error: Parse error: Unexpected "#bar, $zap" at line 1 column 14.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"#bar, $zap\" at line 1 column 14.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / behavesLikeDb2Formatter: supports @, #, $ characters in named parameters
 -- input:
 SELECT :foo@bar, :foo#bar, :foo$bar, :@zip, :#zap, :$zop
--- error:
--- Error: Parse error: Unexpected "#bar, :foo" at line 1 column 22.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"#bar, :foo\" at line 1 column 22.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / behavesLikeDb2Formatter: supports strings with G, GX, BX, UX prefixes
 -- input:
 SELECT G'blah blah', GX'01AC', BX'0101', UX'CCF239' FROM foo
 -- output:
-SELECT
-  G 'blah blah',
-  GX '01AC',
-  BX '0101',
-  UX 'CCF239'
-FROM
-  foo
+select g 'blah blah', gx '01AC', bx '0101', ux 'CCF239'
+from foo
 -- #endregion
 
 -- #region: sql-formatter / test / behavesLikeDb2Formatter: supports WITH isolation level modifiers for UPDATE statement
 -- input:
 UPDATE foo SET x = 10 WITH CS
 -- output:
-UPDATE foo
-SET
+update foo
+set
   x = 10
-WITH
-  CS
+with
+  cs
 -- #endregion
 
 -- #region: sql-formatter / test / behavesLikeMariaDbFormatter: allows $ character as part of identifiers
 -- input:
 SELECT $foo, some$$ident
--- error:
--- Error: Parse error: Unexpected "$$ident" at line 1 column 18.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"$$ident\" at line 1 column 18.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / behavesLikeMariaDbFormatter: does not wrap CHARACTER SET to multiple lines
 -- input:
 ALTER TABLE t MODIFY col1 VARCHAR(50) CHARACTER SET greek
 -- output:
-ALTER TABLE t MODIFY col1 VARCHAR(50) CHARACTER
-SET
+alter table t modify col1 varchar(50) character
+set
   greek
 -- #endregion
 
 -- #region: sql-formatter / test / behavesLikeMariaDbFormatter: supports @@ system variables
 -- input:
 SELECT @@GLOBAL.time, @@SYSTEM.date, @@hour FROM foo;
--- error:
--- Error: Parse error: Unexpected "@@GLOBAL.t" at line 1 column 8.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"@@GLOBAL.t\" at line 1 column 8.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / behavesLikeMariaDbFormatter: supports @`name` variables
 -- input:
 SELECT @`baz zaz` FROM tbl;
--- error:
--- Error: Parse error: Unexpected "@`baz zaz`" at line 1 column 8.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"@`baz zaz`\" at line 1 column 8.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / behavesLikeMariaDbFormatter: supports @variables
 -- input:
 SELECT @foo, @some_long.var$with$special.chars
 -- output:
-SELECT
-  @foo,
-  @some_long.var $with $special.chars
+select @foo, @some_long.var $with $special.chars
 -- #endregion
 
 -- #region: sql-formatter / test / behavesLikeMariaDbFormatter: supports *.* syntax in GRANT statement
 -- input:
 GRANT ALL ON *.* TO user2;
--- error:
--- Error: Parse error at token: . at line 1 column 15
--- Unexpected PROPERTY_ACCESS_OPERATOR token: {"type":"PROPERTY_ACCESS_OPERATOR","raw":".","text":".","start":14}. Instead, I was expecting to see one of the following:
--- 
--- A ASTERISK token based on:
---     asterisk$subexpression$1 →  ● %ASTERISK
---     asterisk →  ● asterisk$subexpression$1
---     free_form_sql$subexpression$1 →  ● asterisk
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A DELIMITER token based on:
---     statement$subexpression$1 →  ● %DELIMITER
---     statement → expressions_or_clauses ● statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A EOF token based on:
---     statement$subexpression$1 →  ● %EOF
---     statement → expressions_or_clauses ● statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A LINE_COMMENT token based on:
---     comment →  ● %LINE_COMMENT
---     asteriskless_free_form_sql$subexpression$1 →  ● comment
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A BLOCK_COMMENT token based on:
---     comment →  ● %BLOCK_COMMENT
---     asteriskless_free_form_sql$subexpression$1 →  ● comment
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A DISABLE_COMMENT token based on:
---     comment →  ● %DISABLE_COMMENT
---     asteriskless_free_form_sql$subexpression$1 →  ● comment
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A LIMIT token based on:
---     limit_clause →  ● %LIMIT _ expression_chain_ limit_clause$ebnf$1
---     clause$subexpression$1 →  ● limit_clause
---     clause →  ● clause$subexpression$1
---     expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause
---     expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A RESERVED_SELECT token based on:
---     select_clause →  ● %RESERVED_SELECT select_clause$subexpression$1
---     clause$subexpression$1 →  ● select_clause
---     clause →  ● clause$subexpression$1
---     expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause
---     expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A RESERVED_SELECT token based on:
---     select_clause →  ● %RESERVED_SELECT
---     clause$subexpression$1 →  ● select_clause
---     clause →  ● clause$subexpression$1
---     expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause
---     expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A RESERVED_CLAUSE token based on:
---     other_clause →  ● %RESERVED_CLAUSE other_clause$ebnf$1
---     clause$subexpression$1 →  ● other_clause
---     clause →  ● clause$subexpression$1
---     expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause
---     expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A RESERVED_SET_OPERATION token based on:
---     set_operation →  ● %RESERVED_SET_OPERATION set_operation$ebnf$1
---     clause$subexpression$1 →  ● set_operation
---     clause →  ● clause$subexpression$1
---     expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause
---     expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A AND token based on:
---     logic_operator$subexpression$1 →  ● %AND
---     logic_operator →  ● logic_operator$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● logic_operator
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A OR token based on:
---     logic_operator$subexpression$1 →  ● %OR
---     logic_operator →  ● logic_operator$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● logic_operator
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A XOR token based on:
---     logic_operator$subexpression$1 →  ● %XOR
---     logic_operator →  ● logic_operator$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● logic_operator
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A COMMA token based on:
---     comma$subexpression$1 →  ● %COMMA
---     comma →  ● comma$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● comma
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A WHEN token based on:
---     other_keyword$subexpression$1 →  ● %WHEN
---     other_keyword →  ● other_keyword$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● other_keyword
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A THEN token based on:
---     other_keyword$subexpression$1 →  ● %THEN
---     other_keyword →  ● other_keyword$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● other_keyword
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A ELSE token based on:
---     other_keyword$subexpression$1 →  ● %ELSE
---     other_keyword →  ● other_keyword$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● other_keyword
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A END token based on:
---     other_keyword$subexpression$1 →  ● %END
---     other_keyword →  ● other_keyword$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● other_keyword
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A BETWEEN token based on:
---     between_predicate →  ● %BETWEEN _ andless_expression_chain _ %AND _ andless_expression
---     asteriskless_andless_expression$subexpression$1 →  ● between_predicate
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A CASE token based on:
---     case_expression →  ● %CASE _ case_expression$ebnf$1 case_expression$ebnf$2 %END
---     asteriskless_andless_expression$subexpression$1 →  ● case_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A ARRAY_IDENTIFIER token based on:
---     array_subscript →  ● %ARRAY_IDENTIFIER _ square_brackets
---     atomic_expression$subexpression$1 →  ● array_subscript
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A ARRAY_KEYWORD token based on:
---     array_subscript →  ● %ARRAY_KEYWORD _ square_brackets
---     atomic_expression$subexpression$1 →  ● array_subscript
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A RESERVED_FUNCTION_NAME token based on:
---     function_call →  ● %RESERVED_FUNCTION_NAME _ parenthesis
---     atomic_expression$subexpression$1 →  ● function_call
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A "(" based on:
---     parenthesis →  ● "(" expressions_or_clauses ")"
---     atomic_expression$subexpression$1 →  ● parenthesis
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A "{" based on:
---     curly_braces →  ● "{" curly_braces$ebnf$1 "}"
---     atomic_expression$subexpression$1 →  ● curly_braces
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A "[" based on:
---     square_brackets →  ● "[" square_brackets$ebnf$1 "]"
---     atomic_expression$subexpression$1 →  ● square_brackets
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A RESERVED_PARAMETERIZED_DATA_TYPE token based on:
---     data_type →  ● %RESERVED_PARAMETERIZED_DATA_TYPE _ parenthesis
---     atomic_expression$subexpression$1 →  ● data_type
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A OPERATOR token based on:
---     operator$subexpression$1 →  ● %OPERATOR
---     operator →  ● operator$subexpression$1
---     atomic_expression$subexpression$1 →  ● operator
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A IDENTIFIER token based on:
---     identifier$subexpression$1 →  ● %IDENTIFIER
---     identifier →  ● identifier$subexpression$1
---     atomic_expression$subexpression$1 →  ● identifier
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A QUOTED_IDENTIFIER token based on:
---     identifier$subexpression$1 →  ● %QUOTED_IDENTIFIER
---     identifier →  ● identifier$subexpression$1
---     atomic_expression$subexpression$1 →  ● identifier
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A VARIABLE token based on:
---     identifier$subexpression$1 →  ● %VARIABLE
---     identifier →  ● identifier$subexpression$1
---     atomic_expression$subexpression$1 →  ● identifier
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A NAMED_PARAMETER token based on:
---     parameter$subexpression$1 →  ● %NAMED_PARAMETER
---     parameter →  ● parameter$subexpression$1
---     atomic_expression$subexpression$1 →  ● parameter
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A QUOTED_PARAMETER token based on:
---     parameter$subexpression$1 →  ● %QUOTED_PARAMETER
---     parameter →  ● parameter$subexpression$1
---     atomic_expression$subexpression$1 →  ● parameter
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A NUMBERED_PARAMETER token based on:
---     parameter$subexpression$1 →  ● %NUMBERED_PARAMETER
---     parameter →  ● parameter$subexpression$1
---     atomic_expression$subexpression$1 →  ● parameter
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A POSITIONAL_PARAMETER token based on:
---     parameter$subexpression$1 →  ● %POSITIONAL_PARAMETER
---     parameter →  ● parameter$subexpression$1
---     atomic_expression$subexpression$1 →  ● parameter
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A CUSTOM_PARAMETER token based on:
---     parameter$subexpression$1 →  ● %CUSTOM_PARAMETER
---     parameter →  ● parameter$subexpression$1
---     atomic_expression$subexpression$1 →  ● parameter
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A NUMBER token based on:
---     literal$subexpression$1 →  ● %NUMBER
---     literal →  ● literal$subexpression$1
---     atomic_expression$subexpression$1 →  ● literal
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A STRING token based on:
---     literal$subexpression$1 →  ● %STRING
---     literal →  ● literal$subexpression$1
---     atomic_expression$subexpression$1 →  ● literal
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A RESERVED_DATA_TYPE token based on:
---     data_type$subexpression$1 →  ● %RESERVED_DATA_TYPE
---     data_type →  ● data_type$subexpression$1
---     atomic_expression$subexpression$1 →  ● data_type
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A RESERVED_DATA_TYPE_PHRASE token based on:
---     data_type$subexpression$1 →  ● %RESERVED_DATA_TYPE_PHRASE
---     data_type →  ● data_type$subexpression$1
---     atomic_expression$subexpression$1 →  ● data_type
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A RESERVED_KEYWORD token based on:
---     keyword$subexpression$1 →  ● %RESERVED_KEYWORD
---     keyword →  ● keyword$subexpression$1
---     atomic_expression$subexpression$1 →  ● keyword
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A RESERVED_KEYWORD_PHRASE token based on:
---     keyword$subexpression$1 →  ● %RESERVED_KEYWORD_PHRASE
---     keyword →  ● keyword$subexpression$1
---     atomic_expression$subexpression$1 →  ● keyword
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A RESERVED_JOIN token based on:
---     keyword$subexpression$1 →  ● %RESERVED_JOIN
---     keyword →  ● keyword$subexpression$1
---     atomic_expression$subexpression$1 →  ● keyword
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
+-- error: "Parse error at token: . at line 1 column 15\nUnexpected PROPERTY_ACCESS_OPERATOR token: {\"type\":\"PROPERTY_ACCESS_OPERATOR\",\"raw\":\".\",\"text\":\".\",\"start\":14}. Instead, I was expecting to see one of the following:\n\nA ASTERISK token based on:\n    asterisk$subexpression$1 →  ● %ASTERISK\n    asterisk →  ● asterisk$subexpression$1\n    free_form_sql$subexpression$1 →  ● asterisk\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA DELIMITER token based on:\n    statement$subexpression$1 →  ● %DELIMITER\n    statement → expressions_or_clauses ● statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA EOF token based on:\n    statement$subexpression$1 →  ● %EOF\n    statement → expressions_or_clauses ● statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA LINE_COMMENT token based on:\n    comment →  ● %LINE_COMMENT\n    asteriskless_free_form_sql$subexpression$1 →  ● comment\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA BLOCK_COMMENT token based on:\n    comment →  ● %BLOCK_COMMENT\n    asteriskless_free_form_sql$subexpression$1 →  ● comment\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA DISABLE_COMMENT token based on:\n    comment →  ● %DISABLE_COMMENT\n    asteriskless_free_form_sql$subexpression$1 →  ● comment\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA LIMIT token based on:\n    limit_clause →  ● %LIMIT _ expression_chain_ limit_clause$ebnf$1\n    clause$subexpression$1 →  ● limit_clause\n    clause →  ● clause$subexpression$1\n    expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause\n    expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA RESERVED_SELECT token based on:\n    select_clause →  ● %RESERVED_SELECT select_clause$subexpression$1\n    clause$subexpression$1 →  ● select_clause\n    clause →  ● clause$subexpression$1\n    expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause\n    expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA RESERVED_SELECT token based on:\n    select_clause →  ● %RESERVED_SELECT\n    clause$subexpression$1 →  ● select_clause\n    clause →  ● clause$subexpression$1\n    expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause\n    expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA RESERVED_CLAUSE token based on:\n    other_clause →  ● %RESERVED_CLAUSE other_clause$ebnf$1\n    clause$subexpression$1 →  ● other_clause\n    clause →  ● clause$subexpression$1\n    expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause\n    expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA RESERVED_SET_OPERATION token based on:\n    set_operation →  ● %RESERVED_SET_OPERATION set_operation$ebnf$1\n    clause$subexpression$1 →  ● set_operation\n    clause →  ● clause$subexpression$1\n    expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause\n    expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA AND token based on:\n    logic_operator$subexpression$1 →  ● %AND\n    logic_operator →  ● logic_operator$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● logic_operator\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA OR token based on:\n    logic_operator$subexpression$1 →  ● %OR\n    logic_operator →  ● logic_operator$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● logic_operator\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA XOR token based on:\n    logic_operator$subexpression$1 →  ● %XOR\n    logic_operator →  ● logic_operator$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● logic_operator\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA COMMA token based on:\n    comma$subexpression$1 →  ● %COMMA\n    comma →  ● comma$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● comma\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA WHEN token based on:\n    other_keyword$subexpression$1 →  ● %WHEN\n    other_keyword →  ● other_keyword$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● other_keyword\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA THEN token based on:\n    other_keyword$subexpression$1 →  ● %THEN\n    other_keyword →  ● other_keyword$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● other_keyword\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA ELSE token based on:\n    other_keyword$subexpression$1 →  ● %ELSE\n    other_keyword →  ● other_keyword$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● other_keyword\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA END token based on:\n    other_keyword$subexpression$1 →  ● %END\n    other_keyword →  ● other_keyword$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● other_keyword\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA BETWEEN token based on:\n    between_predicate →  ● %BETWEEN _ andless_expression_chain _ %AND _ andless_expression\n    asteriskless_andless_expression$subexpression$1 →  ● between_predicate\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA CASE token based on:\n    case_expression →  ● %CASE _ case_expression$ebnf$1 case_expression$ebnf$2 %END\n    asteriskless_andless_expression$subexpression$1 →  ● case_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA ARRAY_IDENTIFIER token based on:\n    array_subscript →  ● %ARRAY_IDENTIFIER _ square_brackets\n    atomic_expression$subexpression$1 →  ● array_subscript\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA ARRAY_KEYWORD token based on:\n    array_subscript →  ● %ARRAY_KEYWORD _ square_brackets\n    atomic_expression$subexpression$1 →  ● array_subscript\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA RESERVED_FUNCTION_NAME token based on:\n    function_call →  ● %RESERVED_FUNCTION_NAME _ parenthesis\n    atomic_expression$subexpression$1 →  ● function_call\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA \"(\" based on:\n    parenthesis →  ● \"(\" expressions_or_clauses \")\"\n    atomic_expression$subexpression$1 →  ● parenthesis\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA \"{\" based on:\n    curly_braces →  ● \"{\" curly_braces$ebnf$1 \"}\"\n    atomic_expression$subexpression$1 →  ● curly_braces\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA \"[\" based on:\n    square_brackets →  ● \"[\" square_brackets$ebnf$1 \"]\"\n    atomic_expression$subexpression$1 →  ● square_brackets\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA RESERVED_PARAMETERIZED_DATA_TYPE token based on:\n    data_type →  ● %RESERVED_PARAMETERIZED_DATA_TYPE _ parenthesis\n    atomic_expression$subexpression$1 →  ● data_type\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA OPERATOR token based on:\n    operator$subexpression$1 →  ● %OPERATOR\n    operator →  ● operator$subexpression$1\n    atomic_expression$subexpression$1 →  ● operator\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA IDENTIFIER token based on:\n    identifier$subexpression$1 →  ● %IDENTIFIER\n    identifier →  ● identifier$subexpression$1\n    atomic_expression$subexpression$1 →  ● identifier\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA QUOTED_IDENTIFIER token based on:\n    identifier$subexpression$1 →  ● %QUOTED_IDENTIFIER\n    identifier →  ● identifier$subexpression$1\n    atomic_expression$subexpression$1 →  ● identifier\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA VARIABLE token based on:\n    identifier$subexpression$1 →  ● %VARIABLE\n    identifier →  ● identifier$subexpression$1\n    atomic_expression$subexpression$1 →  ● identifier\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA NAMED_PARAMETER token based on:\n    parameter$subexpression$1 →  ● %NAMED_PARAMETER\n    parameter →  ● parameter$subexpression$1\n    atomic_expression$subexpression$1 →  ● parameter\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA QUOTED_PARAMETER token based on:\n    parameter$subexpression$1 →  ● %QUOTED_PARAMETER\n    parameter →  ● parameter$subexpression$1\n    atomic_expression$subexpression$1 →  ● parameter\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA NUMBERED_PARAMETER token based on:\n    parameter$subexpression$1 →  ● %NUMBERED_PARAMETER\n    parameter →  ● parameter$subexpression$1\n    atomic_expression$subexpression$1 →  ● parameter\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA POSITIONAL_PARAMETER token based on:\n    parameter$subexpression$1 →  ● %POSITIONAL_PARAMETER\n    parameter →  ● parameter$subexpression$1\n    atomic_expression$subexpression$1 →  ● parameter\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA CUSTOM_PARAMETER token based on:\n    parameter$subexpression$1 →  ● %CUSTOM_PARAMETER\n    parameter →  ● parameter$subexpression$1\n    atomic_expression$subexpression$1 →  ● parameter\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA NUMBER token based on:\n    literal$subexpression$1 →  ● %NUMBER\n    literal →  ● literal$subexpression$1\n    atomic_expression$subexpression$1 →  ● literal\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA STRING token based on:\n    literal$subexpression$1 →  ● %STRING\n    literal →  ● literal$subexpression$1\n    atomic_expression$subexpression$1 →  ● literal\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA RESERVED_DATA_TYPE token based on:\n    data_type$subexpression$1 →  ● %RESERVED_DATA_TYPE\n    data_type →  ● data_type$subexpression$1\n    atomic_expression$subexpression$1 →  ● data_type\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA RESERVED_DATA_TYPE_PHRASE token based on:\n    data_type$subexpression$1 →  ● %RESERVED_DATA_TYPE_PHRASE\n    data_type →  ● data_type$subexpression$1\n    atomic_expression$subexpression$1 →  ● data_type\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA RESERVED_KEYWORD token based on:\n    keyword$subexpression$1 →  ● %RESERVED_KEYWORD\n    keyword →  ● keyword$subexpression$1\n    atomic_expression$subexpression$1 →  ● keyword\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA RESERVED_KEYWORD_PHRASE token based on:\n    keyword$subexpression$1 →  ● %RESERVED_KEYWORD_PHRASE\n    keyword →  ● keyword$subexpression$1\n    atomic_expression$subexpression$1 →  ● keyword\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA RESERVED_JOIN token based on:\n    keyword$subexpression$1 →  ● %RESERVED_JOIN\n    keyword →  ● keyword$subexpression$1\n    atomic_expression$subexpression$1 →  ● keyword\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1"
 -- #endregion
 
 -- #region: sql-formatter / test / behavesLikeMariaDbFormatter: supports identifiers that start with numbers
 -- input:
 SELECT 4four, 12345e, 12e45, $567 FROM tbl
--- error:
--- Error: Parse error: Unexpected "4four, 123" at line 1 column 8.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"4four, 123\" at line 1 column 8.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / behavesLikeMariaDbFormatter: supports INSERT ... ON DUPLICATE KEY UPDATE
 -- input:
 INSERT INTO customer VALUES ('John','Doe') ON DUPLICATE KEY UPDATE fname='Untitled';
 -- output:
-INSERT INTO
+insert into
   customer
-VALUES
-  ('John', 'Doe') ON DUPLICATE KEY
-UPDATE fname = 'Untitled';
+values
+  ('John', 'Doe') on duplicate key
+update fname = 'Untitled';
 -- #endregion
 
 -- #region: sql-formatter / test / behavesLikeMariaDbFormatter: supports INSERT ... ON DUPLICATE KEY UPDATE + VALUES() function
 -- input:
 INSERT INTO customer VALUES ('John','Doe') ON DUPLICATE KEY UPDATE col=VALUES(col2);
 -- output:
-INSERT INTO
+insert into
   customer
-VALUES
-  ('John', 'Doe') ON DUPLICATE KEY
-UPDATE col =
-VALUES
+values
+  ('John', 'Doe') on duplicate key
+update col =
+values
   (col2);
 -- #endregion
 
@@ -737,9 +133,9 @@ VALUES
 -- input:
 REPLACE INTO tbl VALUES (1,'Leopard'),(2,'Dog');
 -- output:
-REPLACE INTO
+replace into
   tbl
-VALUES
+values
   (1, 'Leopard'),
   (2, 'Dog');
 -- #endregion
@@ -747,25 +143,19 @@ VALUES
 -- #region: sql-formatter / test / behavesLikeMariaDbFormatter: supports setting variables: @`var` :=
 -- input:
 SET @`foo` := (SELECT * FROM tbl);
--- error:
--- Error: Parse error: Unexpected "@`foo` := " at line 1 column 5.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"@`foo` := \" at line 1 column 5.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / behavesLikeMariaDbFormatter: supports setting variables: @var :=
 -- input:
 SET @foo := 10;
--- error:
--- Error: Parse error: Unexpected ":= 10;" at line 1 column 10.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \":= 10;\" at line 1 column 10.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / behavesLikeMariaDbFormatter: supports unicode identifiers that start with numbers
 -- input:
 SELECT 1ä FROM tbl
--- error:
--- Error: Parse error: Unexpected "1ä FROM tb" at line 1 column 8.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"1ä FROM tb\" at line 1 column 8.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / behavesLikeMariaDbFormatter: uppercases only reserved keywords
@@ -777,10 +167,8 @@ create table account (id int comment 'the most important column');
 -- output:
 CREATE TABLE account (id INT comment 'the most important column');
 
-SELECT
-  *
-FROM
-  mysql.user;
+SELECT *
+FROM mysql.user;
 
 INSERT INTO
   user (id, name)
@@ -791,20 +179,15 @@ VALUES
 -- #region: sql-formatter / test / behavesLikePostgresqlFormatter: allows $ character as part of identifiers
 -- input:
 SELECT foo$, some$$ident
--- error:
--- Error: Parse error: Unexpected "$, some$$i" at line 1 column 11.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"$, some$$i\" at line 1 column 11.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / behavesLikePostgresqlFormatter: allows TYPE to be used as an identifier
 -- input:
 SELECT type, modified_at FROM items;
 -- output:
-SELECT
-  type,
-  modified_at
-FROM
-  items;
+select type, modified_at
+from items;
 -- #endregion
 
 -- #region: sql-formatter / test / behavesLikePostgresqlFormatter: does not recognize common fields names as keywords
@@ -812,15 +195,8 @@ FROM
 -- input:
 SELECT id, type, name, location, label, password FROM release;
 -- output:
-SELECT
-  id,
-  type,
-  name,
-  location,
-  label,
-  password
-FROM
-  RELEASE;
+SELECT id, type, name, location, label, password
+FROM RELEASE;
 -- #endregion
 
 -- #region: sql-formatter / test / behavesLikePostgresqlFormatter: formats ALTER TABLE ... ALTER COLUMN
@@ -831,23 +207,23 @@ ALTER TABLE t ALTER COLUMN foo SET DATA TYPE VARCHAR;
          ALTER TABLE t ALTER COLUMN foo SET NOT NULL;
          ALTER TABLE t ALTER COLUMN foo DROP NOT NULL;
 -- output:
-ALTER TABLE t ALTER COLUMN foo
-SET
-  DATA TYPE VARCHAR;
+alter table t alter column foo
+set
+  data type varchar;
 
-ALTER TABLE t ALTER COLUMN foo
-SET
-  DEFAULT 5;
+alter table t alter column foo
+set
+  default 5;
 
-ALTER TABLE t ALTER COLUMN foo
-DROP DEFAULT;
+alter table t alter column foo
+drop default;
 
-ALTER TABLE t ALTER COLUMN foo
-SET
-  NOT NULL;
+alter table t alter column foo
+set
+  not null;
 
-ALTER TABLE t ALTER COLUMN foo
-DROP NOT NULL;
+alter table t alter column foo
+drop not null;
 -- #endregion
 
 -- #region: sql-formatter / test / behavesLikePostgresqlFormatter: formats DEFAULT VALUES clause
@@ -858,19 +234,17 @@ INSERT INTO items default values RETURNING id;
 INSERT INTO
   items DEFAULT
 VALUES
-RETURNING
-  id;
+RETURNING id;
 -- #endregion
 
 -- #region: sql-formatter / test / behavesLikePostgresqlFormatter: formats SELECT DISTINCT ON () syntax
 -- input:
 SELECT DISTINCT ON (c1, c2) c1, c2 FROM tbl;
 -- output:
-SELECT DISTINCT
-  ON (c1, c2) c1,
+select distinct
+  on (c1, c2) c1,
   c2
-FROM
-  tbl;
+from tbl;
 -- #endregion
 
 -- #region: sql-formatter / test / behavesLikePostgresqlFormatter: formats TIMESTAMP WITH TIMEZONE as data type
@@ -889,9 +263,7 @@ create table time_table (
 -- #region: sql-formatter / test / behavesLikePostgresqlFormatter: formats type-cast operator without spaces
 -- input:
 SELECT 2 :: numeric AS foo;
--- error:
--- Error: Parse error: Unexpected ":: numeric" at line 1 column 10.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \":: numeric\" at line 1 column 10.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / behavesLikePostgresqlFormatter: treats TEXT as data-type (not as plain keyword)
@@ -899,27 +271,24 @@ SELECT 2 :: numeric AS foo;
 -- input:
 CREATE TABLE foo (items text);
 -- output:
-CREATE TABLE foo (items TEXT);
+create table foo (items TEXT);
 -- #endregion
 
 -- #region: sql-formatter / test / behavesLikePostgresqlFormatter: treats TEXT as data-type (not as plain keyword)
 -- config: {"keywordCase":"upper"}
 -- input:
 CREATE TABLE foo (text VARCHAR(100));
--- output: <unchanged>
+-- output:
+CREATE TABLE foo (text varchar(100));
 -- #endregion
 
 -- #region: sql-formatter / test / behavesLikeSqlFormatter: allows keywords as column names in tbl.col syntax
 -- input:
 SELECT mytable.update, mytable.select FROM mytable WHERE mytable.from > 10;
 -- output:
-SELECT
-  mytable.update,
-  mytable.select
-FROM
-  mytable
-WHERE
-  mytable.from > 10;
+select mytable.update, mytable.select
+from mytable
+where mytable.from > 10;
 -- #endregion
 
 -- #region: sql-formatter / test / behavesLikeSqlFormatter: breaks long parenthesized lists to multiple lines
@@ -930,7 +299,7 @@ WHERE
       COALESCE (dq.id_discounter_shopping = 2, 'amount', 'percentage') FROM foo);
     
 -- output:
-INSERT INTO
+insert into
   some_table (
     id_product,
     id_shop,
@@ -938,18 +307,18 @@ INSERT INTO
     id_country,
     id_registration
   ) (
-    SELECT
-      COALESCE(
+    select
+      coalesce(
         dq.id_discounter_shopping = 2,
         dq.value,
         dq.value / 100
       ),
-      COALESCE(
+      coalesce(
         dq.id_discounter_shopping = 2,
         'amount',
         'percentage'
       )
-    FROM
+    from
       foo
   );
 -- #endregion
@@ -958,13 +327,12 @@ INSERT INTO
 -- input:
 SELECT DISTINCT name, ROUND(age/7) field1, 18 + 20 AS field2, 'some string' FROM foo;
 -- output:
-SELECT DISTINCT
+select distinct
   name,
-  ROUND(age / 7) field1,
-  18 + 20 AS field2,
+  round(age / 7) field1,
+  18 + 20 as field2,
   'some string'
-FROM
-  foo;
+from foo;
 -- #endregion
 
 -- #region: sql-formatter / test / behavesLikeSqlFormatter: formats long double parenthized queries to multiple lines
@@ -982,9 +350,9 @@ FROM
 -- input:
 INSERT INTO TestIds (id) VALUES (4),(5), (6),(7),(9),(10),(11);
 -- output:
-INSERT INTO
-  TestIds (id)
-VALUES
+insert into
+  testids (id)
+values
   (4),
   (5),
   (6),
@@ -1000,45 +368,34 @@ VALUES
       SELECT * FROM foo ORDER BY col1 ASC, col2 DESC;
     
 -- output:
-SELECT
-  *
-FROM
-  foo
-ORDER BY
-  col1 ASC,
-  col2 DESC;
+select *
+from foo
+order by col1 asc, col2 desc;
 -- #endregion
 
 -- #region: sql-formatter / test / behavesLikeSqlFormatter: formats SELECT query with SELECT query inside it
 -- input:
 SELECT *, SUM(*) AS total FROM (SELECT * FROM Posts WHERE age > 10) WHERE a > b
 -- output:
-SELECT
-  *,
-  SUM(*) AS total
-FROM
+select *, sum(*) as total
+from
   (
-    SELECT
+    select
       *
-    FROM
-      Posts
-    WHERE
+    from
+      posts
+    where
       age > 10
   )
-WHERE
-  a > b
+where a > b
 -- #endregion
 
 -- #region: sql-formatter / test / behavesLikeSqlFormatter: formats SELECT with asterisks
 -- input:
 SELECT tbl.*, count(*), col1 * col2 FROM tbl;
 -- output:
-SELECT
-  tbl.*,
-  count(*),
-  col1 * col2
-FROM
-  tbl;
+select tbl.*, count(*), col1 * col2
+from tbl;
 -- #endregion
 
 -- #region: sql-formatter / test / behavesLikeSqlFormatter: formats SELECT with complex WHERE
@@ -1048,16 +405,14 @@ FROM
       AND ( (Column2 = Column3 OR Column4 >= ABS(5)) );
     
 -- output:
-SELECT
-  *
-FROM
-  foo
-WHERE
-  Column1 = 'testing'
-  AND (
+select *
+from foo
+where
+  column1 = 'testing'
+  and (
     (
-      Column2 = Column3
-      OR Column4 >= ABS(5)
+      column2 = column3
+      or column4 >= abs(5)
     )
   );
 -- #endregion
@@ -1069,18 +424,12 @@ WHERE
       HAVING column > 10 ORDER BY other_column;
     
 -- output:
-SELECT
-  *
-FROM
-  foo
-WHERE
-  name = 'John'
-GROUP BY
-  some_column
-HAVING
-  column > 10
-ORDER BY
-  other_column;
+select *
+from foo
+where name = 'John'
+group by some_column
+having column > 10
+order by other_column;
 -- #endregion
 
 -- #region: sql-formatter / test / behavesLikeSqlFormatter: formats short double parenthized queries to one line
@@ -1095,42 +444,32 @@ SELECT * FROM foo LEFT
  JOIN mycol ORDER 
  BY blah
 -- output:
-SELECT
-  *
-FROM
-  foo
-  LEFT JOIN mycol
-ORDER BY
-  blah
+select *
+from foo left join mycol
+order by blah
 -- #endregion
 
 -- #region: sql-formatter / test / behavesLikeSqlFormatter: keeps short parenthesized list with nested parenthesis on single line
 -- input:
 SELECT (a + b * (c - SIN(1)));
 -- output:
-SELECT
-  (a + b * (c - SIN(1)));
+select (a + b * (c - sin(1)));
 -- #endregion
 
 -- #region: sql-formatter / test / behavesLikeSqlFormatter: supports unicode letters in identifiers
 -- input:
 SELECT 结合使用, тест FROM töörõõm;
 -- output:
-SELECT
-  结合使用,
-  тест
-FROM
-  töörõõm;
+select 结合使用, тест
+from töörõõm;
 -- #endregion
 
 -- #region: sql-formatter / test / behavesLikeSqlFormatter: supports unicode numbers in identifiers
 -- input:
 SELECT my၁၂၃ FROM tbl༡༢༣;
 -- output:
-SELECT
-  my၁၂၃
-FROM
-  tbl༡༢༣;
+select my၁၂၃
+from tbl༡༢༣;
 -- #endregion
 
 -- #region: sql-formatter / test / bigquery.test: does not support lowercasing of STRUCT
@@ -1138,19 +477,15 @@ FROM
 -- input:
 SELECT STRUCT<Nr INT64, myName STRING>(1,"foo");
 -- output:
-select
-  STRUCT < Nr INT64,
-  myName STRING > (1, "foo");
+select struct < nr int64, myname string > (1, "foo");
 -- #endregion
 
 -- #region: sql-formatter / test / bigquery.test: PIVOT operator
 -- input:
 SELECT * FROM Produce PIVOT(sales FOR quarter IN (Q1, Q2, Q3, Q4));
 -- output:
-SELECT
-  *
-FROM
-  Produce PIVOT (sales FOR quarter IN (Q1, Q2, Q3, Q4));
+select *
+from produce pivot (sales for quarter in (q1, q2, q3, q4));
 -- #endregion
 
 -- #region: sql-formatter / test / bigquery.test: STRUCT and ARRAY type case is affected by dataTypeCase option
@@ -1158,17 +493,13 @@ FROM
 -- input:
 SELECT array<struct<y int64, z string>>[(1, "foo")]
 -- output:
-SELECT
-  ARRAY < struct < y int64,
-  z string >> [(1, "foo")]
+select ARRAY < struct < y int64, z string >> [(1, "foo")]
 -- #endregion
 
 -- #region: sql-formatter / test / bigquery.test: supports @@variables
 -- input:
 SELECT @@error.message, @@time_zone
--- error:
--- Error: Parse error: Unexpected "@@error.me" at line 1 column 8.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"@@error.me\" at line 1 column 8.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / bigquery.test: supports array subscript operator
@@ -1181,13 +512,12 @@ SELECT @@error.message, @@time_zone
       FROM Items;
     
 -- output:
-SELECT
-  item_array [OFFSET(1)] AS item_offset,
-  item_array [ORDINAL(1)] AS item_ordinal,
-  item_array [SAFE_OFFSET(6)] AS item_safe_offset,
-  item_array [SAFE_ORDINAL(6)] AS item_safe_ordinal
-FROM
-  Items;
+select
+  item_array [OFFSET(1)] as item_offset,
+  item_array [ORDINAL(1)] as item_ordinal,
+  item_array [SAFE_OFFSET(6)] as item_safe_offset,
+  item_array [SAFE_ORDINAL(6)] as item_safe_ordinal
+from items;
 -- #endregion
 
 -- #region: sql-formatter / test / bigquery.test: supports dashes inside identifiers
@@ -1195,12 +525,9 @@ FROM
 SELECT alpha-foo, where-long-identifier
 FROM beta
 -- output:
-SELECT
-  alpha - foo,
-where
-  - long - identifier
-FROM
-  beta
+select alpha - foo,
+where - long - identifier
+from beta
 -- #endregion
 
 -- #region: sql-formatter / test / bigquery.test: supports named arguments
@@ -1209,34 +536,31 @@ FROM
       SELECT MAKE_INTERVAL(1, day=>2, minute => 3)
       
 -- output:
-SELECT
-  MAKE_INTERVAL (1, day = > 2, minute = > 3)
+select make_interval (1, day = > 2, minute = > 3)
 -- #endregion
 
 -- #region: sql-formatter / test / bigquery.test: supports parametric ARRAY
 -- input:
 SELECT ARRAY<FLOAT>[1]
 -- output:
-SELECT
-  ARRAY < FLOAT > [1]
+select array < float > [1]
 -- #endregion
 
 -- #region: sql-formatter / test / bigquery.test: supports parametric STRUCT
 -- input:
 SELECT STRUCT<ARRAY<INT64>>([])
 -- output:
-SELECT
-  STRUCT < ARRAY < INT64 >> ([])
+select struct < array < int64 >> ([])
 -- #endregion
 
 -- #region: sql-formatter / test / bigquery.test: supports parametric STRUCT with named fields
 -- input:
 SELECT STRUCT<y INT64, z STRING>(1,"foo"), STRUCT<arr ARRAY<INT64>>([1,2,3]);
 -- output:
-SELECT
-  STRUCT < y INT64,
-  z STRING > (1, "foo"),
-  STRUCT < arr ARRAY < INT64 >> ([1,2,3]);
+select
+  struct < y int64,
+  z string > (1, "foo"),
+  struct < arr array < int64 >> ([1,2,3]);
 -- #endregion
 
 -- #region: sql-formatter / test / bigquery.test: supports QUALIFY clause
@@ -1250,67 +574,52 @@ SELECT
         QUALIFY rank <= 3
       
 -- output:
-SELECT
+select
   item,
-  RANK() OVER (
-    PARTITION BY
+  rank() over (
+    partition by
       category
-    ORDER BY
-      purchases DESC
-  ) AS rank
-FROM
-  Produce
-WHERE
-  Produce.category = 'vegetable' QUALIFY rank <= 3
+    order by
+      purchases desc
+  ) as rank
+from produce
+where produce.category = 'vegetable' qualify rank <= 3
 -- #endregion
 
 -- #region: sql-formatter / test / bigquery.test: supports strings with r, b and rb prefixes with triple-quoted strings
 -- input:
 SELECT R'''blah''', B'''sah''', rb"""hu"h""", br'''bulu bulu''', r"""haha""", BR'''la' la''' FROM foo
--- error:
--- Error: Parse error: Unexpected "", BR'''la" at line 1 column 76.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"\", BR'''la\" at line 1 column 76.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / bigquery.test: supports strings with rb prefixes
 -- input:
 SELECT rb"huh", br'bulu bulu', BR'la la' FROM foo
 -- output:
-SELECT
-  rb "huh",
-  br 'bulu bulu',
-  BR 'la la'
-FROM
-  foo
+select rb "huh", br 'bulu bulu', br 'la la'
+from foo
 -- #endregion
 
 -- #region: sql-formatter / test / bigquery.test: supports STRUCT types
 -- input:
 SELECT STRUCT("Alpha" as name, [23.4, 26.3, 26.4] as splits) FROM beta
 -- output:
-SELECT
-  STRUCT ("Alpha" as name, [23.4, 26.3, 26.4] as splits)
-FROM
-  beta
+select struct ("Alpha" as name, [23.4, 26.3, 26.4] as splits)
+from beta
 -- #endregion
 
 -- #region: sql-formatter / test / bigquery.test: supports trailing comma in SELECT clause
 -- input:
 SELECT foo, bar, FROM tbl;
 -- output:
-SELECT
-  foo,
-  bar,
-FROM
-  tbl;
+select foo, bar,
+from tbl;
 -- #endregion
 
 -- #region: sql-formatter / test / bigquery.test: supports triple-quoted strings
 -- input:
 SELECT '''hello 'my' world''', """hello "my" world""", """\"quoted\"""" FROM foo
--- error:
--- Error: Parse error: Unexpected "\"""" FROM" at line 1 column 67.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"\\\"\"\"\" FROM\" at line 1 column 67.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / bigquery.test: supports uppercasing of STRUCT
@@ -1318,39 +627,31 @@ SELECT '''hello 'my' world''', """hello "my" world""", """\"quoted\"""" FROM foo
 -- input:
 select struct<Nr int64, myName string>(1,"foo");
 -- output:
-SELECT
-  struct < Nr int64,
-  myName string > (1, "foo");
+SELECT struct < nr int64, myname string > (1, "foo");
 -- #endregion
 
 -- #region: sql-formatter / test / bigquery.test: TABLESAMPLE SYSTEM operator
 -- input:
 SELECT * FROM dataset.my_table TABLESAMPLE SYSTEM (10 PERCENT);
 -- output:
-SELECT
-  *
-FROM
-  dataset.my_table TABLESAMPLE SYSTEM (10 PERCENT);
+select *
+from dataset.my_table tablesample system (10 percent);
 -- #endregion
 
 -- #region: sql-formatter / test / bigquery.test: UNNEST operator
 -- input:
 SELECT * FROM UNNEST ([1, 2, 3]);
 -- output:
-SELECT
-  *
-FROM
-  UNNEST ([1, 2, 3]);
+select *
+from unnest ([1, 2, 3]);
 -- #endregion
 
 -- #region: sql-formatter / test / bigquery.test: UNPIVOT operator
 -- input:
 SELECT * FROM Produce UNPIVOT(sales FOR quarter IN (Q1, Q2, Q3, Q4));
 -- output:
-SELECT
-  *
-FROM
-  Produce UNPIVOT (sales FOR quarter IN (Q1, Q2, Q3, Q4));
+select *
+from produce unpivot (sales for quarter in (q1, q2, q3, q4));
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test format case
@@ -1361,103 +662,104 @@ FROM
         CREATE TABLE table2(y String) ENGINE = MergeTree ORDER BY tuple();
       
 -- output:
-CREATE TABLE table1 (x Int32) ENGINE = MergeTree
-ORDER BY
-  tuple () PARALLEL
-WITH
-CREATE TABLE table2 (y String) ENGINE = MergeTree
-ORDER BY
-  tuple ();
+create table table1 (x int32) engine = mergetree
+order by tuple () parallel
+with
+create table table2 (y string) engine = mergetree
+order by tuple ();
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test format case
 -- input:
 DESC TABLE table1;
--- output: <unchanged>
+-- output:
+desc table table1;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test format case
 -- input:
 DESCRIBE TABLE table1;
--- output: <unchanged>
+-- output:
+describe table table1;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats ALTER QUOTA IF EXISTS qA FOR INTERVAL 15 month MAX queries = 123 TO CURRENT_USER;
 -- input:
 ALTER QUOTA IF EXISTS qA FOR INTERVAL 15 month MAX queries = 123 TO CURRENT_USER;
--- output: <unchanged>
+-- output:
+alter quota if exists qa for interval 15 month max queries = 123 to current_user;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats ALTER QUOTA IF EXISTS qB FOR INTERVAL 30 minute MAX execution_time = 0.5, FOR INTERVAL 5 quarter MAX queries = 321, errors = 10 TO d
 -- input:
 ALTER QUOTA IF EXISTS qB RENAME TO qC NOT KEYED FOR INTERVAL 30 minute MAX execution_time = 0.5 FOR INTERVAL 5 quarter MAX queries = 321, errors = 10 TO default;
 -- output:
-ALTER QUOTA IF EXISTS qB
-RENAME TO qC NOT KEYED FOR INTERVAL 30 minute MAX execution_time = 0.5 FOR INTERVAL 5 quarter MAX queries = 321,
-errors = 10 TO default;
+alter quota if exists qb
+rename to qc not keyed for interval 30 minute max execution_time = 0.5 for interval 5 quarter max queries = 321,
+errors = 10 to default;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats ALTER ROW POLICY
 -- input:
 ALTER ROW POLICY IF EXISTS policy1 ON CLUSTER cluster_name1 ON database1.table1 RENAME TO new_name1;
 -- output:
-ALTER ROW POLICY IF EXISTS policy1 ON CLUSTER cluster_name1 ON database1.table1
-RENAME TO new_name1;
+alter row policy if exists policy1 on cluster cluster_name1 on database1.table1
+rename to new_name1;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats ALTER ROW POLICY with multiple policies
 -- input:
 ALTER ROW POLICY IF EXISTS policy1 ON CLUSTER cluster_name1 ON database1.table1 RENAME TO new_name1, policy2 ON CLUSTER cluster_name2 ON database2.table2 RENAME TO new_name2;
 -- output:
-ALTER ROW POLICY IF EXISTS policy1 ON CLUSTER cluster_name1 ON database1.table1
-RENAME TO new_name1,
-policy2 ON CLUSTER cluster_name2 ON database2.table2
-RENAME TO new_name2;
+alter row policy if exists policy1 on cluster cluster_name1 on database1.table1
+rename to new_name1,
+policy2 on cluster cluster_name2 on database2.table2
+rename to new_name2;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats ALTER TABLE ... RENAME COLUMN statement
 -- input:
 ALTER TABLE supplier RENAME COLUMN supplier_id TO id;
 -- output:
-ALTER TABLE supplier
-RENAME COLUMN supplier_id TO id;
+alter table supplier
+rename column supplier_id to id;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats ALTER TABLE ADD CONSTRAINT
 -- input:
 ALTER TABLE t1 ADD CONSTRAINT IF NOT EXISTS c1 CHECK (a > 0);
 -- output:
-ALTER TABLE t1
-ADD CONSTRAINT IF NOT EXISTS c1 CHECK (a > 0);
+alter table t1
+add constraint if not exists c1 check (a > 0);
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats ALTER TABLE ADD INDEX
 -- input:
 ALTER TABLE db.table_name ADD INDEX my_index column1 TYPE minmax GRANULARITY 1 FIRST;
 -- output:
-ALTER TABLE db.table_name
-ADD INDEX my_index column1 TYPE minmax GRANULARITY 1 FIRST;
+alter table db.table_name
+add index my_index column1 type minmax granularity 1 first;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats ALTER TABLE ADD INDEX
 -- input:
 ALTER TABLE db.table_name ON CLUSTER 'my_cluster' ADD INDEX IF NOT EXISTS my_index (column1 + column2) TYPE set(100) GRANULARITY 2 AFTER another_column;
 -- output:
-ALTER TABLE db.table_name ON CLUSTER 'my_cluster'
-ADD INDEX IF NOT EXISTS my_index (column1 + column2) TYPE
+alter table db.table_name on cluster 'my_cluster'
+add index if not exists my_index (column1 + column2) type
 set
-  (100) GRANULARITY 2 AFTER another_column;
+  (100) granularity 2 after another_column;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats ALTER TABLE ADD PROJECTION
 -- input:
 ALTER TABLE visits_order ADD PROJECTION user_name_projection (SELECT * ORDER BY user_name);
 -- output:
-ALTER TABLE visits_order
-ADD PROJECTION user_name_projection (
-  SELECT
+alter table visits_order
+add projection user_name_projection (
+  select
     *
-  ORDER BY
+  order by
     user_name
 );
 -- #endregion
@@ -1466,144 +768,140 @@ ADD PROJECTION user_name_projection (
 -- input:
 ALTER TABLE t1 ADD STATISTICS (c, d) TYPE TDigest, Uniq;
 -- output:
-ALTER TABLE t1
-ADD STATISTICS (c, d) TYPE TDigest,
-Uniq;
+alter table t1
+add statistics (c, d) type tdigest,
+uniq;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats ALTER TABLE APPLY DELETED MASK with ON CLUSTER and IN PARTITION
 -- input:
 ALTER TABLE visits ON CLUSTER prod APPLY DELETED MASK IN PARTITION '2025-01-01';
--- output: <unchanged>
+-- output:
+alter table visits on cluster prod apply deleted mask in partition '2025-01-01';
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats ALTER TABLE CLEAR INDEX
 -- input:
 ALTER TABLE db.table_name ON CLUSTER 'my_cluster' CLEAR INDEX IF EXISTS my_index IN PARTITION '202301';
--- output: <unchanged>
+-- output:
+alter table db.table_name on cluster 'my_cluster' clear index if exists my_index in partition '202301';
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats ALTER TABLE DELETE WHERE
 -- input:
 ALTER TABLE db.events ON CLUSTER prod DELETE WHERE timestamp < now() - INTERVAL 30 DAY;
 -- output:
-ALTER TABLE db.events ON CLUSTER prod DELETE
-WHERE
-  timestamp < now () - INTERVAL 30 DAY;
+alter table db.events on cluster prod delete
+where timestamp < now () - interval 30 day;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats ALTER TABLE DROP COLUMN
 -- input:
 ALTER TABLE visits DROP COLUMN browser;
 -- output:
-ALTER TABLE visits
-DROP COLUMN browser;
+alter table visits
+drop column browser;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats ALTER TABLE DROP CONSTRAINT
 -- input:
 ALTER TABLE t1 DROP CONSTRAINT IF EXISTS c1;
 -- output:
-ALTER TABLE t1
-DROP CONSTRAINT IF EXISTS c1;
+alter table t1
+drop constraint if exists c1;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats ALTER TABLE DROP DETACHED PARTITION
 -- input:
 ALTER TABLE mt DROP DETACHED PARTITION '2020-01-01';
 -- output:
-ALTER TABLE mt
-DROP DETACHED PARTITION '2020-01-01';
+alter table mt
+drop detached partition '2020-01-01';
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats ALTER TABLE DROP DETACHED PARTITION ALL
 -- input:
 ALTER TABLE mt DROP DETACHED PARTITION ALL;
 -- output:
-ALTER TABLE mt
-DROP DETACHED PARTITION ALL;
+alter table mt
+drop detached partition all;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats ALTER TABLE DROP INDEX
 -- input:
 ALTER TABLE db.table_name ON CLUSTER 'my_cluster' DROP INDEX IF EXISTS my_index;
 -- output:
-ALTER TABLE db.table_name ON CLUSTER 'my_cluster'
-DROP INDEX IF EXISTS my_index;
+alter table db.table_name on cluster 'my_cluster'
+drop index if exists my_index;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats ALTER TABLE DROP PART
 -- input:
 ALTER TABLE mt DROP PART 'all_4_4_0';
 -- output:
-ALTER TABLE mt
-DROP PART 'all_4_4_0';
+alter table mt
+drop part 'all_4_4_0';
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats ALTER TABLE DROP PARTITION
 -- input:
 ALTER TABLE posts DROP PARTITION '2008';
 -- output:
-ALTER TABLE posts
-DROP PARTITION '2008';
+alter table posts
+drop partition '2008';
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats ALTER TABLE MATERIALIZE INDEX
 -- input:
 ALTER TABLE db.table_name ON CLUSTER 'my_cluster' MATERIALIZE INDEX IF EXISTS my_index IN PARTITION '202301';
--- output: <unchanged>
+-- output:
+alter table db.table_name on cluster 'my_cluster' materialize index if exists my_index in partition '202301';
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats ALTER TABLE MODIFY ORDER BY
 -- input:
 ALTER TABLE db.events ON CLUSTER prod MODIFY ORDER BY (user_id, timestamp);
 -- output:
-ALTER TABLE db.events ON CLUSTER prod MODIFY
-ORDER BY
-  (user_id, timestamp);
+alter table db.events on cluster prod modify
+order by (user_id, timestamp);
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats ALTER TABLE MODIFY QUERY
 -- input:
 ALTER TABLE mv MODIFY QUERY SELECT a * 2 as a FROM src_table;
 -- output:
-ALTER TABLE mv MODIFY QUERY
-SELECT
-  a * 2 as a
-FROM
-  src_table;
+alter table mv modify query
+select a * 2 as a
+from src_table;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats ALTER TABLE MODIFY QUERY with GROUP BY
 -- input:
 ALTER TABLE mv MODIFY QUERY SELECT toStartOfDay(ts) ts, event_type, browser, count() events_cnt, sum(cost) cost FROM events GROUP BY ts, event_type, browser;
 -- output:
-ALTER TABLE mv MODIFY QUERY
-SELECT
-  toStartOfDay (ts) ts,
+alter table mv modify query
+select
+  tostartofday (ts) ts,
   event_type,
   browser,
   count() events_cnt,
   sum(cost) cost
-FROM
-  events
-GROUP BY
-  ts,
-  event_type,
-  browser;
+from events
+group by ts, event_type, browser;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats ALTER TABLE MODIFY SAMPLE BY
 -- input:
 ALTER TABLE db.events ON CLUSTER prod MODIFY SAMPLE BY user_id;
--- output: <unchanged>
+-- output:
+alter table db.events on cluster prod modify sample by user_id;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats ALTER TABLE MODIFY SETTING
 -- input:
 ALTER TABLE example_table MODIFY SETTING max_part_loading_threads=8, max_parts_in_total=50000;
 -- output:
-ALTER TABLE example_table MODIFY SETTING max_part_loading_threads = 8,
+alter table example_table modify setting max_part_loading_threads = 8,
 max_parts_in_total = 50000;
 -- #endregion
 
@@ -1611,438 +909,431 @@ max_parts_in_total = 50000;
 -- input:
 ALTER TABLE t1 MODIFY STATISTICS c, d TYPE TDigest, Uniq;
 -- output:
-ALTER TABLE t1 MODIFY STATISTICS c,
-d TYPE TDigest,
-Uniq;
+alter table t1 modify statistics c,
+d type tdigest,
+uniq;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats ALTER TABLE MODIFY TTL
 -- input:
 ALTER TABLE t1 MODIFY TTL 1 year;
--- output: <unchanged>
+-- output:
+alter table t1 modify ttl 1 year;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats ALTER TABLE REMOVE SAMPLE BY
 -- input:
 ALTER TABLE db.events ON CLUSTER prod REMOVE SAMPLE BY;
--- output: <unchanged>
+-- output:
+alter table db.events on cluster prod remove sample by;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats ALTER TABLE REMOVE TTL
 -- input:
 ALTER TABLE t1 REMOVE TTL;
--- output: <unchanged>
+-- output:
+alter table t1 remove ttl;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats ALTER TABLE RESET SETTING
 -- input:
 ALTER TABLE example_table RESET SETTING max_part_loading_threads;
--- output: <unchanged>
+-- output:
+alter table example_table reset setting max_part_loading_threads;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats ALTER USER IF EXISTS user1 RENAME TO user1_new, user2 RENAME TO user2_new DROP ALL SETTINGS
 -- input:
 ALTER USER IF EXISTS user1 RENAME TO user1_new, user2 RENAME TO user2_new DROP ALL SETTINGS;
 -- output:
-ALTER USER IF EXISTS user1
-RENAME TO user1_new,
+alter user if exists user1
+rename to user1_new,
 user2
-RENAME TO user2_new
-DROP ALL SETTINGS;
+rename to user2_new
+drop all settings;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats ATTACH DATABASE with ON CLUSTER and SYNC
 -- input:
 ATTACH DATABASE IF NOT EXISTS test_db ON CLUSTER prod;
--- output: <unchanged>
+-- output:
+attach database if not exists test_db on cluster prod;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats CHECK GRANT with column list
 -- input:
 CHECK GRANT SELECT(id, name) ON db.table
 -- output:
-CHECK GRANT
-SELECT
-  (id, name) ON db.table
+check grant
+select (id, name) on db.table
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats CHECK GRANT with multiple privileges
 -- input:
 CHECK GRANT SELECT, INSERT ON db.table
 -- output:
-CHECK GRANT
-SELECT
+check grant
+select
 ,
-  INSERT ON db.table
+  insert on db.table
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats CHECK GRANT with simple privilege
 -- input:
 CHECK GRANT SELECT ON db.table
 -- output:
-CHECK GRANT
-SELECT
-  ON db.table
+check grant
+select on db.table
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats CHECK TABLE with PART
 -- input:
 CHECK TABLE t0 PART '201003_111_222_0'
--- output: <unchanged>
+-- output:
+check table t0 part '201003_111_222_0'
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats CHECK TABLE with PARTITION, FORMAT, and SETTINGS
 -- input:
 CHECK TABLE t0 PARTITION ID '201003' FORMAT PrettyCompactMonoBlock SETTINGS check_query_single_value_result = 0
--- output: <unchanged>
+-- output:
+check table t0 partition id '201003' format prettycompactmonoblock settings check_query_single_value_result = 0
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats complex refreshable materialized view with multiple clauses
 -- input:
 CREATE MATERIALIZED VIEW IF NOT EXISTS mv6 ON CLUSTER prod REFRESH EVERY 1 HOUR RANDOMIZE FOR 30 MINUTE DEPENDS ON table1 APPEND SETTINGS max_threads = 4 AS SELECT date, count() as cnt FROM events GROUP BY date COMMENT 'Hourly aggregation';
 -- output:
-CREATE MATERIALIZED VIEW IF NOT EXISTS mv6 ON CLUSTER prod REFRESH EVERY 1 HOUR RANDOMIZE FOR 30 MINUTE DEPENDS ON table1 APPEND SETTINGS max_threads = 4 AS
-SELECT
-  date,
-  count() as cnt
-FROM
-  events
-GROUP BY
-  date COMMENT 'Hourly aggregation';
+create materialized view if not exists mv6 on cluster prod refresh every 1 hour randomize for 30 minute depends on table1 append settings max_threads = 4 as
+select date, count() as cnt
+from events
+group by date comment 'Hourly aggregation';
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats CREATE FUNCTION with extra syntax
 -- input:
 CREATE FUNCTION linear_equation AS (x, k, b) -> k*x + b;
 -- output:
-CREATE FUNCTION linear_equation AS (x, k, b) -> k * x + b;
+create function linear_equation as (x, k, b) -> k * x + b;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats CREATE FUNCTION with simple function
 -- input:
 CREATE FUNCTION my_function AS (x) -> x + 1;
--- output: <unchanged>
+-- output:
+create function my_function as (x) -> x + 1;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats CREATE MATERIALIZED VIEW with APPEND TO
 -- input:
 CREATE MATERIALIZED VIEW mv5 REFRESH EVERY 1 HOUR APPEND TO target_table AS SELECT * FROM source;
 -- output:
-CREATE MATERIALIZED VIEW mv5 REFRESH EVERY 1 HOUR APPEND TO target_table AS
-SELECT
-  *
-FROM
-  source;
+create materialized view mv5 refresh every 1 hour append to target_table as
+select *
+from source;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats CREATE MATERIALIZED VIEW with DEPENDS ON
 -- input:
 CREATE MATERIALIZED VIEW mv4 REFRESH EVERY 1 HOUR DEPENDS ON table1, table2 AS SELECT * FROM combined;
 -- output:
-CREATE MATERIALIZED VIEW mv4 REFRESH EVERY 1 HOUR DEPENDS ON table1,
-table2 AS
-SELECT
-  *
-FROM
-  combined;
+create materialized view mv4 refresh every 1 hour depends on table1,
+table2 as
+select *
+from combined;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats CREATE MATERIALIZED VIEW with RANDOMIZE FOR
 -- input:
 CREATE MATERIALIZED VIEW mv3 REFRESH EVERY 1 DAY RANDOMIZE FOR 2 HOUR AS SELECT * FROM logs;
 -- output:
-CREATE MATERIALIZED VIEW mv3 REFRESH EVERY 1 DAY RANDOMIZE FOR 2 HOUR AS
-SELECT
-  *
-FROM
-  logs;
+create materialized view mv3 refresh every 1 day randomize for 2 hour as
+select *
+from logs;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats CREATE MATERIALIZED VIEW with REFRESH AFTER and OFFSET
 -- input:
 CREATE MATERIALIZED VIEW mv2 REFRESH AFTER 30 MINUTE OFFSET 5 MINUTE AS SELECT count() FROM events;
 -- output:
-CREATE MATERIALIZED VIEW mv2 REFRESH AFTER 30 MINUTE
-OFFSET
-  5 MINUTE AS
-SELECT
-  count()
-FROM
-  events;
+create materialized view mv2 refresh after 30 minute
+offset
+  5 minute as
+select count()
+from events;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats CREATE MATERIALIZED VIEW with REFRESH EVERY
 -- input:
 CREATE MATERIALIZED VIEW mv1 REFRESH EVERY 1 HOUR AS SELECT * FROM source_table;
 -- output:
-CREATE MATERIALIZED VIEW mv1 REFRESH EVERY 1 HOUR AS
-SELECT
-  *
-FROM
-  source_table;
+create materialized view mv1 refresh every 1 hour as
+select *
+from source_table;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats CREATE TABLE with PROJECTION
 -- input:
 CREATE TABLE visits (user_id UInt64, user_name String, pages_visited Nullable(Float64), user_agent String, PROJECTION projection_visits_by_user (SELECT user_agent, sum(pages_visited) GROUP BY user_id, user_agent)) ENGINE = MergeTree() ORDER BY user_agent;
 -- output:
-CREATE TABLE visits (
-  user_id UInt64,
-  user_name String,
-  pages_visited Nullable (Float64),
-  user_agent String,
-  PROJECTION projection_visits_by_user (
-    SELECT
+create table visits (
+  user_id uint64,
+  user_name string,
+  pages_visited nullable (float64),
+  user_agent string,
+  projection projection_visits_by_user (
+    select
       user_agent,
       sum(pages_visited)
-    GROUP BY
+    group by
       user_id,
       user_agent
   )
-) ENGINE = MergeTree ()
-ORDER BY
-  user_agent;
+) engine = mergetree ()
+order by user_agent;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats DELETE FROM with ON CLUSTER and IN PARTITION
 -- input:
 DELETE FROM db.table ON CLUSTER foo IN PARTITION '2025-01-01' WHERE x = 1;
 -- output:
-DELETE FROM db.table ON CLUSTER foo IN PARTITION '2025-01-01'
-WHERE
-  x = 1;
+delete from db.table on cluster foo in partition '2025-01-01'
+where x = 1;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats DETACH DATABASE with ON CLUSTER and SYNC
 -- input:
 DETACH DATABASE test_db ON CLUSTER prod PERMANENTLY SYNC;
--- output: <unchanged>
+-- output:
+detach database test_db on cluster prod permanently sync;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats DROP DATABASE
 -- input:
 DROP DATABASE db;
--- output: <unchanged>
+-- output:
+drop database db;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats DROP DATABASE IF EXISTS with ON CLUSTER and SYNC
 -- input:
 DROP DATABASE IF EXISTS db ON CLUSTER my_cluster SYNC;
--- output: <unchanged>
+-- output:
+drop database if exists db on cluster my_cluster sync;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats DROP DICTIONARY with various options
 -- input:
 DROP DICTIONARY IF EXISTS mydb.my_dict SYNC;
--- output: <unchanged>
+-- output:
+drop dictionary if exists mydb.my_dict sync;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats DROP FUNCTION
 -- input:
 DROP FUNCTION IF EXISTS my_function ON CLUSTER my_cluster;
--- output: <unchanged>
+-- output:
+drop function if exists my_function on cluster my_cluster;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats DROP multiple tables
 -- input:
 DROP TABLE mydb.tab1, mydb.tab2;
 -- output:
-DROP TABLE mydb.tab1,
+drop table mydb.tab1,
 mydb.tab2;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats DROP NAMED COLLECTION
 -- input:
 DROP NAMED COLLECTION IF EXISTS my_collection ON CLUSTER my_cluster;
--- output: <unchanged>
+-- output:
+drop named collection if exists my_collection on cluster my_cluster;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats DROP POLICY short form
 -- input:
 DROP POLICY IF EXISTS policy1, policy2 ON db1.table1;
 -- output:
-DROP POLICY IF EXISTS policy1,
-policy2 ON db1.table1;
+drop policy if exists policy1,
+policy2 on db1.table1;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats DROP PROFILE short form
 -- input:
 DROP PROFILE IF EXISTS profile1;
--- output: <unchanged>
+-- output:
+drop profile if exists profile1;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats DROP QUOTA
 -- input:
 DROP QUOTA IF EXISTS quota1, quota2 ON CLUSTER my_cluster;
 -- output:
-DROP QUOTA IF EXISTS quota1,
-quota2 ON CLUSTER my_cluster;
+drop quota if exists quota1,
+quota2 on cluster my_cluster;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats DROP ROLE
 -- input:
 DROP ROLE IF EXISTS role1, role2 ON CLUSTER my_cluster;
 -- output:
-DROP ROLE IF EXISTS role1,
-role2 ON CLUSTER my_cluster;
+drop role if exists role1,
+role2 on cluster my_cluster;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats DROP ROW POLICY
 -- input:
 DROP ROW POLICY IF EXISTS policy1, policy2 ON db1.table1;
 -- output:
-DROP ROW POLICY IF EXISTS policy1,
-policy2 ON db1.table1;
+drop row policy if exists policy1,
+policy2 on db1.table1;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats DROP SETTINGS PROFILE
 -- input:
 DROP SETTINGS PROFILE IF EXISTS profile1, profile2 ON CLUSTER my_cluster;
 -- output:
-DROP SETTINGS PROFILE IF EXISTS profile1,
-profile2 ON CLUSTER my_cluster;
+drop settings profile if exists profile1,
+profile2 on cluster my_cluster;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats DROP TABLE IF EMPTY
 -- input:
 DROP TABLE IF EMPTY mydb.my_table;
--- output: <unchanged>
+-- output:
+drop table if empty mydb.my_table;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats DROP TEMPORARY TABLE
 -- input:
 DROP TEMPORARY TABLE temp_table;
--- output: <unchanged>
+-- output:
+drop temporary table temp_table;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats DROP USER single and multiple
 -- input:
 DROP USER IF EXISTS user1, user2 ON CLUSTER my_cluster;
 -- output:
-DROP USER IF EXISTS user1,
-user2 ON CLUSTER my_cluster;
+drop user if exists user1,
+user2 on cluster my_cluster;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats DROP VIEW with SYNC
 -- input:
 DROP VIEW IF EXISTS mydb.my_view ON CLUSTER my_cluster SYNC;
--- output: <unchanged>
+-- output:
+drop view if exists mydb.my_view on cluster my_cluster sync;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats EXCHANGE DICTIONARIES
 -- input:
 EXCHANGE DICTIONARIES dict1 AND dict2;
 -- output:
-EXCHANGE DICTIONARIES dict1
-AND dict2;
+exchange dictionaries dict1
+and dict2;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats EXCHANGE DICTIONARIES with databases and cluster
 -- input:
 EXCHANGE DICTIONARIES db1.dict_A AND db2.dict_B ON CLUSTER prod;
 -- output:
-EXCHANGE DICTIONARIES db1.dict_A
-AND db2.dict_B ON CLUSTER prod;
+exchange dictionaries db1.dict_a
+and db2.dict_b on cluster prod;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats EXCHANGE TABLES
 -- input:
 EXCHANGE TABLES table1 AND table2;
 -- output:
-EXCHANGE TABLES table1
-AND table2;
+exchange tables table1
+and table2;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats EXECUTE AS with SELECT
 -- input:
 EXECUTE AS james SELECT currentUser(), authenticatedUser();
 -- output:
-EXECUTE AS james
-SELECT
-  currentUser (),
-  authenticatedUser ();
+execute as james
+select currentuser (), authenticateduser ();
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats EXISTS TEMPORARY TABLE
 -- input:
 EXISTS TEMPORARY TABLE temp_data;
--- output: <unchanged>
+-- output:
+exists temporary table temp_data;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats EXISTS with FORMAT
 -- input:
 EXISTS TABLE events FORMAT TabSeparated;
--- output: <unchanged>
+-- output:
+exists table events format tabseparated;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats EXPLAIN SELECT with UNION ALL and ORDER BY
 -- input:
 EXPLAIN AST SELECT sum(number) FROM numbers(10) UNION ALL SELECT sum(number) FROM numbers(10) ORDER BY sum(number) ASC FORMAT TSV;
 -- output:
-EXPLAIN AST
-SELECT
-  sum(number)
-FROM
-  numbers (10)
-UNION ALL
-SELECT
-  sum(number)
-FROM
-  numbers (10)
-ORDER BY
-  sum(number) ASC FORMAT TSV;
+explain ast
+select sum(number)
+from numbers (10)
+union all
+select sum(number)
+from numbers (10)
+order by sum(number) asc format tsv;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats GRANT ALTER MATERIALIZE STATISTICS
 -- input:
 GRANT ALTER MATERIALIZE STATISTICS on db.table TO john WITH GRANT OPTION
 -- output:
-GRANT ALTER MATERIALIZE STATISTICS on db.table TO john
-WITH
-  GRANT OPTION
+grant alter materialize statistics on db.table to john
+with
+  grant option
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats GRANT CURRENT GRANTS
 -- input:
 GRANT CURRENT GRANTS(READ ON S3) TO alice
 -- output:
-GRANT CURRENT GRANTS (READ ON S3) TO alice
+grant current grants (read on s3) to alice
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats GRANT READ ON S3 with complex regex pattern
 -- input:
 GRANT READ ON S3('s3://mybucket/data/2024/.*\.parquet') TO analyst
 -- output:
-GRANT READ ON S3 ('s3://mybucket/data/2024/.*\.parquet') TO analyst
+grant read on s3 ('s3://mybucket/data/2024/.*\.parquet') to analyst
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats GRANT SELECT with column list
 -- input:
 GRANT SELECT(x,y) ON db.table TO john
 -- output:
-GRANT
-SELECT
-  (x, y) ON db.table TO john
+grant
+select (x, y) on db.table to john
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats GRANT SELECT with column list and WITH GRANT OPTION
 -- input:
 GRANT SELECT(x,y) ON db.table TO john WITH GRANT OPTION
 -- output:
-GRANT
-SELECT
-  (x, y) ON db.table TO john
-WITH
-  GRANT OPTION
+grant
+select (x, y) on db.table to john
+with
+  grant option
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats INSERT INTO with asterisk
 -- input:
 INSERT INTO insert_select_testtable (*) VALUES (1, 'a', 1) ;
 -- output:
-INSERT INTO
+insert into
   insert_select_testtable (*)
-VALUES
+values
   (1, 'a', 1);
 -- #endregion
 
@@ -2050,23 +1341,23 @@ VALUES
 -- input:
 INSERT INTO insert_select_testtable VALUES (1, DEFAULT, 1) ;
 -- output:
-INSERT INTO
+insert into
   insert_select_testtable
-VALUES
-  (1, DEFAULT, 1);
+values
+  (1, default, 1);
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats INSERT INTO with EXCEPT modifier
 -- input:
 INSERT INTO insert_select_testtable (* EXCEPT(b)) VALUES (2, 2);
 -- output:
-INSERT INTO
+insert into
   insert_select_testtable (
     *
-    EXCEPT
+    except
     (b)
   )
-VALUES
+values
   (2, 2);
 -- #endregion
 
@@ -2074,144 +1365,132 @@ VALUES
 -- input:
 INSERT INTO x WITH y AS (SELECT * FROM numbers(10)) SELECT * FROM y;
 -- output:
-INSERT INTO
+insert into
   x
-WITH
-  y AS (
-    SELECT
+with
+  y as (
+    select
       *
-    FROM
+    from
       numbers (10)
   )
-SELECT
-  *
-FROM
-  y;
+select *
+from y;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats KILL QUERY with ON CLUSTER and FORMAT
 -- input:
 KILL QUERY ON CLUSTER prod WHERE elapsed > 300 FORMAT JSON;
 -- output:
-KILL QUERY ON CLUSTER prod
-WHERE
-  elapsed > 300 FORMAT JSON;
+kill query on cluster prod
+where elapsed > 300 format json;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats KILL QUERY with SYNC
 -- input:
 KILL QUERY WHERE user = 'john' SYNC;
 -- output:
-KILL QUERY
-WHERE
-  user = 'john' SYNC;
+kill query
+where user = 'john' sync;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats KILL QUERY with TEST
 -- input:
 KILL QUERY WHERE query_duration_ms > 60000 TEST;
 -- output:
-KILL QUERY
-WHERE
-  query_duration_ms > 60000 TEST;
+kill query
+where query_duration_ms > 60000 test;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats MOVE QUOTA
 -- input:
 MOVE QUOTA user_quota TO replicated_storage;
--- output: <unchanged>
+-- output:
+move quota user_quota to replicated_storage;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats MOVE ROLE
 -- input:
 MOVE ROLE admin, developer TO local_directory;
 -- output:
-MOVE ROLE admin,
-developer TO local_directory;
+move role admin,
+developer to local_directory;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats MOVE USER
 -- input:
 MOVE USER john, alice TO disk_storage;
 -- output:
-MOVE USER john,
-alice TO disk_storage;
+move user john,
+alice to disk_storage;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats OPTIMIZE TABLE with FINAL
 -- input:
 OPTIMIZE TABLE my_table FINAL;
--- output: <unchanged>
+-- output:
+optimize table my_table final;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats OPTIMIZE TABLE with ON CLUSTER and DEDUPLICATE BY
 -- input:
 OPTIMIZE TABLE logs ON CLUSTER prod DEDUPLICATE BY user_id, timestamp;
 -- output:
-OPTIMIZE TABLE logs ON CLUSTER prod DEDUPLICATE BY user_id,
+optimize table logs on cluster prod deduplicate by user_id,
 timestamp;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats OPTIMIZE TABLE with PARTITION and DEDUPLICATE
 -- input:
 OPTIMIZE TABLE events PARTITION 202501 DEDUPLICATE;
--- output: <unchanged>
+-- output:
+optimize table events partition 202501 deduplicate;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats RENAME TABLE
 -- input:
 RENAME DATABASE atomic_database1 TO atomic_database2 ON CLUSTER production;
--- output: <unchanged>
+-- output:
+rename database atomic_database1 to atomic_database2 on cluster production;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats REPLACE TABLE with ENGINE, ORDER BY, and SELECT
 -- input:
 REPLACE TABLE myOldTable ENGINE = MergeTree() ORDER BY CounterID AS SELECT * FROM myOldTable WHERE CounterID <12345;
 -- output:
-REPLACE TABLE myOldTable ENGINE = MergeTree ()
-ORDER BY
-  CounterID AS
-SELECT
-  *
-FROM
-  myOldTable
-WHERE
-  CounterID < 12345;
+replace table myoldtable engine = mergetree ()
+order by counterid as
+select *
+from myoldtable
+where counterid < 12345;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats REVOKE SELECT with column list
 -- input:
 REVOKE SELECT(wage), SELECT(id) ON accounts.staff FROM mira;
 -- output:
-REVOKE
-SELECT
-  (wage),
-SELECT
-  (id) ON accounts.staff
-FROM
-  mira;
+revoke
+select (wage),
+select (id) on accounts.staff
+from mira;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats REVOKE SELECT with wildcard
 -- input:
 REVOKE SELECT ON accounts.* FROM john;
 -- output:
-REVOKE
-SELECT
-  ON accounts.*
-FROM
-  john;
+revoke
+select on accounts.*
+from john;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats REVOKE with ALL EXCEPT
 -- input:
 REVOKE ON CLUSTER foo ADMIN OPTION FOR role FROM john, matt ALL EXCEPT foo;
 -- output:
-REVOKE ON CLUSTER foo ADMIN OPTION FOR role
-FROM
-  john,
-  matt ALL
-EXCEPT
+revoke on cluster foo admin option for role
+from john, matt all
+except
 foo;
 -- #endregion
 
@@ -2219,134 +1498,112 @@ foo;
 -- input:
 REVOKE ON CLUSTER foo ADMIN OPTION FOR role FROM john;
 -- output:
-REVOKE ON CLUSTER foo ADMIN OPTION FOR role
-FROM
-  john;
+revoke on cluster foo admin option for role
+from john;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats REVOKE with ON CLUSTER and ADMIN OPTION
 -- input:
 REVOKE ON CLUSTER foo role FROM john;
 -- output:
-REVOKE ON CLUSTER foo role
-FROM
-  john;
+revoke on cluster foo role
+from john;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats SELECT with COLUMNS and APPLY modifier
 -- input:
 SELECT COLUMNS('[jk]') APPLY(toString) APPLY(length) APPLY(max) FROM columns_transformers;
 -- output:
-SELECT
-  COLUMNS ('[jk]') APPLY (toString) APPLY (length) APPLY (max)
-FROM
-  columns_transformers;
+select columns ('[jk]') apply (tostring) apply (length) apply (max)
+from columns_transformers;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats SELECT with COLUMNS arithmetic
 -- input:
 SELECT COLUMNS('a') + COLUMNS('c') FROM col_names
 -- output:
-SELECT
-  COLUMNS ('a') + COLUMNS ('c')
-FROM
-  col_names
+select columns ('a') + columns ('c')
+from col_names
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats SELECT with COLUMNS expression
 -- input:
 SELECT COLUMNS('a') FROM col_names
 -- output:
-SELECT
-  COLUMNS ('a')
-FROM
-  col_names
+select columns ('a')
+from col_names
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats SELECT with multiple COLUMNS and functions
 -- input:
 SELECT COLUMNS('a'), COLUMNS('c'), toTypeName(COLUMNS('c')) FROM col_names
 -- output:
-SELECT
-  COLUMNS ('a'),
-  COLUMNS ('c'),
-  toTypeName (COLUMNS ('c'))
-FROM
-  col_names
+select columns ('a'), columns ('c'), totypename (columns ('c'))
+from col_names
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats SELECT with REPLACE, EXCEPT, and APPLY modifiers
 -- input:
 SELECT * REPLACE(i + 1 AS i) EXCEPT (j) APPLY(sum) from columns_transformers;
 -- output:
-SELECT
-  * REPLACE(i + 1 AS i)
-EXCEPT
-(j) APPLY (sum)
-from
-  columns_transformers;
+select
+  * replace(i + 1 as i)
+except
+(j) apply (sum)
+from columns_transformers;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats SELECT with SETTINGS clause
 -- input:
 SELECT * FROM some_table SETTINGS optimize_read_in_order=1, cast_keep_nullable=1;
 -- output:
-SELECT
-  *
-FROM
-  some_table SETTINGS optimize_read_in_order = 1,
-  cast_keep_nullable = 1;
+select *
+from some_table settings optimize_read_in_order = 1, cast_keep_nullable = 1;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats SELECT with window function
 -- input:
 SELECT part_key, value, order, groupArray(value) OVER (PARTITION BY part_key) AS frame_values FROM wf_partition ORDER BY part_key ASC, value ASC;
 -- output:
-SELECT
+select
   part_key,
   value,
   order,
-  groupArray (value) OVER (
-    PARTITION BY
+  grouparray (value) over (
+    partition by
       part_key
-  ) AS frame_values
-FROM
-  wf_partition
-ORDER BY
-  part_key ASC,
-  value ASC;
+  ) as frame_values
+from wf_partition
+order by part_key asc, value asc;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats SELECT with window function and ROWS BETWEEN
 -- input:
 SELECT part_key, value, order, groupArray(value) OVER (PARTITION BY part_key ORDER BY order ASC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS frame_values FROM wf_frame ORDER BY part_key ASC, value ASC;
 -- output:
-SELECT
+select
   part_key,
   value,
   order,
-  groupArray (value) OVER (
-    PARTITION BY
+  grouparray (value) over (
+    partition by
       part_key
-    ORDER BY
-      order ASC ROWS BETWEEN UNBOUNDED PRECEDING
-      AND UNBOUNDED FOLLOWING
-  ) AS frame_values
-FROM
-  wf_frame
-ORDER BY
-  part_key ASC,
-  value ASC;
+    order by
+      order asc rows between unbounded preceding
+      and unbounded following
+  ) as frame_values
+from wf_frame
+order by part_key asc, value asc;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats SET DEFAULT ROLE ALL EXCEPT
 -- input:
 SET DEFAULT ROLE ALL EXCEPT guest TO john, alice;
 -- output:
-SET
-  DEFAULT ROLE ALL
-EXCEPT
-guest TO john,
+set
+  default role all
+except
+guest to john,
 alice;
 -- #endregion
 
@@ -2354,33 +1611,33 @@ alice;
 -- input:
 SET DEFAULT ROLE ALL TO CURRENT_USER;
 -- output:
-SET
-  DEFAULT ROLE ALL TO CURRENT_USER;
+set
+  default role all to current_user;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats SET DEFAULT ROLE NONE
 -- input:
 SET DEFAULT ROLE NONE TO john;
 -- output:
-SET
-  DEFAULT ROLE NONE TO john;
+set
+  default role none to john;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats SET DEFAULT ROLE with multiple roles
 -- input:
 SET DEFAULT ROLE admin, developer TO john;
 -- output:
-SET
-  DEFAULT ROLE admin,
-  developer TO john;
+set
+  default role admin,
+  developer to john;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats SET DEFAULT ROLE with single role to multiple users
 -- input:
 SET DEFAULT ROLE admin TO john, alice;
 -- output:
-SET
-  DEFAULT ROLE admin TO john,
+set
+  default role admin to john,
   alice;
 -- #endregion
 
@@ -2388,17 +1645,17 @@ SET
 -- input:
 SET ROLE ALL;
 -- output:
-SET
-  ROLE ALL;
+set
+  role all;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats SET ROLE ALL EXCEPT
 -- input:
 SET ROLE ALL EXCEPT guest, readonly;
 -- output:
-SET
-  ROLE ALL
-EXCEPT
+set
+  role all
+except
 guest,
 readonly;
 -- #endregion
@@ -2407,8 +1664,8 @@ readonly;
 -- input:
 SET ROLE admin, developer, analyst;
 -- output:
-SET
-  ROLE admin,
+set
+  role admin,
   developer,
   analyst;
 -- #endregion
@@ -2417,245 +1674,240 @@ SET
 -- input:
 SHOW CREATE TABLE db.table INTO OUTFILE 'file.txt' FORMAT CSV;
 -- output:
-SHOW
-CREATE TABLE db.table INTO OUTFILE 'file.txt' FORMAT CSV;
+show
+create table db.table into outfile 'file.txt' format csv;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats simple CHECK TABLE
 -- input:
 CHECK TABLE test_table;
--- output: <unchanged>
+-- output:
+check table test_table;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats simple UNDROP TABLE
 -- input:
 UNDROP TABLE my_table;
--- output: <unchanged>
+-- output:
+undrop table my_table;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats SYSTEM DROP DATABASE REPLICA
 -- input:
 SYSTEM DROP DATABASE REPLICA 'replica1' FROM DATABASE mydb;
 -- output:
-SYSTEM
-DROP DATABASE REPLICA 'replica1'
-FROM
-  DATABASE mydb;
+system
+drop database replica 'replica1'
+from database mydb;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats SYSTEM DROP REPLICA from database
 -- input:
 SYSTEM DROP REPLICA 'replica1' FROM DATABASE mydb;
 -- output:
-SYSTEM
-DROP REPLICA 'replica1'
-FROM
-  DATABASE mydb;
+system
+drop replica 'replica1'
+from database mydb;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats SYSTEM DROP REPLICA from table
 -- input:
 SYSTEM DROP REPLICA 'replica1' FROM TABLE mydb.my_replicated_table;
 -- output:
-SYSTEM
-DROP REPLICA 'replica1'
-FROM
-  TABLE mydb.my_replicated_table;
+system
+drop replica 'replica1'
+from table mydb.my_replicated_table;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats SYSTEM DROP REPLICA from ZooKeeper path
 -- input:
 SYSTEM DROP REPLICA 'replica1' FROM ZKPATH '/clickhouse/tables/01/mydb/my_replicated_table';
 -- output:
-SYSTEM
-DROP REPLICA 'replica1'
-FROM
-  ZKPATH '/clickhouse/tables/01/mydb/my_replicated_table';
+system
+drop replica 'replica1'
+from zkpath '/clickhouse/tables/01/mydb/my_replicated_table';
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats SYSTEM DROP REPLICA on local server
 -- input:
 SYSTEM DROP REPLICA 'replica1';
 -- output:
-SYSTEM
-DROP REPLICA 'replica1';
+system
+drop replica 'replica1';
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats SYSTEM FLUSH DISTRIBUTED on cluster
 -- input:
 SYSTEM FLUSH DISTRIBUTED db.dist_table ON CLUSTER prod;
--- output: <unchanged>
+-- output:
+system flush distributed db.dist_table on cluster prod;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats SYSTEM REFRESH VIEW
 -- input:
 SYSTEM REFRESH VIEW db.mv_hourly;
--- output: <unchanged>
+-- output:
+system refresh view db.mv_hourly;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats SYSTEM START REPLICATION QUEUES
 -- input:
 SYSTEM START REPLICATION QUEUES db.replicated_table;
--- output: <unchanged>
+-- output:
+system start replication queues db.replicated_table;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats SYSTEM START TTL MERGES on table
 -- input:
 SYSTEM START TTL MERGES db.my_table;
--- output: <unchanged>
+-- output:
+system start ttl merges db.my_table;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats SYSTEM STOP FETCHES on replicated table
 -- input:
 SYSTEM STOP FETCHES ON CLUSTER prod db.replicated_table;
--- output: <unchanged>
+-- output:
+system stop fetches on cluster prod db.replicated_table;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats SYSTEM STOP LISTEN with protocol
 -- input:
 SYSTEM STOP LISTEN ON CLUSTER prod TCP SECURE;
--- output: <unchanged>
+-- output:
+system stop listen on cluster prod tcp secure;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats SYSTEM STOP MERGES on cluster
 -- input:
 SYSTEM STOP MERGES ON CLUSTER prod;
--- output: <unchanged>
+-- output:
+system stop merges on cluster prod;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats SYSTEM STOP VIEWS
 -- input:
 SYSTEM STOP VIEWS;
--- output: <unchanged>
+-- output:
+system stop views;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats SYSTEM UNFREEZE with backup name
 -- input:
 SYSTEM UNFREEZE WITH NAME backup_20250101;
 -- output:
-SYSTEM UNFREEZE
-WITH
-  NAME backup_20250101;
+system unfreeze
+with
+  name backup_20250101;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats SYSTEM WAIT LOADING PARTS
 -- input:
 SYSTEM WAIT LOADING PARTS db.events;
--- output: <unchanged>
+-- output:
+system wait loading parts db.events;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats TRUNCATE TABLE IF EXISTS with ON CLUSTER and SYNC
 -- input:
 TRUNCATE TABLE IF EXISTS db.table ON CLUSTER prod SYNC;
--- output: <unchanged>
+-- output:
+truncate table if exists db.table on cluster prod sync;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats UNDROP TABLE with database and ON CLUSTER
 -- input:
 UNDROP TABLE db.my_table ON CLUSTER production;
--- output: <unchanged>
+-- output:
+undrop table db.my_table on cluster production;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats UNDROP TABLE with UUID
 -- input:
 UNDROP TABLE my_table UUID '550e8400-e29b-41d4-a716-446655440000';
--- output: <unchanged>
+-- output:
+undrop table my_table uuid '550e8400-e29b-41d4-a716-446655440000';
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats UPDATE with multiple SET assignments
 -- input:
 UPDATE wikistat SET hits = hits + 1, time = now() WHERE path = 'ClickHouse';
 -- output:
-UPDATE wikistat
-SET
+update wikistat
+set
   hits = hits + 1,
   time = now ()
-WHERE
-  path = 'ClickHouse';
+where path = 'ClickHouse';
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats UPDATE with WHERE clause
 -- input:
 UPDATE hits SET Title = 'Updated Title' WHERE EventDate = today();
 -- output:
-UPDATE hits
-SET
-  Title = 'Updated Title'
-WHERE
-  EventDate = today ();
+update hits
+set
+  title = 'Updated Title'
+where eventdate = today ();
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: formats WITH clause before INSERT INTO
 -- input:
 WITH y AS (SELECT * FROM numbers(10)) INSERT INTO x SELECT * FROM y;
 -- output:
-WITH
-  y AS (
-    SELECT
+with
+  y as (
+    select
       *
-    FROM
+    from
       numbers (10)
   )
-INSERT INTO
+insert into
   x
-SELECT
-  *
-FROM
-  y;
+select *
+from y;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: should support parameters
 -- config: {"params":{"foo":"{'bar': 'baz'}"}}
 -- input:
 SELECT {foo:Map(String, String)};
--- error:
--- Error: Parse error: Unexpected "{foo:Map(S" at line 1 column 8.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"{foo:Map(S\" at line 1 column 8.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: should support parameters
 -- config: {"params":{"foo":"'123'"}}
 -- input:
 SELECT {foo:Uint64};
--- error:
--- Error: Parse error: Unexpected "{foo:Uint6" at line 1 column 8.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"{foo:Uint6\" at line 1 column 8.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: supports map literals
 -- input:
 SELECT {'foo':1,'bar':10,'baz':2,'zap':8};
--- error:
--- Error: Parse error: Unexpected "{'foo':1,'" at line 1 column 8.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"{'foo':1,'\" at line 1 column 8.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: supports the lambda creation operator
 -- input:
 SELECT arrayMap(x->2*x, [1,2,3,4]) AS result;
 -- output:
-SELECT
-  arrayMap (x -> 2 * x, [1,2,3,4]) AS result;
+select arraymap (x -> 2 * x, [1,2,3,4]) as result;
 -- #endregion
 
 -- #region: sql-formatter / test / clickhouse.test: supports the ternary operator
 -- input:
 SELECT foo?bar: baz;
--- error:
--- Error: Parse error: Unexpected ": baz;" at line 1 column 15.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \": baz;\" at line 1 column 15.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / db2.test: supports non-standard FOR clause
 -- input:
 SELECT * FROM tbl FOR UPDATE OF other_tbl FOR RS USE AND KEEP EXCLUSIVE LOCKS
 -- output:
-SELECT
-  *
-FROM
-  tbl FOR
-UPDATE OF other_tbl FOR RS USE
-AND KEEP EXCLUSIVE LOCKS
+select *
+from tbl for
+update of other_tbl for rs use
+and keep exclusive locks
 -- #endregion
 
 -- #region: sql-formatter / test / duckdb.test: capitalizes IS NOT NULL
@@ -2663,39 +1915,33 @@ AND KEEP EXCLUSIVE LOCKS
 -- input:
 SELECT 1 is not null;
 -- output:
-SELECT
-  1 IS NOT NULL;
+SELECT 1 IS NOT NULL;
 -- #endregion
 
 -- #region: sql-formatter / test / duckdb.test: formats {} struct literal (identifier keys)
 -- input:
 SELECT {id:1,type:'Tarzan'} AS obj;
--- error:
--- Error: Parse error: Unexpected "{id:1,type" at line 1 column 8.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"{id:1,type\" at line 1 column 8.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / duckdb.test: formats {} struct literal (quoted identifier keys)
 -- input:
 SELECT {"id":1,"type":'Tarzan'} AS obj;
--- error:
--- Error: Parse error: Unexpected "{"id":1,"t" at line 1 column 8.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"{\"id\":1,\"t\" at line 1 column 8.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / duckdb.test: formats {} struct literal (string keys)
 -- input:
 SELECT {'id':1,'type':'Tarzan'} AS obj;
--- error:
--- Error: Parse error: Unexpected "{'id':1,'t" at line 1 column 8.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"{'id':1,'t\" at line 1 column 8.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / duckdb.test: formats JSON data type
 -- config: {"dataTypeCase":"upper"}
 -- input:
 CREATE TABLE foo (bar json, baz json);
--- output: <unchanged>
+-- output:
+create table foo (bar json, baz json);
 -- #endregion
 
 -- #region: sql-formatter / test / duckdb.test: formats large struct and list literals
@@ -2704,70 +1950,60 @@ CREATE TABLE foo (bar json, baz json);
       INSERT INTO heroes (KEY, VALUE) VALUES ('123', {'id': 1, 'type': 'Tarzan',
       'array': [123456789, 123456789, 123456789, 123456789, 123456789], 'hello': 'world'});
     
--- error:
--- Error: Parse error: Unexpected "{'id': 1, " at line 2 column 54.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"{'id': 1, \" at line 2 column 54.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / duckdb.test: formats percentage value in LIMIT clause
 -- input:
 SELECT * FROM foo LIMIT 10%;
 -- output:
-SELECT
-  *
-FROM
-  foo
-LIMIT
-  10 %;
+select *
+from foo
+limit 10 %;
 -- #endregion
 
 -- #region: sql-formatter / test / duckdb.test: formats prefix aliases
 -- input:
 SELECT foo:10, bar:'hello';
--- error:
--- Error: Parse error: Unexpected ":10, bar:'" at line 1 column 11.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \":10, bar:'\" at line 1 column 11.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / duckdb.test: supports array slice operator
 -- input:
 SELECT foo[:5], bar[1:], baz[1:5], zap[:];
 -- output:
-SELECT
-  foo [:5],
-  bar [1:],
-  baz [1:5],
-  zap [:];
+select foo [:5], bar [1:], baz [1:5], zap [:];
 -- #endregion
 
 -- #region: sql-formatter / test / features / alterTable: formats ALTER TABLE ... ADD COLUMN query
 -- input:
 ALTER TABLE supplier ADD COLUMN unit_price DECIMAL NOT NULL;
 -- output:
-ALTER TABLE supplier
-ADD COLUMN unit_price DECIMAL NOT NULL;
+alter table supplier
+add column unit_price decimal not null;
 -- #endregion
 
 -- #region: sql-formatter / test / features / alterTable: formats ALTER TABLE ... DROP COLUMN query
 -- input:
 ALTER TABLE supplier DROP COLUMN unit_price;
 -- output:
-ALTER TABLE supplier
-DROP COLUMN unit_price;
+alter table supplier
+drop column unit_price;
 -- #endregion
 
 -- #region: sql-formatter / test / features / alterTable: formats ALTER TABLE ... MODIFY statement
 -- input:
 ALTER TABLE supplier MODIFY supplier_id DECIMAL NULL;
--- output: <unchanged>
+-- output:
+alter table supplier modify supplier_id decimal null;
 -- #endregion
 
 -- #region: sql-formatter / test / features / alterTable: formats ALTER TABLE ... RENAME TO statement
 -- input:
 ALTER TABLE supplier RENAME TO the_one_who_supplies;
 -- output:
-ALTER TABLE supplier
-RENAME TO the_one_who_supplies;
+alter table supplier
+rename to the_one_who_supplies;
 -- #endregion
 
 -- #region: sql-formatter / test / features / arrayAndMapAccessors: changes case of array accessors when identifierCase option used
@@ -2775,8 +2011,7 @@ RENAME TO the_one_who_supplies;
 -- input:
 SELECT arr[1];
 -- output:
-SELECT
-  ARR [1];
+select ARR [1];
 -- #endregion
 
 -- #region: sql-formatter / test / features / arrayAndMapAccessors: changes case of array accessors when identifierCase option used
@@ -2784,15 +2019,14 @@ SELECT
 -- input:
 SELECT NS.Arr[1];
 -- output:
-SELECT
-  ns.arr [1];
+select ns.arr [1];
 -- #endregion
 
 -- #region: sql-formatter / test / features / arrayAndMapAccessors: formats array accessor with comment in-between
 -- input:
 SELECT arr /* comment */ [1];
 -- output:
-SELECT
+select
   arr /* comment */ [1];
 -- #endregion
 
@@ -2800,7 +2034,7 @@ SELECT
 -- input:
 SELECT foo./* comment */arr[1];
 -- output:
-SELECT
+select
   foo./* comment */ arr [1];
 -- #endregion
 
@@ -2808,27 +2042,21 @@ SELECT
 -- input:
 SELECT foo.coalesce['blah'];
 -- output:
-SELECT
-  foo.coalesce ['blah'];
+select foo.coalesce ['blah'];
 -- #endregion
 
 -- #region: sql-formatter / test / features / arrayAndMapAccessors: supports square brackets for array indexing
 -- input:
 SELECT arr[1], order_lines[5].productId;
 -- output:
-SELECT
-  arr [1],
-  order_lines [5].productId;
+select arr [1], order_lines [5].productid;
 -- #endregion
 
 -- #region: sql-formatter / test / features / arrayAndMapAccessors: supports square brackets for map lookup
 -- input:
 SELECT alpha['a'], beta['gamma'].zeta, yota['foo.bar-baz'];
 -- output:
-SELECT
-  alpha ['a'],
-  beta ['gamma'].zeta,
-  yota ['foo.bar-baz'];
+select alpha ['a'], beta ['gamma'].zeta, yota ['foo.bar-baz'];
 -- #endregion
 
 -- #region: sql-formatter / test / features / arrayAndMapAccessors: supports square brackets for map lookup - uppercase
@@ -2836,10 +2064,7 @@ SELECT
 -- input:
 SELECT Alpha['a'], Beta['gamma'].zeTa, yotA['foo.bar-baz'];
 -- output:
-SELECT
-  ALPHA ['a'],
-  BETA ['gamma'].ZETA,
-  YOTA ['foo.bar-baz'];
+select ALPHA ['a'], BETA ['gamma'].ZETA, YOTA ['foo.bar-baz'];
 -- #endregion
 
 -- #region: sql-formatter / test / features / arrayLiterals: dataTypeCase option affects ARRAY type case
@@ -2847,7 +2072,7 @@ SELECT
 -- input:
 CREATE TABLE foo ( items ArrAy )
 -- output:
-CREATE TABLE foo (items ARRAY)
+create table foo (items ARRAY)
 -- #endregion
 
 -- #region: sql-formatter / test / features / arrayLiterals: dataTypeCase option does NOT affect ARRAY[] literal case
@@ -2855,8 +2080,7 @@ CREATE TABLE foo (items ARRAY)
 -- input:
 SELECT ArrAy[1, 2]
 -- output:
-SELECT
-  ARRAY [1, 2]
+select ARRAY [1, 2]
 -- #endregion
 
 -- #region: sql-formatter / test / features / arrayLiterals: keywordCase option affects ARRAY[] literal case
@@ -2864,17 +2088,15 @@ SELECT
 -- input:
 SELECT ArrAy[1, 2]
 -- output:
-SELECT
-  ArrAy [1, 2]
+SELECT array [1, 2]
 -- #endregion
 
 -- #region: sql-formatter / test / features / arrayLiterals: supports array literals
 -- input:
 SELECT [1, 2, 3] FROM ['come-on', 'seriously', 'this', 'is', 'a', 'very', 'very', 'long', 'array'];
 -- output:
-SELECT
-  [1, 2, 3]
-FROM
+select [1, 2, 3]
+from
   ['come-on', 'seriously', 'this', 'is', 'a', 'very', 'very', 'long', 'array'];
 -- #endregion
 
@@ -2882,55 +2104,54 @@ FROM
 -- input:
 SELECT ARRAY[1, 2, 3] FROM ARRAY['come-on', 'seriously', 'this', 'is', 'a', 'very', 'very', 'long', 'array'];
 -- output:
-SELECT
-  ARRAY [1, 2, 3]
-FROM
-  ARRAY ['come-on', 'seriously', 'this', 'is', 'a', 'very', 'very', 'long', 'array'];
+select array [1, 2, 3]
+from
+  array ['come-on', 'seriously', 'this', 'is', 'a', 'very', 'very', 'long', 'array'];
 -- #endregion
 
 -- #region: sql-formatter / test / features / between: formats BETWEEN _ AND _ on single line
 -- input:
 foo BETWEEN bar AND baz
--- output: <unchanged>
+-- output:
+foo between bar and baz
 -- #endregion
 
 -- #region: sql-formatter / test / features / between: formats BETWEEN with comments inside
 -- input:
 WHERE foo BETWEEN /*C1*/ t.bar /*C2*/ AND /*C3*/ t.baz
 -- output:
-WHERE
-  foo BETWEEN /*C1*/ t.bar /*C2*/ AND /*C3*/ t.baz
+where
+  foo between /*C1*/ t.bar /*C2*/ and /*C3*/ t.baz
 -- #endregion
 
 -- #region: sql-formatter / test / features / between: supports AND after BETWEEN
 -- input:
 SELECT foo BETWEEN 1 AND 2 AND x > 10
 -- output:
-SELECT
-  foo BETWEEN 1 AND 2
-  AND x > 10
+select foo between 1 and 2 and x > 10
 -- #endregion
 
 -- #region: sql-formatter / test / features / between: supports CASE inside BETWEEN
 -- input:
 foo BETWEEN CASE x WHEN 1 THEN 2 END AND 3
 -- output:
-foo BETWEEN CASE x
-  WHEN 1 THEN 2
-END AND 3
+foo between case x
+  when 1 then 2
+end and 3
 -- #endregion
 
 -- #region: sql-formatter / test / features / between: supports complex expressions inside BETWEEN
 -- input:
 foo BETWEEN 1+2 AND 3+4
 -- output:
-foo BETWEEN 1 + 2 AND 3  + 4
+foo between 1 + 2 and 3  + 4
 -- #endregion
 
 -- #region: sql-formatter / test / features / between: supports qualified.names as BETWEEN expression values
 -- input:
 foo BETWEEN t.bar AND t.baz
--- output: <unchanged>
+-- output:
+foo between t.bar and t.baz
 -- #endregion
 
 -- #region: sql-formatter / test / features / case: formats between inside case expression
@@ -2939,50 +2160,49 @@ foo BETWEEN t.bar AND t.baz
     SELECT CASE WHEN x1 BETWEEN 1 AND 12 THEN '' END c1;
   
 -- output:
-SELECT
-  CASE
-    WHEN x1 BETWEEN 1 AND 12  THEN ''
-  END c1;
+select
+  case
+    when x1 between 1 and 12  then ''
+  end c1;
 -- #endregion
 
 -- #region: sql-formatter / test / features / case: formats CASE ... WHEN inside SELECT
 -- input:
 SELECT foo, bar, CASE baz WHEN 'one' THEN 1 WHEN 'two' THEN 2 ELSE 3 END FROM tbl;
 -- output:
-SELECT
+select
   foo,
   bar,
-  CASE baz
-    WHEN 'one' THEN 1
-    WHEN 'two' THEN 2
-    ELSE 3
-  END
-FROM
-  tbl;
+  case baz
+    when 'one' then 1
+    when 'two' then 2
+    else 3
+  end
+from tbl;
 -- #endregion
 
 -- #region: sql-formatter / test / features / case: formats CASE ... WHEN with a blank expression
 -- input:
 CASE WHEN opt = 'foo' THEN 1 WHEN opt = 'bar' THEN 2 WHEN opt = 'baz' THEN 3 ELSE 4 END;
 -- output:
-CASE
-  WHEN opt = 'foo' THEN 1
-  WHEN opt = 'bar' THEN 2
-  WHEN opt = 'baz' THEN 3
-  ELSE 4
-END;
+case
+  when opt = 'foo' then 1
+  when opt = 'bar' then 2
+  when opt = 'baz' then 3
+  else 4
+end;
 -- #endregion
 
 -- #region: sql-formatter / test / features / case: formats CASE ... WHEN with an expression
 -- input:
 CASE trim(sqrt(2)) WHEN 'one' THEN 1 WHEN 'two' THEN 2 WHEN 'three' THEN 3 ELSE 4 END;
 -- output:
-CASE trim(sqrt(2))
-  WHEN 'one' THEN 1
-  WHEN 'two' THEN 2
-  WHEN 'three' THEN 3
-  ELSE 4
-END;
+case trim(sqrt(2))
+  when 'one' then 1
+  when 'two' then 2
+  when 'three' then 3
+  else 4
+end;
 -- #endregion
 
 -- #region: sql-formatter / test / features / case: formats CASE with comments
@@ -2994,11 +2214,11 @@ END;
       END;
     
 -- output:
-SELECT
-  CASE /*c1*/ foo /*c2*/
-    WHEN /*c3*/ 1 /*c4*/ THEN /*c5*/ 2 /*c6*/
-    ELSE /*c7*/ 3 /*c8*/
-  END;
+select
+  case /*c1*/ foo /*c2*/
+    when /*c3*/ 1 /*c4*/ then /*c5*/ 2 /*c6*/
+    else /*c7*/ 3 /*c8*/
+  end;
 -- #endregion
 
 -- #region: sql-formatter / test / features / case: formats CASE with comments inside sub-expressions
@@ -3010,11 +2230,11 @@ SELECT
       END;
     
 -- output:
-SELECT
-  CASE foo + /*c1*/ bar
-    WHEN 1 /*c2*/ + 1 THEN 2 /*c2*/ * 2
-    ELSE 3 - /*c3*/ 3
-  END;
+select
+  case foo + /*c1*/ bar
+    when 1 /*c2*/ + 1 then 2 /*c2*/ * 2
+    else 3 - /*c3*/ 3
+  end;
 -- #endregion
 
 -- #region: sql-formatter / test / features / case: formats CASE with identStyle:tabularLeft
@@ -3022,10 +2242,10 @@ SELECT
 -- input:
 SELECT CASE foo WHEN 1 THEN bar ELSE baz END;
 -- output:
-SELECT    CASE foo
-                    WHEN 1 THEN bar
-                    ELSE baz
-          END;
+select    case foo
+                    when 1 then bar
+                    else baz
+          end;
 -- #endregion
 
 -- #region: sql-formatter / test / features / case: formats CASE with identStyle:tabularRight
@@ -3033,10 +2253,10 @@ SELECT    CASE foo
 -- input:
 SELECT CASE foo WHEN 1 THEN bar ELSE baz END;
 -- output:
-   SELECT CASE foo
-                    WHEN 1 THEN bar
-                    ELSE baz
-          END;
+   select case foo
+                    when 1 then bar
+                    else baz
+          end;
 -- #endregion
 
 -- #region: sql-formatter / test / features / case: formats nested case expressions
@@ -3053,17 +2273,16 @@ SELECT CASE foo WHEN 1 THEN bar ELSE baz END;
         tbl;
     
 -- output:
-SELECT
-  CASE CASE foo
-      WHEN 1 THEN 11
-      ELSE 22
-    END
-    WHEN 11 THEN 110
-    WHEN 22 THEN 220
-    ELSE 123
-  END
-FROM
-  tbl;
+select
+  case case foo
+      when 1 then 11
+      else 22
+    end
+    when 11 then 110
+    when 22 then 220
+    else 123
+  end
+from tbl;
 -- #endregion
 
 -- #region: sql-formatter / test / features / case: handles edge case of ending inline block with END
@@ -3076,19 +2295,15 @@ select
       when foo then bar
     end
   )
-from
-  quaz
+from quaz
 -- #endregion
 
 -- #region: sql-formatter / test / features / case: ignores words CASE and END inside other strings
 -- input:
 SELECT CASEDATE, ENDDATE FROM table1;
 -- output:
-SELECT
-  CASEDATE,
-  ENDDATE
-FROM
-  table1;
+select casedate, enddate
+from table1;
 -- #endregion
 
 -- #region: sql-formatter / test / features / case: properly converts to uppercase in case statements
@@ -3117,13 +2332,15 @@ end;
 -- #region: sql-formatter / test / features / commentOn: formats COMMENT ON ...
 -- input:
 COMMENT ON COLUMN my_table.ssn IS 'Social Security Number';
--- output: <unchanged>
+-- output:
+comment on column my_table.ssn is 'Social Security Number';
 -- #endregion
 
 -- #region: sql-formatter / test / features / commentOn: formats COMMENT ON ...
 -- input:
 COMMENT ON TABLE my_table IS 'This is an awesome table.';
--- output: <unchanged>
+-- output:
+comment on table my_table is 'This is an awesome table.';
 -- #endregion
 
 -- #region: sql-formatter / test / features / comments: does not detect unclosed comment as a comment
@@ -3133,8 +2350,7 @@ COMMENT ON TABLE my_table IS 'This is an awesome table.';
       /*SomeComment
     
 -- output:
-SELECT
-  count(*) / * SomeComment
+select count(*) / * somecomment
 -- #endregion
 
 -- #region: sql-formatter / test / features / comments: formats comments between function name and parenthesis
@@ -3143,7 +2359,7 @@ SELECT
       SELECT count /* comment */ (*);
     
 -- output:
-SELECT
+select
   count/* comment */ (*);
 -- #endregion
 
@@ -3153,7 +2369,7 @@ SELECT
       SELECT foo. /* com1 */ bar, foo. /* com2 */ *;
     
 -- output:
-SELECT
+select
   foo./* com1 */ bar,
   foo./* com2 */ *;
 -- #endregion
@@ -3164,7 +2380,7 @@ SELECT
       SELECT foo/* com1 */.bar, count()/* com2 */.bar, foo.bar/* com3 */.baz, (1, 2) /* com4 */.foo;
     
 -- output:
-SELECT
+select
   foo /* com1 */.bar,
   count() /* com2 */.bar,
   foo.bar /* com3 */.baz,
@@ -3175,20 +2391,14 @@ SELECT
 -- input:
 /*comment1*/
 /*comment2*/
-
--- output:
-/*comment1*/
-/*comment2*/
+-- output: <unchanged>
 -- #endregion
 
 -- #region: sql-formatter / test / features / comments: formats first line comment in a file
 -- input:
 -- comment1
 -- comment2
-
--- output:
--- comment1
--- comment2
+-- output: <unchanged>
 -- #endregion
 
 -- #region: sql-formatter / test / features / comments: formats line comments followed by close-paren
@@ -3196,7 +2406,7 @@ SELECT
 SELECT ( a --comment
  )
 -- output:
-SELECT
+select
   (
     a --comment
   )
@@ -3207,8 +2417,7 @@ SELECT
 SELECT a --comment
 , b
 -- output:
-SELECT
-  a --comment
+select a --comment
 ,
   b
 -- #endregion
@@ -3218,9 +2427,7 @@ SELECT
 SELECT a --comment
 ()
 -- output:
-SELECT
-  a --comment
-  ()
+select a --comment ()
 -- #endregion
 
 -- #region: sql-formatter / test / features / comments: formats line comments followed by semicolon
@@ -3230,10 +2437,8 @@ SELECT
       ;
     
 -- output:
-SELECT
-  a
-FROM
-  b --comment
+select a
+from b --comment
 ;
 -- #endregion
 
@@ -3248,16 +2453,15 @@ SELECT
 MyTable -- One final comment
 WHERE 1 = 2;
 -- output:
-SELECT
+select
   /*
    * This is a block comment
    */
   *
-FROM
+from
   -- This is another comment
-  MyTable -- One final comment
-WHERE
-  1 = 2;
+  mytable -- One final comment
+where 1 = 2;
 -- #endregion
 
 -- #region: sql-formatter / test / features / comments: formats tricky line comments
@@ -3265,10 +2469,8 @@ WHERE
 SELECT a--comment, here
 FROM b--comment
 -- output:
-SELECT
-  a --comment, here
-FROM
-  b --comment
+select a --comment, here
+from b --comment
 -- #endregion
 
 -- #region: sql-formatter / test / features / comments: indents multiline block comment that is not a doc-comment
@@ -3278,7 +2480,7 @@ SELECT 1
 comment line
 */
 -- output:
-SELECT
+select
   1
   /*
   comment line
@@ -3295,10 +2497,8 @@ SELECT
           my_table;
       
 -- output:
-SELECT
-  a, --comment1
-  b --comment2
-FROM --comment3
+select a, --comment1 b --comment2
+from --comment3
   my_table;
 -- #endregion
 
@@ -3315,12 +2515,12 @@ FROM --comment3
           my_table;
       
 -- output:
-SELECT
+select
   --comment1
   a,
   --comment2
   b
-FROM
+from
   --comment3
   my_table;
 -- #endregion
@@ -3330,13 +2530,11 @@ FROM
 SELECT * FROM
 -- line comment 1
 MyTable -- line comment 2
-
 -- output:
-SELECT
-  *
-FROM
+select *
+from
   -- line comment 1
-  MyTable -- line comment 2
+  mytable -- line comment 2
 -- #endregion
 
 -- #region: sql-formatter / test / features / comments: supports // line comment
@@ -3344,29 +2542,24 @@ FROM
 SELECT alpha // commment
 FROM beta
 -- output:
-SELECT
-  alpha / / commment
-FROM
-  beta
+select alpha / / commment
+from beta
 -- #endregion
 
 -- #region: sql-formatter / test / features / comments: supports # line comment
 -- input:
 SELECT alpha # commment
 FROM beta
--- error:
--- Error: Parse error: Unexpected "# commment" at line 1 column 14.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"# commment\" at line 1 column 14.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / features / comments: supports nested block comments
 -- input:
 SELECT alpha /* /* commment */ */ FROM beta
 -- output:
-SELECT
+select
   alpha /* /* commment */ * /
-FROM
-  beta
+from beta
 -- #endregion
 
 -- #region: sql-formatter / test / features / createTable: correctly indents CREATE TABLE in tabular style
@@ -3377,9 +2570,9 @@ CREATE TABLE foo (
           fname VARCHAR NOT NULL
         );
 -- output:
-CREATE    TABLE foo (
-          id INT PRIMARY KEY NOT NULL,
-          fname VARCHAR NOT NULL
+create    table foo (
+          id int primary key not null,
+          fname varchar not null
           );
 -- #endregion
 
@@ -3387,11 +2580,11 @@ CREATE    TABLE foo (
 -- input:
 CREATE TABLE tbl (a INT PRIMARY KEY, b TEXT, c INT NOT NULL, doggie INT NOT NULL);
 -- output:
-CREATE TABLE tbl (
-  a INT PRIMARY KEY,
-  b TEXT,
-  c INT NOT NULL,
-  doggie INT NOT NULL
+create table tbl (
+  a int primary key,
+  b text,
+  c int not null,
+  doggie int not null
 );
 -- #endregion
 
@@ -3399,107 +2592,98 @@ CREATE TABLE tbl (
 -- input:
 CREATE OR REPLACE TABLE tbl (a INT PRIMARY KEY, b TEXT);
 -- output:
-CREATE
-OR REPLACE TABLE tbl (a INT PRIMARY KEY, b TEXT);
+create
+or replace table tbl (a int primary key, b text);
 -- #endregion
 
 -- #region: sql-formatter / test / features / createTable: formats short CREATE TABLE
 -- input:
 CREATE TABLE tbl (a INT PRIMARY KEY, b TEXT);
--- output: <unchanged>
+-- output:
+create table tbl (a int primary key, b text);
 -- #endregion
 
 -- #region: sql-formatter / test / features / createTable: formats short CREATE TABLE IF NOT EXISTS
 -- input:
 CREATE TABLE IF NOT EXISTS tbl (a INT PRIMARY KEY, b TEXT);
--- output: <unchanged>
+-- output:
+create table if not exists tbl (a int primary key, b text);
 -- #endregion
 
 -- #region: sql-formatter / test / features / createTable: formats short CREATE TABLE with column comments
 -- input:
 CREATE TABLE tbl (a INT COMMENT 'Hello world!', b TEXT COMMENT 'Here we are!');
 -- output:
-CREATE TABLE tbl (
-  a INT COMMENT 'Hello world!',
-  b TEXT COMMENT 'Here we are!'
+create table tbl (
+  a int comment 'Hello world!',
+  b text comment 'Here we are!'
 );
 -- #endregion
 
 -- #region: sql-formatter / test / features / createTable: formats short CREATE TABLE with comment
 -- input:
 CREATE TABLE tbl (a INT, b TEXT) COMMENT = 'Hello, world!';
--- output: <unchanged>
+-- output:
+create table tbl (a int, b text) comment = 'Hello, world!';
 -- #endregion
 
 -- #region: sql-formatter / test / features / createView: formats CREATE MATERIALIZED VIEW
 -- input:
 CREATE MATERIALIZED VIEW mat_view AS SELECT 42;
 -- output:
-CREATE MATERIALIZED VIEW mat_view AS
-SELECT
-  42;
+create materialized view mat_view as
+select 42;
 -- #endregion
 
 -- #region: sql-formatter / test / features / createView: formats CREATE OR REPLACE VIEW
 -- input:
 CREATE OR REPLACE VIEW v1 AS SELECT 42;
 -- output:
-CREATE
-OR REPLACE VIEW v1 AS
-SELECT
-  42;
+create
+or replace view v1 as
+select 42;
 -- #endregion
 
 -- #region: sql-formatter / test / features / createView: formats CREATE VIEW
 -- input:
 CREATE VIEW my_view AS SELECT id, fname, lname FROM tbl;
 -- output:
-CREATE VIEW my_view AS
-SELECT
-  id,
-  fname,
-  lname
-FROM
-  tbl;
+create view my_view as
+select id, fname, lname
+from tbl;
 -- #endregion
 
 -- #region: sql-formatter / test / features / createView: formats CREATE VIEW with columns
 -- input:
 CREATE VIEW my_view (id, fname, lname) AS SELECT * FROM tbl;
 -- output:
-CREATE VIEW my_view (id, fname, lname) AS
-SELECT
-  *
-FROM
-  tbl;
+create view my_view (id, fname, lname) as
+select *
+from tbl;
 -- #endregion
 
 -- #region: sql-formatter / test / features / createView: formats short CREATE VIEW IF NOT EXISTS
 -- input:
 CREATE VIEW IF NOT EXISTS my_view AS SELECT 42;
 -- output:
-CREATE VIEW IF NOT EXISTS my_view AS
-SELECT
-  42;
+create view if not exists my_view as
+select 42;
 -- #endregion
 
 -- #region: sql-formatter / test / features / deleteFrom: formats DELETE FROM statement
 -- input:
 DELETE FROM Customers WHERE CustomerName='Alfred' AND Phone=5002132;
 -- output:
-DELETE FROM Customers
-WHERE
-  CustomerName = 'Alfred'
-  AND Phone = 5002132;
+delete from customers
+where customername = 'Alfred' and phone = 5002132;
 -- #endregion
 
 -- #region: sql-formatter / test / features / deleteFrom: formats DELETE statement (without FROM)
 -- input:
 DELETE Customers WHERE CustomerName='Alfred';
 -- output:
-DELETE Customers
-WHERE
-  CustomerName = 'Alfred';
+delete customers
+where customername = 'Alfred';
 -- #endregion
 
 -- #region: sql-formatter / test / features / disableComment: does not format text after /* sql-formatter-disable */ until end of file
@@ -3510,10 +2694,8 @@ SELECT foo FROM bar;
 
 SELECT foo FROM bar;
 -- output:
-SELECT
-  foo
-FROM
-  bar;
+select foo
+from bar;
 
 /* sql-formatter-disable */
 SELECT foo FROM bar;
@@ -3529,28 +2711,23 @@ SELECT foo FROM bar;
 /* sql-formatter-enable */
 SELECT foo FROM bar;
 -- output:
-SELECT
-  foo
-FROM
-  bar;
+select foo
+from bar;
 
 /* sql-formatter-disable */
 SELECT foo FROM bar;
 /* sql-formatter-enable */
-SELECT
-  foo
-FROM
-  bar;
+select foo
+from bar;
 -- #endregion
 
 -- #region: sql-formatter / test / features / disableComment: does not parse code between disable/enable comments
 -- input:
 SELECT /*sql-formatter-disable*/ ?!{}[] /*sql-formatter-enable*/ FROM bar;
 -- output:
-SELECT
+select
   /*sql-formatter-disable*/ ?!{}[] /*sql-formatter-enable*/
-FROM
-  bar;
+from bar;
 -- #endregion
 
 -- #region: sql-formatter / test / features / disableComment: preserves indentation between /* sql-formatter-disable */ and /* sql-formatter-enable */
@@ -3567,20 +2744,22 @@ SELECT
 -- #region: sql-formatter / test / features / dropTable: formats DROP TABLE IF EXISTS statement
 -- input:
 DROP TABLE IF EXISTS admin_role;
--- output: <unchanged>
+-- output:
+drop table if exists admin_role;
 -- #endregion
 
 -- #region: sql-formatter / test / features / dropTable: formats DROP TABLE statement
 -- input:
 DROP TABLE admin_role;
--- output: <unchanged>
+-- output:
+drop table admin_role;
 -- #endregion
 
 -- #region: sql-formatter / test / features / identifiers: detects consecutive U&"" identifiers as separate ones
 -- input:
 U&"foo"U&"bar"
 -- output:
-U & "foo" U & "bar"
+u & "foo" u & "bar"
 -- #endregion
 
 -- #region: sql-formatter / test / features / identifiers: does not support escaping double-quote by doubling it
@@ -3592,49 +2771,41 @@ U & "foo" U & "bar"
 -- #region: sql-formatter / test / features / identifiers: does not support escaping double-quote with a backslash
 -- input:
 "foo \" JOIN bar"
--- error:
--- Error: Parse error: Unexpected """ at line 1 column 17.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"\"\" at line 1 column 17.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / features / identifiers: does not supports escaping in U&"" strings with a backslash
 -- input:
 U&"foo \" JOIN bar"
--- error:
--- Error: Parse error: Unexpected """ at line 1 column 19.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"\"\" at line 1 column 19.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / features / identifiers: no space around dot between two [bracket-quoted identifiers]
 -- input:
 SELECT [my table].[col name];
 -- output:
-SELECT
-  [my table].[col name];
+select [my table].[col name];
 -- #endregion
 
 -- #region: sql-formatter / test / features / identifiers: no space around dot between two backtick-quoted identifiers
 -- input:
 SELECT `my table`.`col name`;
 -- output:
-SELECT
-  `my table`.`col name`;
+select `my table`.`col name`;
 -- #endregion
 
 -- #region: sql-formatter / test / features / identifiers: no space around dot between two double-quoted identifiers
 -- input:
 SELECT "my table"."col name";
 -- output:
-SELECT
-  "my table"."col name";
+select "my table"."col name";
 -- #endregion
 
 -- #region: sql-formatter / test / features / identifiers: no space around dot between unicode double-quoted identifiers
 -- input:
 SELECT U&"my table".U&"col name";
 -- output:
-SELECT
-  U & "my table".U & "col name";
+select u & "my table".u & "col name";
 -- #endregion
 
 -- #region: sql-formatter / test / features / identifiers: supports [bracket-quoted identifiers]
@@ -3647,10 +2818,8 @@ SELECT
 -- input:
 SELECT [where] FROM [update]
 -- output:
-SELECT
-  [where]
-FROM
-  [update]
+select [where]
+from [update]
 -- #endregion
 
 -- #region: sql-formatter / test / features / identifiers: supports backtick-quoted identifiers
@@ -3663,10 +2832,8 @@ FROM
 -- input:
 SELECT `where` FROM `update`
 -- output:
-SELECT
-  `where`
-FROM
-  `update`
+select `where`
+from `update`
 -- #endregion
 
 -- #region: sql-formatter / test / features / identifiers: supports double-quoted identifiers
@@ -3679,10 +2846,8 @@ FROM
 -- input:
 SELECT "where" FROM "update"
 -- output:
-SELECT
-  "where"
-FROM
-  "update"
+select "where"
+from "update"
 -- #endregion
 
 -- #region: sql-formatter / test / features / identifiers: supports escaping backtick by doubling it
@@ -3707,32 +2872,30 @@ FROM
 -- input:
 U&"foo "" JOIN bar"
 -- output:
-U & "foo "" JOIN bar"
+u & "foo "" JOIN bar"
 -- #endregion
 
 -- #region: sql-formatter / test / features / identifiers: supports unicode double-quoted identifiers
 -- input:
 SELECT U&"where" FROM U&"update"
 -- output:
-SELECT
-  U & "where"
-FROM
-  U & "update"
+select u & "where"
+from u & "update"
 -- #endregion
 
 -- #region: sql-formatter / test / features / identifiers: supports unicode double-quoted identifiers
 -- input:
 U&"foo JOIN bar"
 -- output:
-U & "foo JOIN bar"
+u & "foo JOIN bar"
 -- #endregion
 
 -- #region: sql-formatter / test / features / insertInto: formats INSERT without INTO
 -- input:
 INSERT Customers (ID, MoneyBalance, Address, City) VALUES (12,-123.4, 'Skagen 2111','Stv');
 -- output:
-INSERT Customers (ID, MoneyBalance, Address, City)
-VALUES
+insert customers (id, moneybalance, address, city)
+values
   (12, -123.4, 'Skagen 2111', 'Stv');
 -- #endregion
 
@@ -3740,9 +2903,9 @@ VALUES
 -- input:
 INSERT INTO Customers (ID, MoneyBalance, Address, City) VALUES (12,-123.4, 'Skagen 2111','Stv');
 -- output:
-INSERT INTO
-  Customers (ID, MoneyBalance, Address, City)
-VALUES
+insert into
+  customers (id, moneybalance, address, city)
+values
   (12, -123.4, 'Skagen 2111', 'Stv');
 -- #endregion
 
@@ -3750,13 +2913,9 @@ VALUES
 -- input:
 SELECT x IS DISTINCT FROM y, x IS NOT DISTINCT FROM y
 -- output:
-SELECT
-  x IS DISTINCT
-FROM
-  y,
-  x IS NOT DISTINCT
-FROM
-  y
+select x is distinct
+from y, x is not distinct
+from y
 -- #endregion
 
 -- #region: sql-formatter / test / features / join: properly uppercases JOIN ... ON
@@ -3764,11 +2923,8 @@ FROM
 -- input:
 select * from customers join foo on foo.id = customers.id;
 -- output:
-SELECT
-  *
-FROM
-  customers
-  JOIN foo ON foo.id = customers.id;
+SELECT *
+FROM customers JOIN foo ON foo.id = customers.id;
 -- #endregion
 
 -- #region: sql-formatter / test / features / join: properly uppercases JOIN ... USING
@@ -3776,31 +2932,24 @@ FROM
 -- input:
 select * from customers join foo using (id);
 -- output:
-SELECT
-  *
-FROM
-  customers
-  JOIN foo USING (id);
+SELECT *
+FROM customers JOIN foo USING (id);
 -- #endregion
 
 -- #region: sql-formatter / test / features / limiting: formats FETCH FIRST
 -- input:
 SELECT * FROM tbl FETCH FIRST 10 ROWS ONLY;
 -- output:
-SELECT
-  *
-FROM
-  tbl FETCH FIRST 10 ROWS ONLY;
+select *
+from tbl fetch first 10 rows only;
 -- #endregion
 
 -- #region: sql-formatter / test / features / limiting: formats FETCH NEXT
 -- input:
 SELECT * FROM tbl FETCH NEXT 1 ROW ONLY;
 -- output:
-SELECT
-  *
-FROM
-  tbl FETCH NEXT 1 ROW ONLY;
+select *
+from tbl fetch next 1 row only;
 -- #endregion
 
 -- #region: sql-formatter / test / features / limiting: formats LIMIT in tabular style
@@ -3808,22 +2957,19 @@ FROM
 -- input:
 SELECT * FROM tbl LIMIT 5, 6;
 -- output:
-SELECT    *
-FROM      tbl
-LIMIT     5, 6;
+select    *
+from      tbl
+limit     5, 6;
 -- #endregion
 
 -- #region: sql-formatter / test / features / limiting: formats LIMIT of single value and OFFSET
 -- input:
 SELECT * FROM tbl LIMIT 5 OFFSET 8;
 -- output:
-SELECT
-  *
-FROM
-  tbl
-LIMIT
-  5
-OFFSET
+select *
+from tbl
+limit 5
+offset
   8;
 -- #endregion
 
@@ -3833,11 +2979,9 @@ SELECT * FROM tbl LIMIT --comment
  5,--comment
 6;
 -- output:
-SELECT
-  *
-FROM
-  tbl
-LIMIT --comment
+select *
+from tbl
+limit --comment
   5, --comment
   6;
 -- #endregion
@@ -3846,48 +2990,38 @@ LIMIT --comment
 -- input:
 SELECT * FROM tbl LIMIT abs(-5) - 1, (2 + 3) * 5;
 -- output:
-SELECT
-  *
-FROM
-  tbl
-LIMIT
-  abs(-5) - 1, (2 + 3) * 5;
+select *
+from tbl
+limit abs(-5) - 1, (2 + 3) * 5;
 -- #endregion
 
 -- #region: sql-formatter / test / features / limiting: formats LIMIT with two comma-separated values on single line
 -- input:
 SELECT * FROM tbl LIMIT 5, 10;
 -- output:
-SELECT
-  *
-FROM
-  tbl
-LIMIT
-  5, 10;
+select *
+from tbl
+limit 5, 10;
 -- #endregion
 
 -- #region: sql-formatter / test / features / limiting: formats OFFSET ... FETCH FIRST
 -- input:
 SELECT * FROM tbl OFFSET 250 ROWS FETCH FIRST 5 ROWS ONLY;
 -- output:
-SELECT
-  *
-FROM
-  tbl
-OFFSET
-  250 ROWS FETCH FIRST 5 ROWS ONLY;
+select *
+from tbl
+offset
+  250 rows fetch first 5 rows only;
 -- #endregion
 
 -- #region: sql-formatter / test / features / limiting: formats OFFSET ... FETCH FIRST
 -- input:
 SELECT * FROM tbl OFFSET 250 ROWS FETCH NEXT 5 ROWS ONLY;
 -- output:
-SELECT
-  *
-FROM
-  tbl
-OFFSET
-  250 ROWS FETCH NEXT 5 ROWS ONLY;
+select *
+from tbl
+offset
+  250 rows fetch next 5 rows only;
 -- #endregion
 
 -- #region: sql-formatter / test / features / mergeInto: formats MERGE INTO
@@ -3900,11 +3034,11 @@ MERGE INTO DetailedInventory AS t
       WHEN NOT MATCHED THEN
         INSERT (product, quantity) VALUES ('Horse saddle', 12);
 -- output:
-MERGE INTO DetailedInventory AS t USING Inventory AS i ON t.product = i.product WHEN MATCHED THEN
-UPDATE
-SET
-  quantity = t.quantity + i.quantity WHEN NOT MATCHED THEN INSERT (product, quantity)
-VALUES
+merge into detailedinventory as t using inventory as i on t.product = i.product when matched then
+update
+set
+  quantity = t.quantity + i.quantity when not matched then insert (product, quantity)
+values
   ('Horse saddle', 12);
 -- #endregion
 
@@ -3912,160 +3046,147 @@ VALUES
 -- input:
 SELECT 1e-9 AS a, 1.5e+10 AS b, 3.5E12 AS c, 3.5e12 AS d;
 -- output:
-SELECT
-  1e-9 AS a,
-  1.5e+10 AS b,
-  3.5E12 AS c,
-  3.5e12 AS d;
+select 1e-9 as a, 1.5e+10 as b, 3.5E12 as c, 3.5e12 as d;
 -- #endregion
 
 -- #region: sql-formatter / test / features / numbers: correctly handles floats with trailing point
 -- input:
 SELECT 1000. AS a;
 -- output:
-SELECT
-  1000. AS a;
+select 1000. as a;
 -- #endregion
 
 -- #region: sql-formatter / test / features / numbers: correctly handles floats with trailing point
 -- input:
 SELECT a, b / 1000. AS a_s, 100. * b / SUM(a_s);
 -- output:
-SELECT
-  a,
-  b / 1000. AS a_s,
-  100. * b / SUM(a_s);
+select a, b / 1000. as a_s, 100. * b / sum(a_s);
 -- #endregion
 
 -- #region: sql-formatter / test / features / numbers: supports decimal numbers
 -- input:
 SELECT 42, -35.04, 105., 2.53E+3, 1.085E-5;
 -- output:
-SELECT
-  42,
-  -35.04,
-  105.,
-  2.53E+3,
-  1.085E-5;
+select 42, -35.04, 105., 2.53E+3, 1.085E-5;
 -- #endregion
 
 -- #region: sql-formatter / test / features / numbers: supports decimal values without leading digits
 -- input:
 SELECT .456 AS foo;
 -- output:
-SELECT
-  .456 AS foo;
+select .456 as foo;
 -- #endregion
 
 -- #region: sql-formatter / test / features / numbers: supports hex and binary numbers
 -- input:
 SELECT 0xAE, 0x10F, 0b1010001;
 -- output:
-SELECT
-  0xAE,
-  0x10F,
-  0b1010001;
+select 0xAE, 0x10F, 0b1010001;
 -- #endregion
 
 -- #region: sql-formatter / test / features / numbers: supports underscore separators in numeric literals
 -- input:
 SELECT 1_000_000, 3.14_159, 0x1A_2B_3C, 0b1010_0001, 1.5e+1_0;
--- error:
--- Error: Parse error: Unexpected "1_000_000," at line 1 column 8.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"1_000_000,\" at line 1 column 8.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / features / onConflict: supports INSERT .. ON CONFLICT syntax
 -- input:
 INSERT INTO tbl VALUES (1,'Blah') ON CONFLICT DO NOTHING;
 -- output:
-INSERT INTO
+insert into
   tbl
-VALUES
+values
   (1, 'Blah')
-ON CONFLICT DO NOTHING;
+on conflict do nothing;
 -- #endregion
 
 -- #region: sql-formatter / test / features / operators: supports ANY set-operator
 -- input:
 foo = ANY (1, 2, 3)
 -- output:
-foo = ANY(1, 2, 3)
+foo = any(1, 2, 3)
 -- #endregion
 
 -- #region: sql-formatter / test / features / operators: supports set operators
 -- input:
 EXISTS bar
--- output: <unchanged>
+-- output:
+exists bar
 -- #endregion
 
 -- #region: sql-formatter / test / features / operators: supports set operators
 -- input:
 foo ALL bar
--- output: <unchanged>
+-- output:
+foo all bar
 -- #endregion
 
 -- #region: sql-formatter / test / features / operators: supports set operators
 -- input:
 foo IN (1, 2, 3)
--- output: <unchanged>
+-- output:
+foo in (1, 2, 3)
 -- #endregion
 
 -- #region: sql-formatter / test / features / operators: supports set operators
 -- input:
 foo IS NULL
--- output: <unchanged>
+-- output:
+foo is null
 -- #endregion
 
 -- #region: sql-formatter / test / features / operators: supports set operators
 -- input:
 foo LIKE 'hello%'
--- output: <unchanged>
+-- output:
+foo like 'hello%'
 -- #endregion
 
 -- #region: sql-formatter / test / features / operators: supports set operators
 -- input:
 foo NOT IN (1, 2, 3)
--- output: <unchanged>
+-- output:
+foo not in (1, 2, 3)
 -- #endregion
 
 -- #region: sql-formatter / test / features / operators: supports set operators
 -- input:
 UNIQUE foo
--- output: <unchanged>
+-- output:
+unique foo
 -- #endregion
 
 -- #region: sql-formatter / test / features / returning: places RETURNING to new line
 -- input:
 INSERT INTO users (firstname, lastname) VALUES ('Joe', 'Cool') RETURNING id, firstname;
 -- output:
-INSERT INTO
+insert into
   users (firstname, lastname)
-VALUES
+values
   ('Joe', 'Cool')
-RETURNING
-  id,
-  firstname;
+returning id, firstname;
 -- #endregion
 
 -- #region: sql-formatter / test / features / schema: formats simple SET SCHEMA statements
 -- input:
 SET SCHEMA schema1;
--- output: <unchanged>
+-- output:
+set schema schema1;
 -- #endregion
 
 -- #region: sql-formatter / test / features / strings: detects consecutive B'' strings as separate ones
 -- input:
 B'1001'B'0110'
 -- output:
-B '1001' B '0110'
+b '1001' b '0110'
 -- #endregion
 
 -- #region: sql-formatter / test / features / strings: detects consecutive B"" strings as separate ones
 -- input:
 B"1001"B"0110"
 -- output:
-B "1001" B "0110"
+b "1001" b "0110"
 -- #endregion
 
 -- #region: sql-formatter / test / features / strings: detects consecutive E'' strings as separate ones
@@ -4079,7 +3200,7 @@ e 'a ha' e 'hm mm'
 -- input:
 N'foo'N'bar'
 -- output:
-N 'foo' N 'bar'
+n 'foo' n 'bar'
 -- #endregion
 
 -- #region: sql-formatter / test / features / strings: detects consecutive r'' strings as separate ones
@@ -4100,7 +3221,7 @@ r "a ha" r "hm mm"
 -- input:
 U&'foo'U&'bar'
 -- output:
-U & 'foo' U & 'bar'
+u & 'foo' u & 'bar'
 -- #endregion
 
 -- #region: sql-formatter / test / features / strings: detects consecutive X'' strings as separate ones
@@ -4114,7 +3235,7 @@ X'AE01' X'01F6'
 -- input:
 X"AE01"X"01F6"
 -- output:
-X "AE01" X "01F6"
+x "AE01" x "01F6"
 -- #endregion
 
 -- #region: sql-formatter / test / features / strings: does not support escaping single-quote by doubling it
@@ -4126,9 +3247,7 @@ X "AE01" X "01F6"
 -- #region: sql-formatter / test / features / strings: does not support escaping single-quote with a backslash
 -- input:
 'foo \' JOIN bar'
--- error:
--- Error: Parse error: Unexpected "'" at line 1 column 17.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"'\" at line 1 column 17.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / features / strings: supports bit sequences
@@ -4142,17 +3261,15 @@ b '01'
 -- input:
 B'10110'
 -- output:
-B '10110'
+b '10110'
 -- #endregion
 
 -- #region: sql-formatter / test / features / strings: supports bit sequences
 -- input:
 SELECT b'0101' FROM foo
 -- output:
-SELECT
-  b '0101'
-FROM
-  foo
+select b '0101'
+from foo
 -- #endregion
 
 -- #region: sql-formatter / test / features / strings: supports bit sequences (with double-qoutes)
@@ -4166,105 +3283,88 @@ b "01"
 -- input:
 B"10110"
 -- output:
-B "10110"
+b "10110"
 -- #endregion
 
 -- #region: sql-formatter / test / features / strings: supports bit sequences (with double-qoutes)
 -- input:
 SELECT b"0101" FROM foo
 -- output:
-SELECT
-  b "0101"
-FROM
-  foo
+select b "0101"
+from foo
 -- #endregion
 
 -- #region: sql-formatter / test / features / strings: supports dollar-quoted strings
 -- input:
 $$foo 
  bar$$
--- error:
--- Error: Parse error: Unexpected "$$foo 
---  ba" at line 1 column 1.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"$$foo \n ba\" at line 1 column 1.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / features / strings: supports dollar-quoted strings
 -- input:
 $$foo $ JOIN bar$$
--- error:
--- Error: Parse error: Unexpected "$$foo $ JO" at line 1 column 1.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"$$foo $ JO\" at line 1 column 1.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / features / strings: supports dollar-quoted strings
 -- input:
 $$foo JOIN bar$$
--- error:
--- Error: Parse error: Unexpected "$$foo JOIN" at line 1 column 1.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"$$foo JOIN\" at line 1 column 1.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / features / strings: supports dollar-quoted strings
 -- input:
 SELECT $$where$$ FROM $$update$$
--- error:
--- Error: Parse error: Unexpected "$$where$$ " at line 1 column 8.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"$$where$$ \" at line 1 column 8.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / features / strings: supports E'' strings with C-style escapes
 -- input:
 E'blah blah'
 -- output:
-E 'blah blah'
+e 'blah blah'
 -- #endregion
 
 -- #region: sql-formatter / test / features / strings: supports E'' strings with C-style escapes
 -- input:
 E'blah''blah'
 -- output:
-E 'blah''blah'
+e 'blah''blah'
 -- #endregion
 
 -- #region: sql-formatter / test / features / strings: supports E'' strings with C-style escapes
 -- input:
 E'some \' FROM escapes'
--- error:
--- Error: Parse error: Unexpected "'" at line 1 column 23.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"'\" at line 1 column 23.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / features / strings: supports E'' strings with C-style escapes
 -- input:
 SELECT E'blah' FROM foo
 -- output:
-SELECT
-  E 'blah'
-FROM
-  foo
+select e 'blah'
+from foo
 -- #endregion
 
 -- #region: sql-formatter / test / features / strings: supports escaping in N'' strings with a backslash
 -- input:
 N'foo \' JOIN bar'
--- error:
--- Error: Parse error: Unexpected "'" at line 1 column 18.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"'\" at line 1 column 18.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / features / strings: supports escaping in N'' strings with repeated quote
 -- input:
 N'foo '' JOIN bar'
 -- output:
-N 'foo '' JOIN bar'
+n 'foo '' JOIN bar'
 -- #endregion
 
 -- #region: sql-formatter / test / features / strings: supports escaping in U&'' strings with repeated quote
 -- input:
 U&'foo '' JOIN bar'
 -- output:
-U & 'foo '' JOIN bar'
+u & 'foo '' JOIN bar'
 -- #endregion
 
 -- #region: sql-formatter / test / features / strings: supports escaping single-quote by doubling it
@@ -4276,29 +3376,23 @@ U & 'foo '' JOIN bar'
 -- #region: sql-formatter / test / features / strings: supports escaping single-quote with a backslash and a repeated quote
 -- input:
 'foo \' JOIN ''bar'
--- error:
--- Error: Parse error: Unexpected "'" at line 1 column 19.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"'\" at line 1 column 19.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / features / strings: supports hex byte sequences
 -- input:
 SELECT x'2B' FROM foo
 -- output:
-SELECT
-  x'2B'
-FROM
-  foo
+select x'2B'
+from foo
 -- #endregion
 
 -- #region: sql-formatter / test / features / strings: supports hex byte sequences
 -- input:
 SELECT x"2B" FROM foo
 -- output:
-SELECT
-  x "2B"
-FROM
-  foo
+select x "2B"
+from foo
 -- #endregion
 
 -- #region: sql-formatter / test / features / strings: supports hex byte sequences
@@ -4324,29 +3418,23 @@ x "0E"
 -- input:
 X"1F0A89C3"
 -- output:
-X "1F0A89C3"
+x "1F0A89C3"
 -- #endregion
 
 -- #region: sql-formatter / test / features / strings: supports no escaping in raw strings
 -- input:
 SELECT r'some \',R'text' FROM foo
 -- output:
-SELECT
-  r 'some \',
-  R 'text'
-FROM
-  foo
+select r 'some \', r 'text'
+from foo
 -- #endregion
 
 -- #region: sql-formatter / test / features / strings: supports no escaping in raw strings (with double-quotes)
 -- input:
 SELECT r"some \", R"text" FROM foo
 -- output:
-SELECT
-  r "some \",
-  R "text"
-FROM
-  foo
+select r "some \", r "text"
+from foo
 -- #endregion
 
 -- #region: sql-formatter / test / features / strings: supports single-quoted strings
@@ -4359,120 +3447,110 @@ FROM
 -- input:
 SELECT 'where' FROM 'update'
 -- output:
-SELECT
-  'where'
-FROM
-  'update'
+select 'where'
+from 'update'
 -- #endregion
 
 -- #region: sql-formatter / test / features / strings: supports T-SQL unicode strings
 -- input:
 N'foo JOIN bar'
 -- output:
-N 'foo JOIN bar'
+n 'foo JOIN bar'
 -- #endregion
 
 -- #region: sql-formatter / test / features / strings: supports T-SQL unicode strings
 -- input:
 SELECT N'where' FROM N'update'
 -- output:
-SELECT
-  N 'where'
-FROM
-  N 'update'
+select n 'where'
+from n 'update'
 -- #endregion
 
 -- #region: sql-formatter / test / features / strings: supports tagged dollar-quoted strings
 -- input:
 $xxx$foo $$ LEFT JOIN $yyy$ bar$xxx$
--- error:
--- Error: Parse error: Unexpected "$$ LEFT JO" at line 1 column 10.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"$$ LEFT JO\" at line 1 column 10.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / features / strings: supports unicode single-quoted strings
 -- input:
 SELECT U&'where' FROM U&'update'
 -- output:
-SELECT
-  U & 'where'
-FROM
-  U & 'update'
+select u & 'where'
+from u & 'update'
 -- #endregion
 
 -- #region: sql-formatter / test / features / strings: supports unicode single-quoted strings
 -- input:
 U&'foo JOIN bar'
 -- output:
-U & 'foo JOIN bar'
+u & 'foo JOIN bar'
 -- #endregion
 
 -- #region: sql-formatter / test / features / truncateTable: formats TRUNCATE statement (without TABLE)
 -- input:
 TRUNCATE Customers;
--- output: <unchanged>
+-- output:
+truncate customers;
 -- #endregion
 
 -- #region: sql-formatter / test / features / truncateTable: formats TRUNCATE TABLE statement
 -- input:
 TRUNCATE TABLE Customers;
--- output: <unchanged>
+-- output:
+truncate table customers;
 -- #endregion
 
 -- #region: sql-formatter / test / features / update: formats simple UPDATE statement
 -- input:
 UPDATE Customers SET ContactName='Alfred Schmidt', City='Hamburg' WHERE CustomerName='Alfreds Futterkiste';
 -- output:
-UPDATE Customers
-SET
-  ContactName = 'Alfred Schmidt',
-  City = 'Hamburg'
-WHERE
-  CustomerName = 'Alfreds Futterkiste';
+update customers
+set
+  contactname = 'Alfred Schmidt',
+  city = 'Hamburg'
+where customername = 'Alfreds Futterkiste';
 -- #endregion
 
 -- #region: sql-formatter / test / features / update: formats UPDATE statement with AS part
 -- input:
 UPDATE customers SET total_orders = order_summary.total  FROM ( SELECT * FROM bank) AS order_summary
 -- output:
-UPDATE customers
-SET
+update customers
+set
   total_orders = order_summary.total
-FROM
+from
   (
-    SELECT
+    select
       *
-    FROM
+    from
       bank
-  ) AS order_summary
+  ) as order_summary
 -- #endregion
 
 -- #region: sql-formatter / test / features / update: formats UPDATE statement with cursor position
 -- input:
 UPDATE Customers SET Name='John' WHERE CURRENT OF my_cursor;
 -- output:
-UPDATE Customers
-SET
-  Name = 'John'
-WHERE
-  CURRENT OF my_cursor;
+update customers
+set
+  name = 'John'
+where current of my_cursor;
 -- #endregion
 
 -- #region: sql-formatter / test / features / window: formats multiple WINDOW specifications
 -- input:
 SELECT * FROM table1 WINDOW w1 AS (PARTITION BY col1), w2 AS (PARTITION BY col1, col2);
 -- output:
-SELECT
-  *
-FROM
-  table1
-WINDOW
-  w1 AS (
-    PARTITION BY
+select *
+from table1
+window
+  w1 as (
+    partition by
       col1
   ),
-  w2 AS (
-    PARTITION BY
+  w2 as (
+    partition by
       col1,
       col2
   );
@@ -4482,16 +3560,13 @@ WINDOW
 -- input:
 SELECT *, ROW_NUMBER() OVER wnd AS next_value FROM tbl WINDOW wnd AS (PARTITION BY id ORDER BY time);
 -- output:
-SELECT
-  *,
-  ROW_NUMBER() OVER wnd AS next_value
-FROM
-  tbl
-WINDOW
-  wnd AS (
-    PARTITION BY
+select *, row_number() over wnd as next_value
+from tbl
+window
+  wnd as (
+    partition by
       id
-    ORDER BY
+    order by
       time
   );
 -- #endregion
@@ -4508,16 +3583,15 @@ WINDOW
           tbl
       
 -- output:
-SELECT
-  RANK() OVER (
-    PARTITION BY
+select
+  rank() over (
+    partition by
       explosion
-    ORDER BY
-      day ROWS BETWEEN 6 PRECEDING
-      AND CURRENT ROW
-  ) AS amount
-FROM
-  tbl
+    order by
+      day rows between 6 preceding
+      and current row
+  ) as amount
+from tbl
 -- #endregion
 
 -- #region: sql-formatter / test / features / with: formats WITH clause with multiple Common Table Expressions (CTE)
@@ -4536,34 +3610,32 @@ FROM
       SELECT * FROM final;
     
 -- output:
-WITH
-  cte_1 AS (
-    SELECT
+with
+  cte_1 as (
+    select
       a
-    FROM
+    from
       b
-    WHERE
+    where
       c = 1
   ),
-  cte_2 AS (
-    SELECT
+  cte_2 as (
+    select
       c
-    FROM
+    from
       d
-    WHERE
+    where
       e = 2
   ),
-  final AS (
-    SELECT
+  final as (
+    select
       *
-    FROM
+    from
       cte_1
-      LEFT JOIN cte_2 ON b = d
+      left join cte_2 on b = d
   )
-SELECT
-  *
-FROM
-  final;
+select *
+from final;
 -- #endregion
 
 -- #region: sql-formatter / test / features / with: formats WITH clause with parameterized CTE
@@ -4577,49 +3649,41 @@ FROM
       SELECT id, parent_id FROM cte_1;
     
 -- output:
-WITH
-  cte_1 (id, parent_id) AS (
-    SELECT
+with
+  cte_1 (id, parent_id) as (
+    select
       id,
       parent_id
-    FROM
+    from
       tab1
-    WHERE
-      parent_id IS NULL
+    where
+      parent_id is null
   )
-SELECT
-  id,
-  parent_id
-FROM
-  cte_1;
+select id, parent_id
+from cte_1;
 -- #endregion
 
 -- #region: sql-formatter / test / hive.test: formats INSERT INTO TABLE
 -- input:
 INSERT INTO TABLE Customers VALUES (12,-123.4, 'Skagen 2111','Stv');
 -- output:
-INSERT INTO
-  TABLE Customers
-VALUES
+insert into
+  table customers
+values
   (12, -123.4, 'Skagen 2111', 'Stv');
 -- #endregion
 
 -- #region: sql-formatter / test / hive.test: recognizes ${hivevar:name} substitution variables
 -- input:
 SELECT ${var1}, ${ var 2 } FROM ${hivevar:table_name} WHERE name = '${hivevar:name}';
--- error:
--- Error: Parse error: Unexpected "${var1}, $" at line 1 column 8.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"${var1}, $\" at line 1 column 8.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / hive.test: supports SORT BY, CLUSTER BY, DISTRIBUTE BY
 -- input:
 SELECT value, count DISTRIBUTE BY count CLUSTER BY value SORT BY value, count;
 -- output:
-SELECT
-  value,
-  count DISTRIBUTE BY count CLUSTER BY value SORT BY value,
-  count;
+select value, count distribute by count cluster by value sort by value, count;
 -- #endregion
 
 -- #region: sql-formatter / test / mariadb.test: formats ALTER TABLE ... ALTER COLUMN
@@ -4627,44 +3691,38 @@ SELECT
 ALTER TABLE t ALTER COLUMN foo SET DEFAULT 10;
          ALTER TABLE t ALTER COLUMN foo DROP DEFAULT;
 -- output:
-ALTER TABLE t ALTER COLUMN foo
-SET
-  DEFAULT 10;
+alter table t alter column foo
+set
+  default 10;
 
-ALTER TABLE t ALTER COLUMN foo
-DROP DEFAULT;
+alter table t alter column foo
+drop default;
 -- #endregion
 
 -- #region: sql-formatter / test / mariadb.test: supports @'name' variables
 -- input:
 SELECT @'bar ar', @'bar\'x', @'bar''y' FROM tbl;
--- error:
--- Error: Parse error: Unexpected "@'bar ar'," at line 1 column 8.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"@'bar ar',\" at line 1 column 8.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / mariadb.test: supports @"name" variables
 -- input:
 SELECT @"foo fo", @"foo\"x", @"foo""y" FROM tbl;
--- error:
--- Error: Parse error: Unexpected "@"foo fo"," at line 1 column 8.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"@\"foo fo\",\" at line 1 column 8.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / n1ql.test: formats explained DELETE query with USE KEYS
 -- input:
 EXPLAIN DELETE FROM tutorial t USE KEYS 'baldwin'
 -- output:
-EXPLAIN
-DELETE FROM tutorial t USE KEYS 'baldwin'
+explain
+delete from tutorial t use keys 'baldwin'
 -- #endregion
 
 -- #region: sql-formatter / test / n1ql.test: formats INSERT with {} object literal
 -- input:
 INSERT INTO heroes (KEY, VALUE) VALUES ('123', {'id':1,'type':'Tarzan'});
--- error:
--- Error: Parse error: Unexpected "{'id':1,'t" at line 1 column 48.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"{'id':1,'t\" at line 1 column 48.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / n1ql.test: formats SELECT query with NEST and USE KEYS
@@ -4675,28 +3733,25 @@ INSERT INTO heroes (KEY, VALUE) VALUES ('123', {'id':1,'type':'Tarzan'});
       ON KEYS ARRAY s.order_id FOR s IN usr.shipped_order_history END;
     
 -- output:
-SELECT
-  *
-FROM
-  usr USE KEYS 'Elinor_33313792' NEST orders_with_users orders ON KEYS ARRAY s.order_id FOR s IN usr.shipped_order_history END;
+select *
+from
+  usr use keys 'Elinor_33313792' nest orders_with_users orders on keys array s.order_id for s in usr.shipped_order_history end;
 -- #endregion
 
 -- #region: sql-formatter / test / n1ql.test: formats SELECT query with UNNEST top level reserver word
 -- input:
 SELECT * FROM tutorial UNNEST tutorial.children c;
 -- output:
-SELECT
-  *
-FROM
-  tutorial UNNEST tutorial.children c;
+select *
+from tutorial unnest tutorial.children c;
 -- #endregion
 
 -- #region: sql-formatter / test / n1ql.test: formats UPDATE query with USE KEYS
 -- input:
 UPDATE tutorial USE KEYS 'baldwin' SET type = 'actor'
 -- output:
-UPDATE tutorial USE KEYS 'baldwin'
-SET
+update tutorial use keys 'baldwin'
+set
   type = 'actor'
 -- #endregion
 
@@ -4705,9 +3760,9 @@ SET
 -- input:
 CREATE TABLE users ( user_id iNt PRIMARY KEY, total_earnings Decimal(5, 2) NOT NULL )
 -- output:
-CREATE TABLE users (
-  user_id int PRIMARY KEY,
-  total_earnings decimal(5, 2) NOT NULL
+create table users (
+  user_id int primary key,
+  total_earnings decimal(5, 2) not null
 )
 -- #endregion
 
@@ -4716,9 +3771,9 @@ CREATE TABLE users (
 -- input:
 CREATE TABLE users ( user_id iNt PRIMARY KEY, total_earnings Decimal(5, 2) NOT NULL )
 -- output:
-CREATE TABLE users (
-  user_id INT PRIMARY KEY,
-  total_earnings DECIMAL(5, 2) NOT NULL
+create table users (
+  user_id INT primary key,
+  total_earnings DECIMAL(5, 2) not null
 )
 -- #endregion
 
@@ -4726,9 +3781,9 @@ CREATE TABLE users (
 -- input:
 CREATE TABLE users ( user_id iNt PRIMARY KEY, total_earnings Decimal(5, 2) NOT NULL )
 -- output:
-CREATE TABLE users (
-  user_id iNt PRIMARY KEY,
-  total_earnings Decimal(5, 2) NOT NULL
+create table users (
+  user_id int primary key,
+  total_earnings decimal(5, 2) not null
 )
 -- #endregion
 
@@ -4737,12 +3792,11 @@ CREATE TABLE users (
 -- input:
 SELECT product.price + (product.original_price * product.sales_tax) AS total FROM product;
 -- output:
-SELECT
+select
   product.price + (
     product.original_price * product.sales_tax
-  ) AS total
-FROM
-  product;
+  ) as total
+from product;
 -- #endregion
 
 -- #region: sql-formatter / test / options / expressionWidth: calculates parenthesized expression length (also considering spaces)
@@ -4750,12 +3804,9 @@ FROM
 -- input:
 SELECT (price * tax) AS total FROM table_name WHERE (amount > 25);
 -- output:
-SELECT
-  (price*tax) AS total
-FROM
-  table_name
-WHERE
-  (amount>25);
+select (price*tax) as total
+from table_name
+where (amount>25);
 -- #endregion
 
 -- #region: sql-formatter / test / options / expressionWidth: formats inline when length of substituted parameters < expressionWidth
@@ -4763,8 +3814,7 @@ WHERE
 -- input:
 SELECT (?, ?, ?) AS total;
 -- output:
-SELECT
-  (10, 20, 30) AS total;
+select (10, 20, 30) as total;
 -- #endregion
 
 -- #region: sql-formatter / test / options / expressionWidth: formats NOT-inline when length of substituted parameters > expressionWidth
@@ -4772,12 +3822,12 @@ SELECT
 -- input:
 SELECT (?, ?, ?) AS total;
 -- output:
-SELECT
+select
   (
     100,
     200,
     300
-  ) AS total;
+  ) as total;
 -- #endregion
 
 -- #region: sql-formatter / test / options / expressionWidth: keeps paranthesized expressions on single lines when they do not exceed expressionWidth
@@ -4785,18 +3835,15 @@ SELECT
 -- input:
 SELECT product.price + (product.original_price * product.sales_tax) AS total FROM product;
 -- output:
-SELECT
-  product.price + (product.original_price * product.sales_tax) AS total
-FROM
-  product;
+select product.price + (product.original_price * product.sales_tax) as total
+from product;
 -- #endregion
 
 -- #region: sql-formatter / test / options / expressionWidth: throws error when expressionWidth is zero
 -- config: {"expressionWidth":0}
 -- input:
 SELECT *
--- error:
--- Error: expressionWidth config must be positive number. Received 0 instead.
+-- error: "expressionWidth config must be positive number. Received 0 instead."
 -- #endregion
 
 -- #region: sql-formatter / test / options / functionCase: converts function names to lowercase
@@ -4804,11 +3851,8 @@ SELECT *
 -- input:
 SELECT MiN(price) AS min_price, Cast(item_code AS INT) FROM products
 -- output:
-SELECT
-  min(price) AS min_price,
-  cast(item_code AS INT)
-FROM
-  products
+select min(price) as min_price, cast(item_code as int)
+from products
 -- #endregion
 
 -- #region: sql-formatter / test / options / functionCase: converts function names to uppercase
@@ -4816,22 +3860,16 @@ FROM
 -- input:
 SELECT MiN(price) AS min_price, Cast(item_code AS INT) FROM products
 -- output:
-SELECT
-  MIN(price) AS min_price,
-  CAST(item_code AS INT)
-FROM
-  products
+select MIN(price) as min_price, CAST(item_code as int)
+from products
 -- #endregion
 
 -- #region: sql-formatter / test / options / functionCase: preserves function name case by default
 -- input:
 SELECT MiN(price) AS min_price, Cast(item_code AS INT) FROM products
 -- output:
-SELECT
-  MiN(price) AS min_price,
-  Cast(item_code AS INT)
-FROM
-  products
+select min(price) as min_price, cast(item_code as int)
+from products
 -- #endregion
 
 -- #region: sql-formatter / test / options / identifierCase: converts identifiers to lowercase
@@ -4839,15 +3877,9 @@ FROM
 -- input:
 select Abc, 'mytext' as MyText from tBl1 left join Tbl2 where colA > 1 and colB = 3
 -- output:
-select
-  abc,
-  'mytext' as mytext
-from
-  tbl1
-  left join tbl2
-where
-  cola > 1
-  and colb = 3
+select abc, 'mytext' as mytext
+from tbl1 left join tbl2
+where cola > 1 and colb = 3
 -- #endregion
 
 -- #region: sql-formatter / test / options / identifierCase: converts identifiers to uppercase
@@ -4855,15 +3887,9 @@ where
 -- input:
 select Abc, 'mytext' as MyText from tBl1 left join Tbl2 where colA > 1 and colB = 3
 -- output:
-select
-  ABC,
-  'mytext' as MYTEXT
-from
-  TBL1
-  left join TBL2
-where
-  COLA > 1
-  and COLB = 3
+select ABC, 'mytext' as MYTEXT
+from TBL1 left join TBL2
+where COLA > 1 and COLB = 3
 -- #endregion
 
 -- #region: sql-formatter / test / options / identifierCase: converts multi-part identifiers to uppercase
@@ -4871,10 +3897,8 @@ where
 -- input:
 select Abc from Part1.Part2.Part3
 -- output:
-select
-  ABC
-from
-  PART1.PART2.PART3
+select ABC
+from PART1.PART2.PART3
 -- #endregion
 
 -- #region: sql-formatter / test / options / identifierCase: does not uppercase quoted identifiers
@@ -4882,8 +3906,7 @@ from
 -- input:
 select "abc" as foo
 -- output:
-select
-  "abc" as FOO
+select "abc" as FOO
 -- #endregion
 
 -- #region: sql-formatter / test / options / identifierCase: function names are not effected by identifierCase option
@@ -4891,25 +3914,17 @@ select
 -- input:
 select count(*) from tbl
 -- output:
-select
-  count(*)
-from
-  TBL
+select count(*)
+from TBL
 -- #endregion
 
 -- #region: sql-formatter / test / options / identifierCase: preserves identifier case by default
 -- input:
 select Abc, 'mytext' as MyText from tBl1 left join Tbl2 where colA > 1 and colB = 3
 -- output:
-select
-  Abc,
-  'mytext' as MyText
-from
-  tBl1
-  left join Tbl2
-where
-  colA > 1
-  and colB = 3
+select abc, 'mytext' as mytext
+from tbl1 left join tbl2
+where cola > 1 and colb = 3
 -- #endregion
 
 -- #region: sql-formatter / test / options / indentStyle: correctly indents set operations inside subqueries
@@ -4920,14 +3935,14 @@ SELECT * FROM (
             UNION ALL
             SELECT * FROM b) AS tbl;
 -- output:
-SELECT    *
-FROM      (
-          SELECT    *
-          FROM      a
-          UNION ALL
-          SELECT    *
-          FROM      b
-          ) AS tbl;
+select    *
+from      (
+          select    *
+          from      a
+          union all
+          select    *
+          from      b
+          ) as tbl;
 -- #endregion
 
 -- #region: sql-formatter / test / options / indentStyle: does not indent semicolon when newlineBeforeSemicolon:true used
@@ -4935,10 +3950,10 @@ FROM      (
 -- input:
 SELECT firstname, lastname, age FROM customers;
 -- output:
-SELECT    firstname,
+select    firstname,
           lastname,
           age
-FROM      customers
+from      customers
 ;
 -- #endregion
 
@@ -4947,9 +3962,9 @@ FROM      customers
 -- input:
 SELECT * FROM tbl WHERE id BETWEEN 1 AND 5000;
 -- output:
-SELECT    *
-FROM      tbl
-WHERE     id BETWEEN 1 AND 5000;
+select    *
+from      tbl
+where     id between 1 and 5000;
 -- #endregion
 
 -- #region: sql-formatter / test / options / indentStyle: formats BETWEEN..AND
@@ -4957,9 +3972,9 @@ WHERE     id BETWEEN 1 AND 5000;
 -- input:
 SELECT * FROM tbl WHERE id BETWEEN 1 AND 5000;
 -- output:
-   SELECT *
-     FROM tbl
-    WHERE id BETWEEN 1 AND 5000;
+   select *
+     from tbl
+    where id between 1 and 5000;
 -- #endregion
 
 -- #region: sql-formatter / test / options / indentStyle: handles long keywords
@@ -4972,12 +3987,12 @@ SELECT *
 FROM b
 LEFT OUTER JOIN c;
 -- output:
-SELECT    *
-FROM      a
-UNION ALL
-SELECT    *
-FROM      b
-LEFT      OUTER JOIN c;
+select    *
+from      a
+union all
+select    *
+from      b
+left      outer join c;
 -- #endregion
 
 -- #region: sql-formatter / test / options / indentStyle: handles long keywords
@@ -4990,12 +4005,12 @@ SELECT *
 FROM b
 LEFT OUTER JOIN c;
 -- output:
-   SELECT *
-     FROM a
-UNION ALL
-   SELECT *
-     FROM b
-     LEFT OUTER JOIN c;
+   select *
+     from a
+union all
+   select *
+     from b
+     left outer join c;
 -- #endregion
 
 -- #region: sql-formatter / test / options / indentStyle: handles multiple levels of nested queries
@@ -5003,19 +4018,19 @@ UNION ALL
 -- input:
 SELECT age FROM (SELECT fname, lname, age FROM (SELECT fname, lname FROM persons) JOIN (SELECT age FROM ages)) as mytable;
 -- output:
-SELECT    age
-FROM      (
-          SELECT    fname,
+select    age
+from      (
+          select    fname,
                     lname,
                     age
-          FROM      (
-                    SELECT    fname,
+          from      (
+                    select    fname,
                               lname
-                    FROM      persons
+                    from      persons
                     )
-          JOIN      (
-                    SELECT    age
-                    FROM      ages
+          join      (
+                    select    age
+                    from      ages
                     )
           ) as mytable;
 -- #endregion
@@ -5027,12 +4042,8 @@ select distinct * frOM foo left JOIN bar WHERe cola > 1 and colb = 3
 -- output:
 select distinct
   *
-from
-  foo
-  left join bar
-where
-  cola > 1
-  and colb = 3
+from foo left join bar
+where cola > 1 and colb = 3
 -- #endregion
 
 -- #region: sql-formatter / test / options / keywordCase: converts keywords to uppercase
@@ -5042,12 +4053,8 @@ select distinct * frOM foo left JOIN mycol WHERe cola > 1 and colb = 3
 -- output:
 SELECT DISTINCT
   *
-FROM
-  foo
-  LEFT JOIN mycol
-WHERE
-  cola > 1
-  AND colb = 3
+FROM foo LEFT JOIN mycol
+WHERE cola > 1 AND colb = 3
 -- #endregion
 
 -- #region: sql-formatter / test / options / keywordCase: does not uppercase keywords inside strings
@@ -5055,8 +4062,7 @@ WHERE
 -- input:
 select 'distinct' as foo
 -- output:
-SELECT
-  'distinct' AS foo
+SELECT 'distinct' AS foo
 -- #endregion
 
 -- #region: sql-formatter / test / options / keywordCase: formats multi-word reserved clauses into single line
@@ -5073,17 +4079,11 @@ select * from mytable
       by
       mytable2.col3;
 -- output:
-SELECT
-  *
-FROM
-  mytable
-  INNER JOIN mytable2 ON mytable1.col1 = mytable2.col1
-WHERE
-  mytable2.col1 = 5
-GROUP BY
-  mytable1.col2
-ORDER BY
-  mytable2.col3;
+SELECT *
+FROM mytable INNER JOIN mytable2 ON mytable1.col1 = mytable2.col1
+WHERE mytable2.col1 = 5
+GROUP BY mytable1.col2
+ORDER BY mytable2.col3;
 -- #endregion
 
 -- #region: sql-formatter / test / options / keywordCase: preserves keyword case by default
@@ -5092,12 +4092,8 @@ select distinct * frOM foo left JOIN bar WHERe cola > 1 and colb = 3
 -- output:
 select distinct
   *
-frOM
-  foo
-  left JOIN bar
-WHERe
-  cola > 1
-  and colb = 3
+from foo left join bar
+where cola > 1 and colb = 3
 -- #endregion
 
 -- #region: sql-formatter / test / options / keywordCase: treats dot-seperated keywords as plain identifiers
@@ -5105,25 +4101,19 @@ WHERe
 -- input:
 select table.and from set.select
 -- output:
-SELECT
-  table.and
-FROM
-  set.select
+SELECT table.and
+FROM set.select
 -- #endregion
 
 -- #region: sql-formatter / test / options / linesBetweenQueries: defaults to single empty line between queries
 -- input:
 SELECT * FROM foo; SELECT * FROM bar;
 -- output:
-SELECT
-  *
-FROM
-  foo;
+select *
+from foo;
 
-SELECT
-  *
-FROM
-  bar;
+select *
+from bar;
 -- #endregion
 
 -- #region: sql-formatter / test / options / linesBetweenQueries: supports more empty lines between queries
@@ -5131,16 +4121,12 @@ FROM
 -- input:
 SELECT * FROM foo; SELECT * FROM bar;
 -- output:
-SELECT
-  *
-FROM
-  foo;
+select *
+from foo;
 
 
-SELECT
-  *
-FROM
-  bar;
+select *
+from bar;
 -- #endregion
 
 -- #region: sql-formatter / test / options / linesBetweenQueries: supports no empty lines between queries
@@ -5148,25 +4134,18 @@ FROM
 -- input:
 SELECT * FROM foo; SELECT * FROM bar;
 -- output:
-SELECT
-  *
-FROM
-  foo;
-SELECT
-  *
-FROM
-  bar;
+select *
+from foo;
+select *
+from bar;
 -- #endregion
 
 -- #region: sql-formatter / test / options / logicalOperatorNewline: by default adds newline before logical operator
 -- input:
 SELECT a WHERE true AND false;
 -- output:
-SELECT
-  a
-WHERE
-  true
-  AND false;
+select a
+where true and false;
 -- #endregion
 
 -- #region: sql-formatter / test / options / logicalOperatorNewline: supports newline after logical operator
@@ -5174,21 +4153,16 @@ WHERE
 -- input:
 SELECT a WHERE true AND false;
 -- output:
-SELECT
-  a
-WHERE
-  true AND
-  false;
+select a
+where true and false;
 -- #endregion
 
 -- #region: sql-formatter / test / options / newlineBeforeSemicolon: defaults to semicolon on end of last line
 -- input:
 SELECT a FROM b;
 -- output:
-SELECT
-  a
-FROM
-  b;
+select a
+from b;
 -- #endregion
 
 -- #region: sql-formatter / test / options / newlineBeforeSemicolon: does not add newline before lonely semicolon when newlineBeforeSemicolon:true
@@ -5231,9 +4205,8 @@ FROM
 -- input:
 SELECT a FROM;
 -- output:
-SELECT
-  a
-FROM;
+select a
+from;
 -- #endregion
 
 -- #region: sql-formatter / test / options / newlineBeforeSemicolon: supports semicolon on separate line
@@ -5241,10 +4214,8 @@ FROM;
 -- input:
 SELECT a FROM b;
 -- output:
-SELECT
-  a
-FROM
-  b
+select a
+from b
 ;
 -- #endregion
 
@@ -5252,98 +4223,71 @@ FROM
 -- input:
 SELECT ?, ?, ?;
 -- output:
-SELECT
-  ?,
-  ?,
-  ?;
+select ?, ?, ?;
 -- #endregion
 
 -- #region: sql-formatter / test / options / param: recognizes :n placeholders
 -- input:
 SELECT :1, :2 FROM tbl
--- error:
--- Error: Parse error: Unexpected ":1, :2 FRO" at line 1 column 8.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \":1, :2 FRO\" at line 1 column 8.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / options / param: recognizes :name placeholders
 -- input:
 SELECT :foo, :bar, :baz;
 -- output:
-SELECT
-  :foo,
-  :bar,
-  :baz;
+select :foo, :bar, :baz;
 -- #endregion
 
 -- #region: sql-formatter / test / options / param: recognizes ? numbered placeholders
 -- input:
 SELECT ?1, ?25, ?2;
 -- output:
-SELECT
-  ?1,
-  ?25,
-  ?2;
+select ?1, ?25, ?2;
 -- #endregion
 
 -- #region: sql-formatter / test / options / param: recognizes @"name" placeholders
 -- input:
 SELECT @"foo", @"foo bar";
--- error:
--- Error: Parse error: Unexpected "@"foo", @"" at line 1 column 8.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"@\"foo\", @\"\" at line 1 column 8.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / options / param: recognizes @[name] placeholders
 -- input:
 SELECT @[foo], @[foo bar];
--- error:
--- Error: Parse error: Unexpected "@[foo], @[" at line 1 column 8.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"@[foo], @[\" at line 1 column 8.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / options / param: recognizes @`name` placeholders
 -- input:
 SELECT @`foo`, @`foo bar`;
--- error:
--- Error: Parse error: Unexpected "@`foo`, @`" at line 1 column 8.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"@`foo`, @`\" at line 1 column 8.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / options / param: recognizes @name placeholders
 -- input:
 SELECT @foo, @bar, @baz;
 -- output:
-SELECT
-  @foo,
-  @bar,
-  @baz;
+select @foo, @bar, @baz;
 -- #endregion
 
 -- #region: sql-formatter / test / options / param: recognizes $"name" placeholders
 -- input:
 SELECT $"foo", $"foo bar";
--- error:
--- Error: Parse error: Unexpected "$"foo", $"" at line 1 column 8.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"$\"foo\", $\"\" at line 1 column 8.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / options / param: recognizes $n placeholders
 -- input:
 SELECT $1, $2 FROM tbl
--- error:
--- Error: Parse error: Unexpected "$1, $2 FRO" at line 1 column 8.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"$1, $2 FRO\" at line 1 column 8.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / options / param: recognizes $name placeholders
 -- input:
 SELECT $foo, $bar, $baz;
 -- output:
-SELECT
-  $foo,
-  $bar,
-  $baz;
+select $foo, $bar, $baz;
 -- #endregion
 
 -- #region: sql-formatter / test / options / param: replaces :name placeholders with param values
@@ -5351,9 +4295,7 @@ SELECT
 -- input:
 WHERE name = :name AND age > :current_age;
 -- output:
-WHERE
-  name = 'John'
-  AND age > 10;
+where name = 'John' and age > 10;
 -- #endregion
 
 -- #region: sql-formatter / test / options / param: replaces ? positional placeholders inside BETWEEN expression
@@ -5361,10 +4303,8 @@ WHERE
 -- input:
 SELECT name WHERE age BETWEEN ? AND ?;
 -- output:
-SELECT
-  name
-WHERE
-  age BETWEEN 5 AND 10;
+select name
+where age between 5 and 10;
 -- #endregion
 
 -- #region: sql-formatter / test / options / param: replaces ? positional placeholders with param values
@@ -5372,37 +4312,28 @@ WHERE
 -- input:
 SELECT ?, ?, ?;
 -- output:
-SELECT
-  first,
-  second,
-  third;
+select first, second, third;
 -- #endregion
 
 -- #region: sql-formatter / test / options / param: replaces @"name" placeholders with param values
 -- config: {"params":{"name":"'John'","current age":"10"}}
 -- input:
 WHERE name = @"name" AND age > @"current age";
--- error:
--- Error: Parse error: Unexpected "@"name" AN" at line 1 column 14.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"@\"name\" AN\" at line 1 column 14.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / options / param: replaces @[name] placeholders with param values
 -- config: {"params":{"name":"'John'","current age":"10"}}
 -- input:
 WHERE name = @[name] AND age > @[current age];
--- error:
--- Error: Parse error: Unexpected "@[name] AN" at line 1 column 14.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"@[name] AN\" at line 1 column 14.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / options / param: replaces @`name` placeholders with param values
 -- config: {"params":{"name":"'John'","current age":"10"}}
 -- input:
 WHERE name = @`name` AND age > @`current age`;
--- error:
--- Error: Parse error: Unexpected "@`name` AN" at line 1 column 14.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"@`name` AN\" at line 1 column 14.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / options / param: replaces @name placeholders with param values
@@ -5410,18 +4341,14 @@ WHERE name = @`name` AND age > @`current age`;
 -- input:
 WHERE name = @name AND age > @current_age;
 -- output:
-WHERE
-  name = 'John'
-  AND age > 10;
+where name = 'John' and age > 10;
 -- #endregion
 
 -- #region: sql-formatter / test / options / param: replaces $"name" placeholders with param values
 -- config: {"params":{"name":"'John'","current age":"10"}}
 -- input:
 WHERE name = $"name" AND age > $"current age";
--- error:
--- Error: Parse error: Unexpected "$"name" AN" at line 1 column 14.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"$\"name\" AN\" at line 1 column 14.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / options / param: replaces $name placeholders with param values
@@ -5429,17 +4356,14 @@ WHERE name = $"name" AND age > $"current age";
 -- input:
 WHERE name = $name AND age > $current_age;
 -- output:
-WHERE
-  name = 'John'
-  AND age > 10;
+where name = 'John' and age > 10;
 -- #endregion
 
 -- #region: sql-formatter / test / options / paramTypes: does not enter infinite loop when empty regex given
 -- config: {"paramTypes":{"custom":[{"regex":""}]}}
 -- input:
 SELECT foo FROM bar
--- error:
--- Error: Empty regex given in custom paramTypes. That would result in matching infinite amount of parameters.
+-- error: "Empty regex given in custom paramTypes. That would result in matching infinite amount of parameters."
 -- #endregion
 
 -- #region: sql-formatter / test / options / paramTypes: replaces :name named placeholders with param values
@@ -5447,10 +4371,7 @@ SELECT foo FROM bar
 -- input:
 SELECT :a, :b, :c;
 -- output:
-SELECT
-  first,
-  second,
-  third;
+select first, second, third;
 -- #endregion
 
 -- #region: sql-formatter / test / options / paramTypes: replaces ? positional placeholders with param values
@@ -5458,10 +4379,7 @@ SELECT
 -- input:
 SELECT ?, ?, ?;
 -- output:
-SELECT
-  first,
-  second,
-  third;
+select first, second, third;
 -- #endregion
 
 -- #region: sql-formatter / test / options / paramTypes: replaces %blah% numbered placeholders with param values
@@ -5469,37 +4387,29 @@ SELECT
 -- input:
 SELECT %1%, %2%, %3%;
 -- output:
-SELECT
-  first,
-  second,
-  third;
+select first, second, third;
 -- #endregion
 
 -- #region: sql-formatter / test / options / paramTypes: supports multiple custom param types
 -- config: {"paramTypes":{"custom":[{"regex":"%[0-9]+%"},{"regex":"{[0-9]}"}]},"params":{"%1%":"first","{2}":"second"}}
 -- input:
 SELECT %1%, {2};
--- error:
--- SyntaxError: Invalid regular expression: /(?:{[0-9]})/uy: Lone quantifier brackets
+-- error: "SyntaxError: Invalid regular expression: /(?:{[0-9]})/uy: Lone quantifier brackets"
 -- #endregion
 
 -- #region: sql-formatter / test / options / paramTypes: supports parameterizing schema.table.column syntax
 -- config: {"paramTypes":{"custom":[{"regex":"{w+}"}]}}
 -- input:
 SELECT {schema}.{table}.{column} FROM {schema}.{table}
--- error:
--- SyntaxError: Invalid regular expression: /(?:{w+})/uy: Lone quantifier brackets
+-- error: "SyntaxError: Invalid regular expression: /(?:{w+})/uy: Lone quantifier brackets"
 -- #endregion
 
 -- #region: sql-formatter / test / options / tabWidth: indents with 2 spaces by default
 -- input:
 SELECT count(*),Column1 FROM Table1;
 -- output:
-SELECT
-  count(*),
-  Column1
-FROM
-  Table1;
+select count(*), column1
+from table1;
 -- #endregion
 
 -- #region: sql-formatter / test / options / tabWidth: supports indenting with 4 spaces
@@ -5507,11 +4417,11 @@ FROM
 -- input:
 SELECT count(*),Column1 FROM Table1;
 -- output:
-SELECT
+select
     count(*),
-    Column1
-FROM
-    Table1;
+    column1
+from
+    table1;
 -- #endregion
 
 -- #region: sql-formatter / test / options / useTabs: ignores tabWidth when useTabs is enabled
@@ -5519,11 +4429,11 @@ FROM
 -- input:
 SELECT count(*),Column1 FROM Table1;
 -- output:
-SELECT
+select
 	count(*),
-	Column1
-FROM
-	Table1;
+	column1
+from
+	table1;
 -- #endregion
 
 -- #region: sql-formatter / test / options / useTabs: supports indenting with tabs
@@ -5531,11 +4441,11 @@ FROM
 -- input:
 SELECT count(*),Column1 FROM Table1;
 -- output:
-SELECT
+select
 	count(*),
-	Column1
-FROM
-	Table1;
+	column1
+from
+	table1;
 -- #endregion
 
 -- #region: sql-formatter / test / plsql.test: formats FOR UPDATE clause
@@ -5545,29 +4455,22 @@ FROM
       SELECT * FROM tbl FOR UPDATE OF tbl.salary;
     
 -- output:
-SELECT
-  *
-FROM
-  tbl FOR
-UPDATE;
+select *
+from tbl for
+update;
 
-SELECT
-  *
-FROM
-  tbl FOR
-UPDATE OF tbl.salary;
+select *
+from tbl for
+update of tbl.salary;
 -- #endregion
 
 -- #region: sql-formatter / test / plsql.test: formats identifier with dblink
 -- input:
 SELECT * FROM database.table@dblink WHERE id = 1;
 -- output:
-SELECT
-  *
-FROM
-  database.table @dblink
-WHERE
-  id = 1;
+select *
+from database.table @dblink
+where id = 1;
 -- #endregion
 
 -- #region: sql-formatter / test / plsql.test: formats Oracle recursive sub queries
@@ -5579,43 +4482,35 @@ WHERE
       SELECT * FROM t1;
     
 -- output:
-WITH
-  t1 AS (
-    SELECT
+with
+  t1 as (
+    select
       *
-    FROM
+    from
       tbl
-  ) SEARCH BREADTH FIRST BY id
-SET
+  ) search breadth first by id
+set
   order1
-SELECT
-  *
-FROM
-  t1;
+select *
+from t1;
 -- #endregion
 
 -- #region: sql-formatter / test / plsql.test: recognizes _, $, # as part of identifiers
 -- input:
 SELECT my_col$1#, col.a$, type#, procedure$, user# FROM tbl;
--- error:
--- Error: Parse error: Unexpected "$1#, col.a" at line 1 column 14.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"$1#, col.a\" at line 1 column 14.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / plsql.test: supports &name substitution variables
 -- input:
 SELECT &name, &some$Special#Chars_, &hah123 FROM &&tbl
--- error:
--- Error: Parse error: Unexpected "#Chars_, &" at line 1 column 28.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"#Chars_, &\" at line 1 column 28.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / plsql.test: supports #, $ in named parameters
 -- input:
 SELECT :col$foo, :col#foo
--- error:
--- Error: Parse error: Unexpected "#foo" at line 1 column 22.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"#foo\" at line 1 column 22.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / plsql.test: supports Q custom delimiter strings
@@ -5629,21 +4524,21 @@ nq '(test string ( ) ' foo ' bar )'
 -- input:
 NQ'[test string [ ] 'foo' bar ]'
 -- output:
-NQ '[test string [ ] ' foo ' bar ]'
+nq '[test string [ ] ' foo ' bar ]'
 -- #endregion
 
 -- #region: sql-formatter / test / plsql.test: supports Q custom delimiter strings
 -- input:
 nQ'{test string { } 'foo' bar }'
 -- output:
-nQ '{test string { } ' foo ' bar }'
+nq '{test string { } ' foo ' bar }'
 -- #endregion
 
 -- #region: sql-formatter / test / plsql.test: supports Q custom delimiter strings
 -- input:
 Nq'%test string % % 'foo' bar %'
 -- output:
-Nq '%test string % % ' foo ' bar %'
+nq '%test string % % ' foo ' bar %'
 -- #endregion
 
 -- #region: sql-formatter / test / plsql.test: supports Q custom delimiter strings
@@ -5656,29 +4551,28 @@ q '<test string < > ' foo ' bar >'
 -- #region: sql-formatter / test / plsql.test: supports Q custom delimiter strings
 -- input:
 q'$test string $'$''
--- error:
--- Error: Parse error: Unexpected "$''" at line 1 column 18.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"$''\" at line 1 column 18.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / plsql.test: supports Q custom delimiter strings
 -- input:
 Q'Stest string S'S''
 -- output:
-Q 'Stest string S' S ''
+q 'Stest string S' s ''
 -- #endregion
 
 -- #region: sql-formatter / test / plsql.test: supports Q custom delimiter strings
 -- input:
 Q'Xtest string X X 'foo' bar X'
 -- output:
-Q 'Xtest string X X ' foo ' bar X'
+q 'Xtest string X X ' foo ' bar X'
 -- #endregion
 
 -- #region: sql-formatter / test / postgresql.test: formats empty SELECT
 -- input:
 SELECT;
--- output: <unchanged>
+-- output:
+select;
 -- #endregion
 
 -- #region: sql-formatter / test / postgresql.test: formats FOR UPDATE clause
@@ -5688,24 +4582,21 @@ SELECT;
         SELECT * FROM tbl FOR UPDATE OF tbl.salary;
       
 -- output:
-SELECT
-  *
-FROM
-  tbl FOR
-UPDATE;
+select *
+from tbl for
+update;
 
-SELECT
-  *
-FROM
-  tbl FOR
-UPDATE OF tbl.salary;
+select *
+from tbl for
+update of tbl.salary;
 -- #endregion
 
 -- #region: sql-formatter / test / postgresql.test: formats JSON and JSONB data types
 -- config: {"dataTypeCase":"upper"}
 -- input:
 CREATE TABLE foo (bar json, baz jsonb);
--- output: <unchanged>
+-- output:
+create table foo (bar json, baz jsonb);
 -- #endregion
 
 -- #region: sql-formatter / test / postgresql.test: formats keywords in COMMENT ON
@@ -5740,506 +4631,27 @@ create table time_table (
 -- input:
 SELECT foo operator ( !== ) bar;
 -- output:
-SELECT
-  foo operator (!= =) bar;
+select foo operator (!= =) bar;
 -- #endregion
 
 -- #region: sql-formatter / test / postgresql.test: supports OPERATOR() syntax
 -- input:
 SELECT foo OPERATOR(public.===) bar;
--- error:
--- Error: Parse error at token: == at line 1 column 28
--- Unexpected OPERATOR token: {"type":"OPERATOR","raw":"==","text":"==","start":27}. Instead, I was expecting to see one of the following:
--- 
--- A LINE_COMMENT token based on:
---     comment →  ● %LINE_COMMENT
---     _$ebnf$1 → _$ebnf$1 ● comment
---     _ →  ● _$ebnf$1
---     property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR ● _ property_access$subexpression$1
---     atomic_expression$subexpression$1 →  ● property_access
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     parenthesis → "(" ● expressions_or_clauses ")"
---     atomic_expression$subexpression$1 →  ● parenthesis
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     select_clause$subexpression$1$ebnf$2 → select_clause$subexpression$1$ebnf$2 ● free_form_sql
---     select_clause$subexpression$1 → asteriskless_free_form_sql ● select_clause$subexpression$1$ebnf$2
---     select_clause → %RESERVED_SELECT ● select_clause$subexpression$1
---     clause$subexpression$1 →  ● select_clause
---     clause →  ● clause$subexpression$1
---     expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause
---     expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A BLOCK_COMMENT token based on:
---     comment →  ● %BLOCK_COMMENT
---     _$ebnf$1 → _$ebnf$1 ● comment
---     _ →  ● _$ebnf$1
---     property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR ● _ property_access$subexpression$1
---     atomic_expression$subexpression$1 →  ● property_access
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     parenthesis → "(" ● expressions_or_clauses ")"
---     atomic_expression$subexpression$1 →  ● parenthesis
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     select_clause$subexpression$1$ebnf$2 → select_clause$subexpression$1$ebnf$2 ● free_form_sql
---     select_clause$subexpression$1 → asteriskless_free_form_sql ● select_clause$subexpression$1$ebnf$2
---     select_clause → %RESERVED_SELECT ● select_clause$subexpression$1
---     clause$subexpression$1 →  ● select_clause
---     clause →  ● clause$subexpression$1
---     expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause
---     expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A DISABLE_COMMENT token based on:
---     comment →  ● %DISABLE_COMMENT
---     _$ebnf$1 → _$ebnf$1 ● comment
---     _ →  ● _$ebnf$1
---     property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR ● _ property_access$subexpression$1
---     atomic_expression$subexpression$1 →  ● property_access
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     parenthesis → "(" ● expressions_or_clauses ")"
---     atomic_expression$subexpression$1 →  ● parenthesis
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     select_clause$subexpression$1$ebnf$2 → select_clause$subexpression$1$ebnf$2 ● free_form_sql
---     select_clause$subexpression$1 → asteriskless_free_form_sql ● select_clause$subexpression$1$ebnf$2
---     select_clause → %RESERVED_SELECT ● select_clause$subexpression$1
---     clause$subexpression$1 →  ● select_clause
---     clause →  ● clause$subexpression$1
---     expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause
---     expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A ARRAY_IDENTIFIER token based on:
---     array_subscript →  ● %ARRAY_IDENTIFIER _ square_brackets
---     property_access$subexpression$1 →  ● array_subscript
---     property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1
---     atomic_expression$subexpression$1 →  ● property_access
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     parenthesis → "(" ● expressions_or_clauses ")"
---     atomic_expression$subexpression$1 →  ● parenthesis
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     select_clause$subexpression$1$ebnf$2 → select_clause$subexpression$1$ebnf$2 ● free_form_sql
---     select_clause$subexpression$1 → asteriskless_free_form_sql ● select_clause$subexpression$1$ebnf$2
---     select_clause → %RESERVED_SELECT ● select_clause$subexpression$1
---     clause$subexpression$1 →  ● select_clause
---     clause →  ● clause$subexpression$1
---     expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause
---     expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A ARRAY_KEYWORD token based on:
---     array_subscript →  ● %ARRAY_KEYWORD _ square_brackets
---     property_access$subexpression$1 →  ● array_subscript
---     property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1
---     atomic_expression$subexpression$1 →  ● property_access
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     parenthesis → "(" ● expressions_or_clauses ")"
---     atomic_expression$subexpression$1 →  ● parenthesis
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     select_clause$subexpression$1$ebnf$2 → select_clause$subexpression$1$ebnf$2 ● free_form_sql
---     select_clause$subexpression$1 → asteriskless_free_form_sql ● select_clause$subexpression$1$ebnf$2
---     select_clause → %RESERVED_SELECT ● select_clause$subexpression$1
---     clause$subexpression$1 →  ● select_clause
---     clause →  ● clause$subexpression$1
---     expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause
---     expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A ASTERISK token based on:
---     all_columns_asterisk →  ● %ASTERISK
---     property_access$subexpression$1 →  ● all_columns_asterisk
---     property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1
---     atomic_expression$subexpression$1 →  ● property_access
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     parenthesis → "(" ● expressions_or_clauses ")"
---     atomic_expression$subexpression$1 →  ● parenthesis
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     select_clause$subexpression$1$ebnf$2 → select_clause$subexpression$1$ebnf$2 ● free_form_sql
---     select_clause$subexpression$1 → asteriskless_free_form_sql ● select_clause$subexpression$1$ebnf$2
---     select_clause → %RESERVED_SELECT ● select_clause$subexpression$1
---     clause$subexpression$1 →  ● select_clause
---     clause →  ● clause$subexpression$1
---     expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause
---     expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A IDENTIFIER token based on:
---     identifier$subexpression$1 →  ● %IDENTIFIER
---     identifier →  ● identifier$subexpression$1
---     property_access$subexpression$1 →  ● identifier
---     property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1
---     atomic_expression$subexpression$1 →  ● property_access
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     parenthesis → "(" ● expressions_or_clauses ")"
---     atomic_expression$subexpression$1 →  ● parenthesis
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     select_clause$subexpression$1$ebnf$2 → select_clause$subexpression$1$ebnf$2 ● free_form_sql
---     select_clause$subexpression$1 → asteriskless_free_form_sql ● select_clause$subexpression$1$ebnf$2
---     select_clause → %RESERVED_SELECT ● select_clause$subexpression$1
---     clause$subexpression$1 →  ● select_clause
---     clause →  ● clause$subexpression$1
---     expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause
---     expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A QUOTED_IDENTIFIER token based on:
---     identifier$subexpression$1 →  ● %QUOTED_IDENTIFIER
---     identifier →  ● identifier$subexpression$1
---     property_access$subexpression$1 →  ● identifier
---     property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1
---     atomic_expression$subexpression$1 →  ● property_access
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     parenthesis → "(" ● expressions_or_clauses ")"
---     atomic_expression$subexpression$1 →  ● parenthesis
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     select_clause$subexpression$1$ebnf$2 → select_clause$subexpression$1$ebnf$2 ● free_form_sql
---     select_clause$subexpression$1 → asteriskless_free_form_sql ● select_clause$subexpression$1$ebnf$2
---     select_clause → %RESERVED_SELECT ● select_clause$subexpression$1
---     clause$subexpression$1 →  ● select_clause
---     clause →  ● clause$subexpression$1
---     expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause
---     expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A VARIABLE token based on:
---     identifier$subexpression$1 →  ● %VARIABLE
---     identifier →  ● identifier$subexpression$1
---     property_access$subexpression$1 →  ● identifier
---     property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1
---     atomic_expression$subexpression$1 →  ● property_access
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     parenthesis → "(" ● expressions_or_clauses ")"
---     atomic_expression$subexpression$1 →  ● parenthesis
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     select_clause$subexpression$1$ebnf$2 → select_clause$subexpression$1$ebnf$2 ● free_form_sql
---     select_clause$subexpression$1 → asteriskless_free_form_sql ● select_clause$subexpression$1$ebnf$2
---     select_clause → %RESERVED_SELECT ● select_clause$subexpression$1
---     clause$subexpression$1 →  ● select_clause
---     clause →  ● clause$subexpression$1
---     expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause
---     expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A NAMED_PARAMETER token based on:
---     parameter$subexpression$1 →  ● %NAMED_PARAMETER
---     parameter →  ● parameter$subexpression$1
---     property_access$subexpression$1 →  ● parameter
---     property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1
---     atomic_expression$subexpression$1 →  ● property_access
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     parenthesis → "(" ● expressions_or_clauses ")"
---     atomic_expression$subexpression$1 →  ● parenthesis
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     select_clause$subexpression$1$ebnf$2 → select_clause$subexpression$1$ebnf$2 ● free_form_sql
---     select_clause$subexpression$1 → asteriskless_free_form_sql ● select_clause$subexpression$1$ebnf$2
---     select_clause → %RESERVED_SELECT ● select_clause$subexpression$1
---     clause$subexpression$1 →  ● select_clause
---     clause →  ● clause$subexpression$1
---     expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause
---     expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A QUOTED_PARAMETER token based on:
---     parameter$subexpression$1 →  ● %QUOTED_PARAMETER
---     parameter →  ● parameter$subexpression$1
---     property_access$subexpression$1 →  ● parameter
---     property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1
---     atomic_expression$subexpression$1 →  ● property_access
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     parenthesis → "(" ● expressions_or_clauses ")"
---     atomic_expression$subexpression$1 →  ● parenthesis
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     select_clause$subexpression$1$ebnf$2 → select_clause$subexpression$1$ebnf$2 ● free_form_sql
---     select_clause$subexpression$1 → asteriskless_free_form_sql ● select_clause$subexpression$1$ebnf$2
---     select_clause → %RESERVED_SELECT ● select_clause$subexpression$1
---     clause$subexpression$1 →  ● select_clause
---     clause →  ● clause$subexpression$1
---     expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause
---     expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A NUMBERED_PARAMETER token based on:
---     parameter$subexpression$1 →  ● %NUMBERED_PARAMETER
---     parameter →  ● parameter$subexpression$1
---     property_access$subexpression$1 →  ● parameter
---     property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1
---     atomic_expression$subexpression$1 →  ● property_access
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     parenthesis → "(" ● expressions_or_clauses ")"
---     atomic_expression$subexpression$1 →  ● parenthesis
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     select_clause$subexpression$1$ebnf$2 → select_clause$subexpression$1$ebnf$2 ● free_form_sql
---     select_clause$subexpression$1 → asteriskless_free_form_sql ● select_clause$subexpression$1$ebnf$2
---     select_clause → %RESERVED_SELECT ● select_clause$subexpression$1
---     clause$subexpression$1 →  ● select_clause
---     clause →  ● clause$subexpression$1
---     expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause
---     expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A POSITIONAL_PARAMETER token based on:
---     parameter$subexpression$1 →  ● %POSITIONAL_PARAMETER
---     parameter →  ● parameter$subexpression$1
---     property_access$subexpression$1 →  ● parameter
---     property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1
---     atomic_expression$subexpression$1 →  ● property_access
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     parenthesis → "(" ● expressions_or_clauses ")"
---     atomic_expression$subexpression$1 →  ● parenthesis
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     select_clause$subexpression$1$ebnf$2 → select_clause$subexpression$1$ebnf$2 ● free_form_sql
---     select_clause$subexpression$1 → asteriskless_free_form_sql ● select_clause$subexpression$1$ebnf$2
---     select_clause → %RESERVED_SELECT ● select_clause$subexpression$1
---     clause$subexpression$1 →  ● select_clause
---     clause →  ● clause$subexpression$1
---     expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause
---     expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A CUSTOM_PARAMETER token based on:
---     parameter$subexpression$1 →  ● %CUSTOM_PARAMETER
---     parameter →  ● parameter$subexpression$1
---     property_access$subexpression$1 →  ● parameter
---     property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1
---     atomic_expression$subexpression$1 →  ● property_access
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
---     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
---     parenthesis → "(" ● expressions_or_clauses ")"
---     atomic_expression$subexpression$1 →  ● parenthesis
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     select_clause$subexpression$1$ebnf$2 → select_clause$subexpression$1$ebnf$2 ● free_form_sql
---     select_clause$subexpression$1 → asteriskless_free_form_sql ● select_clause$subexpression$1$ebnf$2
---     select_clause → %RESERVED_SELECT ● select_clause$subexpression$1
---     clause$subexpression$1 →  ● select_clause
---     clause →  ● clause$subexpression$1
---     expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause
---     expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
+-- error: "Parse error at token: == at line 1 column 28\nUnexpected OPERATOR token: {\"type\":\"OPERATOR\",\"raw\":\"==\",\"text\":\"==\",\"start\":27}. Instead, I was expecting to see one of the following:\n\nA LINE_COMMENT token based on:\n    comment →  ● %LINE_COMMENT\n    _$ebnf$1 → _$ebnf$1 ● comment\n    _ →  ● _$ebnf$1\n    property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR ● _ property_access$subexpression$1\n    atomic_expression$subexpression$1 →  ● property_access\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    parenthesis → \"(\" ● expressions_or_clauses \")\"\n    atomic_expression$subexpression$1 →  ● parenthesis\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    select_clause$subexpression$1$ebnf$2 → select_clause$subexpression$1$ebnf$2 ● free_form_sql\n    select_clause$subexpression$1 → asteriskless_free_form_sql ● select_clause$subexpression$1$ebnf$2\n    select_clause → %RESERVED_SELECT ● select_clause$subexpression$1\n    clause$subexpression$1 →  ● select_clause\n    clause →  ● clause$subexpression$1\n    expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause\n    expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA BLOCK_COMMENT token based on:\n    comment →  ● %BLOCK_COMMENT\n    _$ebnf$1 → _$ebnf$1 ● comment\n    _ →  ● _$ebnf$1\n    property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR ● _ property_access$subexpression$1\n    atomic_expression$subexpression$1 →  ● property_access\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    parenthesis → \"(\" ● expressions_or_clauses \")\"\n    atomic_expression$subexpression$1 →  ● parenthesis\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    select_clause$subexpression$1$ebnf$2 → select_clause$subexpression$1$ebnf$2 ● free_form_sql\n    select_clause$subexpression$1 → asteriskless_free_form_sql ● select_clause$subexpression$1$ebnf$2\n    select_clause → %RESERVED_SELECT ● select_clause$subexpression$1\n    clause$subexpression$1 →  ● select_clause\n    clause →  ● clause$subexpression$1\n    expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause\n    expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA DISABLE_COMMENT token based on:\n    comment →  ● %DISABLE_COMMENT\n    _$ebnf$1 → _$ebnf$1 ● comment\n    _ →  ● _$ebnf$1\n    property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR ● _ property_access$subexpression$1\n    atomic_expression$subexpression$1 →  ● property_access\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    parenthesis → \"(\" ● expressions_or_clauses \")\"\n    atomic_expression$subexpression$1 →  ● parenthesis\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    select_clause$subexpression$1$ebnf$2 → select_clause$subexpression$1$ebnf$2 ● free_form_sql\n    select_clause$subexpression$1 → asteriskless_free_form_sql ● select_clause$subexpression$1$ebnf$2\n    select_clause → %RESERVED_SELECT ● select_clause$subexpression$1\n    clause$subexpression$1 →  ● select_clause\n    clause →  ● clause$subexpression$1\n    expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause\n    expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA ARRAY_IDENTIFIER token based on:\n    array_subscript →  ● %ARRAY_IDENTIFIER _ square_brackets\n    property_access$subexpression$1 →  ● array_subscript\n    property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1\n    atomic_expression$subexpression$1 →  ● property_access\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    parenthesis → \"(\" ● expressions_or_clauses \")\"\n    atomic_expression$subexpression$1 →  ● parenthesis\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    select_clause$subexpression$1$ebnf$2 → select_clause$subexpression$1$ebnf$2 ● free_form_sql\n    select_clause$subexpression$1 → asteriskless_free_form_sql ● select_clause$subexpression$1$ebnf$2\n    select_clause → %RESERVED_SELECT ● select_clause$subexpression$1\n    clause$subexpression$1 →  ● select_clause\n    clause →  ● clause$subexpression$1\n    expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause\n    expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA ARRAY_KEYWORD token based on:\n    array_subscript →  ● %ARRAY_KEYWORD _ square_brackets\n    property_access$subexpression$1 →  ● array_subscript\n    property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1\n    atomic_expression$subexpression$1 →  ● property_access\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    parenthesis → \"(\" ● expressions_or_clauses \")\"\n    atomic_expression$subexpression$1 →  ● parenthesis\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    select_clause$subexpression$1$ebnf$2 → select_clause$subexpression$1$ebnf$2 ● free_form_sql\n    select_clause$subexpression$1 → asteriskless_free_form_sql ● select_clause$subexpression$1$ebnf$2\n    select_clause → %RESERVED_SELECT ● select_clause$subexpression$1\n    clause$subexpression$1 →  ● select_clause\n    clause →  ● clause$subexpression$1\n    expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause\n    expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA ASTERISK token based on:\n    all_columns_asterisk →  ● %ASTERISK\n    property_access$subexpression$1 →  ● all_columns_asterisk\n    property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1\n    atomic_expression$subexpression$1 →  ● property_access\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    parenthesis → \"(\" ● expressions_or_clauses \")\"\n    atomic_expression$subexpression$1 →  ● parenthesis\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    select_clause$subexpression$1$ebnf$2 → select_clause$subexpression$1$ebnf$2 ● free_form_sql\n    select_clause$subexpression$1 → asteriskless_free_form_sql ● select_clause$subexpression$1$ebnf$2\n    select_clause → %RESERVED_SELECT ● select_clause$subexpression$1\n    clause$subexpression$1 →  ● select_clause\n    clause →  ● clause$subexpression$1\n    expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause\n    expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA IDENTIFIER token based on:\n    identifier$subexpression$1 →  ● %IDENTIFIER\n    identifier →  ● identifier$subexpression$1\n    property_access$subexpression$1 →  ● identifier\n    property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1\n    atomic_expression$subexpression$1 →  ● property_access\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    parenthesis → \"(\" ● expressions_or_clauses \")\"\n    atomic_expression$subexpression$1 →  ● parenthesis\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    select_clause$subexpression$1$ebnf$2 → select_clause$subexpression$1$ebnf$2 ● free_form_sql\n    select_clause$subexpression$1 → asteriskless_free_form_sql ● select_clause$subexpression$1$ebnf$2\n    select_clause → %RESERVED_SELECT ● select_clause$subexpression$1\n    clause$subexpression$1 →  ● select_clause\n    clause →  ● clause$subexpression$1\n    expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause\n    expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA QUOTED_IDENTIFIER token based on:\n    identifier$subexpression$1 →  ● %QUOTED_IDENTIFIER\n    identifier →  ● identifier$subexpression$1\n    property_access$subexpression$1 →  ● identifier\n    property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1\n    atomic_expression$subexpression$1 →  ● property_access\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    parenthesis → \"(\" ● expressions_or_clauses \")\"\n    atomic_expression$subexpression$1 →  ● parenthesis\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    select_clause$subexpression$1$ebnf$2 → select_clause$subexpression$1$ebnf$2 ● free_form_sql\n    select_clause$subexpression$1 → asteriskless_free_form_sql ● select_clause$subexpression$1$ebnf$2\n    select_clause → %RESERVED_SELECT ● select_clause$subexpression$1\n    clause$subexpression$1 →  ● select_clause\n    clause →  ● clause$subexpression$1\n    expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause\n    expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA VARIABLE token based on:\n    identifier$subexpression$1 →  ● %VARIABLE\n    identifier →  ● identifier$subexpression$1\n    property_access$subexpression$1 →  ● identifier\n    property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1\n    atomic_expression$subexpression$1 →  ● property_access\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    parenthesis → \"(\" ● expressions_or_clauses \")\"\n    atomic_expression$subexpression$1 →  ● parenthesis\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    select_clause$subexpression$1$ebnf$2 → select_clause$subexpression$1$ebnf$2 ● free_form_sql\n    select_clause$subexpression$1 → asteriskless_free_form_sql ● select_clause$subexpression$1$ebnf$2\n    select_clause → %RESERVED_SELECT ● select_clause$subexpression$1\n    clause$subexpression$1 →  ● select_clause\n    clause →  ● clause$subexpression$1\n    expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause\n    expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA NAMED_PARAMETER token based on:\n    parameter$subexpression$1 →  ● %NAMED_PARAMETER\n    parameter →  ● parameter$subexpression$1\n    property_access$subexpression$1 →  ● parameter\n    property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1\n    atomic_expression$subexpression$1 →  ● property_access\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    parenthesis → \"(\" ● expressions_or_clauses \")\"\n    atomic_expression$subexpression$1 →  ● parenthesis\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    select_clause$subexpression$1$ebnf$2 → select_clause$subexpression$1$ebnf$2 ● free_form_sql\n    select_clause$subexpression$1 → asteriskless_free_form_sql ● select_clause$subexpression$1$ebnf$2\n    select_clause → %RESERVED_SELECT ● select_clause$subexpression$1\n    clause$subexpression$1 →  ● select_clause\n    clause →  ● clause$subexpression$1\n    expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause\n    expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA QUOTED_PARAMETER token based on:\n    parameter$subexpression$1 →  ● %QUOTED_PARAMETER\n    parameter →  ● parameter$subexpression$1\n    property_access$subexpression$1 →  ● parameter\n    property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1\n    atomic_expression$subexpression$1 →  ● property_access\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    parenthesis → \"(\" ● expressions_or_clauses \")\"\n    atomic_expression$subexpression$1 →  ● parenthesis\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    select_clause$subexpression$1$ebnf$2 → select_clause$subexpression$1$ebnf$2 ● free_form_sql\n    select_clause$subexpression$1 → asteriskless_free_form_sql ● select_clause$subexpression$1$ebnf$2\n    select_clause → %RESERVED_SELECT ● select_clause$subexpression$1\n    clause$subexpression$1 →  ● select_clause\n    clause →  ● clause$subexpression$1\n    expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause\n    expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA NUMBERED_PARAMETER token based on:\n    parameter$subexpression$1 →  ● %NUMBERED_PARAMETER\n    parameter →  ● parameter$subexpression$1\n    property_access$subexpression$1 →  ● parameter\n    property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1\n    atomic_expression$subexpression$1 →  ● property_access\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    parenthesis → \"(\" ● expressions_or_clauses \")\"\n    atomic_expression$subexpression$1 →  ● parenthesis\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    select_clause$subexpression$1$ebnf$2 → select_clause$subexpression$1$ebnf$2 ● free_form_sql\n    select_clause$subexpression$1 → asteriskless_free_form_sql ● select_clause$subexpression$1$ebnf$2\n    select_clause → %RESERVED_SELECT ● select_clause$subexpression$1\n    clause$subexpression$1 →  ● select_clause\n    clause →  ● clause$subexpression$1\n    expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause\n    expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA POSITIONAL_PARAMETER token based on:\n    parameter$subexpression$1 →  ● %POSITIONAL_PARAMETER\n    parameter →  ● parameter$subexpression$1\n    property_access$subexpression$1 →  ● parameter\n    property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1\n    atomic_expression$subexpression$1 →  ● property_access\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    parenthesis → \"(\" ● expressions_or_clauses \")\"\n    atomic_expression$subexpression$1 →  ● parenthesis\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    select_clause$subexpression$1$ebnf$2 → select_clause$subexpression$1$ebnf$2 ● free_form_sql\n    select_clause$subexpression$1 → asteriskless_free_form_sql ● select_clause$subexpression$1$ebnf$2\n    select_clause → %RESERVED_SELECT ● select_clause$subexpression$1\n    clause$subexpression$1 →  ● select_clause\n    clause →  ● clause$subexpression$1\n    expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause\n    expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA CUSTOM_PARAMETER token based on:\n    parameter$subexpression$1 →  ● %CUSTOM_PARAMETER\n    parameter →  ● parameter$subexpression$1\n    property_access$subexpression$1 →  ● parameter\n    property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1\n    atomic_expression$subexpression$1 →  ● property_access\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql\n    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2\n    parenthesis → \"(\" ● expressions_or_clauses \")\"\n    atomic_expression$subexpression$1 →  ● parenthesis\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    select_clause$subexpression$1$ebnf$2 → select_clause$subexpression$1$ebnf$2 ● free_form_sql\n    select_clause$subexpression$1 → asteriskless_free_form_sql ● select_clause$subexpression$1$ebnf$2\n    select_clause → %RESERVED_SELECT ● select_clause$subexpression$1\n    clause$subexpression$1 →  ● select_clause\n    clause →  ● clause$subexpression$1\n    expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause\n    expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1"
 -- #endregion
 
 -- #region: sql-formatter / test / postgresql.test: supports OR REPLACE in CREATE FUNCTION
 -- input:
 CREATE OR REPLACE FUNCTION foo ();
 -- output:
-CREATE
-OR REPLACE FUNCTION foo ();
+create
+or replace function foo ();
 -- #endregion
 
 -- #region: sql-formatter / test / postgresql.test: supports OR REPLACE in CREATE PROCEDURE
 -- input:
 CREATE OR REPLACE PROCEDURE foo () LANGUAGE sql AS $$ BEGIN END $$;
--- error:
--- Error: Parse error: Unexpected "$$ BEGIN E" at line 1 column 52.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"$$ BEGIN E\" at line 1 column 52.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / postgresql.test: supports UUID type and functions
@@ -6247,7 +4659,7 @@ CREATE OR REPLACE PROCEDURE foo () LANGUAGE sql AS $$ BEGIN END $$;
 -- input:
 CREATE TABLE foo (id uuid DEFAULT Gen_Random_Uuid());
 -- output:
-CREATE TABLE foo (id uuid DEFAULT Gen_Random_Uuid ());
+create table foo (id uuid default gen_random_uuid ());
 -- #endregion
 
 -- #region: sql-formatter / test / redshift.test: formats ALTER TABLE ... ALTER COLUMN
@@ -6255,9 +4667,9 @@ CREATE TABLE foo (id uuid DEFAULT Gen_Random_Uuid ());
 ALTER TABLE t ALTER COLUMN foo TYPE VARCHAR;
          ALTER TABLE t ALTER COLUMN foo ENCODE my_encoding;
 -- output:
-ALTER TABLE t ALTER COLUMN foo TYPE VARCHAR;
+alter table t alter column foo type varchar;
 
-ALTER TABLE t ALTER COLUMN foo ENCODE my_encoding;
+alter table t alter column foo encode my_encoding;
 -- #endregion
 
 -- #region: sql-formatter / test / redshift.test: formats COPY
@@ -6270,99 +4682,82 @@ ALTER TABLE t ALTER COLUMN foo ENCODE my_encoding;
         REGION AS 'us-east-1'
       
 -- output:
-COPY schema.table
-FROM
-  's3://bucket/file.csv' IAM_ROLE 'arn:aws:iam::123456789:role/rolename' FORMAT AS CSV DELIMITER ',' QUOTE '"' REGION AS 'us-east-1'
+copy schema.table
+from
+  's3://bucket/file.csv' iam_role 'arn:aws:iam::123456789:role/rolename' format as csv delimiter ',' quote '"' region as 'us-east-1'
 -- #endregion
 
 -- #region: sql-formatter / test / redshift.test: formats DISTKEY and SORTKEY after CREATE TABLE
 -- input:
 CREATE TABLE items (a INT PRIMARY KEY, b TEXT, c INT NOT NULL, d INT NOT NULL, e INT NOT NULL) DISTKEY(created_at) SORTKEY(created_at);
 -- output:
-CREATE TABLE items (
-  a INT PRIMARY KEY,
-  b TEXT,
-  c INT NOT NULL,
-  d INT NOT NULL,
-  e INT NOT NULL
-) DISTKEY (created_at) SORTKEY (created_at);
+create table items (
+  a int primary key,
+  b text,
+  c int not null,
+  d int not null,
+  e int not null
+) distkey (created_at) sortkey (created_at);
 -- #endregion
 
 -- #region: sql-formatter / test / redshift.test: formats LIMIT
 -- input:
 SELECT col1 FROM tbl ORDER BY col2 DESC LIMIT 10;
 -- output:
-SELECT
-  col1
-FROM
-  tbl
-ORDER BY
-  col2 DESC
-LIMIT
-  10;
+select col1
+from tbl
+order by col2 desc
+limit 10;
 -- #endregion
 
 -- #region: sql-formatter / test / redshift.test: formats temp table name starting with #
 -- input:
 CREATE TABLE #tablename AS tbl;
--- error:
--- Error: Parse error: Unexpected "#tablename" at line 1 column 14.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"#tablename\" at line 1 column 14.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / redshift.test: supports QUALIFY clause
 -- input:
 SELECT * FROM tbl QUALIFY ROW_NUMBER() OVER my_window = 1
 -- output:
-SELECT
-  *
-FROM
-  tbl QUALIFY ROW_NUMBER() OVER my_window = 1
+select *
+from tbl qualify row_number() over my_window = 1
 -- #endregion
 
 -- #region: sql-formatter / test / singlestoredb.test: formats '::' path-operator without spaces
 -- input:
 SELECT * FROM foo WHERE json_foo::bar = 'foobar'
--- error:
--- Error: Parse error: Unexpected "::bar = 'f" at line 1 column 33.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"::bar = 'f\" at line 1 column 33.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / singlestoredb.test: formats '::%' conversion path-operator without spaces
 -- input:
 SELECT * FROM foo WHERE json_foo::%bar = 'foobar'
--- error:
--- Error: Parse error: Unexpected "::%bar = '" at line 1 column 33.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"::%bar = '\" at line 1 column 33.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / singlestoredb.test: formats '::$' conversion path-operator without spaces
 -- input:
 SELECT * FROM foo WHERE json_foo::$bar = 'foobar'
--- error:
--- Error: Parse error: Unexpected "::$bar = '" at line 1 column 33.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"::$bar = '\" at line 1 column 33.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / snowflake.test: allows $ character as part of unquoted identifiers
 -- input:
 SELECT foo$
--- error:
--- Error: Parse error: Unexpected "$" at line 1 column 11.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"$\" at line 1 column 11.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / snowflake.test: allows TYPE to be used as an identifier
 -- input:
 SELECT CASE WHEN type = 'upgrade' THEN amount ELSE 0 END FROM items;
 -- output:
-SELECT
-  CASE
-    WHEN type = 'upgrade' THEN amount
-    ELSE 0
-  END
-FROM
-  items;
+select
+  case
+    when type = 'upgrade' then amount
+    else 0
+  end
+from items;
 -- #endregion
 
 -- #region: sql-formatter / test / snowflake.test: detects data types
@@ -6370,35 +4765,29 @@ FROM
 -- input:
 CREATE TABLE tbl (first_column double Precision, second_column numBer (38, 0), third String);
 -- output:
-CREATE TABLE tbl (
-  first_column double Precision,
-  second_column numBer (38, 0),
-  third String
+create table tbl (
+  first_column double precision,
+  second_column number (38, 0),
+  third string
 );
 -- #endregion
 
 -- #region: sql-formatter / test / snowflake.test: formats ':' path-operator followed by dots without spaces
 -- input:
 SELECT foo : bar . baz
--- error:
--- Error: Parse error: Unexpected ": bar . ba" at line 1 column 12.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \": bar . ba\" at line 1 column 12.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / snowflake.test: formats ':' path-operator when followed by reserved keyword
 -- input:
 SELECT foo : from
--- error:
--- Error: Parse error: Unexpected ": from" at line 1 column 12.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \": from\" at line 1 column 12.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / snowflake.test: formats ':' path-operator without spaces
 -- input:
 SELECT foo : bar
--- error:
--- Error: Parse error: Unexpected ": bar" at line 1 column 12.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \": bar\" at line 1 column 12.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / snowflake.test: formats ALTER TABLE ... ALTER COLUMN
@@ -6415,83 +4804,79 @@ ALTER TABLE t ALTER COLUMN foo SET DATA TYPE VARCHAR;
          ALTER TABLE t ALTER COLUMN foo SET TAG tname = 10;
          ALTER TABLE t ALTER COLUMN foo UNSET TAG tname;
 -- output:
-ALTER TABLE t ALTER COLUMN foo
-SET
-  DATA TYPE VARCHAR;
+alter table t alter column foo
+set
+  data type varchar;
 
-ALTER TABLE t ALTER COLUMN foo
-SET
-  DEFAULT 5;
+alter table t alter column foo
+set
+  default 5;
 
-ALTER TABLE t ALTER COLUMN foo
-DROP DEFAULT;
+alter table t alter column foo
+drop default;
 
-ALTER TABLE t ALTER COLUMN foo
-SET
-  NOT NULL;
+alter table t alter column foo
+set
+  not null;
 
-ALTER TABLE t ALTER COLUMN foo
-DROP NOT NULL;
+alter table t alter column foo
+drop not null;
 
-ALTER TABLE t ALTER COLUMN foo COMMENT 'blah';
+alter table t alter column foo comment 'blah';
 
-ALTER TABLE t ALTER COLUMN foo UNSET COMMENT;
+alter table t alter column foo unset comment;
 
-ALTER TABLE t ALTER COLUMN foo
-SET
-  MASKING POLICY polis;
+alter table t alter column foo
+set
+  masking policy polis;
 
-ALTER TABLE t ALTER COLUMN foo UNSET MASKING POLICY;
+alter table t alter column foo unset masking policy;
 
-ALTER TABLE t ALTER COLUMN foo
-SET
-  TAG tname = 10;
+alter table t alter column foo
+set
+  tag tname = 10;
 
-ALTER TABLE t ALTER COLUMN foo UNSET TAG tname;
+alter table t alter column foo unset tag tname;
 -- #endregion
 
 -- #region: sql-formatter / test / snowflake.test: supports $$-quoted strings
 -- input:
 SELECT $$foo' JOIN"$bar$$, $$foo$$$$bar$$
--- error:
--- Error: Parse error: Unexpected "$$foo' JOI" at line 1 column 8.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"$$foo' JOI\" at line 1 column 8.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / snowflake.test: supports IDENTIFIER() syntax
 -- input:
 CREATE TABLE identifier($foo);
 -- output:
-CREATE TABLE identifier ($foo);
+create table identifier ($foo);
 -- #endregion
 
 -- #region: sql-formatter / test / snowflake.test: supports lambda expressions
 -- input:
 SELECT FILTER(my_arr, a -> a:value >= 50);
 -- output:
-SELECT
-  FILTER (my_arr, a -> a :value >= 50);
+select filter (my_arr, a -> a :value >= 50);
 -- #endregion
 
 -- #region: sql-formatter / test / spark.test: formats ALTER TABLE ... ALTER COLUMN
 -- input:
 ALTER TABLE StudentInfo ALTER COLUMN FirstName COMMENT "new comment";
--- output: <unchanged>
+-- output:
+alter table studentinfo alter column firstname comment "new comment";
 -- #endregion
 
 -- #region: sql-formatter / test / spark.test: formats basic WINDOW clause
 -- input:
 SELECT * FROM tbl WINDOW win1, WINDOW win2, WINDOW win3;
 -- output:
-SELECT
-  *
-FROM
-  tbl
-WINDOW
+select *
+from tbl
+window
   win1,
-WINDOW
+window
   win2,
-WINDOW
+window
   win3;
 -- #endregion
 
@@ -6499,38 +4884,31 @@ WINDOW
 -- input:
 SELECT window(time, '1 hour').start AS window_start, window(time, '1 hour').end AS window_end FROM tbl;
 -- output:
-SELECT
+select
 window
-  (time, '1 hour').start AS window_start,
+  (time, '1 hour').start as window_start,
 window
-  (time, '1 hour').end AS window_end
-FROM
-  tbl;
+  (time, '1 hour').end as window_end
+from tbl;
 -- #endregion
 
 -- #region: sql-formatter / test / spark.test: recognizes ${name} substitution variables
 -- input:
 SELECT ${var1}, ${ var 2 } FROM ${table_name} WHERE name = '${name}';
--- error:
--- Error: Parse error: Unexpected "${var1}, $" at line 1 column 8.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"${var1}, $\" at line 1 column 8.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / spark.test: supports identifiers that start with numbers
 -- input:
 SELECT 4four, 12345e FROM 5tbl
--- error:
--- Error: Parse error: Unexpected "4four, 123" at line 1 column 8.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"4four, 123\" at line 1 column 8.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / sql.test: crashes when encountering unsupported curly braces
 -- input:
 SELECT
   {foo};
--- error:
--- Error: Parse error: Unexpected "{foo};" at line 2 column 3.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"{foo};\" at line 2 column 3.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / sql.test: formats ALTER TABLE ... ALTER COLUMN
@@ -6540,18 +4918,18 @@ ALTER TABLE t ALTER COLUMN foo SET DEFAULT 5;
          ALTER TABLE t ALTER COLUMN foo DROP SCOPE CASCADE;
          ALTER TABLE t ALTER COLUMN foo RESTART WITH 10;
 -- output:
-ALTER TABLE t ALTER COLUMN foo
-SET
-  DEFAULT 5;
+alter table t alter column foo
+set
+  default 5;
 
-ALTER TABLE t ALTER COLUMN foo
-DROP DEFAULT;
+alter table t alter column foo
+drop default;
 
-ALTER TABLE t ALTER COLUMN foo
-DROP SCOPE CASCADE;
+alter table t alter column foo
+drop scope cascade;
 
-ALTER TABLE t ALTER COLUMN foo RESTART
-WITH
+alter table t alter column foo restart
+with
   10;
 -- #endregion
 
@@ -6559,11 +4937,8 @@ WITH
 -- input:
 SELECT @name, :bar FROM foo;
 -- output:
-SELECT
-  @name,
-  :bar
-FROM
-  foo;
+select @name, :bar
+from foo;
 -- #endregion
 
 -- #region: sql-formatter / test / sql.test: treats ASC and DESC as reserved keywords
@@ -6571,336 +4946,46 @@ FROM
 -- input:
 SELECT foo FROM bar ORDER BY foo asc, zap desc
 -- output:
-SELECT
-  foo
-FROM
-  bar
-ORDER BY
-  foo ASC,
-  zap DESC
+SELECT foo
+FROM bar
+ORDER BY foo ASC, zap DESC
 -- #endregion
 
 -- #region: sql-formatter / test / sqlFormatter.test: throws error suggesting a use of a more specific dialect
 -- input:
 SELECT «weird-stuff»
--- error:
--- Error: Parse error: Unexpected "«weird-stu" at line 1 column 8.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"«weird-stu\" at line 1 column 8.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / sqlFormatter.test: throws error when encountering incorrect SQL grammar
 -- input:
 SELECT foo.+;
--- error:
--- Error: Parse error at token: + at line 1 column 12
--- Unexpected OPERATOR token: {"type":"OPERATOR","raw":"+","text":"+","start":11}. Instead, I was expecting to see one of the following:
--- 
--- A LINE_COMMENT token based on:
---     comment →  ● %LINE_COMMENT
---     _$ebnf$1 → _$ebnf$1 ● comment
---     _ →  ● _$ebnf$1
---     property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR ● _ property_access$subexpression$1
---     atomic_expression$subexpression$1 →  ● property_access
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     select_clause$subexpression$1 →  ● asteriskless_free_form_sql select_clause$subexpression$1$ebnf$2
---     select_clause → %RESERVED_SELECT ● select_clause$subexpression$1
---     clause$subexpression$1 →  ● select_clause
---     clause →  ● clause$subexpression$1
---     expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause
---     expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A BLOCK_COMMENT token based on:
---     comment →  ● %BLOCK_COMMENT
---     _$ebnf$1 → _$ebnf$1 ● comment
---     _ →  ● _$ebnf$1
---     property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR ● _ property_access$subexpression$1
---     atomic_expression$subexpression$1 →  ● property_access
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     select_clause$subexpression$1 →  ● asteriskless_free_form_sql select_clause$subexpression$1$ebnf$2
---     select_clause → %RESERVED_SELECT ● select_clause$subexpression$1
---     clause$subexpression$1 →  ● select_clause
---     clause →  ● clause$subexpression$1
---     expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause
---     expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A DISABLE_COMMENT token based on:
---     comment →  ● %DISABLE_COMMENT
---     _$ebnf$1 → _$ebnf$1 ● comment
---     _ →  ● _$ebnf$1
---     property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR ● _ property_access$subexpression$1
---     atomic_expression$subexpression$1 →  ● property_access
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     select_clause$subexpression$1 →  ● asteriskless_free_form_sql select_clause$subexpression$1$ebnf$2
---     select_clause → %RESERVED_SELECT ● select_clause$subexpression$1
---     clause$subexpression$1 →  ● select_clause
---     clause →  ● clause$subexpression$1
---     expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause
---     expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A ARRAY_IDENTIFIER token based on:
---     array_subscript →  ● %ARRAY_IDENTIFIER _ square_brackets
---     property_access$subexpression$1 →  ● array_subscript
---     property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1
---     atomic_expression$subexpression$1 →  ● property_access
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     select_clause$subexpression$1 →  ● asteriskless_free_form_sql select_clause$subexpression$1$ebnf$2
---     select_clause → %RESERVED_SELECT ● select_clause$subexpression$1
---     clause$subexpression$1 →  ● select_clause
---     clause →  ● clause$subexpression$1
---     expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause
---     expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A ARRAY_KEYWORD token based on:
---     array_subscript →  ● %ARRAY_KEYWORD _ square_brackets
---     property_access$subexpression$1 →  ● array_subscript
---     property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1
---     atomic_expression$subexpression$1 →  ● property_access
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     select_clause$subexpression$1 →  ● asteriskless_free_form_sql select_clause$subexpression$1$ebnf$2
---     select_clause → %RESERVED_SELECT ● select_clause$subexpression$1
---     clause$subexpression$1 →  ● select_clause
---     clause →  ● clause$subexpression$1
---     expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause
---     expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A ASTERISK token based on:
---     all_columns_asterisk →  ● %ASTERISK
---     property_access$subexpression$1 →  ● all_columns_asterisk
---     property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1
---     atomic_expression$subexpression$1 →  ● property_access
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     select_clause$subexpression$1 →  ● asteriskless_free_form_sql select_clause$subexpression$1$ebnf$2
---     select_clause → %RESERVED_SELECT ● select_clause$subexpression$1
---     clause$subexpression$1 →  ● select_clause
---     clause →  ● clause$subexpression$1
---     expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause
---     expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A IDENTIFIER token based on:
---     identifier$subexpression$1 →  ● %IDENTIFIER
---     identifier →  ● identifier$subexpression$1
---     property_access$subexpression$1 →  ● identifier
---     property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1
---     atomic_expression$subexpression$1 →  ● property_access
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     select_clause$subexpression$1 →  ● asteriskless_free_form_sql select_clause$subexpression$1$ebnf$2
---     select_clause → %RESERVED_SELECT ● select_clause$subexpression$1
---     clause$subexpression$1 →  ● select_clause
---     clause →  ● clause$subexpression$1
---     expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause
---     expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A QUOTED_IDENTIFIER token based on:
---     identifier$subexpression$1 →  ● %QUOTED_IDENTIFIER
---     identifier →  ● identifier$subexpression$1
---     property_access$subexpression$1 →  ● identifier
---     property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1
---     atomic_expression$subexpression$1 →  ● property_access
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     select_clause$subexpression$1 →  ● asteriskless_free_form_sql select_clause$subexpression$1$ebnf$2
---     select_clause → %RESERVED_SELECT ● select_clause$subexpression$1
---     clause$subexpression$1 →  ● select_clause
---     clause →  ● clause$subexpression$1
---     expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause
---     expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A VARIABLE token based on:
---     identifier$subexpression$1 →  ● %VARIABLE
---     identifier →  ● identifier$subexpression$1
---     property_access$subexpression$1 →  ● identifier
---     property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1
---     atomic_expression$subexpression$1 →  ● property_access
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     select_clause$subexpression$1 →  ● asteriskless_free_form_sql select_clause$subexpression$1$ebnf$2
---     select_clause → %RESERVED_SELECT ● select_clause$subexpression$1
---     clause$subexpression$1 →  ● select_clause
---     clause →  ● clause$subexpression$1
---     expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause
---     expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A NAMED_PARAMETER token based on:
---     parameter$subexpression$1 →  ● %NAMED_PARAMETER
---     parameter →  ● parameter$subexpression$1
---     property_access$subexpression$1 →  ● parameter
---     property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1
---     atomic_expression$subexpression$1 →  ● property_access
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     select_clause$subexpression$1 →  ● asteriskless_free_form_sql select_clause$subexpression$1$ebnf$2
---     select_clause → %RESERVED_SELECT ● select_clause$subexpression$1
---     clause$subexpression$1 →  ● select_clause
---     clause →  ● clause$subexpression$1
---     expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause
---     expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A QUOTED_PARAMETER token based on:
---     parameter$subexpression$1 →  ● %QUOTED_PARAMETER
---     parameter →  ● parameter$subexpression$1
---     property_access$subexpression$1 →  ● parameter
---     property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1
---     atomic_expression$subexpression$1 →  ● property_access
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     select_clause$subexpression$1 →  ● asteriskless_free_form_sql select_clause$subexpression$1$ebnf$2
---     select_clause → %RESERVED_SELECT ● select_clause$subexpression$1
---     clause$subexpression$1 →  ● select_clause
---     clause →  ● clause$subexpression$1
---     expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause
---     expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A NUMBERED_PARAMETER token based on:
---     parameter$subexpression$1 →  ● %NUMBERED_PARAMETER
---     parameter →  ● parameter$subexpression$1
---     property_access$subexpression$1 →  ● parameter
---     property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1
---     atomic_expression$subexpression$1 →  ● property_access
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     select_clause$subexpression$1 →  ● asteriskless_free_form_sql select_clause$subexpression$1$ebnf$2
---     select_clause → %RESERVED_SELECT ● select_clause$subexpression$1
---     clause$subexpression$1 →  ● select_clause
---     clause →  ● clause$subexpression$1
---     expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause
---     expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A POSITIONAL_PARAMETER token based on:
---     parameter$subexpression$1 →  ● %POSITIONAL_PARAMETER
---     parameter →  ● parameter$subexpression$1
---     property_access$subexpression$1 →  ● parameter
---     property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1
---     atomic_expression$subexpression$1 →  ● property_access
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     select_clause$subexpression$1 →  ● asteriskless_free_form_sql select_clause$subexpression$1$ebnf$2
---     select_clause → %RESERVED_SELECT ● select_clause$subexpression$1
---     clause$subexpression$1 →  ● select_clause
---     clause →  ● clause$subexpression$1
---     expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause
---     expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A CUSTOM_PARAMETER token based on:
---     parameter$subexpression$1 →  ● %CUSTOM_PARAMETER
---     parameter →  ● parameter$subexpression$1
---     property_access$subexpression$1 →  ● parameter
---     property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1
---     atomic_expression$subexpression$1 →  ● property_access
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     select_clause$subexpression$1 →  ● asteriskless_free_form_sql select_clause$subexpression$1$ebnf$2
---     select_clause → %RESERVED_SELECT ● select_clause$subexpression$1
---     clause$subexpression$1 →  ● select_clause
---     clause →  ● clause$subexpression$1
---     expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause
---     expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
+-- error: "Parse error at token: + at line 1 column 12\nUnexpected OPERATOR token: {\"type\":\"OPERATOR\",\"raw\":\"+\",\"text\":\"+\",\"start\":11}. Instead, I was expecting to see one of the following:\n\nA LINE_COMMENT token based on:\n    comment →  ● %LINE_COMMENT\n    _$ebnf$1 → _$ebnf$1 ● comment\n    _ →  ● _$ebnf$1\n    property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR ● _ property_access$subexpression$1\n    atomic_expression$subexpression$1 →  ● property_access\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    select_clause$subexpression$1 →  ● asteriskless_free_form_sql select_clause$subexpression$1$ebnf$2\n    select_clause → %RESERVED_SELECT ● select_clause$subexpression$1\n    clause$subexpression$1 →  ● select_clause\n    clause →  ● clause$subexpression$1\n    expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause\n    expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA BLOCK_COMMENT token based on:\n    comment →  ● %BLOCK_COMMENT\n    _$ebnf$1 → _$ebnf$1 ● comment\n    _ →  ● _$ebnf$1\n    property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR ● _ property_access$subexpression$1\n    atomic_expression$subexpression$1 →  ● property_access\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    select_clause$subexpression$1 →  ● asteriskless_free_form_sql select_clause$subexpression$1$ebnf$2\n    select_clause → %RESERVED_SELECT ● select_clause$subexpression$1\n    clause$subexpression$1 →  ● select_clause\n    clause →  ● clause$subexpression$1\n    expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause\n    expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA DISABLE_COMMENT token based on:\n    comment →  ● %DISABLE_COMMENT\n    _$ebnf$1 → _$ebnf$1 ● comment\n    _ →  ● _$ebnf$1\n    property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR ● _ property_access$subexpression$1\n    atomic_expression$subexpression$1 →  ● property_access\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    select_clause$subexpression$1 →  ● asteriskless_free_form_sql select_clause$subexpression$1$ebnf$2\n    select_clause → %RESERVED_SELECT ● select_clause$subexpression$1\n    clause$subexpression$1 →  ● select_clause\n    clause →  ● clause$subexpression$1\n    expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause\n    expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA ARRAY_IDENTIFIER token based on:\n    array_subscript →  ● %ARRAY_IDENTIFIER _ square_brackets\n    property_access$subexpression$1 →  ● array_subscript\n    property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1\n    atomic_expression$subexpression$1 →  ● property_access\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    select_clause$subexpression$1 →  ● asteriskless_free_form_sql select_clause$subexpression$1$ebnf$2\n    select_clause → %RESERVED_SELECT ● select_clause$subexpression$1\n    clause$subexpression$1 →  ● select_clause\n    clause →  ● clause$subexpression$1\n    expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause\n    expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA ARRAY_KEYWORD token based on:\n    array_subscript →  ● %ARRAY_KEYWORD _ square_brackets\n    property_access$subexpression$1 →  ● array_subscript\n    property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1\n    atomic_expression$subexpression$1 →  ● property_access\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    select_clause$subexpression$1 →  ● asteriskless_free_form_sql select_clause$subexpression$1$ebnf$2\n    select_clause → %RESERVED_SELECT ● select_clause$subexpression$1\n    clause$subexpression$1 →  ● select_clause\n    clause →  ● clause$subexpression$1\n    expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause\n    expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA ASTERISK token based on:\n    all_columns_asterisk →  ● %ASTERISK\n    property_access$subexpression$1 →  ● all_columns_asterisk\n    property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1\n    atomic_expression$subexpression$1 →  ● property_access\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    select_clause$subexpression$1 →  ● asteriskless_free_form_sql select_clause$subexpression$1$ebnf$2\n    select_clause → %RESERVED_SELECT ● select_clause$subexpression$1\n    clause$subexpression$1 →  ● select_clause\n    clause →  ● clause$subexpression$1\n    expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause\n    expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA IDENTIFIER token based on:\n    identifier$subexpression$1 →  ● %IDENTIFIER\n    identifier →  ● identifier$subexpression$1\n    property_access$subexpression$1 →  ● identifier\n    property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1\n    atomic_expression$subexpression$1 →  ● property_access\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    select_clause$subexpression$1 →  ● asteriskless_free_form_sql select_clause$subexpression$1$ebnf$2\n    select_clause → %RESERVED_SELECT ● select_clause$subexpression$1\n    clause$subexpression$1 →  ● select_clause\n    clause →  ● clause$subexpression$1\n    expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause\n    expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA QUOTED_IDENTIFIER token based on:\n    identifier$subexpression$1 →  ● %QUOTED_IDENTIFIER\n    identifier →  ● identifier$subexpression$1\n    property_access$subexpression$1 →  ● identifier\n    property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1\n    atomic_expression$subexpression$1 →  ● property_access\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    select_clause$subexpression$1 →  ● asteriskless_free_form_sql select_clause$subexpression$1$ebnf$2\n    select_clause → %RESERVED_SELECT ● select_clause$subexpression$1\n    clause$subexpression$1 →  ● select_clause\n    clause →  ● clause$subexpression$1\n    expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause\n    expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA VARIABLE token based on:\n    identifier$subexpression$1 →  ● %VARIABLE\n    identifier →  ● identifier$subexpression$1\n    property_access$subexpression$1 →  ● identifier\n    property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1\n    atomic_expression$subexpression$1 →  ● property_access\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    select_clause$subexpression$1 →  ● asteriskless_free_form_sql select_clause$subexpression$1$ebnf$2\n    select_clause → %RESERVED_SELECT ● select_clause$subexpression$1\n    clause$subexpression$1 →  ● select_clause\n    clause →  ● clause$subexpression$1\n    expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause\n    expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA NAMED_PARAMETER token based on:\n    parameter$subexpression$1 →  ● %NAMED_PARAMETER\n    parameter →  ● parameter$subexpression$1\n    property_access$subexpression$1 →  ● parameter\n    property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1\n    atomic_expression$subexpression$1 →  ● property_access\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    select_clause$subexpression$1 →  ● asteriskless_free_form_sql select_clause$subexpression$1$ebnf$2\n    select_clause → %RESERVED_SELECT ● select_clause$subexpression$1\n    clause$subexpression$1 →  ● select_clause\n    clause →  ● clause$subexpression$1\n    expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause\n    expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA QUOTED_PARAMETER token based on:\n    parameter$subexpression$1 →  ● %QUOTED_PARAMETER\n    parameter →  ● parameter$subexpression$1\n    property_access$subexpression$1 →  ● parameter\n    property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1\n    atomic_expression$subexpression$1 →  ● property_access\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    select_clause$subexpression$1 →  ● asteriskless_free_form_sql select_clause$subexpression$1$ebnf$2\n    select_clause → %RESERVED_SELECT ● select_clause$subexpression$1\n    clause$subexpression$1 →  ● select_clause\n    clause →  ● clause$subexpression$1\n    expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause\n    expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA NUMBERED_PARAMETER token based on:\n    parameter$subexpression$1 →  ● %NUMBERED_PARAMETER\n    parameter →  ● parameter$subexpression$1\n    property_access$subexpression$1 →  ● parameter\n    property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1\n    atomic_expression$subexpression$1 →  ● property_access\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    select_clause$subexpression$1 →  ● asteriskless_free_form_sql select_clause$subexpression$1$ebnf$2\n    select_clause → %RESERVED_SELECT ● select_clause$subexpression$1\n    clause$subexpression$1 →  ● select_clause\n    clause →  ● clause$subexpression$1\n    expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause\n    expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA POSITIONAL_PARAMETER token based on:\n    parameter$subexpression$1 →  ● %POSITIONAL_PARAMETER\n    parameter →  ● parameter$subexpression$1\n    property_access$subexpression$1 →  ● parameter\n    property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1\n    atomic_expression$subexpression$1 →  ● property_access\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    select_clause$subexpression$1 →  ● asteriskless_free_form_sql select_clause$subexpression$1$ebnf$2\n    select_clause → %RESERVED_SELECT ● select_clause$subexpression$1\n    clause$subexpression$1 →  ● select_clause\n    clause →  ● clause$subexpression$1\n    expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause\n    expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA CUSTOM_PARAMETER token based on:\n    parameter$subexpression$1 →  ● %CUSTOM_PARAMETER\n    parameter →  ● parameter$subexpression$1\n    property_access$subexpression$1 →  ● parameter\n    property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1\n    atomic_expression$subexpression$1 →  ● property_access\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    select_clause$subexpression$1 →  ● asteriskless_free_form_sql select_clause$subexpression$1$ebnf$2\n    select_clause → %RESERVED_SELECT ● select_clause$subexpression$1\n    clause$subexpression$1 →  ● select_clause\n    clause →  ● clause$subexpression$1\n    expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause\n    expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1"
 -- #endregion
 
 -- #region: sql-formatter / test / sqlite.test: supports ON CONFLICT .. DO UPDATE syntax
 -- input:
 INSERT INTO tbl VALUES (1,'Leopard') ON CONFLICT DO UPDATE SET foo=1;
 -- output:
-INSERT INTO
+insert into
   tbl
-VALUES
+values
   (1, 'Leopard')
-ON CONFLICT DO UPDATE
-SET
+on conflict do update
+set
   foo = 1;
 -- #endregion
 
 -- #region: sql-formatter / test / transactsql.test: allows @ and # at the start of identifiers
 -- input:
 SELECT @bar, #baz, @@some, ##flam FROM tbl;
--- error:
--- Error: Parse error: Unexpected "#baz, @@so" at line 1 column 14.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"#baz, @@so\" at line 1 column 14.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / transactsql.test: allows the use of the ODBC date format
 -- input:
 WITH [sales_query] AS (SELECT [customerId] FROM [segments].dbo.[sales] WHERE [salesdate] > {d'2024-01-01'})
--- error:
--- Error: Parse error: Unexpected "{d'2024-01" at line 1 column 92.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"{d'2024-01\" at line 1 column 92.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / transactsql.test: does not detect CHAR() as function
@@ -6908,7 +4993,7 @@ WITH [sales_query] AS (SELECT [customerId] FROM [segments].dbo.[sales] WHERE [sa
 -- input:
 CREATE TABLE foo (name char(65));
 -- output:
-CREATE TABLE foo (name CHAR(65));
+create table foo (name CHAR(65));
 -- #endregion
 
 -- #region: sql-formatter / test / transactsql.test: does not recognize ODBC keywords as reserved keywords
@@ -6916,348 +5001,37 @@ CREATE TABLE foo (name CHAR(65));
 -- input:
 SELECT Value, Zone
 -- output:
-SELECT
-  Value,
-  Zone
+SELECT value, zone
 -- #endregion
 
 -- #region: sql-formatter / test / transactsql.test: formats .. shorthand for database.schema.table
 -- input:
 SELECT x FROM db..tbl
--- error:
--- Error: Parse error at token: . at line 1 column 18
--- Unexpected PROPERTY_ACCESS_OPERATOR token: {"type":"PROPERTY_ACCESS_OPERATOR","raw":".","text":".","start":17}. Instead, I was expecting to see one of the following:
--- 
--- A LINE_COMMENT token based on:
---     comment →  ● %LINE_COMMENT
---     _$ebnf$1 → _$ebnf$1 ● comment
---     _ →  ● _$ebnf$1
---     property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR ● _ property_access$subexpression$1
---     atomic_expression$subexpression$1 →  ● property_access
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     other_clause$ebnf$1 → other_clause$ebnf$1 ● free_form_sql
---     other_clause → %RESERVED_CLAUSE ● other_clause$ebnf$1
---     clause$subexpression$1 →  ● other_clause
---     clause →  ● clause$subexpression$1
---     expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause
---     expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A BLOCK_COMMENT token based on:
---     comment →  ● %BLOCK_COMMENT
---     _$ebnf$1 → _$ebnf$1 ● comment
---     _ →  ● _$ebnf$1
---     property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR ● _ property_access$subexpression$1
---     atomic_expression$subexpression$1 →  ● property_access
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     other_clause$ebnf$1 → other_clause$ebnf$1 ● free_form_sql
---     other_clause → %RESERVED_CLAUSE ● other_clause$ebnf$1
---     clause$subexpression$1 →  ● other_clause
---     clause →  ● clause$subexpression$1
---     expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause
---     expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A DISABLE_COMMENT token based on:
---     comment →  ● %DISABLE_COMMENT
---     _$ebnf$1 → _$ebnf$1 ● comment
---     _ →  ● _$ebnf$1
---     property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR ● _ property_access$subexpression$1
---     atomic_expression$subexpression$1 →  ● property_access
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     other_clause$ebnf$1 → other_clause$ebnf$1 ● free_form_sql
---     other_clause → %RESERVED_CLAUSE ● other_clause$ebnf$1
---     clause$subexpression$1 →  ● other_clause
---     clause →  ● clause$subexpression$1
---     expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause
---     expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A ARRAY_IDENTIFIER token based on:
---     array_subscript →  ● %ARRAY_IDENTIFIER _ square_brackets
---     property_access$subexpression$1 →  ● array_subscript
---     property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1
---     atomic_expression$subexpression$1 →  ● property_access
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     other_clause$ebnf$1 → other_clause$ebnf$1 ● free_form_sql
---     other_clause → %RESERVED_CLAUSE ● other_clause$ebnf$1
---     clause$subexpression$1 →  ● other_clause
---     clause →  ● clause$subexpression$1
---     expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause
---     expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A ARRAY_KEYWORD token based on:
---     array_subscript →  ● %ARRAY_KEYWORD _ square_brackets
---     property_access$subexpression$1 →  ● array_subscript
---     property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1
---     atomic_expression$subexpression$1 →  ● property_access
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     other_clause$ebnf$1 → other_clause$ebnf$1 ● free_form_sql
---     other_clause → %RESERVED_CLAUSE ● other_clause$ebnf$1
---     clause$subexpression$1 →  ● other_clause
---     clause →  ● clause$subexpression$1
---     expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause
---     expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A ASTERISK token based on:
---     all_columns_asterisk →  ● %ASTERISK
---     property_access$subexpression$1 →  ● all_columns_asterisk
---     property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1
---     atomic_expression$subexpression$1 →  ● property_access
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     other_clause$ebnf$1 → other_clause$ebnf$1 ● free_form_sql
---     other_clause → %RESERVED_CLAUSE ● other_clause$ebnf$1
---     clause$subexpression$1 →  ● other_clause
---     clause →  ● clause$subexpression$1
---     expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause
---     expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A IDENTIFIER token based on:
---     identifier$subexpression$1 →  ● %IDENTIFIER
---     identifier →  ● identifier$subexpression$1
---     property_access$subexpression$1 →  ● identifier
---     property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1
---     atomic_expression$subexpression$1 →  ● property_access
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     other_clause$ebnf$1 → other_clause$ebnf$1 ● free_form_sql
---     other_clause → %RESERVED_CLAUSE ● other_clause$ebnf$1
---     clause$subexpression$1 →  ● other_clause
---     clause →  ● clause$subexpression$1
---     expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause
---     expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A QUOTED_IDENTIFIER token based on:
---     identifier$subexpression$1 →  ● %QUOTED_IDENTIFIER
---     identifier →  ● identifier$subexpression$1
---     property_access$subexpression$1 →  ● identifier
---     property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1
---     atomic_expression$subexpression$1 →  ● property_access
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     other_clause$ebnf$1 → other_clause$ebnf$1 ● free_form_sql
---     other_clause → %RESERVED_CLAUSE ● other_clause$ebnf$1
---     clause$subexpression$1 →  ● other_clause
---     clause →  ● clause$subexpression$1
---     expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause
---     expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A VARIABLE token based on:
---     identifier$subexpression$1 →  ● %VARIABLE
---     identifier →  ● identifier$subexpression$1
---     property_access$subexpression$1 →  ● identifier
---     property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1
---     atomic_expression$subexpression$1 →  ● property_access
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     other_clause$ebnf$1 → other_clause$ebnf$1 ● free_form_sql
---     other_clause → %RESERVED_CLAUSE ● other_clause$ebnf$1
---     clause$subexpression$1 →  ● other_clause
---     clause →  ● clause$subexpression$1
---     expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause
---     expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A NAMED_PARAMETER token based on:
---     parameter$subexpression$1 →  ● %NAMED_PARAMETER
---     parameter →  ● parameter$subexpression$1
---     property_access$subexpression$1 →  ● parameter
---     property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1
---     atomic_expression$subexpression$1 →  ● property_access
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     other_clause$ebnf$1 → other_clause$ebnf$1 ● free_form_sql
---     other_clause → %RESERVED_CLAUSE ● other_clause$ebnf$1
---     clause$subexpression$1 →  ● other_clause
---     clause →  ● clause$subexpression$1
---     expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause
---     expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A QUOTED_PARAMETER token based on:
---     parameter$subexpression$1 →  ● %QUOTED_PARAMETER
---     parameter →  ● parameter$subexpression$1
---     property_access$subexpression$1 →  ● parameter
---     property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1
---     atomic_expression$subexpression$1 →  ● property_access
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     other_clause$ebnf$1 → other_clause$ebnf$1 ● free_form_sql
---     other_clause → %RESERVED_CLAUSE ● other_clause$ebnf$1
---     clause$subexpression$1 →  ● other_clause
---     clause →  ● clause$subexpression$1
---     expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause
---     expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A NUMBERED_PARAMETER token based on:
---     parameter$subexpression$1 →  ● %NUMBERED_PARAMETER
---     parameter →  ● parameter$subexpression$1
---     property_access$subexpression$1 →  ● parameter
---     property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1
---     atomic_expression$subexpression$1 →  ● property_access
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     other_clause$ebnf$1 → other_clause$ebnf$1 ● free_form_sql
---     other_clause → %RESERVED_CLAUSE ● other_clause$ebnf$1
---     clause$subexpression$1 →  ● other_clause
---     clause →  ● clause$subexpression$1
---     expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause
---     expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A POSITIONAL_PARAMETER token based on:
---     parameter$subexpression$1 →  ● %POSITIONAL_PARAMETER
---     parameter →  ● parameter$subexpression$1
---     property_access$subexpression$1 →  ● parameter
---     property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1
---     atomic_expression$subexpression$1 →  ● property_access
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     other_clause$ebnf$1 → other_clause$ebnf$1 ● free_form_sql
---     other_clause → %RESERVED_CLAUSE ● other_clause$ebnf$1
---     clause$subexpression$1 →  ● other_clause
---     clause →  ● clause$subexpression$1
---     expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause
---     expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
--- A CUSTOM_PARAMETER token based on:
---     parameter$subexpression$1 →  ● %CUSTOM_PARAMETER
---     parameter →  ● parameter$subexpression$1
---     property_access$subexpression$1 →  ● parameter
---     property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1
---     atomic_expression$subexpression$1 →  ● property_access
---     atomic_expression →  ● atomic_expression$subexpression$1
---     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
---     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
---     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
---     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
---     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
---     free_form_sql →  ● free_form_sql$subexpression$1
---     other_clause$ebnf$1 → other_clause$ebnf$1 ● free_form_sql
---     other_clause → %RESERVED_CLAUSE ● other_clause$ebnf$1
---     clause$subexpression$1 →  ● other_clause
---     clause →  ● clause$subexpression$1
---     expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause
---     expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2
---     statement →  ● expressions_or_clauses statement$subexpression$1
---     main$ebnf$1 → main$ebnf$1 ● statement
---     main →  ● main$ebnf$1
+-- error: "Parse error at token: . at line 1 column 18\nUnexpected PROPERTY_ACCESS_OPERATOR token: {\"type\":\"PROPERTY_ACCESS_OPERATOR\",\"raw\":\".\",\"text\":\".\",\"start\":17}. Instead, I was expecting to see one of the following:\n\nA LINE_COMMENT token based on:\n    comment →  ● %LINE_COMMENT\n    _$ebnf$1 → _$ebnf$1 ● comment\n    _ →  ● _$ebnf$1\n    property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR ● _ property_access$subexpression$1\n    atomic_expression$subexpression$1 →  ● property_access\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    other_clause$ebnf$1 → other_clause$ebnf$1 ● free_form_sql\n    other_clause → %RESERVED_CLAUSE ● other_clause$ebnf$1\n    clause$subexpression$1 →  ● other_clause\n    clause →  ● clause$subexpression$1\n    expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause\n    expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA BLOCK_COMMENT token based on:\n    comment →  ● %BLOCK_COMMENT\n    _$ebnf$1 → _$ebnf$1 ● comment\n    _ →  ● _$ebnf$1\n    property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR ● _ property_access$subexpression$1\n    atomic_expression$subexpression$1 →  ● property_access\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    other_clause$ebnf$1 → other_clause$ebnf$1 ● free_form_sql\n    other_clause → %RESERVED_CLAUSE ● other_clause$ebnf$1\n    clause$subexpression$1 →  ● other_clause\n    clause →  ● clause$subexpression$1\n    expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause\n    expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA DISABLE_COMMENT token based on:\n    comment →  ● %DISABLE_COMMENT\n    _$ebnf$1 → _$ebnf$1 ● comment\n    _ →  ● _$ebnf$1\n    property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR ● _ property_access$subexpression$1\n    atomic_expression$subexpression$1 →  ● property_access\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    other_clause$ebnf$1 → other_clause$ebnf$1 ● free_form_sql\n    other_clause → %RESERVED_CLAUSE ● other_clause$ebnf$1\n    clause$subexpression$1 →  ● other_clause\n    clause →  ● clause$subexpression$1\n    expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause\n    expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA ARRAY_IDENTIFIER token based on:\n    array_subscript →  ● %ARRAY_IDENTIFIER _ square_brackets\n    property_access$subexpression$1 →  ● array_subscript\n    property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1\n    atomic_expression$subexpression$1 →  ● property_access\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    other_clause$ebnf$1 → other_clause$ebnf$1 ● free_form_sql\n    other_clause → %RESERVED_CLAUSE ● other_clause$ebnf$1\n    clause$subexpression$1 →  ● other_clause\n    clause →  ● clause$subexpression$1\n    expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause\n    expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA ARRAY_KEYWORD token based on:\n    array_subscript →  ● %ARRAY_KEYWORD _ square_brackets\n    property_access$subexpression$1 →  ● array_subscript\n    property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1\n    atomic_expression$subexpression$1 →  ● property_access\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    other_clause$ebnf$1 → other_clause$ebnf$1 ● free_form_sql\n    other_clause → %RESERVED_CLAUSE ● other_clause$ebnf$1\n    clause$subexpression$1 →  ● other_clause\n    clause →  ● clause$subexpression$1\n    expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause\n    expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA ASTERISK token based on:\n    all_columns_asterisk →  ● %ASTERISK\n    property_access$subexpression$1 →  ● all_columns_asterisk\n    property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1\n    atomic_expression$subexpression$1 →  ● property_access\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    other_clause$ebnf$1 → other_clause$ebnf$1 ● free_form_sql\n    other_clause → %RESERVED_CLAUSE ● other_clause$ebnf$1\n    clause$subexpression$1 →  ● other_clause\n    clause →  ● clause$subexpression$1\n    expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause\n    expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA IDENTIFIER token based on:\n    identifier$subexpression$1 →  ● %IDENTIFIER\n    identifier →  ● identifier$subexpression$1\n    property_access$subexpression$1 →  ● identifier\n    property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1\n    atomic_expression$subexpression$1 →  ● property_access\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    other_clause$ebnf$1 → other_clause$ebnf$1 ● free_form_sql\n    other_clause → %RESERVED_CLAUSE ● other_clause$ebnf$1\n    clause$subexpression$1 →  ● other_clause\n    clause →  ● clause$subexpression$1\n    expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause\n    expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA QUOTED_IDENTIFIER token based on:\n    identifier$subexpression$1 →  ● %QUOTED_IDENTIFIER\n    identifier →  ● identifier$subexpression$1\n    property_access$subexpression$1 →  ● identifier\n    property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1\n    atomic_expression$subexpression$1 →  ● property_access\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    other_clause$ebnf$1 → other_clause$ebnf$1 ● free_form_sql\n    other_clause → %RESERVED_CLAUSE ● other_clause$ebnf$1\n    clause$subexpression$1 →  ● other_clause\n    clause →  ● clause$subexpression$1\n    expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause\n    expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA VARIABLE token based on:\n    identifier$subexpression$1 →  ● %VARIABLE\n    identifier →  ● identifier$subexpression$1\n    property_access$subexpression$1 →  ● identifier\n    property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1\n    atomic_expression$subexpression$1 →  ● property_access\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    other_clause$ebnf$1 → other_clause$ebnf$1 ● free_form_sql\n    other_clause → %RESERVED_CLAUSE ● other_clause$ebnf$1\n    clause$subexpression$1 →  ● other_clause\n    clause →  ● clause$subexpression$1\n    expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause\n    expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA NAMED_PARAMETER token based on:\n    parameter$subexpression$1 →  ● %NAMED_PARAMETER\n    parameter →  ● parameter$subexpression$1\n    property_access$subexpression$1 →  ● parameter\n    property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1\n    atomic_expression$subexpression$1 →  ● property_access\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    other_clause$ebnf$1 → other_clause$ebnf$1 ● free_form_sql\n    other_clause → %RESERVED_CLAUSE ● other_clause$ebnf$1\n    clause$subexpression$1 →  ● other_clause\n    clause →  ● clause$subexpression$1\n    expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause\n    expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA QUOTED_PARAMETER token based on:\n    parameter$subexpression$1 →  ● %QUOTED_PARAMETER\n    parameter →  ● parameter$subexpression$1\n    property_access$subexpression$1 →  ● parameter\n    property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1\n    atomic_expression$subexpression$1 →  ● property_access\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    other_clause$ebnf$1 → other_clause$ebnf$1 ● free_form_sql\n    other_clause → %RESERVED_CLAUSE ● other_clause$ebnf$1\n    clause$subexpression$1 →  ● other_clause\n    clause →  ● clause$subexpression$1\n    expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause\n    expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA NUMBERED_PARAMETER token based on:\n    parameter$subexpression$1 →  ● %NUMBERED_PARAMETER\n    parameter →  ● parameter$subexpression$1\n    property_access$subexpression$1 →  ● parameter\n    property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1\n    atomic_expression$subexpression$1 →  ● property_access\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    other_clause$ebnf$1 → other_clause$ebnf$1 ● free_form_sql\n    other_clause → %RESERVED_CLAUSE ● other_clause$ebnf$1\n    clause$subexpression$1 →  ● other_clause\n    clause →  ● clause$subexpression$1\n    expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause\n    expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA POSITIONAL_PARAMETER token based on:\n    parameter$subexpression$1 →  ● %POSITIONAL_PARAMETER\n    parameter →  ● parameter$subexpression$1\n    property_access$subexpression$1 →  ● parameter\n    property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1\n    atomic_expression$subexpression$1 →  ● property_access\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    other_clause$ebnf$1 → other_clause$ebnf$1 ● free_form_sql\n    other_clause → %RESERVED_CLAUSE ● other_clause$ebnf$1\n    clause$subexpression$1 →  ● other_clause\n    clause →  ● clause$subexpression$1\n    expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause\n    expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1\nA CUSTOM_PARAMETER token based on:\n    parameter$subexpression$1 →  ● %CUSTOM_PARAMETER\n    parameter →  ● parameter$subexpression$1\n    property_access$subexpression$1 →  ● parameter\n    property_access → atomic_expression _ %PROPERTY_ACCESS_OPERATOR _ ● property_access$subexpression$1\n    atomic_expression$subexpression$1 →  ● property_access\n    atomic_expression →  ● atomic_expression$subexpression$1\n    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression\n    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1\n    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression\n    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1\n    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql\n    free_form_sql →  ● free_form_sql$subexpression$1\n    other_clause$ebnf$1 → other_clause$ebnf$1 ● free_form_sql\n    other_clause → %RESERVED_CLAUSE ● other_clause$ebnf$1\n    clause$subexpression$1 →  ● other_clause\n    clause →  ● clause$subexpression$1\n    expressions_or_clauses$ebnf$2 → expressions_or_clauses$ebnf$2 ● clause\n    expressions_or_clauses → expressions_or_clauses$ebnf$1 ● expressions_or_clauses$ebnf$2\n    statement →  ● expressions_or_clauses statement$subexpression$1\n    main$ebnf$1 → main$ebnf$1 ● statement\n    main →  ● main$ebnf$1"
 -- #endregion
 
 -- #region: sql-formatter / test / transactsql.test: formats ALTER TABLE ... ALTER COLUMN
 -- input:
 ALTER TABLE t ALTER COLUMN foo INT NOT NULL DEFAULT 5;
--- output: <unchanged>
+-- output:
+alter table t alter column foo int not null default 5;
 -- #endregion
 
 -- #region: sql-formatter / test / transactsql.test: formats GO CREATE OR ALTER PROCEDURE
 -- input:
 GO CREATE OR ALTER PROCEDURE p
 -- output:
-GO CREATE
-OR ALTER PROCEDURE p
+go create
+or alter procedure p
 -- #endregion
 
 -- #region: sql-formatter / test / transactsql.test: formats GO on a separate line
 -- input:
 CREATE VIEW foo AS SELECT * FROM tbl GO CREATE INDEX bar
 -- output:
-CREATE VIEW foo AS
-SELECT
-  *
-FROM
-  tbl GO CREATE INDEX bar
+create view foo as
+select *
+from tbl go create index bar
 -- #endregion
 
 -- #region: sql-formatter / test / transactsql.test: formats goto labels
@@ -7265,85 +5039,70 @@ FROM
 InfiniLoop:
       SELECT 'Hello.';
       GOTO InfiniLoop;
--- error:
--- Error: Parse error: Unexpected ":
---       SE" at line 1 column 11.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \":\n      SE\" at line 1 column 11.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / transactsql.test: formats scope resolution operator without spaces
 -- input:
 SELECT hierarchyid :: GetRoot();
--- error:
--- Error: Parse error: Unexpected ":: GetRoot" at line 1 column 20.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \":: GetRoot\" at line 1 column 20.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / transactsql.test: formats SELECT ... FOR BROWSE
 -- input:
 SELECT col FOR BROWSE
 -- output:
-SELECT
-  col FOR BROWSE
+select col for browse
 -- #endregion
 
 -- #region: sql-formatter / test / transactsql.test: formats SELECT ... FOR JSON
 -- input:
 SELECT col FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
 -- output:
-SELECT
-  col FOR JSON PATH,
-  WITHOUT_ARRAY_WRAPPER
+select col for json path, without_array_wrapper
 -- #endregion
 
 -- #region: sql-formatter / test / transactsql.test: formats SELECT ... FOR XML
 -- input:
 SELECT col FOR XML PATH('Employee'), ROOT('Employees')
 -- output:
-SELECT
-  col FOR XML PATH ('Employee'),
-  ROOT ('Employees')
+select col for xml path ('Employee'), root ('Employees')
 -- #endregion
 
 -- #region: sql-formatter / test / transactsql.test: formats SELECT ... INTO clause
 -- input:
 SELECT col INTO #temp FROM tbl
--- error:
--- Error: Parse error: Unexpected "#temp FROM" at line 1 column 17.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"#temp FROM\" at line 1 column 17.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / transactsql.test: formats SELECT ... OPTION ()
 -- input:
 SELECT col OPTION (MAXRECURSION 5)
 -- output:
-SELECT
-  col OPTION (MAXRECURSION 5)
+select col option (maxrecursion 5)
 -- #endregion
 
 -- #region: sql-formatter / test / transactsql.test: recognizes @, $, # as part of identifiers
 -- input:
 SELECT from@bar, where#to, join$me FROM tbl;
--- error:
--- Error: Parse error: Unexpected "#to, join$" at line 1 column 23.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"#to, join$\" at line 1 column 23.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / transactsql.test: supports ALTER PROCEDURE
 -- input:
 GO ALTER PROCEDURE foo AS SELECT 1; GO
 -- output:
-GO ALTER PROCEDURE foo AS
-SELECT
-  1;
+go alter procedure foo as
+select 1;
 
-GO
+go
 -- #endregion
 
 -- #region: sql-formatter / test / transactsql.test: supports special $ACTION keyword
 -- input:
 MERGE INTO tbl OUTPUT $action AS act;
--- output: <unchanged>
+-- output:
+merge into tbl output $action as act;
 -- #endregion
 
 -- #region: sql-formatter / test / trino.test: formats row PATTERN()s
@@ -7366,17 +5125,15 @@ MERGE INTO tbl OUTPUT $action AS act;
                   D AS totalprice > PREV(totalprice)
         )
     
--- error:
--- Error: Parse error: Unexpected "{5} {- C+ " at line 11 column 25.
--- SQL dialect used: "sqlite".
+-- error: "Parse error: Unexpected \"{5} {- C+ \" at line 11 column 25.\nSQL dialect used: \"sqlite\"."
 -- #endregion
 
 -- #region: sql-formatter / test / trino.test: formats SET SESSION
 -- input:
 SET SESSION foo = 444;
 -- output:
-SET
-  SESSION foo = 444;
+set
+  session foo = 444;
 -- #endregion
 
 -- #region: sql-formatter / test / trino.test: formats TIMESTAMP WITH TIME ZONE syntax
@@ -7387,16 +5144,16 @@ SET
           deleted_at TIME WITH TIME ZONE,
           modified_at TIMESTAMP(0) WITH TIME ZONE);
 -- output:
-CREATE TABLE time_table (
-  id INT,
-  created_at TIMESTAMP
-  WITH
-    TIME ZONE,
-    deleted_at TIME
-  WITH
-    TIME ZONE,
-    modified_at TIMESTAMP (0)
-  WITH
-    TIME ZONE
+create table time_table (
+  id int,
+  created_at timestamp
+  with
+    time zone,
+    deleted_at time
+  with
+    time zone,
+    modified_at timestamp (0)
+  with
+    time zone
 );
 -- #endregion

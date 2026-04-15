@@ -6,6 +6,11 @@ import {describe, expect, test} from 'vitest';
 import {formatSql} from '../src/index.js';
 
 const fixturesDir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'formatter');
+const shouldUpdateFixtures = process.env.SQLFU_FORMATTER_UPDATE === '1';
+
+if (shouldUpdateFixtures) {
+  await rewriteFormatterFixtures(fixturesDir);
+}
 
 for (const fixturePath of await listFixtureFiles(fixturesDir)) {
   describe(path.basename(fixturePath), async () => {
@@ -57,16 +62,22 @@ function parseFormatterFixture(contents: string): FormatterFixtureCase[] {
     const inputMarker = groups.body.match(/^-- ?input:$/m);
     const unchangedOutputMarker = groups.body.match(/^-- ?output:\s*<unchanged>\s*$/m);
     const outputMarker = groups.body.match(/^-- ?output:$/m);
+    const inlineErrorMatch = groups.body.match(/^-- ?error:\s*(?<json>"(?:\\.|[^"])*")\s*$/m);
     const errorMarker = groups.body.match(/^-- ?error:$/m);
     if (
       inputMarker?.index === undefined
-      || (!unchangedOutputMarker && outputMarker?.index === undefined && errorMarker?.index === undefined)
+      || (
+        !unchangedOutputMarker
+        && outputMarker?.index === undefined
+        && errorMarker?.index === undefined
+        && !inlineErrorMatch?.groups?.json
+      )
     ) {
       throw new Error(`Invalid formatter fixture region "${groups.name}"`);
     }
 
     const inputStart = inputMarker.index + inputMarker[0].length + 1;
-    const resolvedResultMarker = unchangedOutputMarker ?? outputMarker ?? errorMarker!;
+    const resolvedResultMarker = unchangedOutputMarker ?? outputMarker ?? errorMarker ?? inlineErrorMatch!;
     const resultStart = resolvedResultMarker.index!;
     const input = trimFixtureBlock(groups.body.slice(inputStart, resultStart));
     const output = unchangedOutputMarker
@@ -74,7 +85,9 @@ function parseFormatterFixture(contents: string): FormatterFixtureCase[] {
       : outputMarker
         ? trimFixtureBlock(groups.body.slice(outputMarker.index! + outputMarker[0].length + 1))
         : undefined;
-    const error = errorMarker
+    const error = inlineErrorMatch?.groups?.json
+      ? JSON.parse(inlineErrorMatch.groups.json) as string
+      : errorMarker
       ? parseErrorBlock(groups.body.slice(errorMarker.index! + errorMarker[0].length + 1))
       : undefined;
     cases.push({
@@ -123,4 +136,61 @@ function normalizeThrownError(fn: () => unknown): string {
 
 function normalizeErrorMessage(value: string): string {
   return value.replace(/^Error:\s*/, '').trimEnd();
+}
+
+async function rewriteFormatterFixtures(root: string): Promise<void> {
+  for (const fixturePath of await listFixtureFiles(root)) {
+    const original = await fs.readFile(fixturePath, 'utf8');
+    const rewritten = rewriteFixtureContents(original);
+    if (rewritten !== original) {
+      await fs.writeFile(fixturePath, rewritten);
+    }
+  }
+}
+
+function rewriteFixtureContents(contents: string): string {
+  const defaultConfig = parseDefaultConfig(contents);
+  const regionPattern = /^-- #region: (?<name>.+)\n(?<body>[\s\S]*?)^-- #endregion$/gm;
+  const rewrittenRegions = [...contents.matchAll(regionPattern)].map((match) => {
+    const groups = match.groups;
+    if (!groups) {
+      throw new Error('Invalid formatter fixture while rewriting');
+    }
+
+    return rewriteRegion(groups.name, groups.body, defaultConfig);
+  });
+
+  const header = contents.match(/^-- default config: .+\n\n/m)?.[0] ?? '';
+  return `${header}${rewrittenRegions.join('\n\n')}\n`;
+}
+
+function rewriteRegion(name: string, body: string, defaultConfig: Record<string, unknown>): string {
+  const configMatch = body.match(/^-- ?config: (?<json>.+)$/m);
+  const inputMarker = body.match(/^-- ?input:$/m);
+  const resultMarker = body.match(/^-- ?(?:output:\s*<unchanged>|output:|error:.*)$/m);
+  if (inputMarker?.index === undefined || resultMarker?.index === undefined) {
+    throw new Error(`Invalid formatter fixture region "${name}"`);
+  }
+
+  const inputStart = inputMarker.index + inputMarker[0].length + 1;
+  const input = trimFixtureBlock(body.slice(inputStart, resultMarker.index));
+  const localConfig = configMatch?.groups?.json ? JSON.parse(configMatch.groups.json) as Record<string, unknown> : {};
+  const config = {...defaultConfig, ...localConfig};
+
+  let resultLines: string[];
+  try {
+    const output = formatSql(input, config);
+    resultLines = output === input ? ['-- output: <unchanged>'] : ['-- output:', output];
+  } catch (error) {
+    resultLines = [`-- error: ${JSON.stringify(normalizeErrorMessage(error instanceof Error ? String(error) : String(error)))}`];
+  }
+
+  return [
+    `-- #region: ${name}`,
+    ...(Object.keys(localConfig).length > 0 ? [`-- config: ${JSON.stringify(localConfig)}`] : []),
+    '-- input:',
+    input,
+    ...resultLines,
+    '-- #endregion',
+  ].join('\n');
 }

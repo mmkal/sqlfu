@@ -240,19 +240,42 @@ function SchemaPanel(input: {
                 Recommended actions
               </h3>
             </div>
-            <div className="stack">
-              {input.check.recommendations.map((recommendation) => (
-                <div key={`${recommendation.kind}/${recommendation.command ?? recommendation.label}`} className="stack">
-                  <p className="schema-recommendation">
-                    {renderSchemaRecommendationSummary(recommendation, handleSchemaCommand)}
-                  </p>
-                  {recommendation.command && commandErrors?.[recommendation.command] ? (
-                    <div className="schema-command">
-                      <span className="schema-command-error">{commandErrors[recommendation.command]}</span>
+            <div className="schema-recommendation-table">
+              {input.check.recommendations.map((recommendation) => {
+                const command = recommendation.command;
+                return (
+                  <div
+                    key={`${recommendation.kind}/${command ?? recommendation.label}`}
+                    className="schema-recommendation-row"
+                  >
+                    <div className="schema-recommendation-command">
+                      {command ? (
+                        <button
+                          className="button inline-command-button"
+                          type="button"
+                          aria-label={command}
+                          title={command}
+                          onClick={() => {
+                            handleSchemaCommand(command);
+                          }}
+                        >
+                          {command}
+                        </button>
+                      ) : null}
                     </div>
-                  ) : null}
-                </div>
-              ))}
+                    <div className="schema-recommendation-content">
+                      <p className="schema-recommendation">
+                        {renderSchemaRecommendationSummary(recommendation)}
+                      </p>
+                      {command && commandErrors?.[command] ? (
+                        <div className="schema-command">
+                          <span className="schema-command-error">{commandErrors[command]}</span>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </section>
         ) : null}
@@ -1558,25 +1581,10 @@ function formatAppliedAgo(appliedAt: string | null) {
 
 function renderSchemaRecommendationSummary(
   recommendation: SchemaCheckResponse['recommendations'][number],
-  handleSchemaCommand: (command: string) => void,
 ): ReactNode {
-  const nodes: ReactNode[] = [];
-  if (recommendation.command) {
-    nodes.push(
-        <button
-          key="command"
-          className="button inline-command-button"
-          type="button"
-          aria-label={recommendation.command}
-          onClick={() => {
-            handleSchemaCommand(recommendation.command!);
-          }}
-        >
-          {recommendation.command}
-        </button>,
-    );
-  }
-  nodes.push(<span key="label">{recommendation.label.replace(/\.$/u, '')}.</span>);
+  const nodes: ReactNode[] = [
+    <span key="label">{recommendation.label.replace(/\.$/u, '')}.</span>,
+  ];
   if (recommendation.rationale) {
     nodes.push(<span key="rationale"> ({recommendation.rationale})</span>);
   }

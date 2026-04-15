@@ -524,8 +524,33 @@ h3 {
   overflow-wrap: anywhere;
 }
 
+.schema-recommendation-table {
+  display: table;
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0 0.5rem;
+}
+
+.schema-recommendation-row {
+  display: table-row;
+}
+
+.schema-recommendation-command {
+  display: table-cell;
+  width: 1%;
+  padding-right: 0.75rem;
+  vertical-align: top;
+  max-width: 12rem;
+}
+
+.schema-recommendation-content {
+  display: table-cell;
+  vertical-align: top;
+}
+
 .schema-recommendation {
   display: block;
+  margin: 0;
 }
 
 .button {
@@ -541,10 +566,15 @@ h3 {
 }
 
 .inline-command-button {
+  display: inline-block;
+  max-width: 100%;
   padding: 0.28rem 0.65rem;
   font-size: 0.92rem;
   vertical-align: baseline;
   margin: 0 0.35rem 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .icon-button {

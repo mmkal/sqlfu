@@ -333,6 +333,7 @@ h3 {
   background: rgba(255, 255, 255, 0.34);
   border-color: rgba(65, 47, 18, 0.12) !important;
   outline: none;
+  font-family: "IBM Plex Mono", "SFMono-Regular", "Menlo", monospace;
 }
 
 .reactgrid-content .rg-pane .rg-cell.rg-header-cell {
@@ -351,6 +352,11 @@ h3 {
 .reactgrid-content .rg-pane .rg-cell.dirty-cell {
   background: rgba(178, 76, 43, 0.16) !important;
   box-shadow: inset 0 0 0 1px rgba(178, 76, 43, 0.22);
+}
+
+.reactgrid-content .rg-pane .rg-cell.append-row-cell {
+  color: rgba(117, 97, 71, 0.6);
+  background: rgba(239, 226, 203, 0.18) !important;
 }
 
 .reactgrid-content .rg-pane .rg-cell-focus,

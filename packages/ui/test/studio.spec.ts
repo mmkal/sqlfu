@@ -317,9 +317,37 @@ test('clicking a relation cell shows the full cell content below the table', asy
 
   await page.locator('.reactgrid [data-cell-rowidx="1"][data-cell-colidx="4"]').click();
   const selectedCellPanel = page.locator('.selected-cell-panel');
-  await expect(selectedCellPanel.getByText('Cell', {exact: true})).toBeVisible();
+  await expect(selectedCellPanel).toContainText('Cell: body, row 1');
   await expect(selectedCellPanel).toContainText('body');
   await expect(selectedCellPanel).toContainText('First post body');
+});
+
+test('clicking a sql runner result cell shows the full cell content below the table', async ({page}) => {
+  await page.goto('/#sql');
+
+  await replaceCodeMirrorText(page, 'SQL editor', `
+    select body
+    from posts
+    where slug = 'hello-world'
+    limit 1;
+  `);
+  await page.getByRole('button', {name: 'Run SQL'}).click();
+
+  await page.locator('.reactgrid [data-cell-rowidx="1"][data-cell-colidx="1"]').click();
+  const selectedCellPanel = page.locator('.selected-cell-panel');
+  await expect(selectedCellPanel).toContainText('Cell: body, row 1');
+  await expect(selectedCellPanel).toContainText('First post body');
+});
+
+test('clicking a saved query result cell shows the full cell content below the table', async ({page}) => {
+  await page.goto('/#query/list-post-cards');
+
+  await page.getByRole('button', {name: 'Run generated query'}).click();
+  await page.locator('.reactgrid [data-cell-rowidx="1"][data-cell-colidx="3"]').click();
+
+  const selectedCellPanel = page.locator('.selected-cell-panel');
+  await expect(selectedCellPanel).toContainText('Cell: title, row 1');
+  await expect(selectedCellPanel).toContainText('Hello World');
 });
 
 test('relation rows can be edited and saved from the grid', async ({page}) => {

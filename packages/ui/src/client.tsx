@@ -997,13 +997,14 @@ function QueryWorkbench(input: {
         {input.running ? <p>Running…</p> : null}
         {input.executionError ? <ErrorView error={input.executionError} /> : null}
         {input.successMessage ? <p>{input.successMessage}</p> : null}
-        {input.executionResult ? <ExecutionResult result={input.executionResult} /> : <p className="muted">{input.emptyMessage}</p>}
+        {input.executionResult ? <ExecutionResult storageKey={input.workbenchKey ?? input.title} result={input.executionResult} /> : <p className="muted">{input.emptyMessage}</p>}
       </section>
     </section>
   );
 }
 
 function ExecutionResult(input: {
+  storageKey: string;
   result: QueryExecutionResponse | SqlRunnerResponse;
 }) {
   if (input.result.mode === 'metadata') {
@@ -1012,7 +1013,7 @@ function ExecutionResult(input: {
 
   const rows = input.result.rows ?? [];
   const columns = rows.length > 0 ? Object.keys(rows[0]!) : [];
-  return <DataTable storageKey="execution-result" columns={columns} rows={rows} />;
+  return <DataTable storageKey={`execution-result/${input.storageKey}`} columns={columns} rows={rows} showSelectedCellDetail />;
 }
 
 function DataTable(input: {

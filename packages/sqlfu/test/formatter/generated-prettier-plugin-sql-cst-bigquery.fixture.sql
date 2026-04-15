@@ -1534,8 +1534,8 @@ SELECT
 -- input:
 SELECT JSON '{"name":"It's Mr John"}'
 -- error:
-Error: Parse error: Unexpected ""}'" at line 1 column 35.
-SQL dialect used: "bigquery".
+-- Error: Parse error: Unexpected ""}'" at line 1 column 35.
+-- SQL dialect used: "bigquery".
 -- #endregion
 
 -- #region: prettier-plugin-sql-cst / test / expr / json.test: converts double-quoted JSON literal to single-quoted one
@@ -1582,8 +1582,8 @@ SELECT
 -- input:
 SELECT JSON '{"name":"It'''s Mr John"}'
 -- error:
-Error: Parse error: Unexpected ""}'" at line 1 column 37.
-SQL dialect used: "bigquery".
+-- Error: Parse error: Unexpected ""}'" at line 1 column 37.
+-- SQL dialect used: "bigquery".
 -- #endregion
 
 -- #region: prettier-plugin-sql-cst / test / expr / json.test: formats JSON literal using Prettier JSON formatter
@@ -1790,841 +1790,840 @@ CASE foo
     SELECT CONCAT('Invalid product');
 END CASE
 -- error:
-Error: Parse error at token: SELECT at line 3 column 5
-Unexpected RESERVED_SELECT token: {"type":"RESERVED_SELECT","raw":"SELECT","text":"SELECT","start":27,"precedingWhitespace":"\n    "}. Instead, I was expecting to see one of the following:
-
-A LINE_COMMENT token based on:
-    comment →  ● %LINE_COMMENT
-    _$ebnf$1 → _$ebnf$1 ● comment
-    _ →  ● _$ebnf$1
-    case_clause → %WHEN _ expression_chain_ %THEN ● _ expression_chain_
-    case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
-    case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
-    asteriskless_andless_expression$subexpression$1 →  ● case_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
-    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
-    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
-    free_form_sql →  ● free_form_sql$subexpression$1
-    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
-    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
-    statement →  ● expressions_or_clauses statement$subexpression$1
-    main$ebnf$1 → main$ebnf$1 ● statement
-    main →  ● main$ebnf$1
-A BLOCK_COMMENT token based on:
-    comment →  ● %BLOCK_COMMENT
-    _$ebnf$1 → _$ebnf$1 ● comment
-    _ →  ● _$ebnf$1
-    case_clause → %WHEN _ expression_chain_ %THEN ● _ expression_chain_
-    case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
-    case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
-    asteriskless_andless_expression$subexpression$1 →  ● case_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
-    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
-    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
-    free_form_sql →  ● free_form_sql$subexpression$1
-    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
-    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
-    statement →  ● expressions_or_clauses statement$subexpression$1
-    main$ebnf$1 → main$ebnf$1 ● statement
-    main →  ● main$ebnf$1
-A DISABLE_COMMENT token based on:
-    comment →  ● %DISABLE_COMMENT
-    _$ebnf$1 → _$ebnf$1 ● comment
-    _ →  ● _$ebnf$1
-    case_clause → %WHEN _ expression_chain_ %THEN ● _ expression_chain_
-    case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
-    case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
-    asteriskless_andless_expression$subexpression$1 →  ● case_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
-    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
-    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
-    free_form_sql →  ● free_form_sql$subexpression$1
-    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
-    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
-    statement →  ● expressions_or_clauses statement$subexpression$1
-    main$ebnf$1 → main$ebnf$1 ● statement
-    main →  ● main$ebnf$1
-A AND token based on:
-    logic_operator$subexpression$1 →  ● %AND
-    logic_operator →  ● logic_operator$subexpression$1
-    expression$subexpression$1 →  ● logic_operator
-    expression →  ● expression$subexpression$1
-    expression_with_comments_ →  ● expression _
-    expression_chain_$ebnf$1 →  ● expression_with_comments_
-    expression_chain_ →  ● expression_chain_$ebnf$1
-    case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
-    case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
-    case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
-    asteriskless_andless_expression$subexpression$1 →  ● case_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
-    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
-    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
-    free_form_sql →  ● free_form_sql$subexpression$1
-    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
-    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
-    statement →  ● expressions_or_clauses statement$subexpression$1
-    main$ebnf$1 → main$ebnf$1 ● statement
-    main →  ● main$ebnf$1
-A OR token based on:
-    logic_operator$subexpression$1 →  ● %OR
-    logic_operator →  ● logic_operator$subexpression$1
-    expression$subexpression$1 →  ● logic_operator
-    expression →  ● expression$subexpression$1
-    expression_with_comments_ →  ● expression _
-    expression_chain_$ebnf$1 →  ● expression_with_comments_
-    expression_chain_ →  ● expression_chain_$ebnf$1
-    case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
-    case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
-    case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
-    asteriskless_andless_expression$subexpression$1 →  ● case_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
-    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
-    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
-    free_form_sql →  ● free_form_sql$subexpression$1
-    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
-    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
-    statement →  ● expressions_or_clauses statement$subexpression$1
-    main$ebnf$1 → main$ebnf$1 ● statement
-    main →  ● main$ebnf$1
-A XOR token based on:
-    logic_operator$subexpression$1 →  ● %XOR
-    logic_operator →  ● logic_operator$subexpression$1
-    expression$subexpression$1 →  ● logic_operator
-    expression →  ● expression$subexpression$1
-    expression_with_comments_ →  ● expression _
-    expression_chain_$ebnf$1 →  ● expression_with_comments_
-    expression_chain_ →  ● expression_chain_$ebnf$1
-    case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
-    case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
-    case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
-    asteriskless_andless_expression$subexpression$1 →  ● case_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
-    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
-    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
-    free_form_sql →  ● free_form_sql$subexpression$1
-    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
-    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
-    statement →  ● expressions_or_clauses statement$subexpression$1
-    main$ebnf$1 → main$ebnf$1 ● statement
-    main →  ● main$ebnf$1
-A ASTERISK token based on:
-    asterisk$subexpression$1 →  ● %ASTERISK
-    asterisk →  ● asterisk$subexpression$1
-    andless_expression$subexpression$1 →  ● asterisk
-    andless_expression →  ● andless_expression$subexpression$1
-    expression$subexpression$1 →  ● andless_expression
-    expression →  ● expression$subexpression$1
-    expression_with_comments_ →  ● expression _
-    expression_chain_$ebnf$1 →  ● expression_with_comments_
-    expression_chain_ →  ● expression_chain_$ebnf$1
-    case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
-    case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
-    case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
-    asteriskless_andless_expression$subexpression$1 →  ● case_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
-    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
-    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
-    free_form_sql →  ● free_form_sql$subexpression$1
-    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
-    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
-    statement →  ● expressions_or_clauses statement$subexpression$1
-    main$ebnf$1 → main$ebnf$1 ● statement
-    main →  ● main$ebnf$1
-A BETWEEN token based on:
-    between_predicate →  ● %BETWEEN _ andless_expression_chain _ %AND _ andless_expression
-    asteriskless_andless_expression$subexpression$1 →  ● between_predicate
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    andless_expression$subexpression$1 →  ● asteriskless_andless_expression
-    andless_expression →  ● andless_expression$subexpression$1
-    expression$subexpression$1 →  ● andless_expression
-    expression →  ● expression$subexpression$1
-    expression_with_comments_ →  ● expression _
-    expression_chain_$ebnf$1 →  ● expression_with_comments_
-    expression_chain_ →  ● expression_chain_$ebnf$1
-    case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
-    case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
-    case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
-    asteriskless_andless_expression$subexpression$1 →  ● case_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
-    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
-    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
-    free_form_sql →  ● free_form_sql$subexpression$1
-    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
-    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
-    statement →  ● expressions_or_clauses statement$subexpression$1
-    main$ebnf$1 → main$ebnf$1 ● statement
-    main →  ● main$ebnf$1
-A CASE token based on:
-    case_expression →  ● %CASE _ case_expression$ebnf$1 case_expression$ebnf$2 %END
-    asteriskless_andless_expression$subexpression$1 →  ● case_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    andless_expression$subexpression$1 →  ● asteriskless_andless_expression
-    andless_expression →  ● andless_expression$subexpression$1
-    expression$subexpression$1 →  ● andless_expression
-    expression →  ● expression$subexpression$1
-    expression_with_comments_ →  ● expression _
-    expression_chain_$ebnf$1 →  ● expression_with_comments_
-    expression_chain_ →  ● expression_chain_$ebnf$1
-    case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
-    case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
-    case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
-    asteriskless_andless_expression$subexpression$1 →  ● case_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
-    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
-    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
-    free_form_sql →  ● free_form_sql$subexpression$1
-    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
-    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
-    statement →  ● expressions_or_clauses statement$subexpression$1
-    main$ebnf$1 → main$ebnf$1 ● statement
-    main →  ● main$ebnf$1
-A ARRAY_IDENTIFIER token based on:
-    array_subscript →  ● %ARRAY_IDENTIFIER _ square_brackets
-    atomic_expression$subexpression$1 →  ● array_subscript
-    atomic_expression →  ● atomic_expression$subexpression$1
-    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    andless_expression$subexpression$1 →  ● asteriskless_andless_expression
-    andless_expression →  ● andless_expression$subexpression$1
-    expression$subexpression$1 →  ● andless_expression
-    expression →  ● expression$subexpression$1
-    expression_with_comments_ →  ● expression _
-    expression_chain_$ebnf$1 →  ● expression_with_comments_
-    expression_chain_ →  ● expression_chain_$ebnf$1
-    case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
-    case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
-    case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
-    asteriskless_andless_expression$subexpression$1 →  ● case_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
-    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
-    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
-    free_form_sql →  ● free_form_sql$subexpression$1
-    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
-    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
-    statement →  ● expressions_or_clauses statement$subexpression$1
-    main$ebnf$1 → main$ebnf$1 ● statement
-    main →  ● main$ebnf$1
-A ARRAY_KEYWORD token based on:
-    array_subscript →  ● %ARRAY_KEYWORD _ square_brackets
-    atomic_expression$subexpression$1 →  ● array_subscript
-    atomic_expression →  ● atomic_expression$subexpression$1
-    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    andless_expression$subexpression$1 →  ● asteriskless_andless_expression
-    andless_expression →  ● andless_expression$subexpression$1
-    expression$subexpression$1 →  ● andless_expression
-    expression →  ● expression$subexpression$1
-    expression_with_comments_ →  ● expression _
-    expression_chain_$ebnf$1 →  ● expression_with_comments_
-    expression_chain_ →  ● expression_chain_$ebnf$1
-    case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
-    case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
-    case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
-    asteriskless_andless_expression$subexpression$1 →  ● case_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
-    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
-    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
-    free_form_sql →  ● free_form_sql$subexpression$1
-    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
-    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
-    statement →  ● expressions_or_clauses statement$subexpression$1
-    main$ebnf$1 → main$ebnf$1 ● statement
-    main →  ● main$ebnf$1
-A RESERVED_FUNCTION_NAME token based on:
-    function_call →  ● %RESERVED_FUNCTION_NAME _ parenthesis
-    atomic_expression$subexpression$1 →  ● function_call
-    atomic_expression →  ● atomic_expression$subexpression$1
-    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    andless_expression$subexpression$1 →  ● asteriskless_andless_expression
-    andless_expression →  ● andless_expression$subexpression$1
-    expression$subexpression$1 →  ● andless_expression
-    expression →  ● expression$subexpression$1
-    expression_with_comments_ →  ● expression _
-    expression_chain_$ebnf$1 →  ● expression_with_comments_
-    expression_chain_ →  ● expression_chain_$ebnf$1
-    case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
-    case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
-    case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
-    asteriskless_andless_expression$subexpression$1 →  ● case_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
-    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
-    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
-    free_form_sql →  ● free_form_sql$subexpression$1
-    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
-    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
-    statement →  ● expressions_or_clauses statement$subexpression$1
-    main$ebnf$1 → main$ebnf$1 ● statement
-    main →  ● main$ebnf$1
-A "(" based on:
-    parenthesis →  ● "(" expressions_or_clauses ")"
-    atomic_expression$subexpression$1 →  ● parenthesis
-    atomic_expression →  ● atomic_expression$subexpression$1
-    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    andless_expression$subexpression$1 →  ● asteriskless_andless_expression
-    andless_expression →  ● andless_expression$subexpression$1
-    expression$subexpression$1 →  ● andless_expression
-    expression →  ● expression$subexpression$1
-    expression_with_comments_ →  ● expression _
-    expression_chain_$ebnf$1 →  ● expression_with_comments_
-    expression_chain_ →  ● expression_chain_$ebnf$1
-    case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
-    case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
-    case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
-    asteriskless_andless_expression$subexpression$1 →  ● case_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
-    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
-    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
-    free_form_sql →  ● free_form_sql$subexpression$1
-    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
-    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
-    statement →  ● expressions_or_clauses statement$subexpression$1
-    main$ebnf$1 → main$ebnf$1 ● statement
-    main →  ● main$ebnf$1
-A "{" based on:
-    curly_braces →  ● "{" curly_braces$ebnf$1 "}"
-    atomic_expression$subexpression$1 →  ● curly_braces
-    atomic_expression →  ● atomic_expression$subexpression$1
-    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    andless_expression$subexpression$1 →  ● asteriskless_andless_expression
-    andless_expression →  ● andless_expression$subexpression$1
-    expression$subexpression$1 →  ● andless_expression
-    expression →  ● expression$subexpression$1
-    expression_with_comments_ →  ● expression _
-    expression_chain_$ebnf$1 →  ● expression_with_comments_
-    expression_chain_ →  ● expression_chain_$ebnf$1
-    case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
-    case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
-    case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
-    asteriskless_andless_expression$subexpression$1 →  ● case_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
-    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
-    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
-    free_form_sql →  ● free_form_sql$subexpression$1
-    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
-    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
-    statement →  ● expressions_or_clauses statement$subexpression$1
-    main$ebnf$1 → main$ebnf$1 ● statement
-    main →  ● main$ebnf$1
-A "[" based on:
-    square_brackets →  ● "[" square_brackets$ebnf$1 "]"
-    atomic_expression$subexpression$1 →  ● square_brackets
-    atomic_expression →  ● atomic_expression$subexpression$1
-    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    andless_expression$subexpression$1 →  ● asteriskless_andless_expression
-    andless_expression →  ● andless_expression$subexpression$1
-    expression$subexpression$1 →  ● andless_expression
-    expression →  ● expression$subexpression$1
-    expression_with_comments_ →  ● expression _
-    expression_chain_$ebnf$1 →  ● expression_with_comments_
-    expression_chain_ →  ● expression_chain_$ebnf$1
-    case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
-    case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
-    case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
-    asteriskless_andless_expression$subexpression$1 →  ● case_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
-    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
-    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
-    free_form_sql →  ● free_form_sql$subexpression$1
-    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
-    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
-    statement →  ● expressions_or_clauses statement$subexpression$1
-    main$ebnf$1 → main$ebnf$1 ● statement
-    main →  ● main$ebnf$1
-A RESERVED_PARAMETERIZED_DATA_TYPE token based on:
-    data_type →  ● %RESERVED_PARAMETERIZED_DATA_TYPE _ parenthesis
-    atomic_expression$subexpression$1 →  ● data_type
-    atomic_expression →  ● atomic_expression$subexpression$1
-    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    andless_expression$subexpression$1 →  ● asteriskless_andless_expression
-    andless_expression →  ● andless_expression$subexpression$1
-    expression$subexpression$1 →  ● andless_expression
-    expression →  ● expression$subexpression$1
-    expression_with_comments_ →  ● expression _
-    expression_chain_$ebnf$1 →  ● expression_with_comments_
-    expression_chain_ →  ● expression_chain_$ebnf$1
-    case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
-    case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
-    case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
-    asteriskless_andless_expression$subexpression$1 →  ● case_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
-    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
-    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
-    free_form_sql →  ● free_form_sql$subexpression$1
-    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
-    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
-    statement →  ● expressions_or_clauses statement$subexpression$1
-    main$ebnf$1 → main$ebnf$1 ● statement
-    main →  ● main$ebnf$1
-A OPERATOR token based on:
-    operator$subexpression$1 →  ● %OPERATOR
-    operator →  ● operator$subexpression$1
-    atomic_expression$subexpression$1 →  ● operator
-    atomic_expression →  ● atomic_expression$subexpression$1
-    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    andless_expression$subexpression$1 →  ● asteriskless_andless_expression
-    andless_expression →  ● andless_expression$subexpression$1
-    expression$subexpression$1 →  ● andless_expression
-    expression →  ● expression$subexpression$1
-    expression_with_comments_ →  ● expression _
-    expression_chain_$ebnf$1 →  ● expression_with_comments_
-    expression_chain_ →  ● expression_chain_$ebnf$1
-    case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
-    case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
-    case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
-    asteriskless_andless_expression$subexpression$1 →  ● case_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
-    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
-    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
-    free_form_sql →  ● free_form_sql$subexpression$1
-    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
-    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
-    statement →  ● expressions_or_clauses statement$subexpression$1
-    main$ebnf$1 → main$ebnf$1 ● statement
-    main →  ● main$ebnf$1
-A IDENTIFIER token based on:
-    identifier$subexpression$1 →  ● %IDENTIFIER
-    identifier →  ● identifier$subexpression$1
-    atomic_expression$subexpression$1 →  ● identifier
-    atomic_expression →  ● atomic_expression$subexpression$1
-    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    andless_expression$subexpression$1 →  ● asteriskless_andless_expression
-    andless_expression →  ● andless_expression$subexpression$1
-    expression$subexpression$1 →  ● andless_expression
-    expression →  ● expression$subexpression$1
-    expression_with_comments_ →  ● expression _
-    expression_chain_$ebnf$1 →  ● expression_with_comments_
-    expression_chain_ →  ● expression_chain_$ebnf$1
-    case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
-    case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
-    case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
-    asteriskless_andless_expression$subexpression$1 →  ● case_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
-    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
-    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
-    free_form_sql →  ● free_form_sql$subexpression$1
-    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
-    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
-    statement →  ● expressions_or_clauses statement$subexpression$1
-    main$ebnf$1 → main$ebnf$1 ● statement
-    main →  ● main$ebnf$1
-A QUOTED_IDENTIFIER token based on:
-    identifier$subexpression$1 →  ● %QUOTED_IDENTIFIER
-    identifier →  ● identifier$subexpression$1
-    atomic_expression$subexpression$1 →  ● identifier
-    atomic_expression →  ● atomic_expression$subexpression$1
-    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    andless_expression$subexpression$1 →  ● asteriskless_andless_expression
-    andless_expression →  ● andless_expression$subexpression$1
-    expression$subexpression$1 →  ● andless_expression
-    expression →  ● expression$subexpression$1
-    expression_with_comments_ →  ● expression _
-    expression_chain_$ebnf$1 →  ● expression_with_comments_
-    expression_chain_ →  ● expression_chain_$ebnf$1
-    case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
-    case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
-    case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
-    asteriskless_andless_expression$subexpression$1 →  ● case_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
-    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
-    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
-    free_form_sql →  ● free_form_sql$subexpression$1
-    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
-    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
-    statement →  ● expressions_or_clauses statement$subexpression$1
-    main$ebnf$1 → main$ebnf$1 ● statement
-    main →  ● main$ebnf$1
-A VARIABLE token based on:
-    identifier$subexpression$1 →  ● %VARIABLE
-    identifier →  ● identifier$subexpression$1
-    atomic_expression$subexpression$1 →  ● identifier
-    atomic_expression →  ● atomic_expression$subexpression$1
-    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    andless_expression$subexpression$1 →  ● asteriskless_andless_expression
-    andless_expression →  ● andless_expression$subexpression$1
-    expression$subexpression$1 →  ● andless_expression
-    expression →  ● expression$subexpression$1
-    expression_with_comments_ →  ● expression _
-    expression_chain_$ebnf$1 →  ● expression_with_comments_
-    expression_chain_ →  ● expression_chain_$ebnf$1
-    case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
-    case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
-    case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
-    asteriskless_andless_expression$subexpression$1 →  ● case_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
-    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
-    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
-    free_form_sql →  ● free_form_sql$subexpression$1
-    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
-    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
-    statement →  ● expressions_or_clauses statement$subexpression$1
-    main$ebnf$1 → main$ebnf$1 ● statement
-    main →  ● main$ebnf$1
-A NAMED_PARAMETER token based on:
-    parameter$subexpression$1 →  ● %NAMED_PARAMETER
-    parameter →  ● parameter$subexpression$1
-    atomic_expression$subexpression$1 →  ● parameter
-    atomic_expression →  ● atomic_expression$subexpression$1
-    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    andless_expression$subexpression$1 →  ● asteriskless_andless_expression
-    andless_expression →  ● andless_expression$subexpression$1
-    expression$subexpression$1 →  ● andless_expression
-    expression →  ● expression$subexpression$1
-    expression_with_comments_ →  ● expression _
-    expression_chain_$ebnf$1 →  ● expression_with_comments_
-    expression_chain_ →  ● expression_chain_$ebnf$1
-    case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
-    case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
-    case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
-    asteriskless_andless_expression$subexpression$1 →  ● case_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
-    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
-    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
-    free_form_sql →  ● free_form_sql$subexpression$1
-    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
-    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
-    statement →  ● expressions_or_clauses statement$subexpression$1
-    main$ebnf$1 → main$ebnf$1 ● statement
-    main →  ● main$ebnf$1
-A QUOTED_PARAMETER token based on:
-    parameter$subexpression$1 →  ● %QUOTED_PARAMETER
-    parameter →  ● parameter$subexpression$1
-    atomic_expression$subexpression$1 →  ● parameter
-    atomic_expression →  ● atomic_expression$subexpression$1
-    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    andless_expression$subexpression$1 →  ● asteriskless_andless_expression
-    andless_expression →  ● andless_expression$subexpression$1
-    expression$subexpression$1 →  ● andless_expression
-    expression →  ● expression$subexpression$1
-    expression_with_comments_ →  ● expression _
-    expression_chain_$ebnf$1 →  ● expression_with_comments_
-    expression_chain_ →  ● expression_chain_$ebnf$1
-    case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
-    case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
-    case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
-    asteriskless_andless_expression$subexpression$1 →  ● case_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
-    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
-    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
-    free_form_sql →  ● free_form_sql$subexpression$1
-    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
-    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
-    statement →  ● expressions_or_clauses statement$subexpression$1
-    main$ebnf$1 → main$ebnf$1 ● statement
-    main →  ● main$ebnf$1
-A NUMBERED_PARAMETER token based on:
-    parameter$subexpression$1 →  ● %NUMBERED_PARAMETER
-    parameter →  ● parameter$subexpression$1
-    atomic_expression$subexpression$1 →  ● parameter
-    atomic_expression →  ● atomic_expression$subexpression$1
-    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    andless_expression$subexpression$1 →  ● asteriskless_andless_expression
-    andless_expression →  ● andless_expression$subexpression$1
-    expression$subexpression$1 →  ● andless_expression
-    expression →  ● expression$subexpression$1
-    expression_with_comments_ →  ● expression _
-    expression_chain_$ebnf$1 →  ● expression_with_comments_
-    expression_chain_ →  ● expression_chain_$ebnf$1
-    case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
-    case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
-    case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
-    asteriskless_andless_expression$subexpression$1 →  ● case_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
-    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
-    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
-    free_form_sql →  ● free_form_sql$subexpression$1
-    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
-    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
-    statement →  ● expressions_or_clauses statement$subexpression$1
-    main$ebnf$1 → main$ebnf$1 ● statement
-    main →  ● main$ebnf$1
-A POSITIONAL_PARAMETER token based on:
-    parameter$subexpression$1 →  ● %POSITIONAL_PARAMETER
-    parameter →  ● parameter$subexpression$1
-    atomic_expression$subexpression$1 →  ● parameter
-    atomic_expression →  ● atomic_expression$subexpression$1
-    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    andless_expression$subexpression$1 →  ● asteriskless_andless_expression
-    andless_expression →  ● andless_expression$subexpression$1
-    expression$subexpression$1 →  ● andless_expression
-    expression →  ● expression$subexpression$1
-    expression_with_comments_ →  ● expression _
-    expression_chain_$ebnf$1 →  ● expression_with_comments_
-    expression_chain_ →  ● expression_chain_$ebnf$1
-    case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
-    case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
-    case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
-    asteriskless_andless_expression$subexpression$1 →  ● case_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
-    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
-    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
-    free_form_sql →  ● free_form_sql$subexpression$1
-    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
-    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
-    statement →  ● expressions_or_clauses statement$subexpression$1
-    main$ebnf$1 → main$ebnf$1 ● statement
-    main →  ● main$ebnf$1
-A CUSTOM_PARAMETER token based on:
-    parameter$subexpression$1 →  ● %CUSTOM_PARAMETER
-    parameter →  ● parameter$subexpression$1
-    atomic_expression$subexpression$1 →  ● parameter
-    atomic_expression →  ● atomic_expression$subexpression$1
-    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    andless_expression$subexpression$1 →  ● asteriskless_andless_expression
-    andless_expression →  ● andless_expression$subexpression$1
-    expression$subexpression$1 →  ● andless_expression
-    expression →  ● expression$subexpression$1
-    expression_with_comments_ →  ● expression _
-    expression_chain_$ebnf$1 →  ● expression_with_comments_
-    expression_chain_ →  ● expression_chain_$ebnf$1
-    case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
-    case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
-    case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
-    asteriskless_andless_expression$subexpression$1 →  ● case_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
-    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
-    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
-    free_form_sql →  ● free_form_sql$subexpression$1
-    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
-    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
-    statement →  ● expressions_or_clauses statement$subexpression$1
-    main$ebnf$1 → main$ebnf$1 ● statement
-    main →  ● main$ebnf$1
-A NUMBER token based on:
-    literal$subexpression$1 →  ● %NUMBER
-    literal →  ● literal$subexpression$1
-    atomic_expression$subexpression$1 →  ● literal
-    atomic_expression →  ● atomic_expression$subexpression$1
-    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    andless_expression$subexpression$1 →  ● asteriskless_andless_expression
-    andless_expression →  ● andless_expression$subexpression$1
-    expression$subexpression$1 →  ● andless_expression
-    expression →  ● expression$subexpression$1
-    expression_with_comments_ →  ● expression _
-    expression_chain_$ebnf$1 →  ● expression_with_comments_
-    expression_chain_ →  ● expression_chain_$ebnf$1
-    case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
-    case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
-    case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
-    asteriskless_andless_expression$subexpression$1 →  ● case_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
-    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
-    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
-    free_form_sql →  ● free_form_sql$subexpression$1
-    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
-    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
-    statement →  ● expressions_or_clauses statement$subexpression$1
-    main$ebnf$1 → main$ebnf$1 ● statement
-    main →  ● main$ebnf$1
-A STRING token based on:
-    literal$subexpression$1 →  ● %STRING
-    literal →  ● literal$subexpression$1
-    atomic_expression$subexpression$1 →  ● literal
-    atomic_expression →  ● atomic_expression$subexpression$1
-    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    andless_expression$subexpression$1 →  ● asteriskless_andless_expression
-    andless_expression →  ● andless_expression$subexpression$1
-    expression$subexpression$1 →  ● andless_expression
-    expression →  ● expression$subexpression$1
-    expression_with_comments_ →  ● expression _
-    expression_chain_$ebnf$1 →  ● expression_with_comments_
-    expression_chain_ →  ● expression_chain_$ebnf$1
-    case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
-    case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
-    case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
-    asteriskless_andless_expression$subexpression$1 →  ● case_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
-    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
-    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
-    free_form_sql →  ● free_form_sql$subexpression$1
-    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
-    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
-    statement →  ● expressions_or_clauses statement$subexpression$1
-    main$ebnf$1 → main$ebnf$1 ● statement
-    main →  ● main$ebnf$1
-A RESERVED_DATA_TYPE token based on:
-    data_type$subexpression$1 →  ● %RESERVED_DATA_TYPE
-    data_type →  ● data_type$subexpression$1
-    atomic_expression$subexpression$1 →  ● data_type
-    atomic_expression →  ● atomic_expression$subexpression$1
-    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    andless_expression$subexpression$1 →  ● asteriskless_andless_expression
-    andless_expression →  ● andless_expression$subexpression$1
-    expression$subexpression$1 →  ● andless_expression
-    expression →  ● expression$subexpression$1
-    expression_with_comments_ →  ● expression _
-    expression_chain_$ebnf$1 →  ● expression_with_comments_
-    expression_chain_ →  ● expression_chain_$ebnf$1
-    case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
-    case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
-    case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
-    asteriskless_andless_expression$subexpression$1 →  ● case_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
-    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
-    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
-    free_form_sql →  ● free_form_sql$subexpression$1
-    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
-    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
-    statement →  ● expressions_or_clauses statement$subexpression$1
-    main$ebnf$1 → main$ebnf$1 ● statement
-    main →  ● main$ebnf$1
-A RESERVED_DATA_TYPE_PHRASE token based on:
-    data_type$subexpression$1 →  ● %RESERVED_DATA_TYPE_PHRASE
-    data_type →  ● data_type$subexpression$1
-    atomic_expression$subexpression$1 →  ● data_type
-    atomic_expression →  ● atomic_expression$subexpression$1
-    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    andless_expression$subexpression$1 →  ● asteriskless_andless_expression
-    andless_expression →  ● andless_expression$subexpression$1
-    expression$subexpression$1 →  ● andless_expression
-    expression →  ● expression$subexpression$1
-    expression_with_comments_ →  ● expression _
-    expression_chain_$ebnf$1 →  ● expression_with_comments_
-    expression_chain_ →  ● expression_chain_$ebnf$1
-    case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
-    case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
-    case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
-    asteriskless_andless_expression$subexpression$1 →  ● case_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
-    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
-    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
-    free_form_sql →  ● free_form_sql$subexpression$1
-    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
-    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
-    statement →  ● expressions_or_clauses statement$subexpression$1
-    main$ebnf$1 → main$ebnf$1 ● statement
-    main →  ● main$ebnf$1
-A RESERVED_KEYWORD token based on:
-    keyword$subexpression$1 →  ● %RESERVED_KEYWORD
-    keyword →  ● keyword$subexpression$1
-    atomic_expression$subexpression$1 →  ● keyword
-    atomic_expression →  ● atomic_expression$subexpression$1
-    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    andless_expression$subexpression$1 →  ● asteriskless_andless_expression
-    andless_expression →  ● andless_expression$subexpression$1
-    expression$subexpression$1 →  ● andless_expression
-    expression →  ● expression$subexpression$1
-    expression_with_comments_ →  ● expression _
-    expression_chain_$ebnf$1 →  ● expression_with_comments_
-    expression_chain_ →  ● expression_chain_$ebnf$1
-    case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
-    case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
-    case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
-    asteriskless_andless_expression$subexpression$1 →  ● case_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
-    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
-    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
-    free_form_sql →  ● free_form_sql$subexpression$1
-    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
-    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
-    statement →  ● expressions_or_clauses statement$subexpression$1
-    main$ebnf$1 → main$ebnf$1 ● statement
-    main →  ● main$ebnf$1
-A RESERVED_KEYWORD_PHRASE token based on:
-    keyword$subexpression$1 →  ● %RESERVED_KEYWORD_PHRASE
-    keyword →  ● keyword$subexpression$1
-    atomic_expression$subexpression$1 →  ● keyword
-    atomic_expression →  ● atomic_expression$subexpression$1
-    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    andless_expression$subexpression$1 →  ● asteriskless_andless_expression
-    andless_expression →  ● andless_expression$subexpression$1
-    expression$subexpression$1 →  ● andless_expression
-    expression →  ● expression$subexpression$1
-    expression_with_comments_ →  ● expression _
-    expression_chain_$ebnf$1 →  ● expression_with_comments_
-    expression_chain_ →  ● expression_chain_$ebnf$1
-    case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
-    case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
-    case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
-    asteriskless_andless_expression$subexpression$1 →  ● case_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
-    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
-    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
-    free_form_sql →  ● free_form_sql$subexpression$1
-    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
-    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
-    statement →  ● expressions_or_clauses statement$subexpression$1
-    main$ebnf$1 → main$ebnf$1 ● statement
-    main →  ● main$ebnf$1
-A RESERVED_JOIN token based on:
-    keyword$subexpression$1 →  ● %RESERVED_JOIN
-    keyword →  ● keyword$subexpression$1
-    atomic_expression$subexpression$1 →  ● keyword
-    atomic_expression →  ● atomic_expression$subexpression$1
-    asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    andless_expression$subexpression$1 →  ● asteriskless_andless_expression
-    andless_expression →  ● andless_expression$subexpression$1
-    expression$subexpression$1 →  ● andless_expression
-    expression →  ● expression$subexpression$1
-    expression_with_comments_ →  ● expression _
-    expression_chain_$ebnf$1 →  ● expression_with_comments_
-    expression_chain_ →  ● expression_chain_$ebnf$1
-    case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
-    case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
-    case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
-    asteriskless_andless_expression$subexpression$1 →  ● case_expression
-    asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
-    asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
-    asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
-    free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
-    free_form_sql →  ● free_form_sql$subexpression$1
-    expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
-    expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
-    statement →  ● expressions_or_clauses statement$subexpression$1
-    main$ebnf$1 → main$ebnf$1 ● statement
-    main →  ● main$ebnf$1
-
+-- Error: Parse error at token: SELECT at line 3 column 5
+-- Unexpected RESERVED_SELECT token: {"type":"RESERVED_SELECT","raw":"SELECT","text":"SELECT","start":27,"precedingWhitespace":"\n    "}. Instead, I was expecting to see one of the following:
+-- 
+-- A LINE_COMMENT token based on:
+--     comment →  ● %LINE_COMMENT
+--     _$ebnf$1 → _$ebnf$1 ● comment
+--     _ →  ● _$ebnf$1
+--     case_clause → %WHEN _ expression_chain_ %THEN ● _ expression_chain_
+--     case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
+--     case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
+--     asteriskless_andless_expression$subexpression$1 →  ● case_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
+--     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
+--     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
+--     free_form_sql →  ● free_form_sql$subexpression$1
+--     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
+--     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
+--     statement →  ● expressions_or_clauses statement$subexpression$1
+--     main$ebnf$1 → main$ebnf$1 ● statement
+--     main →  ● main$ebnf$1
+-- A BLOCK_COMMENT token based on:
+--     comment →  ● %BLOCK_COMMENT
+--     _$ebnf$1 → _$ebnf$1 ● comment
+--     _ →  ● _$ebnf$1
+--     case_clause → %WHEN _ expression_chain_ %THEN ● _ expression_chain_
+--     case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
+--     case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
+--     asteriskless_andless_expression$subexpression$1 →  ● case_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
+--     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
+--     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
+--     free_form_sql →  ● free_form_sql$subexpression$1
+--     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
+--     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
+--     statement →  ● expressions_or_clauses statement$subexpression$1
+--     main$ebnf$1 → main$ebnf$1 ● statement
+--     main →  ● main$ebnf$1
+-- A DISABLE_COMMENT token based on:
+--     comment →  ● %DISABLE_COMMENT
+--     _$ebnf$1 → _$ebnf$1 ● comment
+--     _ →  ● _$ebnf$1
+--     case_clause → %WHEN _ expression_chain_ %THEN ● _ expression_chain_
+--     case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
+--     case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
+--     asteriskless_andless_expression$subexpression$1 →  ● case_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
+--     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
+--     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
+--     free_form_sql →  ● free_form_sql$subexpression$1
+--     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
+--     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
+--     statement →  ● expressions_or_clauses statement$subexpression$1
+--     main$ebnf$1 → main$ebnf$1 ● statement
+--     main →  ● main$ebnf$1
+-- A AND token based on:
+--     logic_operator$subexpression$1 →  ● %AND
+--     logic_operator →  ● logic_operator$subexpression$1
+--     expression$subexpression$1 →  ● logic_operator
+--     expression →  ● expression$subexpression$1
+--     expression_with_comments_ →  ● expression _
+--     expression_chain_$ebnf$1 →  ● expression_with_comments_
+--     expression_chain_ →  ● expression_chain_$ebnf$1
+--     case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
+--     case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
+--     case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
+--     asteriskless_andless_expression$subexpression$1 →  ● case_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
+--     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
+--     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
+--     free_form_sql →  ● free_form_sql$subexpression$1
+--     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
+--     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
+--     statement →  ● expressions_or_clauses statement$subexpression$1
+--     main$ebnf$1 → main$ebnf$1 ● statement
+--     main →  ● main$ebnf$1
+-- A OR token based on:
+--     logic_operator$subexpression$1 →  ● %OR
+--     logic_operator →  ● logic_operator$subexpression$1
+--     expression$subexpression$1 →  ● logic_operator
+--     expression →  ● expression$subexpression$1
+--     expression_with_comments_ →  ● expression _
+--     expression_chain_$ebnf$1 →  ● expression_with_comments_
+--     expression_chain_ →  ● expression_chain_$ebnf$1
+--     case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
+--     case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
+--     case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
+--     asteriskless_andless_expression$subexpression$1 →  ● case_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
+--     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
+--     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
+--     free_form_sql →  ● free_form_sql$subexpression$1
+--     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
+--     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
+--     statement →  ● expressions_or_clauses statement$subexpression$1
+--     main$ebnf$1 → main$ebnf$1 ● statement
+--     main →  ● main$ebnf$1
+-- A XOR token based on:
+--     logic_operator$subexpression$1 →  ● %XOR
+--     logic_operator →  ● logic_operator$subexpression$1
+--     expression$subexpression$1 →  ● logic_operator
+--     expression →  ● expression$subexpression$1
+--     expression_with_comments_ →  ● expression _
+--     expression_chain_$ebnf$1 →  ● expression_with_comments_
+--     expression_chain_ →  ● expression_chain_$ebnf$1
+--     case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
+--     case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
+--     case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
+--     asteriskless_andless_expression$subexpression$1 →  ● case_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
+--     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
+--     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
+--     free_form_sql →  ● free_form_sql$subexpression$1
+--     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
+--     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
+--     statement →  ● expressions_or_clauses statement$subexpression$1
+--     main$ebnf$1 → main$ebnf$1 ● statement
+--     main →  ● main$ebnf$1
+-- A ASTERISK token based on:
+--     asterisk$subexpression$1 →  ● %ASTERISK
+--     asterisk →  ● asterisk$subexpression$1
+--     andless_expression$subexpression$1 →  ● asterisk
+--     andless_expression →  ● andless_expression$subexpression$1
+--     expression$subexpression$1 →  ● andless_expression
+--     expression →  ● expression$subexpression$1
+--     expression_with_comments_ →  ● expression _
+--     expression_chain_$ebnf$1 →  ● expression_with_comments_
+--     expression_chain_ →  ● expression_chain_$ebnf$1
+--     case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
+--     case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
+--     case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
+--     asteriskless_andless_expression$subexpression$1 →  ● case_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
+--     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
+--     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
+--     free_form_sql →  ● free_form_sql$subexpression$1
+--     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
+--     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
+--     statement →  ● expressions_or_clauses statement$subexpression$1
+--     main$ebnf$1 → main$ebnf$1 ● statement
+--     main →  ● main$ebnf$1
+-- A BETWEEN token based on:
+--     between_predicate →  ● %BETWEEN _ andless_expression_chain _ %AND _ andless_expression
+--     asteriskless_andless_expression$subexpression$1 →  ● between_predicate
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     andless_expression$subexpression$1 →  ● asteriskless_andless_expression
+--     andless_expression →  ● andless_expression$subexpression$1
+--     expression$subexpression$1 →  ● andless_expression
+--     expression →  ● expression$subexpression$1
+--     expression_with_comments_ →  ● expression _
+--     expression_chain_$ebnf$1 →  ● expression_with_comments_
+--     expression_chain_ →  ● expression_chain_$ebnf$1
+--     case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
+--     case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
+--     case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
+--     asteriskless_andless_expression$subexpression$1 →  ● case_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
+--     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
+--     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
+--     free_form_sql →  ● free_form_sql$subexpression$1
+--     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
+--     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
+--     statement →  ● expressions_or_clauses statement$subexpression$1
+--     main$ebnf$1 → main$ebnf$1 ● statement
+--     main →  ● main$ebnf$1
+-- A CASE token based on:
+--     case_expression →  ● %CASE _ case_expression$ebnf$1 case_expression$ebnf$2 %END
+--     asteriskless_andless_expression$subexpression$1 →  ● case_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     andless_expression$subexpression$1 →  ● asteriskless_andless_expression
+--     andless_expression →  ● andless_expression$subexpression$1
+--     expression$subexpression$1 →  ● andless_expression
+--     expression →  ● expression$subexpression$1
+--     expression_with_comments_ →  ● expression _
+--     expression_chain_$ebnf$1 →  ● expression_with_comments_
+--     expression_chain_ →  ● expression_chain_$ebnf$1
+--     case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
+--     case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
+--     case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
+--     asteriskless_andless_expression$subexpression$1 →  ● case_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
+--     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
+--     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
+--     free_form_sql →  ● free_form_sql$subexpression$1
+--     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
+--     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
+--     statement →  ● expressions_or_clauses statement$subexpression$1
+--     main$ebnf$1 → main$ebnf$1 ● statement
+--     main →  ● main$ebnf$1
+-- A ARRAY_IDENTIFIER token based on:
+--     array_subscript →  ● %ARRAY_IDENTIFIER _ square_brackets
+--     atomic_expression$subexpression$1 →  ● array_subscript
+--     atomic_expression →  ● atomic_expression$subexpression$1
+--     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     andless_expression$subexpression$1 →  ● asteriskless_andless_expression
+--     andless_expression →  ● andless_expression$subexpression$1
+--     expression$subexpression$1 →  ● andless_expression
+--     expression →  ● expression$subexpression$1
+--     expression_with_comments_ →  ● expression _
+--     expression_chain_$ebnf$1 →  ● expression_with_comments_
+--     expression_chain_ →  ● expression_chain_$ebnf$1
+--     case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
+--     case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
+--     case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
+--     asteriskless_andless_expression$subexpression$1 →  ● case_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
+--     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
+--     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
+--     free_form_sql →  ● free_form_sql$subexpression$1
+--     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
+--     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
+--     statement →  ● expressions_or_clauses statement$subexpression$1
+--     main$ebnf$1 → main$ebnf$1 ● statement
+--     main →  ● main$ebnf$1
+-- A ARRAY_KEYWORD token based on:
+--     array_subscript →  ● %ARRAY_KEYWORD _ square_brackets
+--     atomic_expression$subexpression$1 →  ● array_subscript
+--     atomic_expression →  ● atomic_expression$subexpression$1
+--     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     andless_expression$subexpression$1 →  ● asteriskless_andless_expression
+--     andless_expression →  ● andless_expression$subexpression$1
+--     expression$subexpression$1 →  ● andless_expression
+--     expression →  ● expression$subexpression$1
+--     expression_with_comments_ →  ● expression _
+--     expression_chain_$ebnf$1 →  ● expression_with_comments_
+--     expression_chain_ →  ● expression_chain_$ebnf$1
+--     case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
+--     case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
+--     case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
+--     asteriskless_andless_expression$subexpression$1 →  ● case_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
+--     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
+--     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
+--     free_form_sql →  ● free_form_sql$subexpression$1
+--     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
+--     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
+--     statement →  ● expressions_or_clauses statement$subexpression$1
+--     main$ebnf$1 → main$ebnf$1 ● statement
+--     main →  ● main$ebnf$1
+-- A RESERVED_FUNCTION_NAME token based on:
+--     function_call →  ● %RESERVED_FUNCTION_NAME _ parenthesis
+--     atomic_expression$subexpression$1 →  ● function_call
+--     atomic_expression →  ● atomic_expression$subexpression$1
+--     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     andless_expression$subexpression$1 →  ● asteriskless_andless_expression
+--     andless_expression →  ● andless_expression$subexpression$1
+--     expression$subexpression$1 →  ● andless_expression
+--     expression →  ● expression$subexpression$1
+--     expression_with_comments_ →  ● expression _
+--     expression_chain_$ebnf$1 →  ● expression_with_comments_
+--     expression_chain_ →  ● expression_chain_$ebnf$1
+--     case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
+--     case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
+--     case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
+--     asteriskless_andless_expression$subexpression$1 →  ● case_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
+--     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
+--     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
+--     free_form_sql →  ● free_form_sql$subexpression$1
+--     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
+--     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
+--     statement →  ● expressions_or_clauses statement$subexpression$1
+--     main$ebnf$1 → main$ebnf$1 ● statement
+--     main →  ● main$ebnf$1
+-- A "(" based on:
+--     parenthesis →  ● "(" expressions_or_clauses ")"
+--     atomic_expression$subexpression$1 →  ● parenthesis
+--     atomic_expression →  ● atomic_expression$subexpression$1
+--     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     andless_expression$subexpression$1 →  ● asteriskless_andless_expression
+--     andless_expression →  ● andless_expression$subexpression$1
+--     expression$subexpression$1 →  ● andless_expression
+--     expression →  ● expression$subexpression$1
+--     expression_with_comments_ →  ● expression _
+--     expression_chain_$ebnf$1 →  ● expression_with_comments_
+--     expression_chain_ →  ● expression_chain_$ebnf$1
+--     case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
+--     case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
+--     case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
+--     asteriskless_andless_expression$subexpression$1 →  ● case_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
+--     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
+--     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
+--     free_form_sql →  ● free_form_sql$subexpression$1
+--     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
+--     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
+--     statement →  ● expressions_or_clauses statement$subexpression$1
+--     main$ebnf$1 → main$ebnf$1 ● statement
+--     main →  ● main$ebnf$1
+-- A "{" based on:
+--     curly_braces →  ● "{" curly_braces$ebnf$1 "}"
+--     atomic_expression$subexpression$1 →  ● curly_braces
+--     atomic_expression →  ● atomic_expression$subexpression$1
+--     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     andless_expression$subexpression$1 →  ● asteriskless_andless_expression
+--     andless_expression →  ● andless_expression$subexpression$1
+--     expression$subexpression$1 →  ● andless_expression
+--     expression →  ● expression$subexpression$1
+--     expression_with_comments_ →  ● expression _
+--     expression_chain_$ebnf$1 →  ● expression_with_comments_
+--     expression_chain_ →  ● expression_chain_$ebnf$1
+--     case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
+--     case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
+--     case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
+--     asteriskless_andless_expression$subexpression$1 →  ● case_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
+--     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
+--     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
+--     free_form_sql →  ● free_form_sql$subexpression$1
+--     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
+--     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
+--     statement →  ● expressions_or_clauses statement$subexpression$1
+--     main$ebnf$1 → main$ebnf$1 ● statement
+--     main →  ● main$ebnf$1
+-- A "[" based on:
+--     square_brackets →  ● "[" square_brackets$ebnf$1 "]"
+--     atomic_expression$subexpression$1 →  ● square_brackets
+--     atomic_expression →  ● atomic_expression$subexpression$1
+--     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     andless_expression$subexpression$1 →  ● asteriskless_andless_expression
+--     andless_expression →  ● andless_expression$subexpression$1
+--     expression$subexpression$1 →  ● andless_expression
+--     expression →  ● expression$subexpression$1
+--     expression_with_comments_ →  ● expression _
+--     expression_chain_$ebnf$1 →  ● expression_with_comments_
+--     expression_chain_ →  ● expression_chain_$ebnf$1
+--     case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
+--     case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
+--     case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
+--     asteriskless_andless_expression$subexpression$1 →  ● case_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
+--     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
+--     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
+--     free_form_sql →  ● free_form_sql$subexpression$1
+--     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
+--     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
+--     statement →  ● expressions_or_clauses statement$subexpression$1
+--     main$ebnf$1 → main$ebnf$1 ● statement
+--     main →  ● main$ebnf$1
+-- A RESERVED_PARAMETERIZED_DATA_TYPE token based on:
+--     data_type →  ● %RESERVED_PARAMETERIZED_DATA_TYPE _ parenthesis
+--     atomic_expression$subexpression$1 →  ● data_type
+--     atomic_expression →  ● atomic_expression$subexpression$1
+--     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     andless_expression$subexpression$1 →  ● asteriskless_andless_expression
+--     andless_expression →  ● andless_expression$subexpression$1
+--     expression$subexpression$1 →  ● andless_expression
+--     expression →  ● expression$subexpression$1
+--     expression_with_comments_ →  ● expression _
+--     expression_chain_$ebnf$1 →  ● expression_with_comments_
+--     expression_chain_ →  ● expression_chain_$ebnf$1
+--     case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
+--     case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
+--     case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
+--     asteriskless_andless_expression$subexpression$1 →  ● case_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
+--     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
+--     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
+--     free_form_sql →  ● free_form_sql$subexpression$1
+--     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
+--     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
+--     statement →  ● expressions_or_clauses statement$subexpression$1
+--     main$ebnf$1 → main$ebnf$1 ● statement
+--     main →  ● main$ebnf$1
+-- A OPERATOR token based on:
+--     operator$subexpression$1 →  ● %OPERATOR
+--     operator →  ● operator$subexpression$1
+--     atomic_expression$subexpression$1 →  ● operator
+--     atomic_expression →  ● atomic_expression$subexpression$1
+--     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     andless_expression$subexpression$1 →  ● asteriskless_andless_expression
+--     andless_expression →  ● andless_expression$subexpression$1
+--     expression$subexpression$1 →  ● andless_expression
+--     expression →  ● expression$subexpression$1
+--     expression_with_comments_ →  ● expression _
+--     expression_chain_$ebnf$1 →  ● expression_with_comments_
+--     expression_chain_ →  ● expression_chain_$ebnf$1
+--     case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
+--     case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
+--     case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
+--     asteriskless_andless_expression$subexpression$1 →  ● case_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
+--     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
+--     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
+--     free_form_sql →  ● free_form_sql$subexpression$1
+--     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
+--     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
+--     statement →  ● expressions_or_clauses statement$subexpression$1
+--     main$ebnf$1 → main$ebnf$1 ● statement
+--     main →  ● main$ebnf$1
+-- A IDENTIFIER token based on:
+--     identifier$subexpression$1 →  ● %IDENTIFIER
+--     identifier →  ● identifier$subexpression$1
+--     atomic_expression$subexpression$1 →  ● identifier
+--     atomic_expression →  ● atomic_expression$subexpression$1
+--     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     andless_expression$subexpression$1 →  ● asteriskless_andless_expression
+--     andless_expression →  ● andless_expression$subexpression$1
+--     expression$subexpression$1 →  ● andless_expression
+--     expression →  ● expression$subexpression$1
+--     expression_with_comments_ →  ● expression _
+--     expression_chain_$ebnf$1 →  ● expression_with_comments_
+--     expression_chain_ →  ● expression_chain_$ebnf$1
+--     case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
+--     case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
+--     case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
+--     asteriskless_andless_expression$subexpression$1 →  ● case_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
+--     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
+--     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
+--     free_form_sql →  ● free_form_sql$subexpression$1
+--     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
+--     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
+--     statement →  ● expressions_or_clauses statement$subexpression$1
+--     main$ebnf$1 → main$ebnf$1 ● statement
+--     main →  ● main$ebnf$1
+-- A QUOTED_IDENTIFIER token based on:
+--     identifier$subexpression$1 →  ● %QUOTED_IDENTIFIER
+--     identifier →  ● identifier$subexpression$1
+--     atomic_expression$subexpression$1 →  ● identifier
+--     atomic_expression →  ● atomic_expression$subexpression$1
+--     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     andless_expression$subexpression$1 →  ● asteriskless_andless_expression
+--     andless_expression →  ● andless_expression$subexpression$1
+--     expression$subexpression$1 →  ● andless_expression
+--     expression →  ● expression$subexpression$1
+--     expression_with_comments_ →  ● expression _
+--     expression_chain_$ebnf$1 →  ● expression_with_comments_
+--     expression_chain_ →  ● expression_chain_$ebnf$1
+--     case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
+--     case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
+--     case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
+--     asteriskless_andless_expression$subexpression$1 →  ● case_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
+--     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
+--     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
+--     free_form_sql →  ● free_form_sql$subexpression$1
+--     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
+--     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
+--     statement →  ● expressions_or_clauses statement$subexpression$1
+--     main$ebnf$1 → main$ebnf$1 ● statement
+--     main →  ● main$ebnf$1
+-- A VARIABLE token based on:
+--     identifier$subexpression$1 →  ● %VARIABLE
+--     identifier →  ● identifier$subexpression$1
+--     atomic_expression$subexpression$1 →  ● identifier
+--     atomic_expression →  ● atomic_expression$subexpression$1
+--     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     andless_expression$subexpression$1 →  ● asteriskless_andless_expression
+--     andless_expression →  ● andless_expression$subexpression$1
+--     expression$subexpression$1 →  ● andless_expression
+--     expression →  ● expression$subexpression$1
+--     expression_with_comments_ →  ● expression _
+--     expression_chain_$ebnf$1 →  ● expression_with_comments_
+--     expression_chain_ →  ● expression_chain_$ebnf$1
+--     case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
+--     case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
+--     case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
+--     asteriskless_andless_expression$subexpression$1 →  ● case_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
+--     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
+--     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
+--     free_form_sql →  ● free_form_sql$subexpression$1
+--     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
+--     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
+--     statement →  ● expressions_or_clauses statement$subexpression$1
+--     main$ebnf$1 → main$ebnf$1 ● statement
+--     main →  ● main$ebnf$1
+-- A NAMED_PARAMETER token based on:
+--     parameter$subexpression$1 →  ● %NAMED_PARAMETER
+--     parameter →  ● parameter$subexpression$1
+--     atomic_expression$subexpression$1 →  ● parameter
+--     atomic_expression →  ● atomic_expression$subexpression$1
+--     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     andless_expression$subexpression$1 →  ● asteriskless_andless_expression
+--     andless_expression →  ● andless_expression$subexpression$1
+--     expression$subexpression$1 →  ● andless_expression
+--     expression →  ● expression$subexpression$1
+--     expression_with_comments_ →  ● expression _
+--     expression_chain_$ebnf$1 →  ● expression_with_comments_
+--     expression_chain_ →  ● expression_chain_$ebnf$1
+--     case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
+--     case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
+--     case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
+--     asteriskless_andless_expression$subexpression$1 →  ● case_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
+--     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
+--     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
+--     free_form_sql →  ● free_form_sql$subexpression$1
+--     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
+--     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
+--     statement →  ● expressions_or_clauses statement$subexpression$1
+--     main$ebnf$1 → main$ebnf$1 ● statement
+--     main →  ● main$ebnf$1
+-- A QUOTED_PARAMETER token based on:
+--     parameter$subexpression$1 →  ● %QUOTED_PARAMETER
+--     parameter →  ● parameter$subexpression$1
+--     atomic_expression$subexpression$1 →  ● parameter
+--     atomic_expression →  ● atomic_expression$subexpression$1
+--     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     andless_expression$subexpression$1 →  ● asteriskless_andless_expression
+--     andless_expression →  ● andless_expression$subexpression$1
+--     expression$subexpression$1 →  ● andless_expression
+--     expression →  ● expression$subexpression$1
+--     expression_with_comments_ →  ● expression _
+--     expression_chain_$ebnf$1 →  ● expression_with_comments_
+--     expression_chain_ →  ● expression_chain_$ebnf$1
+--     case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
+--     case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
+--     case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
+--     asteriskless_andless_expression$subexpression$1 →  ● case_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
+--     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
+--     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
+--     free_form_sql →  ● free_form_sql$subexpression$1
+--     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
+--     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
+--     statement →  ● expressions_or_clauses statement$subexpression$1
+--     main$ebnf$1 → main$ebnf$1 ● statement
+--     main →  ● main$ebnf$1
+-- A NUMBERED_PARAMETER token based on:
+--     parameter$subexpression$1 →  ● %NUMBERED_PARAMETER
+--     parameter →  ● parameter$subexpression$1
+--     atomic_expression$subexpression$1 →  ● parameter
+--     atomic_expression →  ● atomic_expression$subexpression$1
+--     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     andless_expression$subexpression$1 →  ● asteriskless_andless_expression
+--     andless_expression →  ● andless_expression$subexpression$1
+--     expression$subexpression$1 →  ● andless_expression
+--     expression →  ● expression$subexpression$1
+--     expression_with_comments_ →  ● expression _
+--     expression_chain_$ebnf$1 →  ● expression_with_comments_
+--     expression_chain_ →  ● expression_chain_$ebnf$1
+--     case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
+--     case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
+--     case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
+--     asteriskless_andless_expression$subexpression$1 →  ● case_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
+--     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
+--     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
+--     free_form_sql →  ● free_form_sql$subexpression$1
+--     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
+--     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
+--     statement →  ● expressions_or_clauses statement$subexpression$1
+--     main$ebnf$1 → main$ebnf$1 ● statement
+--     main →  ● main$ebnf$1
+-- A POSITIONAL_PARAMETER token based on:
+--     parameter$subexpression$1 →  ● %POSITIONAL_PARAMETER
+--     parameter →  ● parameter$subexpression$1
+--     atomic_expression$subexpression$1 →  ● parameter
+--     atomic_expression →  ● atomic_expression$subexpression$1
+--     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     andless_expression$subexpression$1 →  ● asteriskless_andless_expression
+--     andless_expression →  ● andless_expression$subexpression$1
+--     expression$subexpression$1 →  ● andless_expression
+--     expression →  ● expression$subexpression$1
+--     expression_with_comments_ →  ● expression _
+--     expression_chain_$ebnf$1 →  ● expression_with_comments_
+--     expression_chain_ →  ● expression_chain_$ebnf$1
+--     case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
+--     case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
+--     case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
+--     asteriskless_andless_expression$subexpression$1 →  ● case_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
+--     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
+--     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
+--     free_form_sql →  ● free_form_sql$subexpression$1
+--     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
+--     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
+--     statement →  ● expressions_or_clauses statement$subexpression$1
+--     main$ebnf$1 → main$ebnf$1 ● statement
+--     main →  ● main$ebnf$1
+-- A CUSTOM_PARAMETER token based on:
+--     parameter$subexpression$1 →  ● %CUSTOM_PARAMETER
+--     parameter →  ● parameter$subexpression$1
+--     atomic_expression$subexpression$1 →  ● parameter
+--     atomic_expression →  ● atomic_expression$subexpression$1
+--     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     andless_expression$subexpression$1 →  ● asteriskless_andless_expression
+--     andless_expression →  ● andless_expression$subexpression$1
+--     expression$subexpression$1 →  ● andless_expression
+--     expression →  ● expression$subexpression$1
+--     expression_with_comments_ →  ● expression _
+--     expression_chain_$ebnf$1 →  ● expression_with_comments_
+--     expression_chain_ →  ● expression_chain_$ebnf$1
+--     case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
+--     case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
+--     case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
+--     asteriskless_andless_expression$subexpression$1 →  ● case_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
+--     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
+--     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
+--     free_form_sql →  ● free_form_sql$subexpression$1
+--     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
+--     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
+--     statement →  ● expressions_or_clauses statement$subexpression$1
+--     main$ebnf$1 → main$ebnf$1 ● statement
+--     main →  ● main$ebnf$1
+-- A NUMBER token based on:
+--     literal$subexpression$1 →  ● %NUMBER
+--     literal →  ● literal$subexpression$1
+--     atomic_expression$subexpression$1 →  ● literal
+--     atomic_expression →  ● atomic_expression$subexpression$1
+--     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     andless_expression$subexpression$1 →  ● asteriskless_andless_expression
+--     andless_expression →  ● andless_expression$subexpression$1
+--     expression$subexpression$1 →  ● andless_expression
+--     expression →  ● expression$subexpression$1
+--     expression_with_comments_ →  ● expression _
+--     expression_chain_$ebnf$1 →  ● expression_with_comments_
+--     expression_chain_ →  ● expression_chain_$ebnf$1
+--     case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
+--     case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
+--     case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
+--     asteriskless_andless_expression$subexpression$1 →  ● case_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
+--     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
+--     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
+--     free_form_sql →  ● free_form_sql$subexpression$1
+--     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
+--     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
+--     statement →  ● expressions_or_clauses statement$subexpression$1
+--     main$ebnf$1 → main$ebnf$1 ● statement
+--     main →  ● main$ebnf$1
+-- A STRING token based on:
+--     literal$subexpression$1 →  ● %STRING
+--     literal →  ● literal$subexpression$1
+--     atomic_expression$subexpression$1 →  ● literal
+--     atomic_expression →  ● atomic_expression$subexpression$1
+--     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     andless_expression$subexpression$1 →  ● asteriskless_andless_expression
+--     andless_expression →  ● andless_expression$subexpression$1
+--     expression$subexpression$1 →  ● andless_expression
+--     expression →  ● expression$subexpression$1
+--     expression_with_comments_ →  ● expression _
+--     expression_chain_$ebnf$1 →  ● expression_with_comments_
+--     expression_chain_ →  ● expression_chain_$ebnf$1
+--     case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
+--     case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
+--     case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
+--     asteriskless_andless_expression$subexpression$1 →  ● case_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
+--     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
+--     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
+--     free_form_sql →  ● free_form_sql$subexpression$1
+--     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
+--     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
+--     statement →  ● expressions_or_clauses statement$subexpression$1
+--     main$ebnf$1 → main$ebnf$1 ● statement
+--     main →  ● main$ebnf$1
+-- A RESERVED_DATA_TYPE token based on:
+--     data_type$subexpression$1 →  ● %RESERVED_DATA_TYPE
+--     data_type →  ● data_type$subexpression$1
+--     atomic_expression$subexpression$1 →  ● data_type
+--     atomic_expression →  ● atomic_expression$subexpression$1
+--     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     andless_expression$subexpression$1 →  ● asteriskless_andless_expression
+--     andless_expression →  ● andless_expression$subexpression$1
+--     expression$subexpression$1 →  ● andless_expression
+--     expression →  ● expression$subexpression$1
+--     expression_with_comments_ →  ● expression _
+--     expression_chain_$ebnf$1 →  ● expression_with_comments_
+--     expression_chain_ →  ● expression_chain_$ebnf$1
+--     case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
+--     case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
+--     case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
+--     asteriskless_andless_expression$subexpression$1 →  ● case_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
+--     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
+--     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
+--     free_form_sql →  ● free_form_sql$subexpression$1
+--     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
+--     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
+--     statement →  ● expressions_or_clauses statement$subexpression$1
+--     main$ebnf$1 → main$ebnf$1 ● statement
+--     main →  ● main$ebnf$1
+-- A RESERVED_DATA_TYPE_PHRASE token based on:
+--     data_type$subexpression$1 →  ● %RESERVED_DATA_TYPE_PHRASE
+--     data_type →  ● data_type$subexpression$1
+--     atomic_expression$subexpression$1 →  ● data_type
+--     atomic_expression →  ● atomic_expression$subexpression$1
+--     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     andless_expression$subexpression$1 →  ● asteriskless_andless_expression
+--     andless_expression →  ● andless_expression$subexpression$1
+--     expression$subexpression$1 →  ● andless_expression
+--     expression →  ● expression$subexpression$1
+--     expression_with_comments_ →  ● expression _
+--     expression_chain_$ebnf$1 →  ● expression_with_comments_
+--     expression_chain_ →  ● expression_chain_$ebnf$1
+--     case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
+--     case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
+--     case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
+--     asteriskless_andless_expression$subexpression$1 →  ● case_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
+--     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
+--     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
+--     free_form_sql →  ● free_form_sql$subexpression$1
+--     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
+--     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
+--     statement →  ● expressions_or_clauses statement$subexpression$1
+--     main$ebnf$1 → main$ebnf$1 ● statement
+--     main →  ● main$ebnf$1
+-- A RESERVED_KEYWORD token based on:
+--     keyword$subexpression$1 →  ● %RESERVED_KEYWORD
+--     keyword →  ● keyword$subexpression$1
+--     atomic_expression$subexpression$1 →  ● keyword
+--     atomic_expression →  ● atomic_expression$subexpression$1
+--     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     andless_expression$subexpression$1 →  ● asteriskless_andless_expression
+--     andless_expression →  ● andless_expression$subexpression$1
+--     expression$subexpression$1 →  ● andless_expression
+--     expression →  ● expression$subexpression$1
+--     expression_with_comments_ →  ● expression _
+--     expression_chain_$ebnf$1 →  ● expression_with_comments_
+--     expression_chain_ →  ● expression_chain_$ebnf$1
+--     case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
+--     case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
+--     case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
+--     asteriskless_andless_expression$subexpression$1 →  ● case_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
+--     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
+--     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
+--     free_form_sql →  ● free_form_sql$subexpression$1
+--     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
+--     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
+--     statement →  ● expressions_or_clauses statement$subexpression$1
+--     main$ebnf$1 → main$ebnf$1 ● statement
+--     main →  ● main$ebnf$1
+-- A RESERVED_KEYWORD_PHRASE token based on:
+--     keyword$subexpression$1 →  ● %RESERVED_KEYWORD_PHRASE
+--     keyword →  ● keyword$subexpression$1
+--     atomic_expression$subexpression$1 →  ● keyword
+--     atomic_expression →  ● atomic_expression$subexpression$1
+--     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     andless_expression$subexpression$1 →  ● asteriskless_andless_expression
+--     andless_expression →  ● andless_expression$subexpression$1
+--     expression$subexpression$1 →  ● andless_expression
+--     expression →  ● expression$subexpression$1
+--     expression_with_comments_ →  ● expression _
+--     expression_chain_$ebnf$1 →  ● expression_with_comments_
+--     expression_chain_ →  ● expression_chain_$ebnf$1
+--     case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
+--     case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
+--     case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
+--     asteriskless_andless_expression$subexpression$1 →  ● case_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
+--     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
+--     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
+--     free_form_sql →  ● free_form_sql$subexpression$1
+--     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
+--     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
+--     statement →  ● expressions_or_clauses statement$subexpression$1
+--     main$ebnf$1 → main$ebnf$1 ● statement
+--     main →  ● main$ebnf$1
+-- A RESERVED_JOIN token based on:
+--     keyword$subexpression$1 →  ● %RESERVED_JOIN
+--     keyword →  ● keyword$subexpression$1
+--     atomic_expression$subexpression$1 →  ● keyword
+--     atomic_expression →  ● atomic_expression$subexpression$1
+--     asteriskless_andless_expression$subexpression$1 →  ● atomic_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     andless_expression$subexpression$1 →  ● asteriskless_andless_expression
+--     andless_expression →  ● andless_expression$subexpression$1
+--     expression$subexpression$1 →  ● andless_expression
+--     expression →  ● expression$subexpression$1
+--     expression_with_comments_ →  ● expression _
+--     expression_chain_$ebnf$1 →  ● expression_with_comments_
+--     expression_chain_ →  ● expression_chain_$ebnf$1
+--     case_clause → %WHEN _ expression_chain_ %THEN _ ● expression_chain_
+--     case_expression$ebnf$2 → case_expression$ebnf$2 ● case_clause
+--     case_expression → %CASE _ case_expression$ebnf$1 ● case_expression$ebnf$2 %END
+--     asteriskless_andless_expression$subexpression$1 →  ● case_expression
+--     asteriskless_andless_expression →  ● asteriskless_andless_expression$subexpression$1
+--     asteriskless_free_form_sql$subexpression$1 →  ● asteriskless_andless_expression
+--     asteriskless_free_form_sql →  ● asteriskless_free_form_sql$subexpression$1
+--     free_form_sql$subexpression$1 →  ● asteriskless_free_form_sql
+--     free_form_sql →  ● free_form_sql$subexpression$1
+--     expressions_or_clauses$ebnf$1 → expressions_or_clauses$ebnf$1 ● free_form_sql
+--     expressions_or_clauses →  ● expressions_or_clauses$ebnf$1 expressions_or_clauses$ebnf$2
+--     statement →  ● expressions_or_clauses statement$subexpression$1
+--     main$ebnf$1 → main$ebnf$1 ● statement
+--     main →  ● main$ebnf$1
 -- #endregion
 
 -- #region: prettier-plugin-sql-cst / test / proc / declare.test: formats basic DECLARE statement
@@ -2822,9 +2821,9 @@ outer_loop: REPEAT
   END LOOP inner_loop;
 UNTIL TRUE END REPEAT outer_loop
 -- error:
-Error: Parse error: Unexpected ": REPEAT
- " at line 1 column 11.
-SQL dialect used: "bigquery".
+-- Error: Parse error: Unexpected ": REPEAT
+--  " at line 1 column 11.
+-- SQL dialect used: "bigquery".
 -- #endregion
 
 -- #region: prettier-plugin-sql-cst / test / proc / loops.test: formats FOR .. IN
@@ -2855,9 +2854,9 @@ outer_loop: LOOP
   END LOOP;
 END LOOP
 -- error:
-Error: Parse error: Unexpected ": LOOP
-  i" at line 1 column 11.
-SQL dialect used: "bigquery".
+-- Error: Parse error: Unexpected ": LOOP
+--   i" at line 1 column 11.
+-- SQL dialect used: "bigquery".
 -- #endregion
 
 -- #region: prettier-plugin-sql-cst / test / proc / loops.test: formats LOOP

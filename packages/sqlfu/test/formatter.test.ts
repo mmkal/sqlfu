@@ -75,7 +75,7 @@ function parseFormatterFixture(contents: string): FormatterFixtureCase[] {
         ? trimFixtureBlock(groups.body.slice(outputMarker.index! + outputMarker[0].length + 1))
         : undefined;
     const error = errorMarker
-      ? trimFixtureBlock(groups.body.slice(errorMarker.index! + errorMarker[0].length + 1))
+      ? parseErrorBlock(groups.body.slice(errorMarker.index! + errorMarker[0].length + 1))
       : undefined;
     cases.push({
       name: groups.name,
@@ -99,6 +99,13 @@ function trimFixtureBlock(value: string): string {
 function parseDefaultConfig(contents: string): Record<string, unknown> {
   const defaultConfigMatch = contents.match(/^-- default config: (?<json>.+)$/m);
   return defaultConfigMatch?.groups?.json ? JSON.parse(defaultConfigMatch.groups.json) as Record<string, unknown> : {};
+}
+
+function parseErrorBlock(value: string): string {
+  return trimFixtureBlock(value)
+    .split('\n')
+    .map((line) => line.replace(/^-- ?/, ''))
+    .join('\n');
 }
 
 function normalizeThrownError(fn: () => unknown): string {

@@ -86,10 +86,10 @@ SELECT
 #
 SELECT 1;
 -- error:
-Error: Parse error: Unexpected "#
-#
-SELECT" at line 1 column 1.
-SQL dialect used: "sqlite".
+-- Error: Parse error: Unexpected "#
+-- #
+-- SELECT" at line 1 column 1.
+-- SQL dialect used: "sqlite".
 -- #endregion
 
 -- #region: prettier-plugin-sql-cst / test / comments.test: collapses multiple empty lines between comments to one
@@ -149,8 +149,8 @@ SELECT
         SELECT 1;
       
 -- error:
-Error: Parse error: Unexpected "#My commen" at line 2 column 9.
-SQL dialect used: "sqlite".
+-- Error: Parse error: Unexpected "#My commen" at line 2 column 9.
+-- SQL dialect used: "sqlite".
 -- #endregion
 
 -- #region: prettier-plugin-sql-cst / test / comments.test: formats basic doc-comments
@@ -270,8 +270,8 @@ SELECT
 #!/usr/bin/sqlite
 SELECT 1;
 -- error:
-Error: Parse error: Unexpected "#!/usr/bin" at line 1 column 1.
-SQL dialect used: "sqlite".
+-- Error: Parse error: Unexpected "#!/usr/bin" at line 1 column 1.
+-- SQL dialect used: "sqlite".
 -- #endregion
 
 -- #region: prettier-plugin-sql-cst / test / comments.test: preserves empty lines between comments
@@ -1621,8 +1621,8 @@ SELECT
 -- input:
 SELECT @`foo`, @foo
 -- error:
-Error: Parse error: Unexpected "@`foo`, @f" at line 1 column 8.
-SQL dialect used: "sqlite".
+-- Error: Parse error: Unexpected "@`foo`, @f" at line 1 column 8.
+-- SQL dialect used: "sqlite".
 -- #endregion
 
 -- #region: prettier-plugin-sql-cst / test / options / identifierCase.test: does not change the case of function names
@@ -1747,8 +1747,8 @@ WHERE
 -- input:
 SELECT * FROM tbl WHERE x = $1 AND y = $2
 -- error:
-Error: Parse error: Unexpected "$1 AND y =" at line 1 column 29.
-SQL dialect used: "sqlite".
+-- Error: Parse error: Unexpected "$1 AND y =" at line 1 column 29.
+-- SQL dialect used: "sqlite".
 -- #endregion
 
 -- #region: prettier-plugin-sql-cst / test / options / paramTypes.test: mix of different parameter types
@@ -2661,6 +2661,6 @@ drop puzzle
 -- input:
 CREATE PUZZLE foo.bar WITH SIZE 12x9
 -- error:
-Error: Parse error: Unexpected "12x9" at line 1 column 33.
-SQL dialect used: "sqlite".
+-- Error: Parse error: Unexpected "12x9" at line 1 column 33.
+-- SQL dialect used: "sqlite".
 -- #endregion

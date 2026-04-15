@@ -1122,6 +1122,7 @@ function DataTable(input: {
     ? formatCellText(input.rows[selectedCell.rowId]?.[selectedCell.columnId])
     : '';
   const selectedCellDirty = selectedOriginalValue !== selectedDraftValue;
+  const showSelectedCellDiffTabs = selectedCellDirty && selectedOriginalValue !== 'null' && selectedOriginalValue !== '';
   const applyUndo = () => {
     const previousRows = rowHistoryRef.current.undo.at(-1);
     if (!previousRows) {
@@ -1256,7 +1257,7 @@ function DataTable(input: {
           <div className="card-title-row">
             <div className="card-title">{`Cell: ${selectedCell.columnId}, row ${selectedCell.rowId + 1}`}</div>
           </div>
-          {selectedCellDirty ? (
+          {showSelectedCellDiffTabs ? (
             <div className="stack">
               <div className="cell-panel-tabs" role="tablist" aria-label="Cell versions">
                 <button

@@ -178,6 +178,38 @@ The name of the migration, if created using `sqlfu draft`, will be based on the 
 
 Generated TypeSQL outputs stay next to your `.sql` files.
 
+## SQL Formatter
+
+`sqlfu` includes a SQL formatter via `formatSql()`.
+
+It is opinionated. The default style is SQLite-first, uses lowercase keywords and types, and tries to keep simple clauses inline when they still read well. For example, it prefers:
+
+```sql
+select foo, bar
+from baz
+```
+
+over the more aggressively expanded (and SHOUTY) default style from upstream `sql-formatter`:
+
+```sql
+SELECT
+  foo,
+  bar
+FROM
+  baz
+```
+
+(casing is configurable, as it is in sql-formatter, but the aggressive expansion isn't possible with sql-formatter)
+
+The implementation started as a vendored copy of [`sql-formatter`](https://github.com/sql-formatter-org/sql-formatter). `sqlfu` diverged because upstream tends to put simple clause bodies on separate lines more often than we want. The vendored formatter still provides the parser and dialect support, but `sqlfu` adds its own wrapper and compacting pass on top.
+
+If you want to see or change that behavior, start here:
+
+- [src/formatter.ts](./src/formatter.ts)
+- [src/vendor/sql-formatter/AGENTS.md](./src/vendor/sql-formatter/AGENTS.md)
+- [test/formatter/sqlite.fixture.sql](./test/formatter/sqlite.fixture.sql)
+- [test/formatter.test.ts](./test/formatter.test.ts)
+
 ## Notes
 
 - `definitions.sql` remains the schema source of truth

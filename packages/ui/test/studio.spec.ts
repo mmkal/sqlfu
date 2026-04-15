@@ -43,16 +43,81 @@ test('schema page shows mismatch cards and can run the recommended sqlfu draft c
   await expect(migrationToggle).toBeVisible();
   await expect(migrationToggle).toContainText('Pending');
   await migrationToggle.click();
-  await expect(page.getByText(/_create_table_posts\.sql$/)).toBeVisible();
-  await expect(
-    await readCodeMirrorText(page, 'create_table_posts migration editor'),
-  ).toContain('create view post_cards as');
+  const firstMigrationDetail = page.locator('.authority-migrations .migration-item').first().locator('.migration-detail');
+  await expect(firstMigrationDetail.getByRole('tab', {name: 'Content'})).toHaveAttribute('aria-selected', 'true');
+  await expect(await readCodeMirrorText(firstMigrationDetail, 'Migration content')).toContain('create view post_cards as');
 
   await expect(page.getByRole('button', {name: 'Migration History'})).toBeVisible();
   await expect(page.getByText('No applied migrations.')).toBeVisible();
 
   await expect(page.getByRole('button', {name: 'Live Schema'})).toBeVisible();
   await expect(await readCodeMirrorText(page, 'Live Schema editor')).toContain('create table posts');
+});
+
+test('migration details show content and metadata tabs in the migrations card', async ({page}) => {
+  await using _project = await preserveSchemaProjectState(path.join(import.meta.dirname, 'projects', 'fixture-project'));
+
+  await page.goto('/#schema');
+
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByRole('button', {name: 'sqlfu draft'}).click();
+
+  const migrationItem = page.locator('.authority-migrations .migration-item').first();
+  await migrationItem.getByRole('button').first().click();
+
+  const migrationDetail = migrationItem.locator('.migration-detail');
+  await expect(migrationDetail.getByRole('tab', {name: 'Content'})).toHaveAttribute('aria-selected', 'true');
+  await expect(migrationDetail.getByRole('tab', {name: 'Metadata'})).toBeVisible();
+  await expect(migrationDetail.getByRole('tab', {name: 'Resultant Schema'})).toBeVisible();
+  await expect(await readCodeMirrorText(migrationDetail, 'Migration content')).toContain('create view post_cards as');
+
+  await migrationDetail.getByRole('tab', {name: 'Metadata'}).click();
+  await expect(migrationDetail.getByRole('tab', {name: 'Metadata'})).toHaveAttribute('aria-selected', 'true');
+  await expect(await readCodeMirrorText(migrationDetail, 'Migration metadata')).toContain('name: create_table_posts');
+  await expect(await readCodeMirrorText(migrationDetail, 'Migration metadata')).toContain('applied_at: null');
+});
+
+test('migration details lazily load the resultant schema tab', async ({page}) => {
+  await using _project = await preserveSchemaProjectState(path.join(import.meta.dirname, 'projects', 'fixture-project'));
+
+  await page.goto('/#schema');
+
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByRole('button', {name: 'sqlfu draft'}).click();
+
+  const migrationDetail = page.locator('.authority-migrations .migration-item').first().locator('.migration-detail');
+  await page.locator('.authority-migrations .migration-item').first().getByRole('button').first().click();
+
+  const [resultantSchemaResponse] = await Promise.all([
+    page.waitForResponse((response) => response.url().includes('/api/schema/authorities/resultant-schema') && response.ok()),
+    migrationDetail.getByRole('tab', {name: 'Resultant Schema'}).click(),
+  ]);
+  expect(await resultantSchemaResponse.json()).toMatchObject({
+    sql: expect.stringContaining('create table posts'),
+  });
+  await expect(await readCodeMirrorText(migrationDetail, 'Migration resultant schema')).toContain('create table posts');
+});
+
+test('migration history rows use the same migration detail view', async ({page}) => {
+  await using _project = await preserveSchemaProjectState(path.join(import.meta.dirname, 'projects', 'fixture-project'));
+
+  await page.goto('/#schema');
+
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByRole('button', {name: 'sqlfu draft'}).click();
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByRole('button', {name: /sqlfu baseline /}).first().click();
+
+  const historyItem = page.locator('.authority-history .migration-item').first();
+  await historyItem.getByRole('button').first().click();
+
+  const migrationDetail = historyItem.locator('.migration-detail');
+  await expect(migrationDetail.getByRole('tab', {name: 'Content'})).toHaveAttribute('aria-selected', 'true');
+  await migrationDetail.getByRole('tab', {name: 'Metadata'}).click();
+  const metadata = await readCodeMirrorText(migrationDetail, 'Migration metadata');
+  expect(metadata).toContain('name: create_table_posts');
+  expect(metadata).toContain('applied_at: ');
+  expect(metadata).not.toContain('applied_at: null');
 });
 
 test('desired schema can be edited and saved, and sync is disabled while it is dirty', async ({page}) => {

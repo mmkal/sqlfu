@@ -218,17 +218,59 @@ export async function getSchemaAuthorities(context: SqlfuRouterContext) {
   await using database = await openMainDevDatabase(context.config.db);
   const applied = await readMigrationHistory(database.client);
   const liveSchema = await extractSchema(database.client);
+  const appliedByName = new Map(applied.map((migration) => [migration.name, migration]));
+  const migrationByName = new Map(migrations.map((migration) => [migrationName(migration), migration]));
 
   return {
     desiredSchemaSql: definitionsSql,
     migrations: migrations.map((migration) => ({
       id: migrationName(migration),
+      fileName: path.basename(migration.path),
       content: migration.content,
-      applied: applied.some((historical) => historical.name === migrationName(migration)),
+      applied: appliedByName.has(migrationName(migration)),
+      appliedAt: appliedByName.get(migrationName(migration))?.appliedAt ?? null,
     })),
-    migrationHistory: applied.map((migration) => migration.name),
+    migrationHistory: applied.map((migration) => ({
+      id: migration.name,
+      fileName: migrationByName.get(migration.name) ? path.basename(migrationByName.get(migration.name)!.path) : null,
+      content: migration.content,
+      applied: true,
+      appliedAt: migration.appliedAt,
+    })),
     liveSchemaSql: liveSchema,
   };
+}
+
+export async function getMigrationResultantSchema(
+  context: SqlfuRouterContext,
+  input: {
+    source: 'migrations' | 'history';
+    id: string;
+  },
+) {
+  const runtime = createRuntime(context);
+  if (input.source === 'migrations') {
+    const migrations = await runtime.readMigrations();
+    const targetIndex = migrations.findIndex((migration) => migrationName(migration) === input.id);
+    if (targetIndex === -1) {
+      throw new Error(`migration ${input.id} not found`);
+    }
+    return materializeMigrationsSchema(runtime.config, migrations.slice(0, targetIndex + 1));
+  }
+
+  await using database = await openMainDevDatabase(context.config.db);
+  const applied = await readMigrationHistory(database.client);
+  const targetIndex = applied.findIndex((migration) => migration.name === input.id);
+  if (targetIndex === -1) {
+    throw new Error(`migration history entry ${input.id} not found`);
+  }
+  return materializeMigrationsSchema(
+    runtime.config,
+    applied.slice(0, targetIndex + 1).map((migration) => ({
+      path: `${migration.name}.sql`,
+      content: migration.content,
+    })),
+  );
 }
 
 export async function runSqlfuCommand(context: SqlfuRouterContext, command: string): Promise<void> {

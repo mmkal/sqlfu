@@ -3,8 +3,8 @@ import path from 'node:path';
 import {Database} from 'bun:sqlite';
 
 import type {QueryCatalog, QueryCatalogEntry, QueryArg, SqlfuProjectConfig, SqlfuRouterContext} from 'sqlfu/experimental';
-import {analyzeAdHocSqlForConfig, createBunClient, getCheckMismatches, getSchemaAuthorities, loadProjectConfig, runSqlfuCommand, splitSqlStatements, writeDefinitionsSql} from 'sqlfu/experimental';
-import type {QueryFileMutationResponse, SaveSqlResponse, SchemaAuthoritiesResponse, SchemaCheckCard, SchemaCheckResponse, SqlAnalysisResponse, SqlEditorDiagnostic, StudioColumn, StudioRelation, StudioSchemaResponse, TableRowKey, TableRowsResponse} from './shared.js';
+import {analyzeAdHocSqlForConfig, createBunClient, getCheckMismatches, getMigrationResultantSchema, getSchemaAuthorities, loadProjectConfig, runSqlfuCommand, splitSqlStatements, writeDefinitionsSql} from 'sqlfu/experimental';
+import type {MigrationResultantSchemaResponse, QueryFileMutationResponse, SaveSqlResponse, SchemaAuthoritiesResponse, SchemaCheckCard, SchemaCheckResponse, SqlAnalysisResponse, SqlEditorDiagnostic, StudioColumn, StudioRelation, StudioSchemaResponse, TableRowKey, TableRowsResponse} from './shared.js';
 
 const clientEntryPath = path.join(import.meta.dir, 'client.tsx');
 const stylesPath = path.join(import.meta.dir, 'styles.css');
@@ -38,6 +38,13 @@ export async function startSqlfuUiServer(input: {
 
         if (url.pathname === '/api/schema/authorities') {
           return json(await getSchemaAuthoritiesResponse(config));
+        }
+
+        if (url.pathname === '/api/schema/authorities/resultant-schema') {
+          return json(await getMigrationResultantSchemaResponse(config, {
+            source: url.searchParams.get('source') === 'history' ? 'history' : 'migrations',
+            id: url.searchParams.get('id') ?? '',
+          }));
         }
 
         if (url.pathname.startsWith('/api/table/')) {
@@ -249,12 +256,36 @@ async function getSchemaAuthoritiesResponse(config: SqlfuProjectConfig): Promise
     migrations: authorities.migrations.map((migration) => ({
       ...parseMigrationId(migration.id),
       id: migration.id,
-      fileName: `${migration.id}.sql`,
+      fileName: migration.fileName,
       content: migration.content,
       applied: migration.applied,
+      appliedAt: migration.appliedAt,
     })),
-    migrationHistory: authorities.migrationHistory,
+    migrationHistory: authorities.migrationHistory.map((migration) => ({
+      ...parseMigrationId(migration.id),
+      id: migration.id,
+      fileName: migration.fileName,
+      content: migration.content,
+      applied: migration.applied,
+      appliedAt: migration.appliedAt,
+    })),
     liveSchemaSql: authorities.liveSchemaSql,
+  };
+}
+
+async function getMigrationResultantSchemaResponse(
+  config: SqlfuProjectConfig,
+  input: {
+    source: 'migrations' | 'history';
+    id: string;
+  },
+): Promise<MigrationResultantSchemaResponse> {
+  if (!input.id.trim()) {
+    throw new Error('Migration id is required');
+  }
+
+  return {
+    sql: await getMigrationResultantSchema(toSqlfuRouterContext(config), input),
   };
 }
 

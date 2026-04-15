@@ -17,9 +17,11 @@ import {
 import {migrationNickname} from 'sqlfu/naming';
 import type {QueryCatalog, QueryCatalogEntry} from 'sqlfu/experimental';
 import type {
+  MigrationResultantSchemaResponse,
   QueryFileMutationResponse,
   QueryExecutionResponse,
   SaveSqlResponse,
+  SchemaAuthorityMigration,
   SchemaAuthoritiesResponse,
   SchemaCheckResponse,
   SqlAnalysisResponse,
@@ -302,15 +304,10 @@ function SchemaPanel(input: {
                         </span>
                       </span>
                     </summary>
-                    <div className="migration-meta muted">
-                      {migration.fileName}
-                    </div>
-                    <SqlCodeMirror
-                      value={migration.content}
-                      ariaLabel={`${migration.name} migration editor`}
-                      relations={[]}
-                      onChange={() => {}}
-                      readOnly
+                    <MigrationDetail
+                      migration={migration}
+                      source="migrations"
+                      storageKey={`schema/migrations/${migration.id}`}
                     />
                   </details>
                 ))}
@@ -330,11 +327,24 @@ function SchemaPanel(input: {
             {input.authorities.migrationHistory.length === 0 ? (
               <p className="muted">No applied migrations.</p>
             ) : (
-              <div className="column-list">
+              <div className="stack">
                 {input.authorities.migrationHistory.map((migration) => (
-                  <div key={migration} className="column-item">
-                    <strong>{migration}</strong>
-                  </div>
+                  <details key={migration.id} className="migration-item">
+                    <summary role="button" className="migration-summary">
+                      <span>{migration.name}</span>
+                      <span className="migration-summary-right">
+                        <span className="pill pill-ok">Applied</span>
+                        <span className="accordion-chevron" aria-hidden="true">
+                          ▾
+                        </span>
+                      </span>
+                    </summary>
+                    <MigrationDetail
+                      migration={migration}
+                      source="history"
+                      storageKey={`schema/history/${migration.id}`}
+                    />
+                  </details>
                 ))}
               </div>
             )}
@@ -360,6 +370,102 @@ function SchemaPanel(input: {
         </details>
       </div>
     </section>
+  );
+}
+
+function MigrationDetail(input: {
+  migration: SchemaAuthorityMigration;
+  source: 'migrations' | 'history';
+  storageKey: string;
+}) {
+  const [activeTab, setActiveTab] = useLocalStorageState<'content' | 'metadata' | 'schema'>(
+    `sqlfu-ui/migration-detail-tab/${input.storageKey}`,
+    {
+      defaultValue: 'content',
+    },
+  );
+  const resultantSchemaQuery = useQuery({
+    queryKey: ['migration-resultant-schema', input.source, input.migration.id],
+    queryFn: () =>
+      fetchJson<MigrationResultantSchemaResponse>(
+        `/api/schema/authorities/resultant-schema?source=${encodeURIComponent(input.source)}&id=${encodeURIComponent(input.migration.id)}`,
+      ),
+    enabled: activeTab === 'schema',
+  });
+  const metadata = [
+    `name: ${input.migration.name}`,
+    `filename: ${input.migration.fileName ?? 'null'}`,
+    `applied_at: ${input.migration.appliedAt ?? 'null'}`,
+  ].join('\n');
+
+  return (
+    <div className="migration-detail">
+      <div className="migration-detail-tabs" role="tablist" aria-label="Migration detail tabs">
+        <button
+          className={activeTab === 'content' ? 'migration-detail-tab active' : 'migration-detail-tab'}
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'content'}
+          onClick={() => setActiveTab('content')}
+        >
+          Content
+        </button>
+        <button
+          className={activeTab === 'metadata' ? 'migration-detail-tab active' : 'migration-detail-tab'}
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'metadata'}
+          onClick={() => setActiveTab('metadata')}
+        >
+          Metadata
+        </button>
+        <button
+          className={activeTab === 'schema' ? 'migration-detail-tab active' : 'migration-detail-tab'}
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'schema'}
+          onClick={() => setActiveTab('schema')}
+        >
+          Resultant Schema
+        </button>
+      </div>
+
+      {activeTab === 'content' ? (
+        <SqlCodeMirror
+          value={input.migration.content}
+          ariaLabel="Migration content"
+          relations={[]}
+          onChange={() => {}}
+          readOnly
+        />
+      ) : null}
+      {activeTab === 'metadata' ? (
+        <TextCodeMirror
+          value={metadata}
+          ariaLabel="Migration metadata"
+          readOnly
+          height="10rem"
+        />
+      ) : null}
+      {activeTab === 'schema' ? (
+        resultantSchemaQuery.data ? (
+          <SqlCodeMirror
+            value={resultantSchemaQuery.data.sql}
+            ariaLabel="Migration resultant schema"
+            relations={[]}
+            onChange={() => {}}
+            readOnly
+          />
+        ) : (
+          <TextCodeMirror
+            value={resultantSchemaQuery.isLoading ? 'Loading resultant schema…' : String(resultantSchemaQuery.error ?? '')}
+            ariaLabel="Migration resultant schema"
+            readOnly
+            height="10rem"
+          />
+        )
+      ) : null}
+    </div>
   );
 }
 

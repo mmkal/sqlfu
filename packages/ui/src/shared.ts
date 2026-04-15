@@ -23,18 +23,23 @@ export type SchemaCheckResponse = {
 
 export type SchemaAuthorityMigration = {
   readonly id: string;
-  readonly fileName: string;
+  readonly fileName: string | null;
   readonly timestamp?: string;
   readonly name: string;
   readonly content: string;
   readonly applied: boolean;
+  readonly appliedAt: string | null;
 };
 
 export type SchemaAuthoritiesResponse = {
   readonly desiredSchemaSql: string;
   readonly migrations: readonly SchemaAuthorityMigration[];
-  readonly migrationHistory: readonly string[];
+  readonly migrationHistory: readonly SchemaAuthorityMigration[];
   readonly liveSchemaSql: string;
+};
+
+export type MigrationResultantSchemaResponse = {
+  readonly sql: string;
 };
 
 export type StudioRelation = {

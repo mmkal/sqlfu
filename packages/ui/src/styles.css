@@ -208,6 +208,37 @@ h3 {
   border-bottom: 1px solid var(--line);
 }
 
+.migration-detail {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.migration-detail-tabs {
+  display: inline-flex;
+  gap: 0.35rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.migration-detail-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.45rem 0.8rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.58);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.migration-detail-tab.active {
+  background: rgba(178, 76, 43, 0.12);
+  border-color: rgba(178, 76, 43, 0.24);
+  color: var(--text);
+}
+
 .table-scroll {
   overflow: auto;
   margin-top: 0.35rem;

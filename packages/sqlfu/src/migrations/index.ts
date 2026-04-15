@@ -10,6 +10,7 @@ export type Migration = {
 export type AppliedMigration = {
   name: string;
   content: string;
+  appliedAt: string;
 };
 
 export async function ensureMigrationTable(client: Client) {
@@ -33,7 +34,7 @@ export async function readMigrationHistory(client: Client): Promise<AppliedMigra
   await ensureMigrationTable(client);
   return client.all<AppliedMigration>({
     sql: `
-      select name, content
+      select name, content, applied_at as appliedAt
       from sqlfu_migrations
       order by name
     `,

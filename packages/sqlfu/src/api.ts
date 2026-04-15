@@ -570,6 +570,7 @@ async function analyzeDatabase(runtime: ReturnType<typeof createRuntime>) {
     excludedTables: schemaDriftExcludedTables,
   });
   applied = await readMigrationHistory(database.client);
+  const hasAppliedHistory = applied.length > 0;
   const appliedNames = new Set(applied.map((migration) => migration.name));
   const migrationByName = new Map(migrations.map((migration) => [migrationName(migration), migration]));
 
@@ -671,7 +672,9 @@ async function analyzeDatabase(runtime: ReturnType<typeof createRuntime>) {
     mismatches.push({
       kind: 'schemaDrift',
       title: 'Schema Drift',
-      summary: repoDriftWithLiveAlreadySynced
+      summary: !hasAppliedHistory
+        ? 'Live Schema exists, but Migration History is empty.'
+        : repoDriftWithLiveAlreadySynced
         ? 'Live Schema matches Desired Schema, but not Migration History.'
         : 'Live Schema does not match Migration History.',
       details: [],

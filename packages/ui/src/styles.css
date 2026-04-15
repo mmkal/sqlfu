@@ -166,6 +166,10 @@ h3 {
   font-weight: 700;
 }
 
+.recommendations .schema-card-title-row .card-title {
+  margin-bottom: 1rem;
+}
+
 .card-title-row {
   display: flex;
   align-items: center;
@@ -521,10 +525,7 @@ h3 {
 }
 
 .schema-recommendation {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  flex-wrap: wrap;
+  display: block;
 }
 
 .button {
@@ -543,6 +544,7 @@ h3 {
   padding: 0.28rem 0.65rem;
   font-size: 0.92rem;
   vertical-align: baseline;
+  margin: 0 0.35rem 0 0;
 }
 
 .icon-button {
@@ -660,6 +662,11 @@ h3 {
   border-color: rgba(178, 76, 43, 0.22);
 }
 
+.schema-card.recommendations {
+  border-color: rgba(138, 104, 24, 0.22);
+  background: rgba(255, 247, 222, 0.94);
+}
+
 .schema-card-title-row {
   align-items: baseline;
   flex-wrap: wrap;
@@ -670,10 +677,32 @@ h3 {
 
 .schema-card-title-row .card-title {
   margin-bottom: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
 }
 
 .schema-card-explainer {
   font-size: 0.94rem;
+}
+
+.schema-card-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+}
+
+.schema-card-status.ok {
+  filter: saturate(0.9);
+}
+
+.schema-card-status.warn {
+  color: var(--accent-strong);
+}
+
+.schema-card-status.recommendations {
+  color: #8a6818;
 }
 
 .schema-card.compact {

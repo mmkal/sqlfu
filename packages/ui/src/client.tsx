@@ -202,20 +202,27 @@ function SchemaPanel(input: {
 
       <div className="stack schema-cards">
         {input.check.error ? (
-          <section className="card schema-card warn">
+          <section className="card schema-card warn compact">
             <div className="card-title-row schema-card-title-row">
-              <h3 className="card-title">Schema Check Failed</h3>
+              <h3 className="card-title">
+                <span className="schema-card-status warn" aria-hidden="true">⚠</span>
+                Schema Check Failed
+              </h3>
             </div>
             <p>{input.check.error}</p>
           </section>
         ) : null}
         {input.check.cards.map((card) => (
-          <section key={card.key} className={`card schema-card ${card.ok ? 'ok compact' : 'warn'}`}>
+          <section key={card.key} className={`card schema-card compact ${card.ok ? 'ok' : 'warn'}`}>
             <div className="card-title-row schema-card-title-row">
-              <h3 className="card-title">{card.ok ? card.okTitle : card.title}</h3>
-              {card.ok ? <span className="muted schema-card-explainer">{card.explainer}</span> : null}
+              <h3 className="card-title">
+                <span className={`schema-card-status ${card.ok ? 'ok' : 'warn'}`} aria-hidden="true">
+                  {card.ok ? '✅' : '⚠'}
+                </span>
+                {getSchemaCardLabel(card)}
+              </h3>
+              <span className="muted schema-card-explainer">{card.ok ? card.explainer : card.summary}</span>
             </div>
-            {!card.ok ? <p>{card.summary}</p> : null}
             {!card.ok && card.details.length > 0 ? (
               <div className="stack">
                 {card.details.map((detail) => (
@@ -226,9 +233,12 @@ function SchemaPanel(input: {
           </section>
         ))}
         {input.check.recommendations.length > 0 ? (
-          <section className="card schema-card warn">
+          <section className="card schema-card recommendations compact">
             <div className="card-title-row schema-card-title-row">
-              <h3 className="card-title">Recommended next actions</h3>
+              <h3 className="card-title">
+                <span className="schema-card-status recommendations" aria-hidden="true">🛠</span>
+                Recommended actions
+              </h3>
             </div>
             <div className="stack">
               {input.check.recommendations.map((recommendation) => (
@@ -1583,6 +1593,10 @@ function renderSchemaRecommendationSummary(
     }
     return nodes;
   });
+}
+
+function getSchemaCardLabel(card: SchemaCheckResponse['cards'][number]) {
+  return (card.ok ? card.okTitle : card.title).replace(/^[^\p{L}\p{N}]+\s*/u, '');
 }
 
 function isSameValue(left: unknown, right: unknown) {

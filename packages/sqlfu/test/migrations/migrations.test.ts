@@ -189,7 +189,7 @@ describe('check recommendations', () => {
       Desired Schema does not match Live Schema.
 
       Recommended next actions
-      - run \`sqlfu draft\` (reviewable migration).]
+      - run \`sqlfu draft\` to create a reviewable migration.]
     `);
   });
 
@@ -228,7 +228,7 @@ describe('check recommendations', () => {
       Migration History is behind Migrations.
 
       Schema Drift
-      Live Schema does not match Migration History.
+      Live Schema exists, but Migration History is empty.
 
       Recommended next actions
       - run \`sqlfu baseline 2026-04-10T00.00.00.000Z_create_person\`.]
@@ -259,7 +259,7 @@ describe('check recommendations', () => {
       Migration History is behind Migrations.
 
       Schema Drift
-      Live Schema does not match Migration History.
+      Live Schema exists, but Migration History is empty.
 
       Sync Drift
       Desired Schema does not match Live Schema.
@@ -300,7 +300,7 @@ describe('check recommendations', () => {
       Migration History is behind Migrations.
 
       Schema Drift
-      Live Schema does not match Migration History.
+      Live Schema exists, but Migration History is empty.
 
       Sync Drift
       Desired Schema does not match Live Schema.

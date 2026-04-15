@@ -128,13 +128,13 @@ describe('check recommendation edge cases', () => {
       Migration History is behind Migrations.
 
       Schema Drift
-      Live Schema does not match Migration History.
+      Live Schema exists, but Migration History is empty.
 
       Sync Drift
       Desired Schema does not match Live Schema.
 
       Recommended next actions
-      - run \`sqlfu draft\` (reviewable migration).]
+      - run \`sqlfu draft\` to create a reviewable migration.]
     `);
   });
 
@@ -160,7 +160,7 @@ describe('check recommendation edge cases', () => {
       Live Schema matches Desired Schema, but not Migration History.
 
       Recommended next actions
-      - run \`sqlfu draft\` (reviewable migration).]
+      - run \`sqlfu draft\` to create a reviewable migration.]
     `);
   });
 
@@ -202,13 +202,13 @@ describe('check recommendation edge cases', () => {
       Desired Schema does not match Migrations.
 
       Schema Drift
-      Live Schema does not match Migration History.
+      Live Schema exists, but Migration History is empty.
 
       Sync Drift
       Desired Schema does not match Live Schema.
 
       Recommended next actions
-      - run \`sqlfu draft\` (reviewable migration).]
+      - run \`sqlfu draft\` to create a reviewable migration.]
     `);
   });
 

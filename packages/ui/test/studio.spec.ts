@@ -13,11 +13,11 @@ test('schema page shows mismatch cards and can run the recommended sqlfu draft c
   await expect(page.getByRole('heading', {name: 'Schema', exact: true})).toBeVisible();
   await expect(page.getByRole('heading', {name: 'Repo Drift'})).toBeVisible();
   await expect(page.getByText('Desired Schema does not match Migrations.')).toBeVisible();
-  await expect(page.getByText('✅ No Pending Migrations')).toBeVisible();
-  await expect(page.getByText('✅ No History Drift')).toBeVisible();
+  await expect(page.getByText('No Pending Migrations')).toBeVisible();
+  await expect(page.getByText('No History Drift')).toBeVisible();
   await expect(page.getByRole('heading', {name: 'Schema Drift'})).toBeVisible();
-  await expect(page.getByText('Live Schema matches Desired Schema, but not Migration History.')).toBeVisible();
-  await expect(page.getByText('✅ No Sync Drift')).toBeVisible();
+  await expect(page.getByText('Live Schema exists, but Migration History is empty.')).toBeVisible();
+  await expect(page.getByText('No Sync Drift')).toBeVisible();
   await expect.poll(() => page.locator('.authority-card > summary').allTextContents()).toEqual([
     'Desired Schema▾',
     'Migrations▾',
@@ -140,7 +140,7 @@ test('desired schema can be edited and saved, and sync is disabled while it is d
 
   await confirmAndRunSchemaCommand(page, page.getByRole('button', {name: 'sqlfu draft'}));
   await confirmAndRunSchemaCommand(page, page.getByRole('button', {name: /sqlfu baseline /}).first());
-  await expect(page.getByText('✅ No Repo Drift')).toBeVisible();
+  await expect(page.getByText('No Repo Drift')).toBeVisible();
 
   await expect(page.getByRole('button', {name: 'Save Desired Schema'})).toHaveCount(0);
 
@@ -201,7 +201,7 @@ test('history to live flow shows a baseline action when check recommends it', as
   await expect(baselineButton).toBeVisible();
 
   await confirmAndRunSchemaCommand(page, baselineButton);
-  await expect(page.getByText('✅ No History Drift')).toBeVisible();
+  await expect(page.getByText('No History Drift')).toBeVisible();
 });
 
 test('history to live flow shows a goto action when check recommends it', async ({page, projectDir}) => {
@@ -234,7 +234,7 @@ from posts;
 
   await confirmAndRunSchemaCommand(page, gotoButton);
   await expect.poll(() => readCodeMirrorText(page, 'Live Schema editor')).toContain('create view post_titles as');
-  await expect(page.getByText('✅ No History Drift')).toBeVisible();
+  await expect(page.getByText('No History Drift')).toBeVisible();
 });
 
 test('schema command failures stay visible next to the failing command button', async ({page}) => {

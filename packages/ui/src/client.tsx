@@ -47,6 +47,14 @@ function App() {
   );
 }
 
+async function invalidateSchemaContent() {
+  await Promise.all([
+    queryClient.invalidateQueries({queryKey: ['schema']}),
+    queryClient.invalidateQueries({queryKey: ['schema-check']}),
+    queryClient.invalidateQueries({queryKey: ['schema-authorities']}),
+  ]);
+}
+
 function Studio() {
   const route = useHashRoute();
   const schemaQuery = useSuspenseQuery({
@@ -497,25 +505,38 @@ function TablePanel(input: {
         method: 'PUT',
         body,
       }),
-    onSuccess: (response) => {
+    onSuccess: async (response) => {
       setDraftRows(response.rows);
       queryClient.setQueryData(['table', input.relation.name, input.page], response);
+      await invalidateSchemaContent();
     },
   });
+  const emptyRowTemplate = Object.fromEntries(input.relation.columns.map((column) => [column.name, null]));
   const displayedRows = normalizeStoredTableDraft(
     draftRows,
     rowsQuery.data.rows,
     rowsQuery.data.columns,
   );
-  const rowsDirty = JSON.stringify(displayedRows) !== JSON.stringify(rowsQuery.data.rows);
+  const displayedOriginalRows = [
+    ...rowsQuery.data.rows,
+    ...displayedRows.slice(rowsQuery.data.rows.length).map(() => ({...emptyRowTemplate})),
+  ];
+  const displayedRowKeys = [
+    ...rowsQuery.data.rowKeys,
+    ...displayedRows.slice(rowsQuery.data.rows.length).map((_, index) => ({
+      kind: 'new' as const,
+      value: `new-${input.relation.name}-${input.page}-${index}`,
+    })),
+  ];
+  const rowsDirty = JSON.stringify(displayedRows) !== JSON.stringify(displayedOriginalRows);
   const handleDiscardRows = () => {
     setDraftRows(rowsQuery.data.rows);
   };
   const handleSaveRows = () => {
     saveRowsMutation.mutate({
-      originalRows: rowsQuery.data.rows,
+      originalRows: displayedOriginalRows,
       rows: displayedRows,
-      rowKeys: rowsQuery.data.rowKeys,
+      rowKeys: displayedRowKeys,
     });
   };
 
@@ -564,11 +585,12 @@ function TablePanel(input: {
         <DataTable
           storageKey={`relation/${input.relation.name}`}
           columns={rowsQuery.data.columns}
-          originalRows={rowsQuery.data.rows}
+          originalRows={displayedOriginalRows}
           rows={displayedRows}
           editable={rowsQuery.data.editable}
           editableColumns={Object.fromEntries(input.relation.columns.map((column) => [column.name, !column.primaryKey]))}
           onRowsChange={setDraftRows}
+          onAppendRow={() => setDraftRows([...displayedRows, {...emptyRowTemplate}])}
           showSelectedCellDetail
         />
         <div className="pager">
@@ -624,6 +646,9 @@ function SqlRunnerPanel(input: {
   const runMutation = useMutation({
     mutationFn: (body: {sql: string; params?: unknown}) =>
       postJson<SqlRunnerResponse>('/api/sql', body),
+    onSuccess: async () => {
+      await invalidateSchemaContent();
+    },
   });
   const saveMutation = useMutation({
     mutationFn: (body: {name: string; sql: string}) =>
@@ -689,6 +714,9 @@ function QueryPanel(input: {
   const mutation = useMutation({
     mutationFn: (body: {data?: unknown; params?: unknown}) =>
       postJson<QueryExecutionResponse>(`/api/query/${encodeURIComponent(entry.id)}`, body),
+    onSuccess: async () => {
+      await invalidateSchemaContent();
+    },
   });
   const [renameDraft, setRenameDraft] = useLocalStorageState(`sqlfu-ui/query-rename/${entry.id}`, {
     defaultValue: entry.id,
@@ -995,6 +1023,7 @@ function DataTable(input: {
   editable?: boolean;
   editableColumns?: Readonly<Record<string, boolean>>;
   onRowsChange?: (rows: readonly Record<string, unknown>[]) => void;
+  onAppendRow?: () => void;
   showSelectedCellDetail?: boolean;
 }) {
   if (input.rows.length === 0) {
@@ -1020,6 +1049,23 @@ function DataTable(input: {
       defaultValue: 'diff',
     },
   );
+  const rowHistoryRef = useRef<{
+    baseline: string;
+    undo: readonly (readonly Record<string, unknown>[])[],
+    redo: readonly (readonly Record<string, unknown>[])[],
+  }>({
+    baseline: '',
+    undo: [],
+    redo: [],
+  });
+  const historyBaseline = JSON.stringify(input.originalRows ?? input.rows);
+  if (rowHistoryRef.current.baseline !== historyBaseline) {
+    rowHistoryRef.current = {
+      baseline: historyBaseline,
+      undo: [],
+      redo: [],
+    };
+  }
   const computedColumnWidths = columnWidthAlgorithm({
     availableWidth: Math.max(0, containerWidth - 64),
     columns: input.columns.map((column) => ({
@@ -1060,6 +1106,13 @@ function DataTable(input: {
           )),
       ],
     })),
+    ...(input.editable && input.onAppendRow ? [{
+      rowId: '__append__',
+      cells: [
+        {type: 'header' as const, text: '+'},
+        ...input.columns.map(() => ({type: 'text' as const, text: '', nonEditable: true, className: 'append-row-cell'})),
+      ],
+    }] : []),
   ];
   const selectedOriginalValue = selectedCell && typeof selectedCell.rowId === 'number' && typeof selectedCell.columnId === 'string'
     ? formatCellText(input.originalRows?.[selectedCell.rowId]?.[selectedCell.columnId])
@@ -1068,9 +1121,77 @@ function DataTable(input: {
     ? formatCellText(input.rows[selectedCell.rowId]?.[selectedCell.columnId])
     : '';
   const selectedCellDirty = selectedOriginalValue !== selectedDraftValue;
+  const applyUndo = () => {
+    const previousRows = rowHistoryRef.current.undo.at(-1);
+    if (!previousRows) {
+      return;
+    }
+    rowHistoryRef.current = {
+      ...rowHistoryRef.current,
+      undo: rowHistoryRef.current.undo.slice(0, -1),
+      redo: [...rowHistoryRef.current.redo, cloneTableRows(input.rows)],
+    };
+    input.onRowsChange?.(cloneTableRows(previousRows));
+  };
+  const applyRedo = () => {
+    const nextRows = rowHistoryRef.current.redo.at(-1);
+    if (!nextRows) {
+      return;
+    }
+    rowHistoryRef.current = {
+      ...rowHistoryRef.current,
+      undo: [...rowHistoryRef.current.undo, cloneTableRows(input.rows)],
+      redo: rowHistoryRef.current.redo.slice(0, -1),
+    };
+    input.onRowsChange?.(cloneTableRows(nextRows));
+  };
 
   return (
-    <div className="stack">
+    <div
+      className="stack"
+      onKeyDownCapture={(event) => {
+        const commandKey = process.platform === 'darwin' ? event.metaKey : event.ctrlKey;
+        if (!commandKey) {
+          return;
+        }
+        if (event.key.toLowerCase() === 'z' && event.shiftKey) {
+          event.preventDefault();
+          applyRedo();
+          return;
+        }
+        if (event.key.toLowerCase() === 'z') {
+          event.preventDefault();
+          applyUndo();
+          return;
+        }
+        if (event.key.toLowerCase() === 'y') {
+          event.preventDefault();
+          applyRedo();
+        }
+      }}
+    >
+      {input.editable ? (
+        <div className="actions">
+          <button
+            className="button"
+            type="button"
+            aria-label="Undo cell changes"
+            disabled={rowHistoryRef.current.undo.length === 0}
+            onClick={applyUndo}
+          >
+            Undo
+          </button>
+          <button
+            className="button"
+            type="button"
+            aria-label="Redo cell changes"
+            disabled={rowHistoryRef.current.redo.length === 0}
+            onClick={applyRedo}
+          >
+            Redo
+          </button>
+        </div>
+      ) : null}
       <div className="table-scroll" ref={containerRef}>
         <reactGrid.ReactGrid
           key={JSON.stringify(input.rows)}
@@ -1091,6 +1212,10 @@ function DataTable(input: {
             }));
           }}
           onFocusLocationChanged={(location) => {
+            if (location.rowId === '__append__' && input.onAppendRow) {
+              input.onAppendRow();
+              return;
+            }
             if (typeof location.rowId !== 'number' || typeof location.columnId !== 'string') {
               return;
             }
@@ -1115,6 +1240,11 @@ function DataTable(input: {
               }
               nextRow[change.columnId] = readGridCellValue(change.newCell);
             }
+            rowHistoryRef.current = {
+              ...rowHistoryRef.current,
+              undo: [...rowHistoryRef.current.undo, cloneTableRows(input.rows)],
+              redo: [],
+            };
             input.onRowsChange?.(nextRows);
           } : undefined}
         />
@@ -1193,6 +1323,10 @@ function DataTable(input: {
       ) : null}
     </div>
   );
+}
+
+function cloneTableRows(rows: readonly Record<string, unknown>[]) {
+  return rows.map((row) => ({...row}));
 }
 
 function EmptyState() {
@@ -1321,7 +1455,7 @@ function normalizeStoredTableDraft(
     return fetchedRows;
   }
 
-  if (draftRows.length !== fetchedRows.length) {
+  if (draftRows.length < fetchedRows.length) {
     return fetchedRows;
   }
 

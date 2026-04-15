@@ -353,6 +353,34 @@ test('relation rows can be edited and saved from the grid', async ({page}) => {
   await expect(page.locator('.reactgrid [data-cell-rowidx="1"][data-cell-colidx="3"]')).toContainText('Hello World Revised');
 });
 
+test('relation rows can be appended from the grid', async ({page}) => {
+  await using _project = await preserveSchemaProjectState(path.join(import.meta.dirname, 'projects', 'fixture-project'));
+
+  await page.goto('/#table/posts');
+
+  await page.locator('.reactgrid [data-cell-rowidx="3"][data-cell-colidx="0"]').click();
+  await expect(page.locator('.reactgrid [data-cell-rowidx="3"][data-cell-colidx="2"]')).toBeVisible();
+
+  await fillGridTextCell(page, 3, 2, 'brand-new-post');
+  await fillGridTextCell(page, 3, 3, 'Brand New Post');
+  await fillGridTextCell(page, 3, 4, 'Inserted from the relations grid');
+  await fillGridTextCell(page, 3, 5, '0');
+
+  await expect(page.getByRole('button', {name: 'Save changes'})).toBeVisible();
+  const [saveResponse] = await Promise.all([
+    page.waitForResponse((response) =>
+      response.request().method() === 'PUT'
+      && response.url().includes('/api/table/posts?page=0'),
+    ),
+    page.getByRole('button', {name: 'Save changes'}).click(),
+  ]);
+  expect(saveResponse.ok(), await saveResponse.text()).toBe(true);
+
+  await page.reload();
+  await expect(page.locator('.reactgrid [data-cell-rowidx="3"][data-cell-colidx="2"]')).toContainText('brand-new-post');
+  await expect(page.locator('.reactgrid [data-cell-rowidx="3"][data-cell-colidx="3"]')).toContainText('Brand New Post');
+});
+
 test('relation rows can discard dirty cell changes', async ({page}) => {
   await using _project = await preserveSchemaProjectState(path.join(import.meta.dirname, 'projects', 'fixture-project'));
 
@@ -379,6 +407,35 @@ test('relation rows can discard dirty cell changes', async ({page}) => {
   await expect(page.getByRole('button', {name: 'Discard changes'})).toHaveCount(0);
   await expect(page.locator('.reactgrid [data-cell-rowidx="1"][data-cell-colidx="3"]')).toContainText('Hello World');
   await expect(page.locator('.reactgrid [data-cell-rowidx="1"][data-cell-colidx="3"]')).not.toHaveClass(/dirty/);
+});
+
+test('relation grid supports undo and redo controls', async ({page}) => {
+  await using _project = await preserveSchemaProjectState(path.join(import.meta.dirname, 'projects', 'fixture-project'));
+
+  await page.goto('/#table/posts');
+
+  const titleCell = page.locator('.reactgrid [data-cell-rowidx="1"][data-cell-colidx="3"]');
+  await titleCell.click();
+  await page.keyboard.press('Enter');
+  const editor = page.locator('.rg-celleditor input');
+  await expect(editor).toBeVisible();
+  await editor.press(`${process.platform === 'darwin' ? 'Meta' : 'Control'}+A`);
+  await editor.press('Backspace');
+  await editor.pressSequentially('Hello World Undo');
+  await editor.press('Enter');
+  await page.locator('.reactgrid [data-cell-rowidx="2"][data-cell-colidx="3"]').click();
+  await titleCell.click();
+
+  await expect(titleCell).toContainText('Hello World Undo');
+  await expect(page.getByRole('button', {name: 'Save changes'})).toBeVisible();
+
+  await page.getByRole('button', {name: 'Undo'}).click();
+  await expect(titleCell).not.toContainText('Undo');
+  await expect(page.getByRole('button', {name: 'Save changes'})).toHaveCount(0);
+
+  await page.getByRole('button', {name: 'Redo'}).click();
+  await expect(titleCell).toContainText('Hello World Undo');
+  await expect(page.getByRole('button', {name: 'Save changes'})).toBeVisible();
 });
 
 test('stale relation draft state is ignored when it does not match the fetched table shape', async ({page}) => {
@@ -579,6 +636,47 @@ test('sql runner understands sqlfu_migrations and suggests a non-noisy saved nam
   await expect(page.getByText('no such table: sqlfu_migrations')).toHaveCount(0);
 });
 
+test('schema queries are invalidated after sql runs, saved query runs, and relation saves', async ({page}) => {
+  await using _project = await preserveSchemaProjectState(path.join(import.meta.dirname, 'projects', 'fixture-project'));
+
+  await page.goto('/#schema');
+  await expect(page.getByRole('heading', {name: 'Schema', exact: true})).toBeVisible();
+
+  await page.goto('/#sql');
+  await replaceCodeMirrorText(page, 'SQL editor', `
+    select id, slug
+    from posts
+    limit 1;
+  `);
+  await Promise.all([
+    page.waitForResponse((response) => response.url().includes('/api/schema') && response.ok()),
+    page.getByRole('button', {name: 'Run SQL'}).click(),
+  ]);
+
+  await page.goto('/#query/list-post-cards');
+  await Promise.all([
+    page.waitForResponse((response) => response.url().includes('/api/schema') && response.ok()),
+    page.getByRole('button', {name: 'Run generated query'}).click(),
+  ]);
+
+  await page.goto('/#table/posts');
+  const titleCell = page.locator('.reactgrid [data-cell-rowidx="1"][data-cell-colidx="3"]');
+  await titleCell.click();
+  await page.keyboard.press('Enter');
+  const editor = page.locator('.rg-celleditor input');
+  await expect(editor).toBeVisible();
+  await editor.press(`${process.platform === 'darwin' ? 'Meta' : 'Control'}+A`);
+  await editor.press('Backspace');
+  await editor.pressSequentially('Updated title');
+  await editor.press('Enter');
+  await page.locator('.reactgrid [data-cell-rowidx="2"][data-cell-colidx="3"]').click();
+  await expect(page.getByRole('button', {name: 'Save changes'})).toBeVisible();
+  await Promise.all([
+    page.waitForResponse((response) => response.url().includes('/api/schema') && response.ok()),
+    page.getByRole('button', {name: 'Save changes'}).click(),
+  ]);
+});
+
 test('sql runner draft survives a reload via local storage', async ({page}) => {
   await page.goto('/#sql');
 
@@ -767,6 +865,23 @@ async function replaceCodeMirrorText(page: any, ariaLabel: string, value: string
 
 async function readCodeMirrorText(page: any, ariaLabel: string) {
   return (await page.locator(`[aria-label="${ariaLabel}"] .cm-content`).textContent()) ?? '';
+}
+
+async function fillGridTextCell(page: any, rowIndex: number, columnIndex: number, value: string) {
+  const cell = page.locator(`.reactgrid [data-cell-rowidx="${rowIndex}"][data-cell-colidx="${columnIndex}"]`);
+  await cell.dblclick();
+  const editor = page.locator('.rg-celleditor input');
+  if (await editor.isVisible()) {
+    await editor.press(`${process.platform === 'darwin' ? 'Meta' : 'Control'}+A`);
+    await editor.press('Backspace');
+    await editor.pressSequentially(value);
+    await editor.press('Enter');
+    return;
+  }
+
+  await cell.click();
+  await page.keyboard.type(value);
+  await page.keyboard.press('Enter');
 }
 
 async function preserveSchemaProjectState(projectRoot: string) {

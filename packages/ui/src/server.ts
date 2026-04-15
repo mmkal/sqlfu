@@ -763,15 +763,13 @@ async function saveTableRows(
     });
 
     for (const row of changedRows) {
-      const setSql = row.changedColumns.map((column) => `"${escapeIdentifier(column)}" = ?`).join(', ');
-      const setArgs = row.changedColumns.map((column) => normalizeDbValue(row.nextRow[column]));
-      const whereClause = buildRowWhereClause(row.rowKey, row.originalRow);
-      const sql = `update "${escapeIdentifier(relationName)}" set ${setSql} where ${whereClause.sql}`;
-      const args = [...setArgs, ...whereClause.args];
+      const sql = row.rowKey.kind === 'new'
+        ? buildInsertRowStatement(relationName, row.nextRow, row.changedColumns)
+        : buildUpdateRowStatement(relationName, row.rowKey, row.originalRow, row.nextRow, row.changedColumns);
       try {
-        database.run(sql, args as any);
+        database.run(sql.sql, sql.args as any);
       } catch (error) {
-        throw new Error(`${error instanceof Error ? error.message : String(error)}\nSQL: ${sql}\nArgs: ${JSON.stringify(args)}`);
+        throw new Error(`${error instanceof Error ? error.message : String(error)}\nSQL: ${sql.sql}\nArgs: ${JSON.stringify(sql.args)}`);
       }
     }
 
@@ -948,6 +946,9 @@ function stripInternalRowValues(row: Record<string, unknown>) {
 }
 
 function buildRowWhereClause(rowKey: TableRowKey, originalRow: Record<string, unknown>) {
+  if (rowKey.kind === 'new') {
+    throw new Error('New rows do not have a where clause');
+  }
   if (rowKey.kind === 'rowid') {
     return {
       sql: 'rowid = ?',
@@ -959,6 +960,35 @@ function buildRowWhereClause(rowKey: TableRowKey, originalRow: Record<string, un
   return {
     sql: entries.map(([column, value]) => (value == null ? `"${escapeIdentifier(column)}" is null` : `"${escapeIdentifier(column)}" = ?`)).join(' and '),
     args: entries.flatMap(([, value]) => (value == null ? [] : [normalizeDbValue(value)])),
+  };
+}
+
+function buildInsertRowStatement(
+  relationName: string,
+  nextRow: Record<string, unknown>,
+  changedColumns: readonly string[],
+) {
+  const columns = changedColumns.map((column) => `"${escapeIdentifier(column)}"`).join(', ');
+  const placeholders = changedColumns.map(() => '?').join(', ');
+  return {
+    sql: `insert into "${escapeIdentifier(relationName)}" (${columns}) values (${placeholders})`,
+    args: changedColumns.map((column) => normalizeDbValue(nextRow[column])),
+  };
+}
+
+function buildUpdateRowStatement(
+  relationName: string,
+  rowKey: TableRowKey,
+  originalRow: Record<string, unknown>,
+  nextRow: Record<string, unknown>,
+  changedColumns: readonly string[],
+) {
+  const setSql = changedColumns.map((column) => `"${escapeIdentifier(column)}" = ?`).join(', ');
+  const setArgs = changedColumns.map((column) => normalizeDbValue(nextRow[column]));
+  const whereClause = buildRowWhereClause(rowKey, originalRow);
+  return {
+    sql: `update "${escapeIdentifier(relationName)}" set ${setSql} where ${whereClause.sql}`,
+    args: [...setArgs, ...whereClause.args],
   };
 }
 

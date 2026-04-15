@@ -74,6 +74,10 @@ export type TableRowKey =
       readonly values: Readonly<Record<string, unknown>>;
     }
   | {
+      readonly kind: 'new';
+      readonly value: string;
+    }
+  | {
       readonly kind: 'rowid';
       readonly value: number;
     };

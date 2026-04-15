@@ -288,6 +288,21 @@ test('relation rows can discard dirty cell changes', async ({page}) => {
   await expect(page.locator('.reactgrid [data-cell-rowidx="1"][data-cell-colidx="3"]')).not.toHaveClass(/dirty/);
 });
 
+test('stale relation draft state is ignored when it does not match the fetched table shape', async ({page}) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem(
+      'sqlfu-ui/table-draft/posts/0',
+      JSON.stringify([{bb: 'stale draft from another table'}]),
+    );
+  });
+
+  await page.goto('/#table/posts');
+
+  await expect(page.locator('.reactgrid [data-cell-rowidx="1"][data-cell-colidx="2"]')).toContainText('hello-world');
+  await expect(page.getByRole('button', {name: 'Save changes'})).toHaveCount(0);
+  await expect(page.getByRole('button', {name: 'Discard changes'})).toHaveCount(0);
+});
+
 test('dirty relation cells show original, draft, and diff modes in the cell panel', async ({page}) => {
   await using _project = await preserveSchemaProjectState(path.join(import.meta.dirname, 'projects', 'fixture-project'));
 

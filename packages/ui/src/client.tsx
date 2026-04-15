@@ -125,7 +125,11 @@ function Studio() {
         ) : route.kind === 'query' && selectedQuery ? (
           <QueryPanel entry={selectedQuery} relations={schemaQuery.data.relations} />
         ) : selectedTable ? (
-          <TablePanel relation={selectedTable} page={route.kind === 'table' ? route.page : 0} />
+          <TablePanel
+            key={`${selectedTable.name}/${route.kind === 'table' ? route.page : 0}`}
+            relation={selectedTable}
+            page={route.kind === 'table' ? route.page : 0}
+          />
         ) : (
           <EmptyState />
         )}
@@ -388,7 +392,11 @@ function TablePanel(input: {
       queryClient.setQueryData(['table', input.relation.name, input.page], response);
     },
   });
-  const displayedRows = draftRows ?? rowsQuery.data.rows;
+  const displayedRows = normalizeStoredTableDraft(
+    draftRows,
+    rowsQuery.data.rows,
+    rowsQuery.data.columns,
+  );
   const rowsDirty = JSON.stringify(displayedRows) !== JSON.stringify(rowsQuery.data.rows);
   const handleDiscardRows = () => {
     setDraftRows(rowsQuery.data.rows);
@@ -1179,6 +1187,30 @@ function formatCellText(value: unknown) {
 
 function isSameValue(left: unknown, right: unknown) {
   return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function normalizeStoredTableDraft(
+  draftRows: readonly Record<string, unknown>[] | undefined,
+  fetchedRows: readonly Record<string, unknown>[],
+  columns: readonly string[],
+) {
+  if (!draftRows) {
+    return fetchedRows;
+  }
+
+  if (draftRows.length !== fetchedRows.length) {
+    return fetchedRows;
+  }
+
+  const expectedColumnKeys = [...columns].sort();
+  for (const row of draftRows) {
+    const rowKeys = Object.keys(row).sort();
+    if (JSON.stringify(rowKeys) !== JSON.stringify(expectedColumnKeys)) {
+      return fetchedRows;
+    }
+  }
+
+  return draftRows;
 }
 
 function useElementWidth<TElement extends HTMLElement>() {

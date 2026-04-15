@@ -10,12 +10,12 @@ test('schema page shows mismatch cards and can run the recommended sqlfu draft c
   await page.goto('/#schema');
 
   await expect(page.getByRole('heading', {name: 'Schema', exact: true})).toBeVisible();
-  await expect(page.getByText('Repo Drift')).toBeVisible();
+  await expect(page.getByRole('heading', {name: 'Repo Drift'})).toBeVisible();
   await expect(page.getByText('Desired Schema does not match Migrations.')).toBeVisible();
   await expect(page.getByText('✅ No Pending Migrations')).toBeVisible();
   await expect(page.getByText('✅ No History Drift')).toBeVisible();
-  await expect(page.getByText('Schema Drift')).toBeVisible();
-  await expect(page.getByText('Live Schema does not match Migration History.')).toBeVisible();
+  await expect(page.getByRole('heading', {name: 'Schema Drift'})).toBeVisible();
+  await expect(page.getByText('Live Schema matches Desired Schema, but not Migration History.')).toBeVisible();
   await expect(page.getByText('✅ No Sync Drift')).toBeVisible();
   await expect.poll(() => page.locator('.authority-card > summary').allTextContents()).toEqual([
     'Desired Schema▾',

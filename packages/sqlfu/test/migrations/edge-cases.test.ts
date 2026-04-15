@@ -159,8 +159,8 @@ describe('check recommendation edge cases', () => {
       Recommendation: run \`sqlfu draft\` (reviewable migration). Then maybe \`sqlfu baseline <new-migration>\` for a synced dev db.
 
       Schema Drift
-      Live Schema does not match Migration History.
-      Recommendation: run \`sqlfu goto <target>\`.]
+      Live Schema matches Desired Schema, but not Migration History.
+      Recommendation: resolve Repo Drift first. Then run \`sqlfu baseline <new-migration>\` for this database.]
     `);
   });
 

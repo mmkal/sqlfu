@@ -573,15 +573,22 @@ async function analyzeDatabase(runtime: ReturnType<typeof createRuntime>) {
   }
 
   if (!historyMismatch && schemaDrift.isDifferent) {
+    const repoDriftWithLiveAlreadySynced = repoDrift.isDifferent && !syncDrift.isDifferent;
     mismatches.push({
       name: 'Schema Drift',
       lines: [
         'Schema Drift',
-        'Live Schema does not match Migration History.',
-        ...(recommendedTarget ? [
-          `Recommended Baseline Target: ${recommendedTarget}`,
-          `Recommendation: run \`sqlfu baseline ${recommendedTarget}\`.`,
-        ] : ['Recommendation: run `sqlfu goto <target>`.']),
+        repoDriftWithLiveAlreadySynced
+          ? 'Live Schema matches Desired Schema, but not Migration History.'
+          : 'Live Schema does not match Migration History.',
+        ...(repoDriftWithLiveAlreadySynced
+          ? [
+            'Recommendation: resolve Repo Drift first. Then run `sqlfu baseline <new-migration>` for this database.',
+          ]
+          : recommendedTarget ? [
+            `Recommended Baseline Target: ${recommendedTarget}`,
+            `Recommendation: run \`sqlfu baseline ${recommendedTarget}\`.`,
+          ] : ['Recommendation: run `sqlfu goto <target>`.']),
       ],
     });
   }

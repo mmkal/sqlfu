@@ -76,6 +76,23 @@ test('createNodeSqliteClient.raw runs multiple statements', () => {
   ]);
 });
 
+test('createNodeSqliteClient.raw runs trigger definitions with begin/end bodies', () => {
+  using fixture = createNodeSqliteFixture(new DatabaseSync(':memory:'));
+
+  fixture.client.raw(`
+    create table users (id integer primary key, email text not null);
+    create table audit_log (email text not null);
+    create trigger users_audit after insert on users begin
+      insert into audit_log(email) values (new.email);
+    end;
+    insert into users (email) values ('ada@example.com');
+  `);
+
+  expect(
+    fixture.client.sql.all<{email: string}>`select email from audit_log order by email`,
+  ).toMatchObject([{email: 'ada@example.com'}]);
+});
+
 function createNodeSqliteFixture(db: DatabaseSync) {
   return {
     client: createNodeSqliteClient(db),

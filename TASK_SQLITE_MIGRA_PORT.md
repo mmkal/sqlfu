@@ -215,10 +215,10 @@ Core SQLite-relevant fixtures:
 
 SQLite-maybe fixtures, only if meaningful:
 
-- [ ] `triggers`
-- [ ] `triggers2`
-- [ ] `triggers3`
-- [ ] `collations`
+- [x] `triggers` - ported as drop/recreate of changed triggers plus creation/deletion of sibling triggers on the same table
+- [x] `triggers2` - ported as a trigger-stability fixture proving unrelated trigger order does not cause churn during a table rebuild
+- [x] `triggers3` - ported as trigger recreation across a view replacement and table rebuild
+- [x] `collations` - ported as a SQLite column-collation rebuild fixture using built-in collations (`nocase` -> `rtrim`)
 
 Probably no real SQLite analogue. Do not fake them. Instead add a documented skip note in this fil explaining why it doesn't make sense to port them (or, if it *does* make sense after all, implement then move them to another section with a note explaining):
 
@@ -398,6 +398,10 @@ Use this section to record fixture-family decisions as you go.
 - `dependencies2`: meaningful for SQLite. Ported as a table-to-view replacement while keeping a dependent view alive.
 - `dependencies3`: meaningful for SQLite. Ported as dependent view recreation around a table shape change plus awkward quoted identifiers.
 - `dependencies4`: partially meaningful for SQLite. Ported as a chained view stack without PostgreSQL materialized views or indexes-on-views.
+- `triggers`: meaningful for SQLite. Ported with real SQLite trigger bodies and `instead of` view triggers.
+- `triggers2`: meaningful for SQLite. Ported to prove stable triggers do not cause false diffs when table shape changes elsewhere.
+- `triggers3`: meaningful for SQLite. Ported as a view-trigger recreation case.
+- `collations`: meaningful in a narrower SQLite sense. Ported as column `collate` clauses using built-in SQLite collations rather than PostgreSQL collation objects.
 - `enumdefaults`, `enumdeps`, `extversions`, `singleschema`, `singleschema_ext`, `excludeschema`, `excludemultipleschemas`, `inherit`, `inherit2`, `partitioning`, `privileges`, `rls`, `rls2`, `seq`, `everything`, `identitycols`: documented skips because the underlying PostgreSQL feature class does not exist in SQLite in a meaningful like-for-like way.
 
 ## Work Log
@@ -415,3 +419,5 @@ Append short dated notes here as you work.
 - 2026-04-15: Documented explicit skip reasons for PostgreSQL-only fixture families so the remaining unchecked Phase 4 items are the genuinely SQLite-meaningful ones.
 - 2026-04-15: Added explicit unsupported-feature failures for triggers, collations, and virtual tables so unsupported SQLite features fail honestly instead of diffing silently.
 - 2026-04-15: Deleted the remaining `sqlite3def` wrapper and binary-downloader files after confirming nothing still imported them.
+- 2026-04-15: Implemented SQLite trigger support in the SQL splitter, inspector, and diff planner, then ported `triggers`, `triggers2`, and `triggers3` fixture families.
+- 2026-04-15: Implemented SQLite column-collation support in the inspected table model and ported a SQLite-specific `collations` fixture.

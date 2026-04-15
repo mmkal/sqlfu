@@ -150,33 +150,76 @@ test('diffSchemaSql rebuilds a table when sqlite needs semantic constraint chang
   }
 });
 
-test('diffSchemaSql fails honestly for sqlite triggers', async () => {
-  await expect(
-    diffSchemaSql({
-      projectRoot: process.cwd(),
-      baselineSql: `
-        create table person(name text);
-        create trigger person_insert_log after insert on person begin
-          select 1;
-        end;
-      `,
-      desiredSql: `create table person(name text, nickname text);`,
-      allowDestructive: true,
-    }),
-  ).rejects.toThrowErrorMatchingInlineSnapshot(
-    `[Error: sqlite triggers are not supported by the native schema diff engine yet: found trigger sql in baselineSql]`,
-  );
+test('diffSchemaSql creates a sqlite trigger when it is added', async () => {
+  const diff = await diffSchemaSql({
+    projectRoot: process.cwd(),
+    baselineSql: `
+      create table person(name text);
+      create table audit_log(name text);
+    `,
+    desiredSql: `
+      create table person(name text);
+      create table audit_log(name text);
+      create trigger person_insert_log after insert on person begin
+        insert into audit_log(name) values (new.name);
+      end;
+    `,
+    allowDestructive: true,
+  });
+
+  expect(diff).toMatchInlineSnapshot(`
+    [
+      "create trigger person_insert_log after insert on person begin",
+      "insert into audit_log(name) values (new.name);",
+      "end;",
+    ]
+  `);
 });
 
-test('diffSchemaSql fails honestly for sqlite collations', async () => {
-  await expect(
-    diffSchemaSql({
-      projectRoot: process.cwd(),
-      baselineSql: `create table person(name text collate nocase);`,
-      desiredSql: `create table person(name text);`,
-      allowDestructive: true,
-    }),
-  ).rejects.toThrowErrorMatchingInlineSnapshot(
-    `[Error: sqlite collations are not supported by the native schema diff engine yet: found collate in baselineSql]`,
-  );
+test('diffSchemaSql recreates a sqlite trigger when its body changes', async () => {
+  const diff = await diffSchemaSql({
+    projectRoot: process.cwd(),
+    baselineSql: `
+      create table person(name text);
+      create table audit_log(name text);
+      create trigger person_insert_log after insert on person begin
+        insert into audit_log(name) values (new.name);
+      end;
+    `,
+    desiredSql: `
+      create table person(name text);
+      create table audit_log(name text);
+      create trigger person_insert_log after insert on person begin
+        insert into audit_log(name) values ('prefix:' || new.name);
+      end;
+    `,
+    allowDestructive: true,
+  });
+
+  expect(diff).toMatchInlineSnapshot(`
+    [
+      "drop trigger "person_insert_log";",
+      "create trigger person_insert_log after insert on person begin",
+      "insert into audit_log(name) values ('prefix:' || new.name);",
+      "end;",
+    ]
+  `);
+});
+
+test('diffSchemaSql rebuilds a table when sqlite column collations change', async () => {
+  const diff = await diffSchemaSql({
+    projectRoot: process.cwd(),
+    baselineSql: `create table person(name text collate nocase);`,
+    desiredSql: `create table person(name text collate rtrim, nickname text collate rtrim);`,
+    allowDestructive: true,
+  });
+
+  expect(diff).toMatchInlineSnapshot(`
+    [
+      "alter table person rename to __sqlfu_old_person;",
+      "create table person(name text collate rtrim, nickname text collate rtrim);",
+      "insert into person("name") select "name" from __sqlfu_old_person;",
+      "drop table __sqlfu_old_person;",
+    ]
+  `);
 });

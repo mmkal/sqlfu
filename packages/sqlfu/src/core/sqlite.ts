@@ -230,6 +230,12 @@ export function splitSqlStatements(sql: string): string[] {
     }
 
     if (char === ';' && !inSingleQuote && !inDoubleQuote) {
+      if (isTriggerStatementInProgress(current) && !isTriggerTerminator(current)) {
+        current += char;
+        index += 1;
+        continue;
+      }
+
       const statement = current.trim();
       if (statement && stripSqlComments(statement).trim()) {
         statements.push(`${statement};`);
@@ -318,4 +324,12 @@ function quoteSqlString(value: string) {
 
 function isPromiseLike<TResult>(value: TResult | Promise<TResult>): value is Promise<TResult> {
   return typeof value === 'object' && value !== null && 'then' in value;
+}
+
+function isTriggerStatementInProgress(sql: string): boolean {
+  return /^\s*create\s+trigger\b/iu.test(stripSqlComments(sql));
+}
+
+function isTriggerTerminator(sql: string): boolean {
+  return /\bend\s*$/iu.test(stripSqlComments(sql).trim());
 }

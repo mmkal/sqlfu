@@ -9,6 +9,7 @@ import type {Client} from '../core/types.js';
 export type SqliteInspectedDatabase = {
   readonly tables: Record<string, SqliteInspectedTable>;
   readonly views: Record<string, SqliteInspectedView>;
+  readonly triggers: Record<string, SqliteInspectedTrigger>;
 };
 
 type SqliteInspectedTable = {
@@ -24,6 +25,7 @@ type SqliteInspectedTable = {
 type SqliteInspectedColumn = {
   readonly name: string;
   readonly declaredType: string;
+  readonly collation: string | null;
   readonly notNull: boolean;
   readonly defaultSql: string | null;
   readonly primaryKeyPosition: number;
@@ -57,6 +59,13 @@ type SqliteInspectedView = {
   readonly name: string;
   readonly createSql: string;
   readonly definition: string;
+};
+
+type SqliteInspectedTrigger = {
+  readonly name: string;
+  readonly onName: string;
+  readonly createSql: string;
+  readonly normalizedSql: string;
 };
 
 type DisposableClient = {
@@ -129,6 +138,7 @@ export async function inspectSqliteSchema(client: Client, schemaName = 'main'): 
 
   const tables: Record<string, SqliteInspectedTable> = {};
   const views: Record<string, SqliteInspectedView> = {};
+  const triggers: Record<string, SqliteInspectedTrigger> = {};
 
   for (const object of objects) {
     if (object.type === 'view') {
@@ -178,6 +188,8 @@ export async function inspectSqliteSchema(client: Client, schemaName = 'main'): 
 
     const explicitIndexes: Record<string, SqliteInspectedIndex> = {};
     const uniqueConstraints: SqliteUniqueConstraint[] = [];
+    const createSql = normalizeStoredSql(object.sql ?? '');
+    const columnCollations = extractTableColumnCollations(createSql);
 
     for (const index of indexList) {
       const indexNameLiteral = quoteSqlString(index.name);
@@ -216,10 +228,11 @@ export async function inspectSqliteSchema(client: Client, schemaName = 'main'): 
 
     tables[object.name] = {
       name: object.name,
-      createSql: normalizeStoredSql(object.sql ?? ''),
+      createSql,
       columns: columns.map((column) => ({
         name: column.name,
         declaredType: normalizeDeclaredType(column.type),
+        collation: columnCollations.get(column.name) ?? null,
         notNull: Boolean(column.notnull),
         defaultSql: normalizeDefaultSql(column.dflt_value),
         primaryKeyPosition: column.pk,
@@ -236,7 +249,32 @@ export async function inspectSqliteSchema(client: Client, schemaName = 'main'): 
     };
   }
 
-  return {tables, views};
+  const triggerRows = await client.all<{
+    readonly name: string;
+    readonly tbl_name: string;
+    readonly sql: string | null;
+  }>({
+    sql: `
+      select name, tbl_name, sql
+      from ${schemaName}.sqlite_schema
+      where type = 'trigger'
+        and name not like 'sqlite_%'
+      order by name
+    `,
+    args: [],
+  });
+
+  for (const trigger of triggerRows) {
+    const createSql = normalizeStoredSql(trigger.sql ?? '');
+    triggers[trigger.name] = {
+      name: trigger.name,
+      onName: trigger.tbl_name,
+      createSql,
+      normalizedSql: normalizeComparableSql(createSql),
+    };
+  }
+
+  return {tables, views, triggers};
 }
 
 export function schemasEqual(left: SqliteInspectedDatabase, right: SqliteInspectedDatabase): boolean {
@@ -252,6 +290,9 @@ function planSchemaDiff(input: {
   const removedViewNames = sortedRemovedKeys(input.baseline.views, input.desired.views);
   const addedViewNames = sortedAddedKeys(input.baseline.views, input.desired.views);
   const modifiedViewNames = sortedModifiedKeys(input.baseline.views, input.desired.views, viewEquals);
+  const removedTriggerNames = sortedRemovedKeys(input.baseline.triggers, input.desired.triggers);
+  const addedTriggerNames = sortedAddedKeys(input.baseline.triggers, input.desired.triggers);
+  const modifiedTriggerNames = sortedModifiedKeys(input.baseline.triggers, input.desired.triggers, triggerEquals);
 
   const removedTableNames = Object.keys(input.baseline.tables)
     .filter((name) => !(name in input.desired.tables))
@@ -290,6 +331,11 @@ function planSchemaDiff(input: {
     }
   }
 
+  const recreatedTriggerNames = Object.entries(input.desired.triggers)
+    .filter(([, trigger]) => changedTables.has(trigger.onName) || modifiedViewNames.includes(trigger.onName))
+    .map(([triggerName]) => triggerName)
+    .sort((left, right) => left.localeCompare(right));
+
   for (const tableName of commonTableNames) {
     if (changedTables.has(tableName)) {
       continue;
@@ -314,9 +360,11 @@ function planSchemaDiff(input: {
   }
 
   const needsDestructive =
+    removedTriggerNames.length > 0 ||
     removedViewNames.length > 0 ||
     removedTableNames.length > 0 ||
     modifiedViewNames.length > 0 ||
+    modifiedTriggerNames.length > 0 ||
     explicitIndexDrops.length > 0;
 
   if (needsDestructive && !input.allowDestructive) {
@@ -324,6 +372,10 @@ function planSchemaDiff(input: {
   }
 
   const prefixes: string[] = [];
+
+  for (const triggerName of new Set([...removedTriggerNames, ...modifiedTriggerNames, ...recreatedTriggerNames].sort((left, right) => left.localeCompare(right)))) {
+    prefixes.push(`drop trigger ${quoteIdentifier(triggerName)};`);
+  }
 
   for (const viewName of [...removedViewNames, ...modifiedViewNames].sort((left, right) => left.localeCompare(right))) {
     prefixes.push(`drop view ${quoteIdentifier(viewName)};`);
@@ -350,6 +402,10 @@ function planSchemaDiff(input: {
 
   for (const viewName of [...addedViewNames, ...modifiedViewNames].sort((left, right) => left.localeCompare(right))) {
     statements.push(withSemicolon(input.desired.views[viewName]!.createSql));
+  }
+
+  for (const triggerName of new Set([...addedTriggerNames, ...modifiedTriggerNames, ...recreatedTriggerNames].sort((left, right) => left.localeCompare(right)))) {
+    statements.push(withSemicolon(input.desired.triggers[triggerName]!.createSql));
   }
 
   return [...prefixes, ...statements].flatMap(splitStatementForOutput).filter(Boolean);
@@ -436,11 +492,13 @@ function columnEquals(left: SqliteInspectedColumn, right: SqliteInspectedColumn)
 
 function indexEquals(left: SqliteInspectedIndex, right: SqliteInspectedIndex): boolean {
   return stableStringify({
+    createSql: normalizeComparableSql(left.createSql),
     unique: left.unique,
     origin: left.origin,
     columns: left.columns,
     where: left.where,
   }) === stableStringify({
+    createSql: normalizeComparableSql(right.createSql),
     unique: right.unique,
     origin: right.origin,
     columns: right.columns,
@@ -452,8 +510,15 @@ function viewEquals(left: SqliteInspectedView, right: SqliteInspectedView): bool
   return left.definition === right.definition;
 }
 
+function triggerEquals(left: SqliteInspectedTrigger, right: SqliteInspectedTrigger): boolean {
+  return left.onName === right.onName && left.normalizedSql === right.normalizedSql;
+}
+
 function columnDefinition(column: SqliteInspectedColumn): string {
   let sql = `${quoteIdentifier(column.name)} ${column.declaredType}`.trimEnd();
+  if (column.collation) {
+    sql += ` collate ${column.collation}`;
+  }
   if (column.notNull) {
     sql += ' not null';
   }
@@ -692,25 +757,22 @@ function toComparableSchema(schema: SqliteInspectedDatabase) {
           },
         ]),
     ),
+    triggers: Object.fromEntries(
+      Object.entries(schema.triggers)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([triggerName, trigger]) => [
+          triggerName,
+          {
+            name: trigger.name,
+            onName: trigger.onName,
+            normalizedSql: trigger.normalizedSql,
+          },
+        ]),
+    ),
   };
 }
 
 async function assertNoUnsupportedSchemaFeatures(client: Client, schemaName: string): Promise<void> {
-  const triggers = await client.all<{readonly name: string}>({
-    sql: `
-      select name
-      from ${schemaName}.sqlite_schema
-      where type = 'trigger'
-        and name not like 'sqlite_%'
-      order by name
-    `,
-    args: [],
-  });
-
-  if (triggers.length > 0) {
-    throw new Error(`sqlite triggers are not supported by the native schema diff engine yet: ${triggers.map(row => row.name).join(', ')}`);
-  }
-
   const unsupportedSqlRows = await client.all<{
     readonly type: string;
     readonly name: string;
@@ -728,9 +790,6 @@ async function assertNoUnsupportedSchemaFeatures(client: Client, schemaName: str
 
   for (const row of unsupportedSqlRows) {
     const normalizedSql = row.sql?.toLowerCase() ?? '';
-    if (/\bcollate\b/u.test(normalizedSql)) {
-      throw new Error(`sqlite collations are not supported by the native schema diff engine yet: ${row.type} ${row.name}`);
-    }
     if (/^create\s+virtual\s+table\b/u.test(normalizedSql)) {
       throw new Error(`sqlite virtual tables are not supported by the native schema diff engine yet: ${row.name}`);
     }
@@ -739,15 +798,13 @@ async function assertNoUnsupportedSchemaFeatures(client: Client, schemaName: str
 
 function assertNoUnsupportedSqlText(sql: string, source: 'baselineSql' | 'desiredSql'): void {
   const normalizedSql = sql.toLowerCase();
-  if (/\bcreate\s+trigger\b/u.test(normalizedSql)) {
-    throw new Error(`sqlite triggers are not supported by the native schema diff engine yet: found trigger sql in ${source}`);
-  }
-  if (/\bcollate\b/u.test(normalizedSql)) {
-    throw new Error(`sqlite collations are not supported by the native schema diff engine yet: found collate in ${source}`);
-  }
   if (/\bcreate\s+virtual\s+table\b/u.test(normalizedSql)) {
     throw new Error(`sqlite virtual tables are not supported by the native schema diff engine yet: found virtual table sql in ${source}`);
   }
+}
+
+function normalizeComparableSql(sql: string): string {
+  return sql.replace(/\s+/gu, ' ').trim().toLowerCase();
 }
 
 async function applySchemaSql(client: Client, sql: string): Promise<void> {
@@ -798,4 +855,141 @@ function pushStatements(target: string[], source: readonly string[]) {
 
 function renderTableName(value: string): string {
   return /^[a-z_][a-z0-9_]*$/u.test(value) ? value : quoteIdentifier(value);
+}
+
+function extractTableColumnCollations(createSql: string): Map<string, string> {
+  const match = createSql.match(/\(([\s\S]*)\)$/u);
+  if (!match) {
+    return new Map();
+  }
+
+  const definitions = splitTopLevelCommaList(match[1]!);
+  const collations = new Map<string, string>();
+
+  for (const definition of definitions) {
+    const trimmed = definition.trim();
+    if (!trimmed || /^(constraint|primary\s+key|unique|foreign\s+key|check)\b/iu.test(trimmed)) {
+      continue;
+    }
+
+    const nameMatch = trimmed.match(/^(?:"((?:[^"]|"")*)"|`([^`]+)`|\[([^\]]+)\]|([^\s]+))(?:\s+|$)/u);
+    if (!nameMatch) {
+      continue;
+    }
+
+    const columnName = normalizeIdentifierToken(nameMatch[1] ?? nameMatch[2] ?? nameMatch[3] ?? nameMatch[4] ?? '');
+    const collationMatch = trimmed.match(/\bcollate\s+("(?:(?:[^"]|"")*)"|`[^`]+`|\[[^\]]+\]|[a-z0-9_]+)/iu);
+    if (columnName && collationMatch) {
+      collations.set(columnName, normalizeIdentifierToken(collationMatch[1]!));
+    }
+  }
+
+  return collations;
+}
+
+function splitTopLevelCommaList(sql: string): string[] {
+  const parts: string[] = [];
+  let current = '';
+  let depth = 0;
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+  let inBacktick = false;
+  let inBracket = false;
+
+  for (let index = 0; index < sql.length; index += 1) {
+    const char = sql[index]!;
+    const next = sql[index + 1];
+
+    current += char;
+
+    if (inSingleQuote) {
+      if (char === "'" && next === "'") {
+        current += next;
+        index += 1;
+        continue;
+      }
+      if (char === "'") {
+        inSingleQuote = false;
+      }
+      continue;
+    }
+
+    if (inDoubleQuote) {
+      if (char === '"' && next === '"') {
+        current += next;
+        index += 1;
+        continue;
+      }
+      if (char === '"') {
+        inDoubleQuote = false;
+      }
+      continue;
+    }
+
+    if (inBacktick) {
+      if (char === '`') {
+        inBacktick = false;
+      }
+      continue;
+    }
+
+    if (inBracket) {
+      if (char === ']') {
+        inBracket = false;
+      }
+      continue;
+    }
+
+    if (char === "'") {
+      inSingleQuote = true;
+      continue;
+    }
+    if (char === '"') {
+      inDoubleQuote = true;
+      continue;
+    }
+    if (char === '`') {
+      inBacktick = true;
+      continue;
+    }
+    if (char === '[') {
+      inBracket = true;
+      continue;
+    }
+    if (char === '(') {
+      depth += 1;
+      continue;
+    }
+    if (char === ')') {
+      depth -= 1;
+      continue;
+    }
+    if (char === ',' && depth === 0) {
+      parts.push(current.slice(0, -1));
+      current = '';
+    }
+  }
+
+  if (current.trim()) {
+    parts.push(current);
+  }
+
+  return parts;
+}
+
+function normalizeIdentifierToken(token: string): string {
+  const trimmed = token.trim();
+  if (!trimmed) {
+    return trimmed;
+  }
+  if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+    return trimmed.slice(1, -1).replaceAll('""', '"').toLowerCase();
+  }
+  if (trimmed.startsWith('`') && trimmed.endsWith('`')) {
+    return trimmed.slice(1, -1).toLowerCase();
+  }
+  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+    return trimmed.slice(1, -1).toLowerCase();
+  }
+  return trimmed.toLowerCase();
 }

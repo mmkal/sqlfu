@@ -540,6 +540,45 @@ test('sql runner executes a named-parameter query and saves it to disk', async (
   await expect(fs.readFile(savedQueryPath, 'utf8')).resolves.toContain('where slug = :slug');
 });
 
+test('sql runner understands sqlfu_migrations and suggests a non-noisy saved name', async ({page}) => {
+  await using _project = await preserveSchemaProjectState(path.join(import.meta.dirname, 'projects', 'fixture-project'));
+  const projectRoot = path.join(import.meta.dirname, 'projects', 'fixture-project');
+  const savedQueryPath = path.join(projectRoot, 'sql', 'list-sqlfu-migrations.sql');
+  await fs.rm(savedQueryPath, {force: true});
+
+  await page.goto('/#schema');
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByRole('button', {name: 'sqlfu draft'}).click();
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByRole('button', {name: /sqlfu baseline /}).first().click();
+
+  await page.goto('/#sql');
+  await replaceCodeMirrorText(page, 'SQL editor', `
+    select *
+    from sqlfu_migrations
+    order by name;
+  `);
+
+  await expect(page.locator('.cm-lintRange-error')).toHaveCount(0);
+  await page.getByRole('button', {name: 'Run SQL'}).click();
+  await expect(page.getByText('checksum')).toBeVisible();
+  await expect(page.getByText('no such table: sqlfu_migrations')).toHaveCount(0);
+
+  page.once('dialog', (dialog) => {
+    expect(dialog.defaultValue()).toBe('list-sqlfu-migrations');
+    dialog.accept('list-sqlfu-migrations');
+  });
+  await page.getByRole('button', {name: 'Save query'}).click();
+
+  await expect(page).toHaveURL(/#query\/list-sqlfu-migrations$/);
+  await expect(fs.readFile(savedQueryPath, 'utf8')).resolves.toContain('from sqlfu_migrations');
+  await expect(page.getByText('Query error')).toHaveCount(0);
+  await expect(page.getByRole('button', {name: 'Run generated query'})).toBeVisible();
+  await page.getByRole('button', {name: 'Run generated query'}).click();
+  await expect(page.getByText('checksum')).toBeVisible();
+  await expect(page.getByText('no such table: sqlfu_migrations')).toHaveCount(0);
+});
+
 test('sql runner draft survives a reload via local storage', async ({page}) => {
   await page.goto('/#sql');
 

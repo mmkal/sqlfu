@@ -15,7 +15,7 @@ import {
   useSuspenseQuery,
 } from '@tanstack/react-query';
 
-import {migrationNickname} from 'sqlfu/naming';
+import {queryNickname} from 'sqlfu/naming';
 import type {QueryCatalog, QueryCatalogEntry} from 'sqlfu/experimental';
 import type {
   MigrationResultantSchemaResponse,
@@ -630,7 +630,7 @@ function SqlRunnerPanel(input: {
       postJson<SaveSqlResponse>('/api/sql/save', body),
   });
   const handleSave = async () => {
-    const suggestedName = slugifyPromptName(migrationNickname(draft.sql));
+    const suggestedName = slugifyPromptName(queryNickname(draft.sql));
     const providedName = window.prompt('Save query as', suggestedName);
     if (providedName == null) {
       return;

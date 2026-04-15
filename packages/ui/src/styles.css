@@ -574,7 +574,9 @@ h3 {
 }
 
 .code-block.error {
-  color: #ffd7ca;
+  color: #7a1d0d;
+  background: rgba(255, 240, 231, 0.92);
+  border-color: rgba(178, 76, 43, 0.28);
 }
 
 .stack,

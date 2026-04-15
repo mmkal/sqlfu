@@ -1,0 +1,1 @@
+whenever SQL runner or one of the saved queries runs, or whenever I edit a table directly from one of the "Relations", can we make it so th  Schema content gets invalidated? However is the best way to do this with orpc? (We are using orpc for API calls, right???)

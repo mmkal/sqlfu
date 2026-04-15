@@ -1,19 +1,33 @@
 import type {AsyncClient, Client, QueryArg, SyncClient} from './types.js';
 
-export async function extractSchema(client: Client, schemaName = 'main'): Promise<string> {
+export async function extractSchema(
+  client: Client,
+  schemaName = 'main',
+  input: {
+    excludedTables?: readonly string[];
+  } = {},
+): Promise<string> {
+  const excludedTables = input.excludedTables ?? [];
+  const excludedTableFilter = excludedTables
+    .map((tableName) => `and name != ${sqlStringLiteral(tableName)}`)
+    .join('\n        ');
   const rows = await client.all<{sql: string | null}>({
     sql: `
       select sql
       from ${schemaName}.sqlite_schema
       where sql is not null
         and name not like 'sqlite_%'
-        and name != 'sqlfu_migrations'
+        ${excludedTableFilter}
       order by type, name
     `,
     args: [],
   });
 
   return rows.map((row) => `${String(row.sql).toLowerCase()};`).join('\n');
+}
+
+function sqlStringLiteral(value: string) {
+  return `'${value.replaceAll(`'`, `''`)}'`;
 }
 
 export type SqliteSchemaFingerprint = {

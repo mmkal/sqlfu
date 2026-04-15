@@ -22,6 +22,7 @@ import {inspectSqliteSchemaSql, schemasEqual} from './schemadiff/sqlite-native.j
 import {generateQueryTypes} from './typegen/index.js';
 
 const base = os.$context<SqlfuRouterContext>();
+const schemaDriftExcludedTables = ['sqlfu_migrations'] as const;
 
 export const router = {
   generate: base
@@ -162,7 +163,9 @@ export const router = {
       const targetSchema = await materializeMigrationsSchema(runtime.config, targetMigrations);
 
       await using database = await openMainDevDatabase(context.config.db);
-      const liveSchema = await extractSchema(database.client);
+      const liveSchema = await extractSchema(database.client, 'main', {
+        excludedTables: schemaDriftExcludedTables,
+      });
       const diffLines = await diffSchemaSql({
         projectRoot: runtime.config.projectRoot,
         baselineSql: liveSchema,
@@ -218,7 +221,9 @@ export async function getSchemaAuthorities(context: SqlfuRouterContext) {
 
   await using database = await openMainDevDatabase(context.config.db);
   const applied = await readMigrationHistory(database.client);
-  const liveSchema = await extractSchema(database.client);
+  const liveSchema = await extractSchema(database.client, 'main', {
+    excludedTables: schemaDriftExcludedTables,
+  });
   const appliedByName = new Map(applied.map((migration) => [migration.name, migration]));
   const migrationByName = new Map(migrations.map((migration) => [migrationName(migration), migration]));
 
@@ -389,7 +394,9 @@ async function draftSql(context: SqlfuRouterContext, input?: {name?: string}) {
 async function syncSql(context: SqlfuRouterContext) {
   const definitionsSql = await readDefinitionsSql(context.config.definitionsPath);
   await using database = await openMainDevDatabase(context.config.db);
-  const baselineSql = await extractSchema(database.client);
+  const baselineSql = await extractSchema(database.client, 'main', {
+    excludedTables: schemaDriftExcludedTables,
+  });
   try {
     const diffLines = await diffSchemaSql({
       projectRoot: context.config.projectRoot,
@@ -435,7 +442,9 @@ async function gotoSql(context: SqlfuRouterContext, input: {target: string}) {
   const targetSchema = await materializeMigrationsSchema(runtime.config, targetMigrations);
 
   await using database = await openMainDevDatabase(context.config.db);
-  const liveSchema = await extractSchema(database.client);
+  const liveSchema = await extractSchema(database.client, 'main', {
+    excludedTables: schemaDriftExcludedTables,
+  });
   const diffLines = await diffSchemaSql({
     projectRoot: runtime.config.projectRoot,
     baselineSql: liveSchema,
@@ -466,13 +475,17 @@ function slugify(value: string) {
 async function materializeDefinitionsSchema(config: SqlfuProjectConfig, definitionsSql: string) {
   await using database = await createScratchDatabase(config, 'materialize-definitions');
   await database.client.raw(definitionsSql);
-  return await extractSchema(database.client);
+  return await extractSchema(database.client, 'main', {
+    excludedTables: schemaDriftExcludedTables,
+  });
 }
 
 async function materializeMigrationsSchema(config: SqlfuProjectConfig, migrations: readonly Migration[]) {
   await using database = await createScratchDatabase(config, 'materialize-migrations');
   await applyMigrations(database.client, {migrations});
-  return await extractSchema(database.client);
+  return await extractSchema(database.client, 'main', {
+    excludedTables: schemaDriftExcludedTables,
+  });
 }
 
 async function applyMigrationsToDatabase(dbPath: string, migrations: readonly Migration[]) {
@@ -549,7 +562,9 @@ async function analyzeDatabase(runtime: ReturnType<typeof createRuntime>) {
   let liveSchema: string;
   let applied: readonly {name: string; checksum: string}[];
   await using database = await openMainDevDatabase(runtime.config.db);
-  liveSchema = await extractSchema(database.client);
+  liveSchema = await extractSchema(database.client, 'main', {
+    excludedTables: schemaDriftExcludedTables,
+  });
   applied = await readMigrationHistory(database.client);
   const appliedNames = new Set(applied.map((migration) => migration.name));
   const migrationByName = new Map(migrations.map((migration) => [migrationName(migration), migration]));

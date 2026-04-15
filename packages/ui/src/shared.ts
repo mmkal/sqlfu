@@ -19,6 +19,7 @@ export type SchemaCheckCard = {
 
 export type SchemaCheckResponse = {
   readonly cards: readonly SchemaCheckCard[];
+  readonly error?: string;
 };
 
 export type SchemaAuthorityMigration = {

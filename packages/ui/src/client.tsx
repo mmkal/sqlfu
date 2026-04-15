@@ -201,6 +201,14 @@ function SchemaPanel(input: {
       </header>
 
       <div className="stack schema-cards">
+        {input.check.error ? (
+          <section className="card schema-card warn">
+            <div className="card-title-row schema-card-title-row">
+              <h3 className="card-title">Schema Check Failed</h3>
+            </div>
+            <p>{input.check.error}</p>
+          </section>
+        ) : null}
         {input.check.cards.map((card) => (
           <section key={card.key} className={`card schema-card ${card.ok ? 'ok compact' : 'warn'}`}>
             <div className="card-title-row schema-card-title-row">

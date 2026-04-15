@@ -171,6 +171,27 @@ test('desired schema can be edited and saved, and sync is disabled while it is d
   await expect(page.getByText('Repo Drift')).toBeVisible();
 });
 
+test('invalid desired schema shows a check error without breaking the schema page', async ({page, projectDir}) => {
+  const definitionsPath = path.join(projectDir, 'definitions.sql');
+  await fs.writeFile(definitionsPath, `
+    create table posts (
+      id integer primary key
+    );
+
+    create tabl nope (
+      id integer primary key
+    );
+  `);
+
+  await page.goto('/#schema');
+
+  await expect(page.getByRole('heading', {name: 'Schema', exact: true})).toBeVisible();
+  await expect(page.getByRole('heading', {name: 'Schema Check Failed'})).toBeVisible();
+  await expect(page.getByText(/near "tabl": syntax error/i)).toBeVisible();
+  await expect(page.getByRole('button', {name: 'Desired Schema'})).toBeVisible();
+  await expect(await readCodeMirrorText(page, 'Desired Schema editor')).toContain('create tabl nope');
+});
+
 test('history to live flow shows a baseline action when check recommends it', async ({page}) => {
   await page.goto('/#schema');
 

@@ -83,10 +83,17 @@ const uiRouter = {
       }
     }),
     check: uiBase.handler(async ({context}) => {
-      const mismatches = await getCheckMismatches({config: context.config});
-      return {
-        cards: buildSchemaCheckCards(mismatches),
-      };
+      try {
+        const mismatches = await getCheckMismatches({config: context.config});
+        return {
+          cards: buildSchemaCheckCards(mismatches),
+        };
+      } catch (error) {
+        return {
+          cards: [],
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
     }),
     authorities: {
       get: uiBase.handler(async ({context}) => {
@@ -1236,12 +1243,18 @@ async function ensureDatabase(projectRoot: string) {
   const database = new DatabaseSync(dbPath);
   try {
     const definitionsSql = await fs.readFile(path.join(projectRoot, 'definitions.sql'), 'utf8');
-    database.exec(definitionsSql);
-    database.exec(`
-      insert into posts (slug, title, body, published) values
-        ('hello-world', 'Hello World', 'First post body', 1),
-        ('draft-notes', 'Draft Notes', 'Unpublished notes', 0);
-    `);
+    try {
+      database.exec(definitionsSql);
+      database.exec(`
+        insert into posts (slug, title, body, published) values
+          ('hello-world', 'Hello World', 'First post body', 1),
+          ('draft-notes', 'Draft Notes', 'Unpublished notes', 0);
+      `);
+    } catch (error) {
+      console.warn(
+        `sqlfu/ui could not initialize ${path.basename(projectRoot)} from definitions.sql: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   } finally {
     database.close();
   }

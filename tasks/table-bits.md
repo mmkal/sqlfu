@@ -1,0 +1,1 @@
+table improvements. make the cell viewer part of a higher-order table component. (probably needs an "editable" prop). that way we can click to view cell content everywhere the table is used, like SQL runner and save query runner. also, cell content should be monospace.

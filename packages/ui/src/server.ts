@@ -1,16 +1,344 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import {Database} from 'bun:sqlite';
+import {os} from '@orpc/server';
 import {RPCHandler} from '@orpc/server/fetch';
+import {z} from 'zod';
 
-import type {QueryCatalog, QueryCatalogEntry, QueryArg, SqlfuProjectConfig, SqlfuRouterContext} from 'sqlfu/experimental';
+import type {QueryCatalog, QueryCatalogEntry, QueryArg, SqlfuProjectConfig} from 'sqlfu/experimental';
 import {analyzeAdHocSqlForConfig, createBunClient, getCheckMismatches, getMigrationResultantSchema, getSchemaAuthorities, loadProjectConfig, runSqlfuCommand, splitSqlStatements, writeDefinitionsSql} from 'sqlfu/experimental';
-import type {MigrationResultantSchemaResponse, QueryFileMutationResponse, SaveSqlResponse, SchemaAuthoritiesResponse, SchemaCheckCard, SchemaCheckResponse, SqlAnalysisResponse, SqlEditorDiagnostic, StudioColumn, StudioRelation, StudioSchemaResponse, TableRowKey, TableRowsResponse} from './shared.js';
-import {createUiRouter} from './orpc.js';
+import type {QueryExecutionResponse, SchemaCheckCard, SqlAnalysisResponse, SqlEditorDiagnostic, StudioColumn, TableRowKey, TableRowsResponse} from './shared.js';
 
 const clientEntryPath = path.join(import.meta.dir, 'client.tsx');
 const stylesPath = path.join(import.meta.dir, 'styles.css');
 const generateCatalogScriptPath = path.join(import.meta.dir, 'generate-catalog.ts');
+
+type UiRouterContext = {
+  config: SqlfuProjectConfig;
+};
+
+const uiBase = os.$context<UiRouterContext>();
+const rowRecordSchema = z.record(z.string(), z.unknown());
+const tableRowKeySchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('primaryKey'),
+    values: z.record(z.string(), z.unknown()),
+  }),
+  z.object({
+    kind: z.literal('new'),
+    value: z.string(),
+  }),
+  z.object({
+    kind: z.literal('rowid'),
+    value: z.number(),
+  }),
+]) satisfies z.ZodType<TableRowKey>;
+
+const uiRouter = {
+  schema: {
+    get: uiBase.handler(async ({context}) => {
+      const projectRoot = path.dirname(context.config.db);
+      const database = new Database(context.config.db);
+      const client = createBunClient(database);
+
+      try {
+        const relations = client.all<{name: string; type: 'table' | 'view'; sql: string | null}>({
+          sql: `
+            select name, type, sql
+            from sqlite_master
+            where type in ('table', 'view')
+              and name not like 'sqlite_%'
+            order by type, name
+          `,
+          args: [],
+        });
+
+        return {
+          projectName: path.basename(projectRoot),
+          projectRoot,
+          relations: relations.map((relation) => ({
+            name: relation.name,
+            kind: relation.type,
+            rowCount: relation.type === 'table' ? getRelationCount(client, relation.name) : undefined,
+            columns: getRelationColumns(client, relation.name),
+            sql: relation.sql ?? undefined,
+          })),
+        };
+      } finally {
+        database.close();
+      }
+    }),
+    check: uiBase.handler(async ({context}) => {
+      const mismatches = await getCheckMismatches({config: context.config});
+      return {
+        cards: buildSchemaCheckCards(mismatches),
+      };
+    }),
+    authorities: {
+      get: uiBase.handler(async ({context}) => {
+        const authorities = await getSchemaAuthorities({config: context.config});
+        return {
+          desiredSchemaSql: authorities.desiredSchemaSql,
+          migrations: authorities.migrations.map((migration) => ({
+            ...parseMigrationId(migration.id),
+            id: migration.id,
+            fileName: migration.fileName,
+            content: migration.content,
+            applied: migration.applied,
+            appliedAt: migration.appliedAt,
+            integrity: migration.integrity,
+          })),
+          migrationHistory: authorities.migrationHistory.map((migration) => ({
+            ...parseMigrationId(migration.id),
+            id: migration.id,
+            fileName: migration.fileName,
+            content: migration.content,
+            applied: migration.applied,
+            appliedAt: migration.appliedAt,
+            integrity: migration.integrity,
+          })),
+          liveSchemaSql: authorities.liveSchemaSql,
+        };
+      }),
+      resultantSchema: uiBase
+        .input(z.object({
+          source: z.enum(['migrations', 'history']),
+          id: z.string(),
+        }))
+        .handler(async ({context, input}) => {
+          if (!input.id.trim()) {
+            throw new Error('Migration id is required');
+          }
+
+          return {
+            sql: await getMigrationResultantSchema({config: context.config}, input),
+          };
+        }),
+    },
+    command: uiBase
+      .input(z.object({
+        command: z.string(),
+      }))
+      .handler(async ({context, input}) => {
+        if (!input.command.trim()) {
+          throw new Error('Command is required');
+        }
+
+        await runSqlfuCommand({config: context.config}, input.command);
+        return {ok: true} as const;
+      }),
+    definitions: uiBase
+      .input(z.object({
+        sql: z.string(),
+      }))
+      .handler(async ({context, input}) => {
+        if (!input.sql.trim()) {
+          throw new Error('Desired Schema is required');
+        }
+
+        await writeDefinitionsSql({config: context.config}, input.sql);
+        return {ok: true} as const;
+      }),
+  },
+  catalog: uiBase.handler(({context}) => loadCatalog(context.config)),
+  table: {
+    list: uiBase
+      .input(z.object({
+        relationName: z.string(),
+        page: z.number().int(),
+      }))
+      .handler(({context, input}) => getTableRows(context.config.db, input.relationName, input.page)),
+    save: uiBase
+      .input(z.object({
+        relationName: z.string(),
+        page: z.number().int(),
+        originalRows: z.array(rowRecordSchema),
+        rows: z.array(rowRecordSchema),
+        rowKeys: z.array(tableRowKeySchema),
+      }))
+      .handler(({context, input}) => saveTableRows(context.config.db, input.relationName, input)),
+    delete: uiBase
+      .input(z.object({
+        relationName: z.string(),
+        page: z.number().int(),
+        originalRow: rowRecordSchema,
+        rowKey: tableRowKeySchema,
+      }))
+      .handler(({context, input}) => deleteTableRow(context.config.db, input.relationName, input)),
+  },
+  sql: {
+    run: uiBase
+      .input(z.object({
+        sql: z.string(),
+        params: z.unknown().optional(),
+      }))
+      .handler(({context, input}) => {
+        const trimmedSql = input.sql.trim();
+        if (!trimmedSql) {
+          throw new Error('SQL is required');
+        }
+
+        const statements = splitSqlStatements(trimmedSql);
+        const params = normalizeSqlRunnerParams(input.params);
+        const database = new Database(context.config.db);
+
+        try {
+          if (statements.length === 1) {
+            try {
+              const rows = database.query<Record<string, unknown>, any>(statements[0]!).all(params as never);
+              return {
+                sql: trimmedSql,
+                mode: 'rows' as const,
+                rows: rows.map(materializeRow),
+              };
+            } catch {}
+          }
+
+          return {
+            sql: trimmedSql,
+            mode: 'metadata' as const,
+            metadata: runSqlStatement(database, trimmedSql, params),
+          };
+        } finally {
+          database.close();
+        }
+      }),
+    analyze: uiBase
+      .input(z.object({
+        sql: z.string(),
+      }))
+      .handler(({context, input}) => analyzeSql(context.config, input)),
+    save: uiBase
+      .input(z.object({
+        sql: z.string(),
+        name: z.string(),
+      }))
+      .handler(async ({context, input}) => {
+        const sql = input.sql.trim();
+        if (!sql) {
+          throw new Error('SQL is required');
+        }
+
+        const baseName = slugifyQueryName(input.name);
+        if (!baseName) {
+          throw new Error('Query name is required');
+        }
+
+        const relativePath = `sql/${baseName}.sql`;
+        const targetPath = path.join(context.config.projectRoot, relativePath);
+        await fs.mkdir(path.dirname(targetPath), {recursive: true});
+        await fs.writeFile(targetPath, `${sql}\n`);
+        await generateCatalogForProject(context.config.projectRoot);
+        return {savedPath: relativePath};
+      }),
+  },
+  query: {
+    execute: uiBase
+      .input(z.object({
+        queryId: z.string(),
+        data: z.record(z.string(), z.unknown()).optional(),
+        params: z.record(z.string(), z.unknown()).optional(),
+      }))
+      .handler(async ({context, input}): Promise<QueryExecutionResponse> => {
+        const catalog = await loadCatalog(context.config);
+        const query = catalog.queries.find((entry) => entry.id === input.queryId);
+        if (!query || query.kind !== 'query') {
+          throw new Error(`Unknown query: ${input.queryId}`);
+        }
+
+        const args = query.args.flatMap((arg) => {
+          const source = arg.scope === 'data' ? input.data : input.params;
+          return encodeArgument(arg, source?.[arg.name]);
+        }) as readonly QueryArg[];
+
+        const database = new Database(context.config.db);
+        const client = createBunClient(database);
+
+        try {
+          if (query.resultMode === 'metadata') {
+            return {
+              mode: 'metadata',
+              metadata: client.run({sql: query.sql, args}),
+            };
+          }
+
+          return {
+            mode: 'rows',
+            rows: client.all({sql: query.sql, args}).map(materializeRow),
+          };
+        } finally {
+          database.close();
+        }
+      }),
+    update: uiBase
+      .input(z.object({
+        queryId: z.string(),
+        sql: z.string(),
+      }))
+      .handler(async ({context, input}) => {
+        const catalog = await loadCatalog(context.config);
+        const query = catalog.queries.find((entry) => entry.id === input.queryId);
+        if (!query) {
+          throw new Error(`Unknown query: ${input.queryId}`);
+        }
+        const sql = input.sql.trim();
+        if (!sql) {
+          throw new Error('SQL is required');
+        }
+
+        await fs.writeFile(path.join(context.config.projectRoot, query.sqlFile), `${sql}\n`);
+        await generateCatalogForProject(context.config.projectRoot);
+        return {
+          id: query.id,
+          sqlFile: query.sqlFile,
+        };
+      }),
+    rename: uiBase
+      .input(z.object({
+        queryId: z.string(),
+        name: z.string(),
+      }))
+      .handler(async ({context, input}) => {
+        const catalog = await loadCatalog(context.config);
+        const query = catalog.queries.find((entry) => entry.id === input.queryId);
+        if (!query) {
+          throw new Error(`Unknown query: ${input.queryId}`);
+        }
+        const nextId = slugifyQueryName(input.name);
+        if (!nextId) {
+          throw new Error('Query name is required');
+        }
+
+        const nextRelativePath = `sql/${nextId}.sql`;
+        const nextPath = path.join(context.config.projectRoot, nextRelativePath);
+        await fs.rename(path.join(context.config.projectRoot, query.sqlFile), nextPath);
+        await generateCatalogForProject(context.config.projectRoot);
+        return {
+          id: nextId,
+          sqlFile: nextRelativePath,
+        };
+      }),
+    delete: uiBase
+      .input(z.object({
+        queryId: z.string(),
+      }))
+      .handler(async ({context, input}) => {
+        const catalog = await loadCatalog(context.config);
+        const query = catalog.queries.find((entry) => entry.id === input.queryId);
+        if (!query) {
+          throw new Error(`Unknown query: ${input.queryId}`);
+        }
+        await fs.rm(path.join(context.config.projectRoot, query.sqlFile), {force: true});
+        await generateCatalogForProject(context.config.projectRoot);
+        return {
+          id: query.id,
+          sqlFile: query.sqlFile,
+        };
+      }),
+  },
+};
+
+export type UiRouter = typeof uiRouter;
 
 export async function startSqlfuUiServer(input: {
   port?: number;
@@ -19,25 +347,7 @@ export async function startSqlfuUiServer(input: {
   const projectRoot = path.resolve(input.projectRoot ?? process.cwd());
   process.chdir(projectRoot);
   const config = await loadProjectConfig();
-  const rpcHandler = new RPCHandler(createUiRouter({
-    getSchema: getSchemaResponse,
-    loadCatalog,
-    getSchemaCheck: getSchemaCheckResponse,
-    getSchemaAuthorities: getSchemaAuthoritiesResponse,
-    getMigrationResultantSchema: getMigrationResultantSchemaResponse,
-    listTableRows: getTableRows,
-    saveTableRows,
-    deleteTableRow,
-    runSql: (uiConfig, rpcInput) => executeSql(uiConfig.db, rpcInput),
-    analyzeSql,
-    saveSqlQuery,
-    runSchemaCommand,
-    saveDefinitionsSql,
-    executeCatalogQuery,
-    updateQueryFile,
-    renameQueryFile,
-    deleteQueryFile,
-  }));
+  const rpcHandler = new RPCHandler(uiRouter);
 
   const server = Bun.serve({
     port: input.port ?? 3017,
@@ -131,91 +441,6 @@ async function analyzeSql(
       diagnostics: [toSqlEditorDiagnostic(input.sql, error)],
     };
   }
-}
-
-async function getSchemaCheckResponse(config: SqlfuProjectConfig): Promise<SchemaCheckResponse> {
-  const mismatches = await getCheckMismatches(toSqlfuRouterContext(config));
-  return {
-    cards: buildSchemaCheckCards(mismatches),
-  };
-}
-
-async function runSchemaCommand(
-  config: SqlfuProjectConfig,
-  input: {
-    command: string;
-  },
-) {
-  if (!input.command.trim()) {
-    throw new Error('Command is required');
-  }
-
-  await runSqlfuCommand(toSqlfuRouterContext(config), input.command);
-  return {
-    ok: true,
-  } as const;
-}
-
-async function saveDefinitionsSql(
-  config: SqlfuProjectConfig,
-  input: {
-    sql: string;
-  },
-) {
-  if (!input.sql.trim()) {
-    throw new Error('Desired Schema is required');
-  }
-
-  await writeDefinitionsSql(toSqlfuRouterContext(config), input.sql);
-  return {
-    ok: true,
-  } as const;
-}
-
-async function getSchemaAuthoritiesResponse(config: SqlfuProjectConfig): Promise<SchemaAuthoritiesResponse> {
-  const authorities = await getSchemaAuthorities(toSqlfuRouterContext(config));
-  return {
-    desiredSchemaSql: authorities.desiredSchemaSql,
-    migrations: authorities.migrations.map((migration) => ({
-      ...parseMigrationId(migration.id),
-      id: migration.id,
-      fileName: migration.fileName,
-      content: migration.content,
-      applied: migration.applied,
-      appliedAt: migration.appliedAt,
-      integrity: migration.integrity,
-    })),
-    migrationHistory: authorities.migrationHistory.map((migration) => ({
-      ...parseMigrationId(migration.id),
-      id: migration.id,
-      fileName: migration.fileName,
-      content: migration.content,
-      applied: migration.applied,
-      appliedAt: migration.appliedAt,
-      integrity: migration.integrity,
-    })),
-    liveSchemaSql: authorities.liveSchemaSql,
-  };
-}
-
-async function getMigrationResultantSchemaResponse(
-  config: SqlfuProjectConfig,
-  input: {
-    source: 'migrations' | 'history';
-    id: string;
-  },
-): Promise<MigrationResultantSchemaResponse> {
-  if (!input.id.trim()) {
-    throw new Error('Migration id is required');
-  }
-
-  return {
-    sql: await getMigrationResultantSchema(toSqlfuRouterContext(config), input),
-  };
-}
-
-function toSqlfuRouterContext(config: SqlfuProjectConfig): SqlfuRouterContext {
-  return {config};
 }
 
 function buildSchemaCheckCards(
@@ -408,111 +633,6 @@ function fallbackDiagnosticRange(sql: string) {
   };
 }
 
-async function executeCatalogQuery(
-  config: SqlfuProjectConfig,
-  queryId: string,
-  input: {
-    data?: Record<string, unknown>;
-    params?: Record<string, unknown>;
-  },
-) {
-  const catalog = await loadCatalog(config);
-  const query = catalog.queries.find((entry) => entry.id === queryId);
-  if (!query || query.kind !== 'query') {
-    throw new Error(`Unknown query: ${queryId}`);
-  }
-
-  const args = query.args.flatMap((arg) => {
-    const source = arg.scope === 'data' ? input.data : input.params;
-    return encodeArgument(arg, source?.[arg.name]);
-  }) as readonly QueryArg[];
-
-  const database = new Database(config.db);
-  const client = createBunClient(database);
-
-  try {
-    if (query.resultMode === 'metadata') {
-      return {
-        mode: 'metadata',
-        metadata: client.run({sql: query.sql, args}),
-      } as const;
-    }
-
-    return {
-      mode: 'rows',
-      rows: client.all({sql: query.sql, args}).map(materializeRow),
-    } as const;
-  } finally {
-    database.close();
-  }
-}
-
-async function renameQueryFile(
-  config: SqlfuProjectConfig,
-  queryId: string,
-  input: {
-    name: string;
-  },
-): Promise<QueryFileMutationResponse> {
-  const query = await loadWritableQuery(config, queryId);
-  const nextId = slugifyQueryName(input.name);
-  if (!nextId) {
-    throw new Error('Query name is required');
-  }
-
-  const nextRelativePath = `sql/${nextId}.sql`;
-  const nextPath = path.join(config.projectRoot, nextRelativePath);
-  await fs.rename(path.join(config.projectRoot, query.sqlFile), nextPath);
-  await generateCatalogForProject(config.projectRoot);
-  return {
-    id: nextId,
-    sqlFile: nextRelativePath,
-  };
-}
-
-async function updateQueryFile(
-  config: SqlfuProjectConfig,
-  queryId: string,
-  input: {
-    sql: string;
-  },
-): Promise<QueryFileMutationResponse> {
-  const query = await loadWritableQuery(config, queryId);
-  const sql = input.sql.trim();
-  if (!sql) {
-    throw new Error('SQL is required');
-  }
-
-  await fs.writeFile(path.join(config.projectRoot, query.sqlFile), `${sql}\n`);
-  await generateCatalogForProject(config.projectRoot);
-  return {
-    id: query.id,
-    sqlFile: query.sqlFile,
-  };
-}
-
-async function deleteQueryFile(
-  config: SqlfuProjectConfig,
-  queryId: string,
-): Promise<QueryFileMutationResponse> {
-  const query = await loadWritableQuery(config, queryId);
-  await fs.rm(path.join(config.projectRoot, query.sqlFile), {force: true});
-  await generateCatalogForProject(config.projectRoot);
-  return {
-    id: query.id,
-    sqlFile: query.sqlFile,
-  };
-}
-
-async function loadWritableQuery(config: SqlfuProjectConfig, queryId: string) {
-  const catalog = await loadCatalog(config);
-  const query = catalog.queries.find((entry) => entry.id === queryId);
-  if (!query) {
-    throw new Error(`Unknown query: ${queryId}`);
-  }
-  return query;
-}
-
 function encodeArgument(
   arg: Extract<QueryCatalogEntry, {kind: 'query'}>['args'][number],
   value: unknown,
@@ -550,40 +670,6 @@ function encodeScalar(
     return value;
   }
   return JSON.stringify(value);
-}
-
-async function getSchemaResponse(dbPath: string): Promise<StudioSchemaResponse> {
-  const database = new Database(dbPath);
-  const client = createBunClient(database);
-
-  try {
-    const rows = client.all<{name: string; type: string; sql: string | null}>({
-      sql: `
-        select name, type, sql
-        from sqlite_schema
-        where type in ('table', 'view')
-          and name not like 'sqlite_%'
-        order by type, name
-      `,
-      args: [],
-    });
-
-    const relations: StudioRelation[] = rows.map((row) => ({
-      name: row.name,
-      kind: row.type === 'view' ? 'view' : 'table',
-      columns: getRelationColumns(client, row.name),
-      rowCount: row.type === 'table' ? getRelationCount(client, row.name) : undefined,
-      sql: row.sql ?? undefined,
-    }));
-
-    return {
-      projectName: path.basename(process.cwd()),
-      projectRoot: process.cwd(),
-      relations,
-    };
-  } finally {
-    database.close();
-  }
 }
 
 function getRelationColumns(client: ReturnType<typeof createBunClient>, relationName: string): readonly StudioColumn[] {
@@ -740,69 +826,6 @@ async function deleteTableRow(
   } finally {
     database.close();
   }
-}
-
-async function executeSql(
-  dbPath: string,
-  input: {
-    sql: string;
-    params: unknown;
-  },
-) {
-  const trimmedSql = input.sql.trim();
-  if (!trimmedSql) {
-    throw new Error('SQL is required');
-  }
-
-  const statements = splitSqlStatements(trimmedSql);
-  const params = normalizeSqlRunnerParams(input.params);
-  const database = new Database(dbPath);
-
-  try {
-    if (statements.length === 1) {
-      try {
-        const rows = database.query<Record<string, unknown>, any>(statements[0]!).all(params as never);
-        return {
-          sql: trimmedSql,
-          mode: 'rows',
-          rows: rows.map(materializeRow),
-        } as const;
-      } catch {}
-    }
-
-    return {
-      sql: trimmedSql,
-      mode: 'metadata',
-      metadata: runSqlStatement(database, trimmedSql, params),
-    } as const;
-  } finally {
-    database.close();
-  }
-}
-
-async function saveSqlQuery(
-  config: SqlfuProjectConfig,
-  input: {
-    sql: string;
-    name: string;
-  },
-): Promise<SaveSqlResponse> {
-  const sql = input.sql.trim();
-  if (!sql) {
-    throw new Error('SQL is required');
-  }
-
-  const baseName = slugifyQueryName(input.name);
-  if (!baseName) {
-    throw new Error('Query name is required');
-  }
-
-  const relativePath = `sql/${baseName}.sql`;
-  const targetPath = path.join(config.projectRoot, relativePath);
-  await fs.mkdir(path.dirname(targetPath), {recursive: true});
-  await fs.writeFile(targetPath, `${sql}\n`);
-  await generateCatalogForProject(config.projectRoot);
-  return {savedPath: relativePath};
 }
 
 function slugifyQueryName(value: string) {

@@ -32,7 +32,7 @@ import type {
   TableRowsResponse,
 } from './shared.js';
 import {columnWidthAlgorithm} from './column-width.js';
-import type {UiRouter} from './orpc.js';
+import type {UiRouter} from './server.js';
 import {SqlCodeMirror, TextCodeMirror, TextDiffCodeMirror} from './sql-codemirror.js';
 
 const queryClient = new QueryClient();

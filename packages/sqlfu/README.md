@@ -1,36 +1,151 @@
 # sqlfu
 
-`sqlfu` is a SQLite-first toolkit for projects that want:
+`sqlfu` is a SQLite-first toolkit for teams that want their data layer to stay close to SQL.
 
-- `definitions.sql` as the schema source of truth
-- checked-in `.sql` files for queries
-- generated TypeScript wrappers next to those queries
-- versioned SQL migrations without building a full ORM around the database
-
-It keeps schema design in `definitions.sql`, queries in checked-in `.sql` files, and migrations as explicit SQL files, with tooling to generate typed wrappers and check drift between repo state and a live dev database.
+It is built around a simple idea: SQL should be the source language for schema, migrations, queries, formatting, and diffing. TypeScript comes second. You should still get good generated types and wrappers, but without having to push the whole project through an ORM-shaped API.
 
 ## Table of contents
 
-- [Install](#install)
-- [Project Layout](#project-layout)
-- [Config](#config)
-- [Commands](#commands)
-- [Migration Model](#migration-model)
-- [Migration Mental Model](#migration-mental-model)
-- [Opinions imposed](#opinions-imposed)
-- [What `generate` Does](#what-generate-does)
-- [SQL Formatter](#sql-formatter)
-- [Notes](#notes)
+- [What Is sqlfu?](#what-is-sqlfu)
+- [Philosophy](#philosophy)
+  - [SQL First](#sql-first)
+  - [TypeScript Second](#typescript-second)
+- [Core Concepts](#core-concepts)
+- [Capabilities](#capabilities)
+  - [Client](#client)
+  - [Migrator](#migrator)
+  - [Diff Engine](#diff-engine)
+  - [Type Generator](#type-generator)
+  - [Formatter](#formatter)
+  - [UI](#ui)
+- [Quick Start](#quick-start)
+  - [Install](#install)
+  - [Minimal Setup](#minimal-setup)
+  - [Configuration](#configuration)
+  - [Generate Types](#generate-types)
+  - [Draft and Apply Migrations](#draft-and-apply-migrations)
+  - [Launch the UI](#launch-the-ui)
+- [Command Reference](#command-reference)
+- [Limitations and Non-Goals](#limitations-and-non-goals)
 
-## Install
+## What Is sqlfu?
+
+`sqlfu` is a set of SQL-first tools that are meant to work together:
+
+- a client for executing checked-in SQL
+- a migrator built around SQL files, not JavaScript migration code
+- a SQLite schema diff engine
+- a type generator for `.sql` queries
+- a SQL formatter
+- a UI for inspecting and working with the project
+
+The intended shape is simple:
+
+- your desired schema lives in `definitions.sql`
+- your migration history lives in `migrations/`
+- your queries live in a flat `sql/` directory
+- generated TypeScript wrappers live next to those queries
+
+## Philosophy
+
+### SQL First
+
+Humans have been writing SQL for decades. Agents are good at generating and editing it. `sqlfu` tries to keep that advantage instead of hiding it behind another abstraction layer.
+
+That is why the project leans so heavily on SQL artifacts:
+
+- schema in `definitions.sql`
+- migrations as SQL files
+- checked-in `.sql` queries
+- a SQL formatter
+- a SQL diff engine
+
+The goal is not to make SQL disappear. The goal is to make SQL a better source language for the rest of the toolchain.
+
+### TypeScript Second
+
+TypeScript is the second language in `sqlfu`, not the first one.
+
+You should still get strong TypeScript output from SQL: generated wrappers, typed params, typed result rows, and a client surface that feels natural in an application. That is why `sqlfu` includes query type generation and why it borrows from vendored TypeSQL analysis instead of asking you to rewrite queries in a TypeScript DSL.
+
+## Core Concepts
+
+- `definitions.sql`
+  The desired schema now.
+- `migrations/`
+  The ordered history of schema changes.
+- `sql/`
+  A flat directory of checked-in query files.
+- generated query wrappers
+  TypeScript code generated next to those `.sql` files.
+- `sqlfu_migrations`
+  The table that records applied migrations in a real database.
+- live schema
+  The schema the database actually has right now.
+
+Those pieces give `sqlfu` enough information to answer the important questions:
+
+- what should the schema be?
+- how did it get here?
+- what queries exist in the repo?
+- do the repo and the database agree?
+
+## Capabilities
+
+### Client
+
+`sqlfu` includes a lightweight client layer for executing SQL directly. It is meant to work with checked-in SQL rather than replace it with a query builder.
+
+Runtime adapters can be imported from `sqlfu/client`, for example `createExpoSqliteClient`, `createLibsqlClient`, or `createD1Client`.
+
+### Migrator
+
+The migrator is SQL-only. Migrations are applied in filename order, recorded in `sqlfu_migrations`, and treated as explicit history rather than generated runtime code.
+
+The production path is replayed migrations, not direct declarative apply.
+
+### Diff Engine
+
+`sqlfu` includes a native SQLite schema diff engine. It compares replayed migration state against `definitions.sql` and produces SQL statements that describe the difference.
+
+That diff engine powers commands like `draft`, `goto`, and `sync`.
+
+For the engine model itself, see [docs/schema-diff-model.md](./docs/schema-diff-model.md).
+
+### Type Generator
+
+`sqlfu generate` reads checked-in `.sql` files and generates TypeScript wrappers next to them. The implementation uses vendored TypeSQL analysis, with a small sqlfu post-pass to improve some SQLite result types.
+
+The goal is to keep SQL as the authored source while still getting useful TypeScript output in application code.
+
+### Formatter
+
+`sqlfu` includes a SQL formatter via `formatSql()`.
+
+It started from a vendored copy of [`sql-formatter`](https://github.com/sql-formatter-org/sql-formatter), then diverged because upstream formatting is more newline-heavy than we want. The current sqlfu defaults are intentionally opinionated: SQLite-first, lowercase by default, and biased toward keeping simple clause bodies inline when they still read well.
+
+If you want to see or change that behavior, start here:
+
+- [src/formatter.ts](./src/formatter.ts)
+- [src/vendor/sql-formatter/AGENTS.md](./src/vendor/sql-formatter/AGENTS.md)
+- [test/formatter/sqlite.fixture.sql](./test/formatter/sqlite.fixture.sql)
+- [test/formatter.test.ts](./test/formatter.test.ts)
+
+### UI
+
+`sqlfu` also has a UI package for working with the project interactively. It sits on top of the same SQL-first model rather than inventing a separate one.
+
+## Quick Start
+
+### Install
 
 ```sh
-npm install sqlfu
+pnpm add sqlfu
 ```
 
 `sqlfu` currently supports macOS and Linux.
 
-## Project Layout
+### Minimal Setup
 
 The default layout is:
 
@@ -45,9 +160,7 @@ The default layout is:
 └── sqlfu.config.ts
 ```
 
-`sqlfu.config.ts` is required. It defines the project-level paths that the tooling uses.
-
-## Config
+### Configuration
 
 Create `sqlfu.config.ts` in your project root:
 
@@ -69,9 +182,9 @@ Required config fields:
 - `definitionsPath`: schema source of truth
 - `sqlDir`: directory containing checked-in `.sql` queries
 
-`sqlfu` manages its own temporary files under `.sqlfu/`, including scratch databases used for schema diffing. These are generally safe to delete at any time, they will regenerate as needed.
+`sqlfu` manages its own temporary files under `.sqlfu/`, including scratch databases used for schema diffing. These are generally safe to delete at any time.
 
-## Commands
+### Generate Types
 
 Generate query wrappers from your schema and `.sql` files:
 
@@ -79,7 +192,57 @@ Generate query wrappers from your schema and `.sql` files:
 sqlfu generate
 ```
 
-Draft a migration file from the diff between replayed migrations and `definitions.sql`:
+`sqlfu generate`:
+
+1. exports the schema from your configured main database into a temporary SQLite database for TypeSQL
+2. generates TypeScript wrappers next to those `.sql` files
+3. refines generated result types for some SQLite cases that TypeSQL currently misses
+
+### Draft and Apply Migrations
+
+Draft a migration from the diff between replayed migrations and `definitions.sql`:
+
+```sh
+sqlfu draft --name add_posts_table
+```
+
+Apply migrations:
+
+```sh
+sqlfu migrate
+```
+
+Run all migration checks:
+
+```sh
+sqlfu check
+```
+
+When you draft a migration, `sqlfu` will:
+
+1. replay migrations into a temporary SQLite database
+2. diff that replayed state against `definitions.sql`
+3. create a new migration file in `migrations/`
+
+You should still review and edit the generated migration, especially for renames, data backfills, and destructive changes.
+
+There is no committed `snapshot.sql` file. If you want the guarantee a snapshot would normally provide, run `sqlfu check`, which verifies that replayed migrations still reproduce `definitions.sql`.
+
+For the migration model in more detail, see [docs/migration-model.md](./docs/migration-model.md).
+
+### Launch the UI
+
+The UI lives in the workspace under `packages/ui`. Use the package-local commands there for interactive work while developing sqlfu itself.
+
+## Command Reference
+
+Generate query wrappers:
+
+```sh
+sqlfu generate
+```
+
+Draft a migration:
 
 ```sh
 sqlfu draft
@@ -91,142 +254,43 @@ Apply migrations:
 sqlfu migrate
 ```
 
-Run all migration checks - if migrations need to be generated, applied, or fixed, this will always give a recommendation, so if you only remember one migration-related command, remember this one:
+Move the database and migration history to an exact target:
+
+```sh
+sqlfu goto <target>
+```
+
+Rewrite migration history to an exact target without changing live schema:
+
+```sh
+sqlfu baseline <target>
+```
+
+Update live schema directly from `definitions.sql`:
+
+```sh
+sqlfu sync
+```
+
+Check the important repo/database mismatches:
 
 ```sh
 sqlfu check
 ```
 
-## Migration Model
+## Limitations and Non-Goals
 
-`sqlfu` uses:
+`sqlfu` deliberately leaves out a few common migration features:
 
-- versioned SQL migration files applied in filename order
-- a native inspected-schema SQLite diff engine to produce structural SQL from the difference between replayed migration state and `definitions.sql`
+- no repeatable migrations
+- no down migrations
+- no JavaScript migrations
 
-That means the production path is replayed versioned migrations, not direct declarative apply.
+Those are not accidents. The project is trying to keep schema history explicit, SQL-authored, and easy to inspect.
 
-When you run:
+Current limits also matter:
 
-```sh
-sqlfu draft --name add_posts_table
-```
-
-`sqlfu` will:
-
-1. replay migrations into a temporary SQLite database
-2. diff that replayed state against `definitions.sql`
-3. create a new migration file in `migrations/`
-
-You should still review and edit the generated migration, especially for renames, data backfills, and destructive changes.
-
-There is no committed `snapshot.sql` file.
-If you want the guarantees a snapshot file would normally provide, run `sqlfu check`, which verifies that replayed migrations still reproduce `definitions.sql`.
-
-## Migration Mental Model
-
-`sqlfu` reasons about migrations using four "authorities". These are referred to often in docs, help text and error messages:
-
-| Authority | Meaning |
-| ------------------- | --------------------------------------------------------------------- |
-| `Desired Schema`    | `definitions.sql`, which says what the schema should look like now    |
-| `Migrations`        | the ordered transition program, usually `migrations/*.sql`            |
-| `Migration History` | the `sqlfu_migrations` table in a specific database                   |
-| `Live Schema`       | the schema the database actually has right now                        |
-
-The usual chain of database changes is:
-
-- `Desired Schema` produces `Migrations` via `sqlfu draft`
-- `Migrations` produce `Migration History` and `Live Schema` via `sqlfu migrate`
-- `Desired Schema` *can* mutate `Live Schema` directly via `sqlfu sync` - typically you'd only want to do this for a dev db
-
-`sqlfu check` names the important ways those authorities can disagree:
-
-| Mismatch | Meaning |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `Repo Drift`           | `Desired Schema` does not match `Migrations`                                                                  |
-| `Pending Migrations`   | `Migration History` is behind `Migrations`                                                                    |
-| `History Drift`        | `Migration History` conflicts with the known `Migrations`, for example because an applied migration was edited or deleted |
-| `Schema Drift`         | `Live Schema` does not match `Migration History`                                                              |
-
-The commands each reconcile a different part of that model. "Smart" ones use schema-diffing to produce "A to B" sql, and are generally less safe to run directly in production environments:
-
-| Command                    | What It Does                                                                 | Is smart? |
-| -------------------------- | ---------------------------------------------------------------------------- | --------- |
-| `sqlfu draft`             | uses `Desired Schema` to generate a new `Migration` so `Migrations` can catch up | yes       |
-| `sqlfu migrate`           | uses `Migrations` to update `Migration History` and `Live Schema` with pending migrations | no        |
-| `sqlfu baseline <target>` | uses `Migrations` to rewrite `Migration History` to an exact target without changing `Live Schema` | no        |
-| `sqlfu goto <target>`     | uses `Migrations` to move `Live Schema` and `Migration History` to an exact target | yes       |
-| `sqlfu sync`              | uses `Desired Schema` to update `Live Schema` directly, ignoring `Migration History` | yes       |
-| `sqlfu check`             | compares the authorities, names the mismatch, and recommends the least-destructive next step when possible | no        |
-
-For the full model and mismatch tables, see [docs/migration-model.md](./docs/migration-model.md).
-For the SQLite schema diff engine itself, see [docs/schema-diff-model.md](./docs/schema-diff-model.md).
-
-## Opinions imposed
-
-`sqlfu` deliberately leaves out a few migration features that are common elsewhere:
-
-**No repeatable migrations**
-`definitions.sql` already plays the role of “what this object should look like now”, and normal versioned migrations capture how you got there. Adding repeatables would create another moving part for the same job.
-
-**No down migrations**
-They tend not to be exercised regularly, which means they are usually unverified when you need them most. `sqlfu goto <target>` covers the same operational space while making the danger explicit.
-
-**No JavaScript migrations**
-There are legitimate use cases, but they also make migrations harder to reason about, harder to inspect, and easier to couple to application code. `sqlfu` stays SQL-first for now. This may be revisited later if a clear use case justifies the extra complexity.
-
-**Migration naming**
-Migrations are generated with a timestamp prefix, based on the ISO-8601 format, with colons replaced by periods. The "Z" is followed by an underscore so you can easily convert to a date fairly easily in javascript if you need to: `new Date(filename.split('_').replace(/T(\d\d)\.(\d\d))\./, 'T$1:$2:')`. The suffix of the migration file can be anything path-safe. This project uses snake-case the suffixes.
-
-The name of the migration, if created using `sqlfu draft`, will be based on the statements in the generated diff. It can be changed manually before it has been run, but there should usually be no need to.
-
-## What `generate` Does
-
-`sqlfu generate`:
-
-1. exports the schema from your configured main database into a temporary SQLite database for TypeSQL
-2. generates TypeScript wrappers next to those `.sql` files
-3. refines generated result types for some SQLite cases that TypeSQL currently misses
-
-Generated TypeSQL outputs stay next to your `.sql` files.
-
-## SQL Formatter
-
-`sqlfu` includes a SQL formatter via `formatSql()`.
-
-It is opinionated. The default style is SQLite-first, uses lowercase keywords and types, and tries to keep simple clauses inline when they still read well. For example, it prefers:
-
-```sql
-select foo, bar
-from baz
-```
-
-over the more aggressively expanded (and SHOUTY) default style from upstream `sql-formatter`:
-
-```sql
-SELECT
-  foo,
-  bar
-FROM
-  baz
-```
-
-(casing is configurable, as it is in sql-formatter, but the aggressive expansion isn't possible with sql-formatter)
-
-The implementation started as a vendored copy of [`sql-formatter`](https://github.com/sql-formatter-org/sql-formatter). `sqlfu` diverged because upstream tends to put simple clause bodies on separate lines more often than we want. The vendored formatter still provides the parser and dialect support, but `sqlfu` adds its own wrapper and compacting pass on top.
-
-If you want to see or change that behavior, start here:
-
-- [src/formatter.ts](./src/formatter.ts)
-- [src/vendor/sql-formatter/AGENTS.md](./src/vendor/sql-formatter/AGENTS.md)
-- [test/formatter/sqlite.fixture.sql](./test/formatter/sqlite.fixture.sql)
-- [test/formatter.test.ts](./test/formatter.test.ts)
-
-## Notes
-
-- `definitions.sql` remains the schema source of truth
-- `migrations/` is the source of truth for deployment history
-- runtime adapters can be imported from `sqlfu/client`, for example `createExpoSqliteClient`
-- `sqlfu` uses scratch SQLite databases under `.sqlfu/` when it needs to diff one schema program against another
-- SQLite view typing is still imperfect in TypeSQL, and some expressions such as `substr(...)` are not inferred directly, so `sqlfu` applies a small post-pass to improve generated result types without changing the SQL-first workflow
+- `sqlfu` is SQLite-first in important parts of the toolchain
+- SQLite view typing is still imperfect in TypeSQL
+- some expressions still need the sqlfu post-pass to get better generated result types
+- the formatter is opinionated and still evolving

@@ -21,7 +21,7 @@ import {diffSchemaSql} from './schemadiff/index.js';
 import {inspectSqliteSchemaSql, schemasEqual} from './schemadiff/sqlite-native.js';
 import {generateQueryTypes} from './typegen/index.js';
 
-const base = os.$context<SqlfuRouterContext>();
+const base = os.$context<SqlfuCommandRouterContext>();
 const schemaDriftExcludedTables = ['sqlfu_migrations'] as const;
 
 export const router = {
@@ -44,7 +44,7 @@ export const router = {
         `This command fails if semantic changes are required. You can run 'sqlfu draft' to create a migration file with the necessary changes.`,
     })
     .handler(async ({context}) => {
-      await applySyncSql(context, acceptConfirmation);
+      await applySyncSql(context, context.confirm);
     }),
 
   draft: base
@@ -57,7 +57,7 @@ export const router = {
       }).partial().optional(),
     )
     .handler(async ({context, input}) => {
-      await applyDraftSql(context, input, acceptConfirmation);
+      await applyDraftSql(context, input, context.confirm);
     }),
 
   migrate: base
@@ -65,7 +65,7 @@ export const router = {
       description: `Apply pending migrations to the configured database.`,
     })
     .handler(async ({context}) => {
-      await applyMigrateSql(context, acceptConfirmation);
+      await applyMigrateSql(context, context.confirm);
     }),
 
   pending: base
@@ -123,7 +123,7 @@ export const router = {
       }),
     )
     .handler(async ({context, input}) => {
-      await applyBaselineSql(context, input, acceptConfirmation);
+      await applyBaselineSql(context, input, context.confirm);
     }),
 
   goto: base
@@ -136,7 +136,7 @@ export const router = {
       }),
     )
     .handler(async ({context, input}) => {
-      await applyGotoSql(context, input, acceptConfirmation);
+      await applyGotoSql(context, input, context.confirm);
     }),
 
   check: {
@@ -164,20 +164,20 @@ export const router = {
   },
 };
 
-export async function getCheckMismatches(context: SqlfuRouterContext): Promise<readonly CheckMismatch[]> {
+export async function getCheckMismatches(context: SqlfuContext): Promise<readonly CheckMismatch[]> {
   const analysis = await analyzeDatabase(createRuntime(context));
   return analysis.mismatches;
 }
 
-export async function getCheckAnalysis(context: SqlfuRouterContext): Promise<CheckAnalysis> {
+export async function getCheckAnalysis(context: SqlfuContext): Promise<CheckAnalysis> {
   return analyzeDatabase(createRuntime(context));
 }
 
-export async function writeDefinitionsSql(context: SqlfuRouterContext, sql: string): Promise<void> {
+export async function writeDefinitionsSql(context: SqlfuContext, sql: string): Promise<void> {
   await fs.writeFile(context.config.definitionsPath, `${sql.trimEnd()}\n`);
 }
 
-export async function getSchemaAuthorities(context: SqlfuRouterContext) {
+export async function getSchemaAuthorities(context: SqlfuContext) {
   const runtime = createRuntime(context);
   const definitionsSql = await runtime.readDefinitionsSql();
   const migrations = await runtime.readMigrations();
@@ -215,7 +215,7 @@ export async function getSchemaAuthorities(context: SqlfuRouterContext) {
 }
 
 export async function getMigrationResultantSchema(
-  context: SqlfuRouterContext,
+  context: SqlfuContext,
   input: {
     source: 'migrations' | 'history';
     id: string;
@@ -262,7 +262,7 @@ export type SqlfuCommandConfirm = (
 ) => Promise<string | null>;
 
 export async function runSqlfuCommand(
-  context: SqlfuRouterContext,
+  context: SqlfuContext,
   command: string,
   confirm: SqlfuCommandConfirm,
 ): Promise<void> {
@@ -308,9 +308,7 @@ export async function runSqlfuCommand(
   throw new Error(`Unsupported sqlfu command: ${command}`);
 }
 
-const acceptConfirmation: SqlfuCommandConfirm = async ({body}) => body;
-
-function createRuntime(context: SqlfuRouterContext) {
+function createRuntime(context: SqlfuContext) {
   return {
     config: context.config,
     now: () => context.now?.() ?? new Date(),
@@ -350,9 +348,9 @@ async function readDefinitionsSql(definitionsPath: string) {
 }
 
 async function applyDraftSql(
-  context: SqlfuRouterContext,
-  input?: {name?: string},
-  confirm: SqlfuCommandConfirm = acceptConfirmation,
+  context: SqlfuContext,
+  input: {name?: string} | undefined,
+  confirm: SqlfuCommandConfirm,
 ) {
   const runtime = createRuntime(context);
   const migrations = await runtime.readMigrations();
@@ -384,8 +382,8 @@ async function applyDraftSql(
 }
 
 async function applySyncSql(
-  context: SqlfuRouterContext,
-  confirm: SqlfuCommandConfirm = acceptConfirmation,
+  context: SqlfuContext,
+  confirm: SqlfuCommandConfirm,
 ) {
   const definitionsSql = await readDefinitionsSql(context.config.definitionsPath);
   await using database = await openMainDevDatabase(context.config.db);
@@ -430,8 +428,8 @@ async function applySyncSql(
 }
 
 async function applyMigrateSql(
-  context: SqlfuRouterContext,
-  confirm: SqlfuCommandConfirm = acceptConfirmation,
+  context: SqlfuContext,
+  confirm: SqlfuCommandConfirm,
 ) {
   const migrations = await createRuntime(context).readMigrations();
   await using database = await openMainDevDatabase(context.config.db);
@@ -456,9 +454,9 @@ async function applyMigrateSql(
 }
 
 async function applyBaselineSql(
-  context: SqlfuRouterContext,
+  context: SqlfuContext,
   input: {target: string},
-  confirm: SqlfuCommandConfirm = acceptConfirmation,
+  confirm: SqlfuCommandConfirm,
 ) {
   const migrations = await createRuntime(context).readMigrations();
   const targetMigrations = getMigrationsThroughTarget(migrations, input.target);
@@ -479,9 +477,9 @@ async function applyBaselineSql(
 }
 
 async function applyGotoSql(
-  context: SqlfuRouterContext,
+  context: SqlfuContext,
   input: {target: string},
-  confirm: SqlfuCommandConfirm = acceptConfirmation,
+  confirm: SqlfuCommandConfirm,
 ) {
   const runtime = createRuntime(context);
   const migrations = await runtime.readMigrations();
@@ -859,9 +857,15 @@ function summarizeSqlite3defError(error: unknown) {
   return line.replace(/^\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2} /u, '');
 }
 
-export interface SqlfuRouterContext {
+export interface SqlfuContext {
   readonly config: SqlfuProjectConfig;
   readonly now?: () => Date;
+}
+
+export interface SqlfuRouterContext extends SqlfuContext {}
+
+export interface SqlfuCommandRouterContext extends SqlfuContext {
+  readonly confirm: SqlfuCommandConfirm;
 }
 
 export type CheckMismatch = {

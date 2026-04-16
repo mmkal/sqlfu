@@ -54,6 +54,7 @@ export async function createMigrationsFixture(
     context: {
       config: projectConfig,
       now: fakeNow,
+      confirm: async ({body}) => body,
     },
   });
   const db = createNodeSqliteClient(new DatabaseSync(dbPath));

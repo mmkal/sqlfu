@@ -636,7 +636,7 @@ async function analyzeDatabase(runtime: ReturnType<typeof createRuntime>) {
   const schemaDrift = await compareSchemas(runtime.config, historicalSchema, liveSchema);
   const syncDrift = await compareSchemas(runtime.config, desiredSchema, liveSchema);
   const recommendedBaselineTarget = await findRecommendedTarget(runtime.config, migrations, liveSchema);
-  const recommendedGotoTarget = !repoDrift.isDifferent && !historyMismatch && !hasPendingMigrations && migrations.length > 0
+  const recommendedGotoTarget = !repoDrift.isDifferent && !historyMismatch && migrations.length > 0
     ? migrationName(migrations.at(-1)!)
     : null;
   const mismatches: CheckMismatch[] = [];

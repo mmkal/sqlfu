@@ -343,6 +343,33 @@ describe('check recommendations', () => {
     `);
   });
 
+  test('recommends goto repo head when pending migrations exist and live schema matches no migration prefix', async () => {
+    await using fixture = await createMigrationsFixture('check-pending-schema-drift-goto-repo-head', {
+      desiredSchema: `create table a(done text)`,
+      migrations: {
+        create_a: `create table a(start text)`,
+        rename_a: `alter table a rename column start to done`,
+      },
+    });
+
+    await fixture.db.raw(`create table a(rogue text)`);
+    await fixture.api.baseline({target: '2026-04-10T00.00.00.000Z_create_a'});
+
+    await expect(fixture.api.check.all()).rejects.toMatchInlineSnapshot(`
+      [Error: Pending Migrations
+      Migration History is behind Migrations.
+
+      Schema Drift
+      Live Schema does not match Migration History.
+
+      Sync Drift
+      Desired Schema does not match Live Schema.
+
+      Recommended next actions
+      - \`sqlfu goto 2026-04-10T01.00.00.000Z_rename_a\` Move the database to the selected migration target.]
+    `);
+  });
+
   test('recommends migrate when migrations are pending but live schema still matches migration history', async () => {
     await using fixture = await createMigrationsFixture('check-pending-migrations-without-schema-drift', {
       desiredSchema: dedent`

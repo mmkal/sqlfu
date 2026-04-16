@@ -72,6 +72,29 @@ test('sqlfu server can serve the packages/ui Vite client in dev mode', async () 
   });
 });
 
+test('sqlfu server accepts secure cross-origin preflight for rpc requests', async () => {
+  await using fixture = await createUiServerFixture();
+
+  const response = await fetch(`${fixture.baseUrl}/api/rpc/schema/get`, {
+    method: 'OPTIONS',
+    headers: {
+      origin: 'https://sqlfu-local.ngrok.app',
+      'access-control-request-method': 'POST',
+      'access-control-request-headers': 'content-type,x-sqlfu-project',
+      'access-control-request-private-network': 'true',
+    },
+    signal: AbortSignal.timeout(5_000),
+  });
+
+  expect(response.status).toBe(204);
+  expect(Object.fromEntries(response.headers.entries())).toMatchObject({
+    'access-control-allow-origin': 'https://sqlfu-local.ngrok.app',
+    'access-control-allow-methods': 'GET,POST,OPTIONS',
+    'access-control-allow-private-network': 'true',
+  });
+  expect(response.headers.get('access-control-allow-headers')).toContain('content-type');
+});
+
 async function createUiServerFixture(input: {
   dev?: boolean;
   uiRoot?: string;

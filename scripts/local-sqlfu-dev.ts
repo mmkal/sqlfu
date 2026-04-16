@@ -1,22 +1,25 @@
 import childProcess from 'node:child_process';
+import http from 'node:http';
+import https from 'node:https';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
-import {startSqlfuServer} from '../packages/sqlfu/src/ui/server.ts';
+import {ensureLocalhostCertificates} from '../packages/sqlfu/src/ui/certs.ts';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, '..');
 const uiRoot = path.join(repoRoot, 'packages', 'ui');
 const defaultProjectRoot = path.join(uiRoot, 'test', 'projects', 'dev-project');
+
 const projectRoot = path.resolve(readOption('--project-root') || defaultProjectRoot);
-const port = Number(readOption('--port') || '3217');
+const apiPort = Number(readOption('--api-port') || '3217');
+const uiPort = Number(readOption('--ui-port') || '3218');
 const ngrokDomain = readOption('--ngrok-domain') || process.env.SQLFU_NGROK_DOMAIN || '';
 const ngrokUrl = readOption('--ngrok-url') || process.env.SQLFU_NGROK_URL || 'https://sqlfu-local.ngrok.app';
 const useNgrok = !process.argv.includes('--no-ngrok');
 
-if (!Number.isInteger(port) || port <= 0) {
-  throw new Error(`Invalid --port value: ${port}`);
-}
+assertPort(apiPort, '--api-port');
+assertPort(uiPort, '--ui-port');
 
 main().catch((error) => {
   console.error(error);
@@ -24,44 +27,176 @@ main().catch((error) => {
 });
 
 async function main() {
-  const server = await startSqlfuServer({
-    port,
+  const certs = await ensureLocalhostCertificates();
+  const apiOrigin = certs ? `https://localhost:${apiPort}` : `http://127.0.0.1:${apiPort}`;
+  const uiOrigin = `http://127.0.0.1:${uiPort}`;
+
+  const backend = spawnProcess('backend', [
+    'pnpm',
+    'exec',
+    'tsx',
+    'packages/sqlfu/src/ui/server.ts',
+    '--project-root',
     projectRoot,
-    dev: true,
-    ui: {
-      root: uiRoot,
-    },
+    '--port',
+    String(apiPort),
+    ...(certs ? ['--tls-key', certs.keyPath, '--tls-cert', certs.certPath] : []),
+  ], {
+    cwd: repoRoot,
   });
 
-  let ngrokProcess: childProcess.ChildProcess | undefined;
-
-  console.log(`sqlfu local dev server listening on http://127.0.0.1:${server.port}`);
-  console.log(`project root: ${projectRoot}`);
-  console.log(`ui root: ${uiRoot}`);
-
   try {
-    const tunnel = useNgrok
-      ? await ensureNgrokTunnel({
-          port: server.port,
-          domain: ngrokDomain,
-          url: ngrokUrl,
-        })
-      : null;
+    await waitForHttpServerOrExit(backend, apiOrigin, certs ? true : false);
 
-    if (tunnel) {
-      ngrokProcess = tunnel.process;
-      console.log(`${tunnel.reused ? 'reusing' : 'started'} ngrok tunnel: ${tunnel.public_url}`);
-      console.log('simulate local.sqlfu.dev by pointing that host at the ngrok URL while this process is running');
-    } else if (useNgrok) {
-      console.log('ngrok tunnel unavailable; continuing with the local dev server only');
+    const ui = spawnProcess('ui', [
+      'pnpm',
+      'exec',
+      'vite',
+      '--host',
+      '127.0.0.1',
+      '--port',
+      String(uiPort),
+    ], {
+      cwd: uiRoot,
+      env: {
+        ...process.env,
+        VITE_SQLFU_API_ORIGIN: apiOrigin,
+      },
+    });
+
+    let ngrokProcess: childProcess.ChildProcess | undefined;
+
+    try {
+      await waitForHttpServerOrExit(ui, uiOrigin, false);
+
+      console.log(`sqlfu backend origin: ${apiOrigin}`);
+      console.log(`sqlfu ui origin: ${uiOrigin}`);
+      console.log(`project root: ${projectRoot}`);
+      if (!certs) {
+        console.log('mkcert not found; backend is using plain HTTP, which is less realistic than the intended localhost HTTPS flow');
+      }
+
+      const tunnel = useNgrok
+        ? await ensureNgrokTunnel({
+            port: uiPort,
+            domain: ngrokDomain,
+            url: ngrokUrl,
+          })
+        : null;
+
+      if (tunnel) {
+        ngrokProcess = tunnel.process;
+        console.log(`${tunnel.reused ? 'reusing' : 'started'} ngrok tunnel: ${tunnel.public_url}`);
+      } else if (useNgrok) {
+        console.log('ngrok tunnel unavailable; continuing with the local UI and backend only');
+      }
+
+      console.log('press Ctrl+C to stop');
+      await waitForShutdown();
+    } finally {
+      ngrokProcess?.kill('SIGTERM');
+      ui.kill('SIGTERM');
+      await waitForExit(ui);
     }
-
-    console.log('press Ctrl+C to stop');
-    await waitForShutdown();
   } finally {
-    ngrokProcess?.kill('SIGTERM');
-    await server.stop();
+    backend.kill('SIGTERM');
+    await waitForExit(backend);
   }
+}
+
+function spawnProcess(
+  label: string,
+  command: string[],
+  options: {
+    cwd: string;
+    env?: NodeJS.ProcessEnv;
+  },
+) {
+  const [bin, ...args] = command;
+  if (!bin) {
+    throw new Error(`Missing command for ${label}`);
+  }
+
+  const child = childProcess.spawn(bin, args, {
+    cwd: options.cwd,
+    env: options.env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  child.stdout.on('data', (chunk) => {
+    process.stdout.write(`[${label}] ${chunk.toString()}`);
+  });
+  child.stderr.on('data', (chunk) => {
+    process.stderr.write(`[${label}] ${chunk.toString()}`);
+  });
+
+  child.once('exit', (code, signal) => {
+    if (code === 0 || signal === 'SIGTERM' || signal === 'SIGINT') {
+      return;
+    }
+    console.error(`[${label}] exited unexpectedly with code ${code} signal ${signal}`);
+  });
+
+  return child;
+}
+
+async function waitForHttpServer(origin: string, insecureTls: boolean) {
+  const timeout = Date.now() + 20_000;
+
+  while (Date.now() < timeout) {
+    try {
+      const status = await requestStatus(origin, insecureTls);
+      if (status < 500) {
+        return;
+      }
+    } catch {}
+
+    await sleep(250);
+  }
+
+  throw new Error(`Timed out waiting for ${origin}`);
+}
+
+async function waitForHttpServerOrExit(
+  child: childProcess.ChildProcess,
+  origin: string,
+  insecureTls: boolean,
+) {
+  await Promise.race([
+    waitForHttpServer(origin, insecureTls),
+    waitForUnexpectedExit(child),
+  ]);
+}
+
+function waitForUnexpectedExit(child: childProcess.ChildProcess) {
+  return new Promise<never>((_, reject) => {
+    child.once('exit', (code, signal) => {
+      reject(new Error(`Process exited before becoming ready with code ${code} signal ${signal}`));
+    });
+  });
+}
+
+function requestStatus(origin: string, insecureTls: boolean) {
+  return new Promise<number>((resolve, reject) => {
+    const url = new URL(origin);
+    const request = (url.protocol === 'https:' ? https : http).request({
+      hostname: url.hostname,
+      port: Number(url.port),
+      path: url.pathname || '/',
+      method: 'GET',
+      rejectUnauthorized: !insecureTls,
+      timeout: 1_000,
+    }, (response) => {
+      response.resume();
+      resolve(response.statusCode || 0);
+    });
+
+    request.once('error', reject);
+    request.once('timeout', () => {
+      request.destroy(new Error(`Timed out waiting for ${origin}`));
+    });
+    request.end();
+  });
 }
 
 async function ensureNgrokTunnel(input: {
@@ -213,14 +348,6 @@ async function readNgrokTunnels() {
   }
 }
 
-function hasCommand(command: string) {
-  const result = childProcess.spawnSync(command, ['version'], {
-    cwd: repoRoot,
-    stdio: 'ignore',
-  });
-  return result.status === 0;
-}
-
 function parseNgrokTunnelLine(
   line: string,
   input: {
@@ -255,6 +382,14 @@ function parseNgrokTunnelLine(
   }
 }
 
+function hasCommand(command: string) {
+  const result = childProcess.spawnSync(command, ['version'], {
+    cwd: repoRoot,
+    stdio: 'ignore',
+  });
+  return result.status === 0;
+}
+
 function readOption(name: string) {
   const index = process.argv.indexOf(name);
   if (index === -1) {
@@ -265,7 +400,7 @@ function readOption(name: string) {
 
 function waitForShutdown() {
   return new Promise<void>((resolve) => {
-    const onSignal = async () => {
+    const onSignal = () => {
       process.off('SIGINT', onSignal);
       process.off('SIGTERM', onSignal);
       resolve();
@@ -274,4 +409,26 @@ function waitForShutdown() {
     process.on('SIGINT', onSignal);
     process.on('SIGTERM', onSignal);
   });
+}
+
+function waitForExit(child: childProcess.ChildProcess) {
+  return new Promise<void>((resolve) => {
+    if (child.exitCode != null || child.killed) {
+      resolve();
+      return;
+    }
+    child.once('exit', () => resolve());
+  });
+}
+
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function assertPort(value: number, flag: string) {
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(`Invalid ${flag} value: ${value}`);
+  }
 }

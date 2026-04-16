@@ -6,8 +6,8 @@ size: large
 ## Status Summary
 
 - Roughly 75% done: the backend move, local-server entrypoint, and website scaffold are in place.
-- Main completed pieces: the UI API now lives in `packages/sqlfu`, `npx sqlfu` starts the local backend, `packages/ui` is client-only, `website/` renders existing markdown into a static docs site, and there is now a dedicated local launcher for the `local.sqlfu.dev` dev simulation.
-- Main missing pieces: decide whether `local.sqlfu.dev` should eventually serve a production UI shell with a direct localhost API model, and add a fuller end-to-end path that exercises the website-to-local-backend story directly.
+- Main completed pieces: the UI API now lives in `packages/sqlfu`, `npx sqlfu` starts the local backend, `packages/ui` is client-only, `website/` renders existing markdown into a static docs site, and the local launcher now simulates a hosted frontend talking to a separate local backend.
+- Main missing pieces: validate the localhost HTTPS path on a machine with `mkcert` installed, and add a fuller end-to-end path that exercises the website-to-local-backend story directly.
 
 ## Goal
 
@@ -67,7 +67,7 @@ Current working idea:
   - open the local studio instructions
   - run `npx sqlfu`
   - load the local backend successfully
-- [x] Add a root launcher for the `local.sqlfu.dev` dev simulation. *`pnpm local-sqlfu-dev` now starts the integrated sqlfu backend + Vite UI server on `localhost:3217` and reuses or creates an `ngrok` tunnel for that origin.*
+- [x] Add a root launcher for the `local.sqlfu.dev` dev simulation. *`pnpm local-sqlfu-dev` now starts a standalone Vite UI server, a standalone sqlfu backend server, and an `ngrok` tunnel that points only at the UI server.*
 - [x] Document the local-vs-hosted model clearly so users know what runs where. *Covered in the website landing page, `packages/sqlfu/README.md`, and the local backend HTML page.*
 
 ## Recommended First Slice
@@ -104,4 +104,4 @@ That gives us the intended local product model without taking on remote executio
 - 2026-04-16: implemented backend move to `packages/sqlfu/src/ui/server.ts`, added `sqlfu/ui` exports, deleted `packages/ui/src/server.ts`, and switched the UI test harness to import the backend from `sqlfu`.
 - 2026-04-16: `packages/sqlfu/src/cli.ts` now starts the local backend by default when invoked as `npx sqlfu`.
 - 2026-04-16: added `website/` with a zero-dependency static build script that renders existing markdown into a web docs site.
-- 2026-04-16: added a root `pnpm local-sqlfu-dev` launcher that serves the Vite client through `packages/sqlfu` in dev mode and exposes that local origin through `ngrok` for `local.sqlfu.dev` simulation.
+- 2026-04-16: added a root `pnpm local-sqlfu-dev` launcher that now runs the UI and backend on separate ports, points `ngrok` only at the UI server, and configures the browser client to talk to the standalone backend origin.

@@ -45,6 +45,7 @@ import {
   DialogTitle,
 } from './components/ui/dialog.js';
 import {AppToaster} from './components/ui/toaster.js';
+import {resolveApiRpcUrl} from './runtime.js';
 import './styles.css';
 
 const queryClient = new QueryClient({
@@ -58,7 +59,7 @@ const queryClient = new QueryClient({
   }),
 });
 const orpcClient: RouterClient<UiRouter> = createORPCClient(new RPCLink({
-  url: `${window.location.origin}/api/rpc`,
+  url: resolveApiRpcUrl(),
 }));
 const orpc = createTanstackQueryUtils(orpcClient);
 

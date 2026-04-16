@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import http from 'node:http';
+import https from 'node:https';
 import path from 'node:path';
 import {DatabaseSync} from 'node:sqlite';
 import {fileURLToPath, pathToFileURL} from 'node:url';
@@ -53,6 +54,10 @@ export type StartSqlfuServerOptions = {
   templateRoot?: string;
   dev?: boolean;
   ui?: UiAssetOptions;
+  tls?: {
+    key: string;
+    cert: string;
+  };
 };
 
 const uiBase = os.$context<UiRouterContext>();
@@ -424,7 +429,12 @@ export async function startSqlfuServer(input: StartSqlfuServerOptions = {}) {
         defaultProjectName: input.defaultProjectName ?? 'dev-project',
       });
   const rpcHandler = new RPCHandler(uiRouter);
-  const httpServer = http.createServer();
+  const httpServer = input.tls
+    ? https.createServer({
+        key: input.tls.key,
+        cert: input.tls.cert,
+      })
+    : http.createServer();
   const uiAssets = input.ui ? resolveUiAssets(input.ui) : undefined;
   const vite = input.dev && uiAssets
     ? await createUiDevServer(uiAssets.root, httpServer)
@@ -433,18 +443,25 @@ export async function startSqlfuServer(input: StartSqlfuServerOptions = {}) {
   httpServer.on('request', async (req, res) => {
     try {
       const url = new URL(req.url ?? '/', `http://${req.headers.host ?? '127.0.0.1'}`);
+      const apiRequest = url.pathname.startsWith('/api/rpc');
+
+      if (apiRequest && req.method === 'OPTIONS') {
+        await sendWebResponse(res, apiPreflightResponse(req));
+        return;
+      }
+
       const config = await resolveProject({
         host: req.headers.host ?? url.host,
         projectHeader: headerValue(req.headers['x-sqlfu-project']),
       });
 
-      if (url.pathname.startsWith('/api/rpc')) {
+      if (apiRequest) {
         const request = await toWebRequest(req, url);
         const {matched, response} = await rpcHandler.handle(request, {
           prefix: '/api/rpc',
           context: {config},
         });
-        await sendWebResponse(res, matched ? response : new Response('Not found', {status: 404}));
+        await sendWebResponse(res, withApiCors(req, matched ? response : new Response('Not found', {status: 404})));
         return;
       }
 
@@ -502,6 +519,8 @@ async function runCliServer() {
   const projectRoot = readOption('--project-root');
   const port = readOption('--port');
   const dev = process.argv.includes('--dev');
+  const tlsKeyPath = readOption('--tls-key');
+  const tlsCertPath = readOption('--tls-cert');
   const server = await startSqlfuServer({
     projectRoot,
     defaultProjectName: readOption('--default-project') ?? undefined,
@@ -509,8 +528,14 @@ async function runCliServer() {
     templateRoot: readOption('--template-root') ?? undefined,
     port: port ? Number(port) : undefined,
     dev,
+    tls: tlsKeyPath && tlsCertPath
+      ? {
+          key: await fs.readFile(tlsKeyPath, 'utf8'),
+          cert: await fs.readFile(tlsCertPath, 'utf8'),
+        }
+      : undefined,
   });
-  console.log(`sqlfu local server listening on http://localhost:${server.port}`);
+  console.log(`sqlfu local server listening on ${(tlsKeyPath && tlsCertPath) ? 'https' : 'http'}://localhost:${server.port}`);
 }
 
 async function loadCatalog(config: SqlfuProjectConfig): Promise<QueryCatalog> {
@@ -1203,6 +1228,35 @@ function apiError(error: unknown) {
     headers: {
       'content-type': 'text/plain; charset=utf-8',
     },
+  });
+}
+
+function apiPreflightResponse(req: http.IncomingMessage) {
+  return withApiCors(req, new Response(null, {status: 204}));
+}
+
+function withApiCors(req: http.IncomingMessage, response: Response) {
+  const headers = new Headers(response.headers);
+  const origin = headerValue(req.headers.origin);
+  const requestedHeaders = headerValue(req.headers['access-control-request-headers']);
+  const privateNetwork = headerValue(req.headers['access-control-request-private-network']);
+
+  if (origin) {
+    headers.set('access-control-allow-origin', origin);
+    headers.set('vary', 'origin');
+  }
+
+  headers.set('access-control-allow-methods', 'GET,POST,OPTIONS');
+  headers.set('access-control-allow-headers', requestedHeaders || 'content-type,x-sqlfu-project');
+
+  if (privateNetwork === 'true') {
+    headers.set('access-control-allow-private-network', 'true');
+  }
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
   });
 }
 

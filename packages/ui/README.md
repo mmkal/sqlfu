@@ -1,8 +1,8 @@
 # sqlfu/ui
 
-Experimental UI for `sqlfu`.
+Client-only UI for `sqlfu`.
 
-This package is intentionally provisional. The current shape, package boundary, and even the existence of this package may change or disappear entirely while `sqlfu` is still pre-alpha.
+The backend API now lives in `packages/sqlfu`. This package owns the React bundle plus local dev/test glue for running that client against a sqlfu backend server.
 
 Current scope:
 
@@ -16,6 +16,6 @@ Development:
 pnpm --filter sqlfu-ui dev
 ```
 
-That starts a Node server with Vite HMR against `packages/ui/test/projects/dev-project`. If the project does not exist yet, it is seeded from the template project.
+That starts the client against a sqlfu backend server with Vite HMR, using `packages/ui/test/projects/dev-project`. If the project does not exist yet, it is seeded from the template project.
 
 Playwright uses the same entrypoint, but starts a separate seeded `fixture-project`.

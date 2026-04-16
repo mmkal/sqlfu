@@ -1,3 +1,3 @@
-import {generateQueryTypes} from 'sqlfu/experimental';
+import {generateQueryTypes} from 'sqlfu';
 
 await generateQueryTypes();

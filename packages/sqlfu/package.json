@@ -15,8 +15,11 @@
     "./client": "./dist/client.js",
     "./api": "./dist/api.js",
     "./cli": "./dist/cli.js",
-    "./naming": "./src/core/naming.ts",
-    "./experimental": "./src/experimental.ts"
+    "./ui": {
+      "types": "./src/ui/index.ts",
+      "default": "./dist/ui/index.js"
+    },
+    "./naming": "./src/core/naming.ts"
   },
   "files": [
     "dist"
@@ -40,6 +43,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@orpc/client": "1.13.13",
     "@libsql/client": "^0.17.2",
     "@types/node": "^24.5.2",
     "better-sqlite3": "^12.8.0",
@@ -51,6 +55,7 @@
     "playwright": "^1.59.1",
     "ts-morph": "^27.0.2",
     "typescript": "^5.9.3",
+    "vite": "^7.1.12",
     "vitest": "^4.1.1"
   }
 }

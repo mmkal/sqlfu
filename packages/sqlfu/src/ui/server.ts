@@ -1,26 +1,34 @@
 import fs from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
-import {spawn} from 'node:child_process';
 import {DatabaseSync} from 'node:sqlite';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {ORPCError, os} from '@orpc/server';
 import {RPCHandler} from '@orpc/server/fetch';
 import type {ViteDevServer} from 'vite';
-import {createServer as createViteServer} from 'vite';
 import {z} from 'zod';
-import {resolveProjectConfig} from '../../sqlfu/src/core/config.ts';
+import {resolveProjectConfig} from '../core/config.js';
 
-import type {CheckAnalysis, QueryCatalog, QueryCatalogEntry, QueryArg, SqlfuProjectConfig} from 'sqlfu/experimental';
-import {analyzeAdHocSqlForConfig, getCheckAnalysis, getMigrationResultantSchema, getSchemaAuthorities, runSqlfuCommand, splitSqlStatements, writeDefinitionsSql} from 'sqlfu/experimental';
-import {createNodeSqliteClient} from 'sqlfu/client';
+import {
+  analyzeAdHocSqlForConfig,
+  generateQueryTypesForConfig,
+} from '../typegen/index.js';
+import type {QueryCatalog, QueryCatalogEntry} from '../typegen/query-catalog.js';
+import type {CheckAnalysis} from '../api.js';
+import {
+  getCheckAnalysis,
+  getMigrationResultantSchema,
+  getSchemaAuthorities,
+  runSqlfuCommand,
+  writeDefinitionsSql,
+} from '../api.js';
+import {createNodeSqliteClient} from '../client.js';
+import {splitSqlStatements} from '../core/sqlite.js';
+import type {QueryArg, SqlfuProjectConfig} from '../core/types.js';
 import type {QueryExecutionResponse, SchemaCheckCard, SchemaCheckRecommendation, SqlAnalysisResponse, SqlEditorDiagnostic, StudioColumn, TableRowKey, TableRowsResponse} from './shared.js';
 
 const sourceDir = path.dirname(fileURLToPath(import.meta.url));
-const packageRoot = path.resolve(sourceDir, '..');
-const distDir = path.join(packageRoot, 'dist');
-const indexHtmlPath = path.join(packageRoot, 'index.html');
-const generateCatalogScriptPath = path.join(sourceDir, 'generate-catalog.ts');
+const packageRoot = path.resolve(sourceDir, '..', '..');
 
 type UiRouterContext = {
   config: SqlfuProjectConfig;
@@ -30,6 +38,22 @@ type ProjectResolver = (request: {
   readonly host: string;
   readonly projectHeader?: string;
 }) => Promise<SqlfuProjectConfig>;
+
+type UiAssetOptions = {
+  root: string;
+  distDir?: string;
+  indexHtmlPath?: string;
+};
+
+export type StartSqlfuServerOptions = {
+  port?: number;
+  projectRoot?: string;
+  defaultProjectName?: string;
+  projectsRoot?: string;
+  templateRoot?: string;
+  dev?: boolean;
+  ui?: UiAssetOptions;
+};
 
 const uiBase = os.$context<UiRouterContext>();
 const rowRecordSchema = z.record(z.string(), z.unknown());
@@ -93,7 +117,7 @@ const uiRouter = {
         return {
           cards: [],
           recommendations: [],
-          error: error instanceof Error ? error.message : String(error),
+          error: String(error),
         };
       }
     }),
@@ -391,14 +415,7 @@ const uiRouter = {
 
 export type UiRouter = typeof uiRouter;
 
-export async function startSqlfuUiServer(input: {
-  port?: number;
-  projectRoot?: string;
-  defaultProjectName?: string;
-  projectsRoot?: string;
-  templateRoot?: string;
-  dev?: boolean;
-}) {
+export async function startSqlfuServer(input: StartSqlfuServerOptions = {}) {
   const resolveProject = input.projectRoot
     ? createFixedProjectResolver(path.resolve(input.projectRoot))
     : createSubdomainProjectResolver({
@@ -408,17 +425,9 @@ export async function startSqlfuUiServer(input: {
       });
   const rpcHandler = new RPCHandler(uiRouter);
   const httpServer = http.createServer();
-  const vite = input.dev
-    ? await createViteServer({
-        root: packageRoot,
-        appType: 'custom',
-        server: {
-          middlewareMode: true,
-          hmr: {
-            server: httpServer,
-          },
-        },
-      })
+  const uiAssets = input.ui ? resolveUiAssets(input.ui) : undefined;
+  const vite = input.dev && uiAssets
+    ? await createUiDevServer(uiAssets.root, httpServer)
     : undefined;
 
   httpServer.on('request', async (req, res) => {
@@ -439,20 +448,25 @@ export async function startSqlfuUiServer(input: {
         return;
       }
 
-      if (vite) {
-        await serveViteRequest(vite, req, res, url);
+      if (vite && uiAssets) {
+        await serveViteRequest(vite, req, res, url, uiAssets.indexHtmlPath);
         return;
       }
 
-      await serveBuiltUi(res, url);
+      if (uiAssets?.distDir) {
+        await serveBuiltUi(res, url, uiAssets.distDir);
+        return;
+      }
+
+      await sendWebResponse(res, htmlResponse(renderServerHomePage(config), 200));
     } catch (error) {
-      await sendWebResponse(res, apiError(error));
+      await sendWebResponse(res, requestErrorResponse(error, req.url ?? '/'));
     }
   });
 
   await new Promise<void>((resolve, reject) => {
     httpServer.once('error', reject);
-    httpServer.listen(input.port ?? 3017, () => {
+    httpServer.listen(input.port ?? 3217, () => {
       httpServer.off('error', reject);
       resolve();
     });
@@ -484,7 +498,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
   const projectRoot = readOption('--project-root');
   const port = readOption('--port');
   const dev = process.argv.includes('--dev');
-  const server = await startSqlfuUiServer({
+  const server = await startSqlfuServer({
     projectRoot,
     defaultProjectName: readOption('--default-project') ?? undefined,
     projectsRoot: readOption('--projects-root') ?? undefined,
@@ -492,7 +506,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
     port: port ? Number(port) : undefined,
     dev,
   });
-  console.log(`sqlfu/ui listening on http://localhost:${server.port}`);
+  console.log(`sqlfu local server listening on http://localhost:${server.port}`);
 }
 
 async function loadCatalog(config: SqlfuProjectConfig): Promise<QueryCatalog> {
@@ -1203,34 +1217,8 @@ function readOption(name: string) {
 }
 
 export async function generateCatalogForProject(projectRoot: string) {
-  await runCommand(['pnpm', 'exec', 'tsx', generateCatalogScriptPath], projectRoot);
-}
-
-async function runCommand(command: readonly string[], cwd: string) {
-  const child = spawn(command[0]!, [...command.slice(1)], {
-    cwd,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  const stdoutChunks: Buffer[] = [];
-  const stderrChunks: Buffer[] = [];
-  child.stdout.on('data', (chunk) => stdoutChunks.push(Buffer.from(chunk)));
-  child.stderr.on('data', (chunk) => stderrChunks.push(Buffer.from(chunk)));
-  const exitCode = await new Promise<number>((resolve, reject) => {
-    child.once('error', reject);
-    child.once('close', (code) => resolve(code ?? 1));
-  });
-  const stdout = Buffer.concat(stdoutChunks).toString('utf8');
-  const stderr = Buffer.concat(stderrChunks).toString('utf8');
-
-  if (exitCode !== 0) {
-    throw new Error(
-      [
-        `Command failed: ${command.join(' ')}`,
-        stdout.trim(),
-        stderr.trim(),
-      ].filter(Boolean).join('\n'),
-    );
-  }
+  const config = await loadProjectConfigFrom(projectRoot);
+  await generateQueryTypesForConfig(config);
 }
 
 function createFixedProjectResolver(projectRoot: string): ProjectResolver {
@@ -1423,6 +1411,7 @@ async function serveViteRequest(
   req: http.IncomingMessage,
   res: http.ServerResponse,
   url: URL,
+  indexHtmlPath: string,
 ) {
   await new Promise<void>((resolve, reject) => {
     vite.middlewares(req, res, (error: unknown) => {
@@ -1440,18 +1429,14 @@ async function serveViteRequest(
 
   const template = await fs.readFile(indexHtmlPath, 'utf8');
   const html = await vite.transformIndexHtml(url.pathname, template);
-  await sendWebResponse(res, new Response(html, {
-    headers: {
-      'content-type': 'text/html; charset=utf-8',
-    },
-  }));
+  await sendWebResponse(res, htmlResponse(html, 200));
 }
 
-async function serveBuiltUi(res: http.ServerResponse, url: URL) {
+async function serveBuiltUi(res: http.ServerResponse, url: URL, distDir: string) {
   const relativePath = url.pathname === '/' ? 'index.html' : url.pathname.replace(/^\/+/, '');
   const candidatePath = path.join(distDir, relativePath);
 
-  if (isInsideDist(candidatePath)) {
+  if (isInsideDist(candidatePath, distDir)) {
     try {
       const file = await fs.readFile(candidatePath);
       await sendWebResponse(res, new Response(file, {
@@ -1463,15 +1448,11 @@ async function serveBuiltUi(res: http.ServerResponse, url: URL) {
     } catch {}
   }
 
-  const indexHtml = await fs.readFile(path.join(distDir, 'index.html'));
-  await sendWebResponse(res, new Response(indexHtml, {
-    headers: {
-      'content-type': 'text/html; charset=utf-8',
-    },
-  }));
+  const indexHtml = await fs.readFile(path.join(distDir, 'index.html'), 'utf8');
+  await sendWebResponse(res, htmlResponse(indexHtml, 200));
 }
 
-function isInsideDist(candidatePath: string) {
+function isInsideDist(candidatePath: string, distDir: string) {
   const relative = path.relative(distDir, candidatePath);
   return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative);
 }
@@ -1493,6 +1474,116 @@ function contentTypeForPath(filePath: string) {
     return 'image/svg+xml';
   }
   return 'application/octet-stream';
+}
+
+function resolveUiAssets(input: UiAssetOptions) {
+  const root = path.resolve(input.root);
+  return {
+    root,
+    distDir: input.distDir ? path.resolve(input.distDir) : path.join(root, 'dist'),
+    indexHtmlPath: path.resolve(input.indexHtmlPath ?? path.join(root, 'index.html')),
+  };
+}
+
+async function createUiDevServer(root: string, httpServer: http.Server) {
+  const {createServer} = await import('vite');
+  return createServer({
+    root,
+    appType: 'custom',
+    server: {
+      middlewareMode: true,
+      hmr: {
+        server: httpServer,
+      },
+    },
+  });
+}
+
+function requestErrorResponse(error: unknown, requestPath: string) {
+  if (requestPath.startsWith('/api/rpc')) {
+    return apiError(error);
+  }
+  return htmlResponse(renderErrorPage(error), 400);
+}
+
+function htmlResponse(html: string, status: number) {
+  return new Response(html, {
+    status,
+    headers: {
+      'content-type': 'text/html; charset=utf-8',
+    },
+  });
+}
+
+function renderServerHomePage(config: SqlfuProjectConfig) {
+  return [
+    '<!doctype html>',
+    '<html lang="en">',
+    '<head>',
+    '  <meta charset="utf-8" />',
+    '  <meta name="viewport" content="width=device-width, initial-scale=1" />',
+    '  <title>sqlfu local server</title>',
+    '  <style>',
+    '    :root { color-scheme: light; font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif; }',
+    '    body { margin: 0; background: linear-gradient(180deg, #f8f0df 0%, #fffdf8 100%); color: #1f1a14; }',
+    '    main { max-width: 48rem; margin: 0 auto; padding: 4rem 1.5rem 5rem; }',
+    '    .eyebrow { letter-spacing: 0.12em; text-transform: uppercase; font: 600 0.72rem/1.4 ui-monospace, SFMono-Regular, monospace; color: #8a5a22; }',
+    '    h1 { font-size: clamp(2.6rem, 8vw, 4.8rem); line-height: 0.95; margin: 0.5rem 0 1rem; }',
+    '    p { font-size: 1.08rem; line-height: 1.7; margin: 0.75rem 0; }',
+    '    code { font-family: ui-monospace, SFMono-Regular, monospace; font-size: 0.95em; }',
+    '    .card { margin-top: 2rem; padding: 1.1rem 1.2rem; border: 1px solid #d9c7aa; border-radius: 1rem; background: rgba(255,255,255,0.72); }',
+    '    a { color: #7a3e00; }',
+    '  </style>',
+    '</head>',
+    '<body>',
+    '  <main>',
+    '    <div class="eyebrow">sqlfu local backend</div>',
+    '    <h1>Local project server is running.</h1>',
+    `    <p>This backend is serving the sqlfu project at <code>${escapeHtml(config.projectRoot)}</code>.</p>`,
+    '    <p>Use the UI against this origin via <code>local.sqlfu.dev</code>, or point a client at <code>/api/rpc</code>.</p>',
+    '    <div class="card">',
+    '      <p><strong>API base:</strong> <code>/api/rpc</code></p>',
+    '      <p><strong>Configured database:</strong> <code>' + escapeHtml(config.db) + '</code></p>',
+    '      <p><a href="https://www.sqlfu.dev">Open docs on www.sqlfu.dev</a></p>',
+    '    </div>',
+    '  </main>',
+    '</body>',
+    '</html>',
+  ].join('\n');
+}
+
+function renderErrorPage(error: unknown) {
+  const message = escapeHtml(error instanceof Error ? error.message : String(error));
+  return [
+    '<!doctype html>',
+    '<html lang="en">',
+    '<head>',
+    '  <meta charset="utf-8" />',
+    '  <meta name="viewport" content="width=device-width, initial-scale=1" />',
+    '  <title>sqlfu local server error</title>',
+    '  <style>',
+    '    body { margin: 0; font-family: ui-sans-serif, system-ui, sans-serif; background: #fcf7f1; color: #23170f; }',
+    '    main { max-width: 42rem; margin: 0 auto; padding: 3rem 1.5rem 4rem; }',
+    '    h1 { font-size: 2rem; margin-bottom: 0.75rem; }',
+    '    pre { white-space: pre-wrap; padding: 1rem; border-radius: 0.75rem; background: #fff; border: 1px solid #e2d6c9; }',
+    '  </style>',
+    '</head>',
+    '<body>',
+    '  <main>',
+    '    <h1>sqlfu could not serve this request.</h1>',
+    '    <p>The local backend is running, but this request could not be handled.</p>',
+    `    <pre>${message}</pre>`,
+    '  </main>',
+    '</body>',
+    '</html>',
+  ].join('\n');
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');
 }
 
 function getServerPort(server: http.Server) {

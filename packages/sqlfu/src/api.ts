@@ -20,11 +20,33 @@ import {
 import {diffSchemaSql} from './schemadiff/index.js';
 import {inspectSqliteSchemaSql, schemasEqual} from './schemadiff/sqlite/index.js';
 import {generateQueryTypes} from './typegen/index.js';
+import {startSqlfuServer} from './ui/server.js';
 
 const base = os.$context<SqlfuCommandRouterContext>();
 const schemaDriftExcludedTables = ['sqlfu_migrations'] as const;
 
 export const router = {
+  serve: base
+    .meta({
+      default: true,
+      description: `Start the local sqlfu backend server used by local.sqlfu.dev.`,
+    })
+    .input(z.object({
+      port: z.number().int().positive(),
+    }).partial().optional())
+    .handler(async ({context, input}) => {
+      const server = await startSqlfuServer({
+        port: input?.port,
+        projectRoot: context.config.projectRoot,
+      });
+
+      console.log(`sqlfu local server listening on http://localhost:${server.port}`);
+      console.log(`project root: ${context.config.projectRoot}`);
+      console.log('open the UI against http://local.sqlfu.dev or point a client at /api/rpc');
+
+      await new Promise(() => {});
+    }),
+
   generate: base
     .meta({
       description: `Generate TypeScript functions for all queries in the sql/ directory.`,
@@ -142,7 +164,6 @@ export const router = {
   check: {
     all: base
       .meta({
-        default: true,
         description: `Run all checks and recommend the next action.`,
       })
       .handler(async ({context}) => {

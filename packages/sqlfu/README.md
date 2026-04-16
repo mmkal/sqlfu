@@ -232,7 +232,19 @@ For the migration model in more detail, see [docs/migration-model.md](./docs/mig
 
 ### Launch the UI
 
-The UI lives in the workspace under `packages/ui`. Use the package-local commands there for interactive work while developing sqlfu itself.
+For end users, start the local backend from your sqlfu project root:
+
+```sh
+npx sqlfu
+```
+
+That starts the UI backend on `localhost:3217`. The intended browser origin is `local.sqlfu.dev`, which should resolve to that local server.
+
+While developing the UI itself inside this repo, the client bundle still lives in `packages/ui`:
+
+```sh
+pnpm --filter sqlfu-ui dev
+```
 
 ## Command Reference
 

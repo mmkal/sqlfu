@@ -22,7 +22,7 @@ import {
 } from '@tanstack/react-query';
 
 import {queryNickname} from 'sqlfu/naming';
-import type {QueryCatalogEntry} from 'sqlfu/experimental';
+import type {QueryCatalogEntry} from 'sqlfu';
 import type {
   QueryExecutionResponse,
   SchemaAuthorityMigration,
@@ -34,7 +34,7 @@ import type {
   TableRowsResponse,
 } from './shared.js';
 import {columnWidthAlgorithm} from './column-width.js';
-import type {UiRouter} from './server.js';
+import type {UiRouter} from 'sqlfu/ui';
 import {SqlCodeMirror, TextCodeMirror, TextDiffCodeMirror} from './sql-codemirror.js';
 import {
   Dialog,

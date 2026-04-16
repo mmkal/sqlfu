@@ -1,23 +1,27 @@
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
-import {startSqlfuUiServer} from '../src/server.ts';
+import {startSqlfuServer} from 'sqlfu/ui';
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
+const uiRoot = path.join(currentDir, '..');
 const port = Number(readOption('--port') ?? '3217');
 const dev = process.argv.includes('--dev');
 const projectsRoot = path.join(currentDir, 'projects');
 const templateRoot = path.join(currentDir, 'template-project');
 
-const server = await startSqlfuUiServer({
+const server = await startSqlfuServer({
   port,
   dev,
   projectsRoot,
   templateRoot,
   defaultProjectName: 'dev-project',
+  ui: {
+    root: uiRoot,
+  },
 });
 
-console.log(`sqlfu/ui dev server listening on http://localhost:${server.port}`);
+console.log(`sqlfu/ui client server listening on http://localhost:${server.port}`);
 console.log(`projects root: ${projectsRoot}`);
 
 await new Promise(() => {});

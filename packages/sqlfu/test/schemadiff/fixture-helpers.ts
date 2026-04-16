@@ -1,7 +1,7 @@
-import fs from 'node:fs/promises';
-import path from 'node:path';
+import {z} from 'zod';
 
 import {diffSchemaSql} from '../../src/schemadiff/index.js';
+import {createParser} from '../sql-fixture-parser.js';
 
 export type SchemadiffFixtureCase = {
   readonly name: string;
@@ -11,6 +11,59 @@ export type SchemadiffFixtureCase = {
   readonly output?: string;
   readonly error?: string;
 };
+
+const schemadiffParser = createParser({
+  commentPrefix: '--',
+  config: z.object({
+    allowDestructive: z.boolean().optional(),
+    error: z.boolean().optional(),
+  }),
+  input: {
+    baseline: z.string(),
+    desired: z.string(),
+  },
+  getOutput: async ({config, input}) => {
+    try {
+      const diff = await diffSchemaSql({
+        projectRoot: process.cwd(),
+        baselineSql: input.baseline,
+        desiredSql: input.desired,
+        allowDestructive: false,
+        ...config,
+      });
+
+      return diff.join('\n');
+    } catch (error) {
+      if (config.error) {
+        return String(error).replace(/^Error:\s*/, '');
+      }
+      throw error;
+    }
+  },
+});
+
+export async function parseSchemadiffFixture(contents: string, filepath = '<fixture>'): Promise<SchemadiffFixtureCase[]> {
+  const parsed = await schemadiffParser.parse({contents, filepath});
+  return parsed.cases.map((fixtureCase) => {
+    if ((fixtureCase.config as Record<string, unknown>).error) {
+      return {
+        name: fixtureCase.name,
+        config: fixtureCase.config,
+        baselineSql: fixtureCase.input.baseline,
+        desiredSql: fixtureCase.input.desired,
+        error: fixtureCase.expectedOutput,
+      };
+    }
+
+    return {
+      name: fixtureCase.name,
+      config: fixtureCase.config,
+      baselineSql: fixtureCase.input.baseline,
+      desiredSql: fixtureCase.input.desired,
+      output: fixtureCase.expectedOutput,
+    };
+  });
+}
 
 export async function runFixtureCase(fixtureCase: SchemadiffFixtureCase): Promise<string> {
   const diff = await diffSchemaSql({
@@ -22,151 +75,4 @@ export async function runFixtureCase(fixtureCase: SchemadiffFixtureCase): Promis
   } as Parameters<typeof diffSchemaSql>[0]);
 
   return diff.join('\n');
-}
-
-export async function listFixtureFiles(root: string): Promise<string[]> {
-  const entries = await fs.readdir(root, {withFileTypes: true});
-  return entries
-    .filter((entry) => entry.isFile() && entry.name.endsWith('.sql'))
-    .map((entry) => path.join(root, entry.name))
-    .sort();
-}
-
-export function parseSchemadiffFixture(contents: string): SchemadiffFixtureCase[] {
-  const cases: SchemadiffFixtureCase[] = [];
-  const defaultConfig = parseDefaultConfig(contents);
-  const regionPattern = /^-- #region: (?<name>.+)\n(?<body>[\s\S]*?)^-- #endregion$/gm;
-
-  for (const match of contents.matchAll(regionPattern)) {
-    const groups = match.groups;
-    if (!groups) {
-      continue;
-    }
-
-    const configMatch = groups.body.match(/^-- ?config: (?<json>.+)$/m);
-    const baselineMarker = groups.body.match(/^-- ?baseline:$/m);
-    const desiredMarker = groups.body.match(/^-- ?desired:$/m);
-    const emptyOutputMarker = groups.body.match(/^-- ?output:\s*<empty>\s*$/m);
-    const outputMarker = groups.body.match(/^-- ?output:$/m);
-    const inlineErrorMatch = groups.body.match(/^-- ?error:\s*(?<json>"(?:\\.|[^"])*")\s*$/m);
-
-    if (baselineMarker?.index === undefined || desiredMarker?.index === undefined) {
-      throw new Error(`Invalid schemadiff fixture region "${groups.name}"`);
-    }
-
-    const resultMarkerIndex = emptyOutputMarker?.index ?? outputMarker?.index ?? inlineErrorMatch?.index;
-    if (resultMarkerIndex === undefined) {
-      throw new Error(`Invalid schemadiff fixture region "${groups.name}"`);
-    }
-
-    const baselineStart = baselineMarker.index + baselineMarker[0].length + 1;
-    const desiredStart = desiredMarker.index + desiredMarker[0].length + 1;
-    const baselineSql = trimFixtureBlock(groups.body.slice(baselineStart, desiredMarker.index));
-    const desiredSql = trimFixtureBlock(groups.body.slice(desiredStart, resultMarkerIndex));
-    const output = emptyOutputMarker
-      ? ''
-      : outputMarker
-        ? trimFixtureBlock(groups.body.slice(outputMarker.index! + outputMarker[0].length + 1))
-        : undefined;
-    const error = inlineErrorMatch?.groups?.json ? JSON.parse(inlineErrorMatch.groups.json) as string : undefined;
-
-    cases.push({
-      name: groups.name,
-      config: {
-        ...defaultConfig,
-        ...(configMatch?.groups?.json ? JSON.parse(configMatch.groups.json) as Record<string, unknown> : {}),
-      },
-      baselineSql,
-      desiredSql,
-      output,
-      error,
-    });
-  }
-
-  return cases;
-}
-
-export async function rewriteSchemadiffFixtures(root: string): Promise<void> {
-  for (const fixturePath of await listFixtureFiles(root)) {
-    const original = await fs.readFile(fixturePath, 'utf8');
-    const rewritten = await rewriteFixtureContents(original);
-    if (rewritten !== original) {
-      await fs.writeFile(fixturePath, rewritten);
-    }
-  }
-}
-
-function parseDefaultConfig(contents: string): Record<string, unknown> {
-  const defaultConfigMatch = contents.match(/^-- default config: (?<json>.+)$/m);
-  return defaultConfigMatch?.groups?.json ? JSON.parse(defaultConfigMatch.groups.json) as Record<string, unknown> : {};
-}
-
-function trimFixtureBlock(value: string): string {
-  return value.replace(/\n+$/g, '');
-}
-
-async function rewriteFixtureContents(contents: string): Promise<string> {
-  const defaultConfig = parseDefaultConfig(contents);
-  const regionPattern = /^-- #region: (?<name>.+)\n(?<body>[\s\S]*?)^-- #endregion$/gm;
-  const rewrittenRegions: string[] = [];
-
-  for (const match of contents.matchAll(regionPattern)) {
-    const groups = match.groups;
-    if (!groups) {
-      throw new Error('Invalid schemadiff fixture while rewriting');
-    }
-
-    rewrittenRegions.push(await rewriteRegion(groups.name, groups.body, defaultConfig));
-  }
-
-  const header = contents.match(/^-- default config: .+\n\n/m)?.[0] ?? '';
-  return `${header}${rewrittenRegions.join('\n\n')}\n`;
-}
-
-async function rewriteRegion(name: string, body: string, defaultConfig: Record<string, unknown>): Promise<string> {
-  const configMatch = body.match(/^-- ?config: (?<json>.+)$/m);
-  const baselineMarker = body.match(/^-- ?baseline:$/m);
-  const desiredMarker = body.match(/^-- ?desired:$/m);
-  const resultMarker = body.match(/^-- ?(?:output:\s*<empty>|output:|error:.*)$/m);
-  if (baselineMarker?.index === undefined || desiredMarker?.index === undefined || resultMarker?.index === undefined) {
-    throw new Error(`Invalid schemadiff fixture region "${name}"`);
-  }
-
-  const baselineStart = baselineMarker.index + baselineMarker[0].length + 1;
-  const desiredStart = desiredMarker.index + desiredMarker[0].length + 1;
-  const baselineSql = trimFixtureBlock(body.slice(baselineStart, desiredMarker.index));
-  const desiredSql = trimFixtureBlock(body.slice(desiredStart, resultMarker.index));
-  const localConfig = configMatch?.groups?.json ? JSON.parse(configMatch.groups.json) as Record<string, unknown> : {};
-
-  try {
-    const output = await runFixtureCase({
-      name,
-      baselineSql,
-      desiredSql,
-      config: {...defaultConfig, ...localConfig},
-    });
-
-    return [
-      `-- #region: ${name}`,
-      ...(Object.keys(localConfig).length > 0 ? [`-- config: ${JSON.stringify(localConfig)}`] : []),
-      '-- baseline:',
-      baselineSql,
-      '-- desired:',
-      desiredSql,
-      output ? '-- output:' : '-- output: <empty>',
-      ...(output ? [output] : []),
-      '-- #endregion',
-    ].join('\n');
-  } catch (error) {
-    return [
-      `-- #region: ${name}`,
-      ...(Object.keys(localConfig).length > 0 ? [`-- config: ${JSON.stringify(localConfig)}`] : []),
-      '-- baseline:',
-      baselineSql,
-      '-- desired:',
-      desiredSql,
-      `-- error: ${JSON.stringify(error instanceof Error ? error.message : String(error))}`,
-      '-- #endregion',
-    ].join('\n');
-  }
 }

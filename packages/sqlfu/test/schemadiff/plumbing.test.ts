@@ -100,7 +100,10 @@ test('diffSchemaSql rebuilds a table when sqlite needs semantic constraint chang
 });
 
 const migraEquivalentFixturePath = path.join(import.meta.dirname, 'fixtures', 'migra-equivalents.sql');
-const migraEquivalentFixtureCases = parseSchemadiffFixture(await fs.readFile(migraEquivalentFixturePath, 'utf8'));
+const migraEquivalentFixtureCases = await parseSchemadiffFixture(
+  await fs.readFile(migraEquivalentFixturePath, 'utf8'),
+  migraEquivalentFixturePath,
+);
 
 for (const fixtureCase of migraEquivalentFixtureCases) {
   test(`${fixtureCase.name} can be applied to reach the desired schema`, async () => {

@@ -1,35 +1,78 @@
-import fs from 'node:fs/promises';
-import path from 'node:path';
-import {fileURLToPath} from 'node:url';
-import {describe, expect, test} from 'vitest';
+import {describe, test, expect} from 'vitest';
+import {createParser} from '../sql-fixture-parser2.js';
+import {z} from 'zod';
+import { diffSchemaSql } from '../../src/index.js';
 
-import {
-  listFixtureFiles,
-  parseSchemadiffFixture,
-  rewriteSchemadiffFixtures,
-  runFixtureCase,
-} from './fixture-helpers.js';
-
-const fixturesDir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures');
-const shouldUpdateFixtures = process.env.SQLFU_SCHEMADIFF_UPDATE === '1';
-
-if (shouldUpdateFixtures) {
-  await rewriteSchemadiffFixtures(fixturesDir);
-}
-
-for (const fixturePath of await listFixtureFiles(fixturesDir)) {
-  describe(path.basename(fixturePath), async () => {
-    const cases = parseSchemadiffFixture(await fs.readFile(fixturePath, 'utf8'));
-
-    for (const fixtureCase of cases) {
-      test(fixtureCase.name, async () => {
-        if (fixtureCase.error) {
-          await expect(runFixtureCase(fixtureCase)).rejects.toThrow(fixtureCase.error);
-          return;
-        }
-
-        await expect(runFixtureCase(fixtureCase)).resolves.toBe(fixtureCase.output);
+const parser = createParser({
+  commentPrefix: '--',
+  input: z.object({
+    baseline: z.string(),
+    desired: z.string(),
+    error: z.boolean().optional(),
+  }),
+  getOutput: async ({input}) => {
+    try {
+      const diff = await diffSchemaSql({
+        projectRoot: process.cwd(),
+        baselineSql: input.baseline,
+        desiredSql: input.desired,
+        allowDestructive: false,
       });
+
+      return diff.join('\n');
+    } catch (error) {
+      if (input.error) {
+        return String(error);
+      }
+      throw error;
     }
-  });
-}
+  },
+});
+
+parser.registerTests({ glob: 'fixtures/*.sql', cwd: import.meta.dirname, describe, test, expect});
+// import path from 'node:path';
+// import {fileURLToPath} from 'node:url';
+
+// import {describe, test} from 'vitest';
+// import {z} from 'zod';
+
+// import {diffSchemaSql} from '../../src/schemadiff/index.js';
+// import {createParser} from '../sql-fixture-parser.js';
+
+// const fixturesDir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures');
+
+// const parser = createParser({
+//   commentPrefix: '--',
+//   config: z.object({
+//     allowDestructive: z.boolean().optional(),
+//     error: z.boolean().optional(),
+//   }),
+//   input: {
+//     baseline: z.string(),
+//     desired: z.string(),
+//   },
+//   getOutput: async ({config, input}) => {
+//     try {
+//       const diff = await diffSchemaSql({
+//         projectRoot: process.cwd(),
+//         baselineSql: input.baseline,
+//         desiredSql: input.desired,
+//         allowDestructive: false,
+//         ...config,
+//       });
+
+//       return diff.join('\n');
+//     } catch (error) {
+//       if (config.error) {
+//         return String(error).replace(/^Error:\s*/, '');
+//       }
+//       throw error;
+//     }
+//   },
+// });
+
+// await parser({
+//   glob: path.join(fixturesDir, '*.sql'),
+//   describe,
+//   test,
+// });

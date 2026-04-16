@@ -1,196 +1,41 @@
-import fs from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {describe, expect, test} from 'vitest';
+
+import {describe, test} from 'vitest';
+import {z} from 'zod';
 
 import {formatSql} from '../src/index.js';
+import {createParser} from './sql-fixture-parser.js';
 
 const fixturesDir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'formatter');
-const shouldUpdateFixtures = process.env.SQLFU_FORMATTER_UPDATE === '1';
 
-if (shouldUpdateFixtures) {
-  await rewriteFormatterFixtures(fixturesDir);
-}
-
-for (const fixturePath of await listFixtureFiles(fixturesDir)) {
-  describe(path.basename(fixturePath), async () => {
-    const cases = parseFormatterFixture(await fs.readFile(fixturePath, 'utf8'));
-
-    for (const fixtureCase of cases) {
-      test(fixtureCase.name, () => {
-        if (fixtureCase.error) {
-          expect(normalizeThrownError(() => formatSql(fixtureCase.input, fixtureCase.config))).toBe(
-            normalizeErrorMessage(fixtureCase.error),
-          );
-          return;
-        }
-
-        expect(formatSql(fixtureCase.input, fixtureCase.config)).toBe(fixtureCase.output);
-      });
-    }
-  });
-}
-
-type FormatterFixtureCase = {
-  readonly name: string;
-  readonly config: Record<string, unknown>;
-  readonly input: string;
-  readonly output?: string;
-  readonly error?: string;
-};
-
-async function listFixtureFiles(fixturesDir: string): Promise<string[]> {
-  const entries = await fs.readdir(fixturesDir, {withFileTypes: true});
-  return entries
-    .filter((entry) => entry.isFile() && entry.name.endsWith('.fixture.sql'))
-    .map((entry) => path.join(fixturesDir, entry.name))
-    .sort();
-}
-
-function parseFormatterFixture(contents: string): FormatterFixtureCase[] {
-  const cases: FormatterFixtureCase[] = [];
-  const defaultConfig = parseDefaultConfig(contents);
-  const regionPattern = /^-- #region: (?<name>.+)\n(?<body>[\s\S]*?)^-- #endregion$/gm;
-
-  for (const match of contents.matchAll(regionPattern)) {
-    const groups = match.groups;
-    if (!groups) {
-      continue;
-    }
-
-    const configMatch = groups.body.match(/^-- ?config: (?<json>.+)$/m);
-    const inputMarker = groups.body.match(/^-- ?input:$/m);
-    const unchangedOutputMarker = groups.body.match(/^-- ?output:\s*<unchanged>\s*$/m);
-    const outputMarker = groups.body.match(/^-- ?output:$/m);
-    const inlineErrorMatch = groups.body.match(/^-- ?error:\s*(?<json>"(?:\\.|[^"])*")\s*$/m);
-    const errorMarker = groups.body.match(/^-- ?error:$/m);
-    if (
-      inputMarker?.index === undefined
-      || (
-        !unchangedOutputMarker
-        && outputMarker?.index === undefined
-        && errorMarker?.index === undefined
-        && !inlineErrorMatch?.groups?.json
-      )
-    ) {
-      throw new Error(`Invalid formatter fixture region "${groups.name}"`);
-    }
-
-    const inputStart = inputMarker.index + inputMarker[0].length + 1;
-    const resolvedResultMarker = unchangedOutputMarker ?? outputMarker ?? errorMarker ?? inlineErrorMatch!;
-    const resultStart = resolvedResultMarker.index!;
-    const input = trimFixtureBlock(groups.body.slice(inputStart, resultStart));
-    const output = unchangedOutputMarker
-      ? input
-      : outputMarker
-        ? trimFixtureBlock(groups.body.slice(outputMarker.index! + outputMarker[0].length + 1))
-        : undefined;
-    const error = inlineErrorMatch?.groups?.json
-      ? JSON.parse(inlineErrorMatch.groups.json) as string
-      : errorMarker
-      ? parseErrorBlock(groups.body.slice(errorMarker.index! + errorMarker[0].length + 1))
-      : undefined;
-    cases.push({
-      name: groups.name,
-      config: {
-        ...defaultConfig,
-        ...(configMatch?.groups?.json ? JSON.parse(configMatch.groups.json) as Record<string, unknown> : {}),
-      },
-      input,
-      output,
-      error,
-    });
-  }
-
-  return cases;
-}
-
-function trimFixtureBlock(value: string): string {
-  return value.replace(/\n+$/g, '');
-}
-
-function parseDefaultConfig(contents: string): Record<string, unknown> {
-  const defaultConfigMatch = contents.match(/^-- default config: (?<json>.+)$/m);
-  return defaultConfigMatch?.groups?.json ? JSON.parse(defaultConfigMatch.groups.json) as Record<string, unknown> : {};
-}
-
-function parseErrorBlock(value: string): string {
-  return trimFixtureBlock(value)
-    .split('\n')
-    .map((line) => line.replace(/^-- ?/, ''))
-    .join('\n');
-}
-
-function normalizeThrownError(fn: () => unknown): string {
-  try {
-    fn();
-    throw new Error('Expected formatter to throw');
-  } catch (error) {
-    if (error instanceof Error && error.message === 'Expected formatter to throw') {
+const parser = createParser({
+  commentPrefix: '--',
+  config: z.object({
+    error: z.boolean().optional(),
+  }).catchall(z.unknown()),
+  input: {
+    input: z.string(),
+  },
+  getOutput: ({config, input}) => {
+    try {
+      const output = formatSql(input.input, config);
+      return output === input.input ? '<unchanged>' : output;
+    } catch (error) {
+      if (config.error) {
+        return normalizeErrorMessage(String(error));
+      }
       throw error;
     }
+  },
+});
 
-    return normalizeErrorMessage(error instanceof Error ? String(error) : String(error));
-  }
-}
+await parser({
+  glob: path.join(fixturesDir, '*.fixture.sql'),
+  describe,
+  test,
+});
 
 function normalizeErrorMessage(value: string): string {
   return value.replace(/^Error:\s*/, '').trimEnd();
-}
-
-async function rewriteFormatterFixtures(root: string): Promise<void> {
-  for (const fixturePath of await listFixtureFiles(root)) {
-    const original = await fs.readFile(fixturePath, 'utf8');
-    const rewritten = rewriteFixtureContents(original);
-    if (rewritten !== original) {
-      await fs.writeFile(fixturePath, rewritten);
-    }
-  }
-}
-
-function rewriteFixtureContents(contents: string): string {
-  const defaultConfig = parseDefaultConfig(contents);
-  const regionPattern = /^-- #region: (?<name>.+)\n(?<body>[\s\S]*?)^-- #endregion$/gm;
-  const rewrittenRegions = [...contents.matchAll(regionPattern)].map((match) => {
-    const groups = match.groups;
-    if (!groups) {
-      throw new Error('Invalid formatter fixture while rewriting');
-    }
-
-    return rewriteRegion(groups.name, groups.body, defaultConfig);
-  });
-
-  const header = contents.match(/^-- default config: .+\n\n/m)?.[0] ?? '';
-  return `${header}${rewrittenRegions.join('\n\n')}\n`;
-}
-
-function rewriteRegion(name: string, body: string, defaultConfig: Record<string, unknown>): string {
-  const configMatch = body.match(/^-- ?config: (?<json>.+)$/m);
-  const inputMarker = body.match(/^-- ?input:$/m);
-  const resultMarker = body.match(/^-- ?(?:output:\s*<unchanged>|output:|error:.*)$/m);
-  if (inputMarker?.index === undefined || resultMarker?.index === undefined) {
-    throw new Error(`Invalid formatter fixture region "${name}"`);
-  }
-
-  const inputStart = inputMarker.index + inputMarker[0].length + 1;
-  const input = trimFixtureBlock(body.slice(inputStart, resultMarker.index));
-  const localConfig = configMatch?.groups?.json ? JSON.parse(configMatch.groups.json) as Record<string, unknown> : {};
-  const config = {...defaultConfig, ...localConfig};
-
-  let resultLines: string[];
-  try {
-    const output = formatSql(input, config);
-    resultLines = output === input ? ['-- output: <unchanged>'] : ['-- output:', output];
-  } catch (error) {
-    resultLines = [`-- error: ${JSON.stringify(normalizeErrorMessage(error instanceof Error ? String(error) : String(error)))}`];
-  }
-
-  return [
-    `-- #region: ${name}`,
-    ...(Object.keys(localConfig).length > 0 ? [`-- config: ${JSON.stringify(localConfig)}`] : []),
-    '-- input:',
-    input,
-    ...resultLines,
-    '-- #endregion',
-  ].join('\n');
 }

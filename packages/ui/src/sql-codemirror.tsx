@@ -85,6 +85,7 @@ export function TextCodeMirror(input: {
   readOnly?: boolean;
   height?: string;
   language?: 'plain' | 'yaml';
+  onChange?: (value: string) => void;
 }) {
   return (
     <CodeMirror
@@ -96,7 +97,7 @@ export function TextCodeMirror(input: {
       basicSetup={{
         foldGutter: false,
       }}
-      onChange={() => {}}
+      onChange={(value) => input.onChange?.(value)}
     />
   );
 }

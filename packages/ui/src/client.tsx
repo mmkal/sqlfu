@@ -10,8 +10,10 @@ import Form from '@rjsf/core';
 import type {RJSFSchema} from '@rjsf/utils';
 import validator from '@rjsf/validator-ajv8';
 import {duration} from 'itty-time';
+import {toast} from 'react-hot-toast';
 import useLocalStorageState from 'use-local-storage-state';
 import {
+  MutationCache,
   QueryClient,
   QueryClientProvider,
   useMutation,
@@ -34,13 +36,109 @@ import type {
 import {columnWidthAlgorithm} from './column-width.js';
 import type {UiRouter} from './server.js';
 import {SqlCodeMirror, TextCodeMirror, TextDiffCodeMirror} from './sql-codemirror.js';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from './components/ui/dialog.js';
+import {AppToaster} from './components/ui/toaster.js';
 import './styles.css';
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  mutationCache: new MutationCache({
+    onError: (error) => {
+      if (parseConfirmationRequest(error)) {
+        return;
+      }
+      toast.error(error instanceof Error ? error.message : String(error));
+    },
+  }),
+});
 const orpcClient: RouterClient<UiRouter> = createORPCClient(new RPCLink({
   url: `${window.location.origin}/api/rpc`,
 }));
 const orpc = createTanstackQueryUtils(orpcClient);
+
+type ConfirmationRequest = {
+  title: string;
+  body: string;
+  editable?: boolean;
+};
+
+type ConfirmationDialogState = {
+  open: boolean;
+  params: ConfirmationRequest | null;
+  draftBody: string;
+};
+
+type ConfirmationDialogResult = {
+  confirmed: boolean;
+  body?: string;
+};
+
+function createConfirmationDialogStore() {
+  let snapshot: ConfirmationDialogState = {
+    open: false,
+    params: null,
+    draftBody: '',
+  };
+  let pendingResolve: ((result: ConfirmationDialogResult) => void) | null = null;
+  const listeners = new Set<() => void>();
+
+  const emit = () => {
+    for (const listener of listeners) {
+      listener();
+    }
+  };
+
+  const setSnapshot = (next: ConfirmationDialogState) => {
+    snapshot = next;
+    emit();
+  };
+
+  return {
+    subscribe(listener: () => void) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    getSnapshot() {
+      return snapshot;
+    },
+    async confirm(params: ConfirmationRequest) {
+      if (pendingResolve) {
+        pendingResolve({confirmed: false});
+      }
+      setSnapshot({
+        open: true,
+        params,
+        draftBody: params.body,
+      });
+      return await new Promise<ConfirmationDialogResult>((resolve) => {
+        pendingResolve = resolve;
+      });
+    },
+    setDraftBody(body: string) {
+      setSnapshot({
+        ...snapshot,
+        draftBody: body,
+      });
+    },
+    close(result: ConfirmationDialogResult) {
+      pendingResolve?.(result);
+      pendingResolve = null;
+      setSnapshot({
+        open: false,
+        params: null,
+        draftBody: '',
+      });
+    },
+  };
+}
+
+const confirmationDialogStore = createConfirmationDialogStore();
 
 function App() {
   return (
@@ -48,12 +146,77 @@ function App() {
       <Suspense fallback={<Shell loading />}>
         <Studio />
       </Suspense>
+      <ConfirmationDialogHost />
+      <AppToaster />
     </QueryClientProvider>
   );
 }
 
 async function invalidateSchemaContent() {
   await queryClient.invalidateQueries({queryKey: orpc.schema.key()});
+}
+
+function ConfirmationDialogHost() {
+  const snapshot = useSyncExternalStore(
+    confirmationDialogStore.subscribe,
+    confirmationDialogStore.getSnapshot,
+  );
+  const params = snapshot.params;
+
+  return (
+    <Dialog
+      open={snapshot.open}
+      onOpenChange={(open) => {
+        if (!open && snapshot.open) {
+          confirmationDialogStore.close({confirmed: false});
+        }
+      }}
+    >
+      <DialogContent className="confirmation-dialog-card">
+        {params ? (
+          <>
+            <DialogHeader>
+              <DialogTitle>{params.title}</DialogTitle>
+              <DialogDescription>
+                Review the server-provided body before continuing.
+              </DialogDescription>
+            </DialogHeader>
+            <TextCodeMirror
+              value={snapshot.draftBody}
+              ariaLabel="Confirmation body editor"
+              readOnly={params.editable !== true}
+              height="18rem"
+              onChange={(value) => {
+                if (params.editable === true) {
+                  confirmationDialogStore.setDraftBody(value);
+                }
+              }}
+            />
+            <DialogFooter>
+              <button
+                className="button"
+                type="button"
+                onClick={() => confirmationDialogStore.close({confirmed: false})}
+              >
+                Cancel
+              </button>
+              <button
+                className="button primary"
+                type="button"
+                onClick={() =>
+                  confirmationDialogStore.close({
+                    confirmed: true,
+                    body: snapshot.draftBody,
+                  })}
+              >
+                Confirm
+              </button>
+            </DialogFooter>
+          </>
+        ) : null}
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 function Studio() {
@@ -169,6 +332,9 @@ function SchemaPanel(input: {
       await queryClient.refetchQueries({queryKey: orpc.schema.key()});
     },
     onError: (error, variables) => {
+      if (parseConfirmationRequest(error)) {
+        return;
+      }
       setCommandErrors((current) => ({
         ...(current ?? {}),
         [variables.command]: error instanceof Error ? error.message : String(error),
@@ -184,12 +350,26 @@ function SchemaPanel(input: {
   });
   const desiredSchemaSql = desiredSchemaDraft ?? input.authorities.desiredSchemaSql;
   const desiredSchemaDirty = normalizeSqlDraft(desiredSchemaSql) !== normalizeSqlDraft(input.authorities.desiredSchemaSql);
-  const handleSchemaCommand = (command: readonly [string, ...string[]]) => {
+  const handleSchemaCommand = async (command: readonly [string, ...string[]]) => {
     const commandText = formatSchemaCommand(command);
-    if (!window.confirm(`Run ${commandText}?`)) {
-      return;
+    try {
+      await runCommandMutation.mutateAsync({command: commandText});
+    } catch (error) {
+      const confirmation = parseConfirmationRequest(error);
+      if (!confirmation) {
+        return;
+      }
+
+      const result = await confirmationDialogStore.confirm(confirmation);
+      if (!result.confirmed || !result.body?.trim()) {
+        return;
+      }
+
+      await runCommandMutation.mutateAsync({
+        command: commandText,
+        confirmation: result.body,
+      });
     }
-    runCommandMutation.mutate({command: commandText});
   };
 
   return (
@@ -1517,6 +1697,32 @@ function ErrorView(input: {
   error: unknown;
 }) {
   return <pre className="code-block error">{String(input.error)}</pre>;
+}
+
+function parseConfirmationRequest(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  const prefix = 'confirmation_missing:';
+  const index = message.indexOf(prefix);
+  if (index === -1) {
+    return null;
+  }
+  const payload = message.slice(index + prefix.length).trim();
+  if (!payload) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(payload) as Partial<ConfirmationRequest>;
+    if (typeof parsed.title !== 'string' || typeof parsed.body !== 'string') {
+      return null;
+    }
+    return {
+      title: parsed.title,
+      body: parsed.body,
+      editable: parsed.editable === true ? true : undefined,
+    };
+  } catch {
+    return null;
+  }
 }
 
 function renderCell(value: unknown) {

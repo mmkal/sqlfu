@@ -111,6 +111,27 @@ test('migration history rows use the same migration detail view', async ({page})
   await expect(historyItem).not.toContainText('Applied');
 });
 
+test('schema commands use server-provided confirmation text', async ({page, projectDir}) => {
+  const migrationsDir = path.join(projectDir, 'migrations');
+
+  await page.goto('/#schema');
+
+  await confirmAndRunSchemaCommand(
+    page,
+    page.getByRole('button', {name: 'sqlfu draft'}),
+    'create table manual_posts (id integer primary key);',
+    'Create migration file?',
+  );
+
+  await expect.poll(async () => {
+    const [migrationFileName] = (await fs.readdir(migrationsDir)).filter((name) => name.endsWith('.sql'));
+    if (!migrationFileName) {
+      return '';
+    }
+    return await fs.readFile(path.join(migrationsDir, migrationFileName), 'utf8');
+  }).toContain('create table manual_posts');
+});
+
 test('migration history shows an integrity warning when applied content no longer matches the repo', async ({page, projectDir}) => {
   const migrationsDir = path.join(projectDir, 'migrations');
 
@@ -168,7 +189,7 @@ test('desired schema can be edited and saved, and sync is disabled while it is d
 
   await page.getByRole('button', {name: 'Save Desired Schema'}).click();
   await expect.poll(() => fs.readFile(definitionsPath, 'utf8')).toContain('create view published_posts as');
-  await expect(page.getByText('Repo Drift')).toBeVisible();
+  await expect(page.getByRole('heading', {name: 'Repo Drift'})).toBeVisible();
 });
 
 test('invalid desired schema shows a check error without breaking the schema page', async ({page, projectDir}) => {
@@ -266,8 +287,8 @@ test('schema command failures stay visible next to the failing command button', 
   await expect(migrateButton).toBeVisible();
   await confirmAndRunSchemaCommand(page, migrateButton);
 
-  await expect(page.getByText(/cannot add a not null column with default value null/i)).toBeVisible();
   await expect(page.locator('.schema-command-error').filter({hasText: 'Cannot add a NOT NULL column with default value NULL'})).toBeVisible();
+  await expect(page.getByRole('status').filter({hasText: 'Cannot add a NOT NULL column with default value NULL'})).toBeVisible();
 });
 
 test('table browser, sql runner, and generated query form work against a live fixture project', async ({page}) => {
@@ -465,10 +486,8 @@ test('relation rows can be selected and deleted from the grid', async ({page}) =
 
 test('appended rows focus the clicked cell and allow editing primary key columns', async ({page}) => {
   await page.goto('/#schema');
-  page.once('dialog', (dialog) => dialog.accept());
-  await page.getByRole('button', {name: 'sqlfu draft'}).click();
-  page.once('dialog', (dialog) => dialog.accept());
-  await page.getByRole('button', {name: /sqlfu baseline /}).first().click();
+  await confirmAndRunSchemaCommand(page, page.getByRole('button', {name: 'sqlfu draft'}));
+  await confirmAndRunSchemaCommand(page, page.getByRole('button', {name: /sqlfu baseline /}).first());
 
   await page.goto('/#table/sqlfu_migrations');
   await page.locator('.reactgrid [data-cell-rowidx="2"][data-cell-colidx="1"]').click();
@@ -693,10 +712,8 @@ test('sql runner understands sqlfu_migrations and suggests a non-noisy saved nam
   await fs.rm(savedQueryPath, {force: true});
 
   await page.goto('/#schema');
-  page.once('dialog', (dialog) => dialog.accept());
-  await page.getByRole('button', {name: 'sqlfu draft'}).click();
-  page.once('dialog', (dialog) => dialog.accept());
-  await page.getByRole('button', {name: /sqlfu baseline /}).first().click();
+  await confirmAndRunSchemaCommand(page, page.getByRole('button', {name: 'sqlfu draft'}));
+  await confirmAndRunSchemaCommand(page, page.getByRole('button', {name: /sqlfu baseline /}).first());
 
   await page.goto('/#sql');
   await replaceCodeMirrorText(page, 'SQL editor', `
@@ -955,11 +972,27 @@ test('sql runner suggests a generated name in the save prompt and does not save 
   await expect(page).toHaveURL(/#sql$/);
 });
 
-async function confirmAndRunSchemaCommand(page: Page, button: Locator) {
-  page.once('dialog', (dialog) => dialog.accept());
+async function confirmAndRunSchemaCommand(
+  page: Page,
+  button: Locator,
+  confirmation?: string,
+  title?: string,
+) {
+  await button.click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  if (title) {
+    await expect(dialog.getByRole('heading', {name: title})).toBeVisible();
+  }
+  if (confirmation != null) {
+    await replaceCodeMirrorText(dialog, 'Confirmation body editor', confirmation);
+  }
   await Promise.all([
-    page.waitForResponse((response) => response.url().includes('/api/rpc/schema/command')),
-    button.click(),
+    page.waitForResponse((response) => {
+      return response.url().includes('/api/rpc/schema/command')
+        && (response.request().postData() ?? '').includes('"confirmation"');
+    }),
+    dialog.getByRole('button', {name: 'Confirm'}).click(),
   ]);
 }
 

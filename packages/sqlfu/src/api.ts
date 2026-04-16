@@ -44,7 +44,7 @@ export const router = {
         `This command fails if semantic changes are required. You can run 'sqlfu draft' to create a migration file with the necessary changes.`,
     })
     .handler(async ({context}) => {
-      await syncSql(context);
+      await applySyncSql(context, acceptConfirmation);
     }),
 
   draft: base
@@ -57,25 +57,7 @@ export const router = {
       }).partial().optional(),
     )
     .handler(async ({context, input}) => {
-      const runtime = createRuntime(context);
-      const migrations = await runtime.readMigrations();
-      const definitionsSql = await runtime.readDefinitionsSql();
-      const baselineSql = migrations.length === 0 ? '' : await materializeMigrationsSchema(runtime.config, migrations);
-      const diffLines = await diffSchemaSql({
-        projectRoot: runtime.config.projectRoot,
-        baselineSql,
-        desiredSql: definitionsSql,
-        allowDestructive: true,
-      });
-
-      if (diffLines.length === 0) {
-        return;
-      }
-
-      const body = diffLines.join('\n').trim();
-      const fileName = `${getMigrationPrefix(runtime.now())}_${slugify(input?.name ?? migrationNickname(body))}.sql`;
-      await fs.mkdir(context.config.migrationsDir, {recursive: true});
-      await fs.writeFile(path.join(context.config.migrationsDir, fileName), `${body}\n`);
+      await applyDraftSql(context, input, acceptConfirmation);
     }),
 
   migrate: base
@@ -83,8 +65,7 @@ export const router = {
       description: `Apply pending migrations to the configured database.`,
     })
     .handler(async ({context}) => {
-      const migrations = await createRuntime(context).readMigrations();
-      await applyMigrationsToDatabase(context.config.db, migrations);
+      await applyMigrateSql(context, acceptConfirmation);
     }),
 
   pending: base
@@ -142,9 +123,7 @@ export const router = {
       }),
     )
     .handler(async ({context, input}) => {
-      const migrations = await createRuntime(context).readMigrations();
-      await using database = await openMainDevDatabase(context.config.db);
-      await baselineMigrationHistory(database.client, {migrations, target: input.target});
+      await applyBaselineSql(context, input, acceptConfirmation);
     }),
 
   goto: base
@@ -157,27 +136,7 @@ export const router = {
       }),
     )
     .handler(async ({context, input}) => {
-      const runtime = createRuntime(context);
-      const migrations = await runtime.readMigrations();
-      const targetMigrations = getMigrationsThroughTarget(migrations, input.target);
-      const targetSchema = await materializeMigrationsSchema(runtime.config, targetMigrations);
-
-      await using database = await openMainDevDatabase(context.config.db);
-      const liveSchema = await extractSchema(database.client, 'main', {
-        excludedTables: schemaDriftExcludedTables,
-      });
-      const diffLines = await diffSchemaSql({
-        projectRoot: runtime.config.projectRoot,
-        baselineSql: liveSchema,
-        desiredSql: targetSchema,
-        allowDestructive: true,
-      });
-      await database.client.transaction(async (tx) => {
-        if (diffLines.length > 0) {
-          await tx.raw(diffLines.join('\n'));
-        }
-        await replaceMigrationHistory(tx, targetMigrations);
-      });
+      await applyGotoSql(context, input, acceptConfirmation);
     }),
 
   check: {
@@ -291,35 +250,49 @@ export async function getMigrationResultantSchema(
   return `-- schema produced by sqlfu goto ${input.id}\n${schemaSql}`;
 }
 
-export async function runSqlfuCommand(context: SqlfuRouterContext, command: string): Promise<void> {
+export type SqlfuCommandConfirmParams = {
+  readonly title: string;
+  readonly body: string;
+  readonly editable?: boolean;
+};
+
+export type SqlfuCommandConfirm = (
+  params: SqlfuCommandConfirmParams,
+) => Promise<string | null>;
+
+export async function runSqlfuCommand(
+  context: SqlfuRouterContext,
+  command: string,
+  confirm: SqlfuCommandConfirm,
+): Promise<void> {
   const normalized = command.trim();
 
   if (normalized === 'sqlfu draft') {
-    await draftSql(context, {});
+    await applyDraftSql(context, {}, confirm);
     return;
   }
 
   if (normalized === 'sqlfu sync') {
-    await syncSql(context);
+    await applySyncSql(context, confirm);
     return;
   }
 
   if (normalized === 'sqlfu migrate') {
-    await migrateSql(context);
+    await applyMigrateSql(context, confirm);
     return;
   }
 
   if (normalized.startsWith('sqlfu baseline ')) {
-    await baselineSql(context, {
+    await applyBaselineSql(context, {
       target: normalized.replace(/^sqlfu baseline /u, '').trim(),
-    });
+    }, confirm);
     return;
   }
 
   if (normalized.startsWith('sqlfu goto ')) {
-    await gotoSql(context, {
+    await applyGotoSql(context, {
       target: normalized.replace(/^sqlfu goto /u, '').trim(),
-    });
+    }, confirm);
     return;
   }
 
@@ -333,6 +306,8 @@ export async function runSqlfuCommand(context: SqlfuRouterContext, command: stri
 
   throw new Error(`Unsupported sqlfu command: ${command}`);
 }
+
+const acceptConfirmation: SqlfuCommandConfirm = async ({body}) => body;
 
 function createRuntime(context: SqlfuRouterContext) {
   return {
@@ -373,7 +348,11 @@ async function readDefinitionsSql(definitionsPath: string) {
   }
 }
 
-async function draftSql(context: SqlfuRouterContext, input?: {name?: string}) {
+async function applyDraftSql(
+  context: SqlfuRouterContext,
+  input?: {name?: string},
+  confirm: SqlfuCommandConfirm = acceptConfirmation,
+) {
   const runtime = createRuntime(context);
   const migrations = await runtime.readMigrations();
   const definitionsSql = await runtime.readDefinitionsSql();
@@ -389,13 +368,23 @@ async function draftSql(context: SqlfuRouterContext, input?: {name?: string}) {
     return;
   }
 
-  const body = diffLines.join('\n').trim();
+  const body = await confirm({
+    title: 'Create migration file?',
+    body: diffLines.join('\n').trim(),
+    editable: true,
+  });
+  if (!body?.trim()) {
+    return;
+  }
   const fileName = `${getMigrationPrefix(runtime.now())}_${slugify(input?.name ?? migrationNickname(body))}.sql`;
   await fs.mkdir(context.config.migrationsDir, {recursive: true});
-  await fs.writeFile(path.join(context.config.migrationsDir, fileName), `${body}\n`);
+  await fs.writeFile(path.join(context.config.migrationsDir, fileName), `${body.trim()}\n`);
 }
 
-async function syncSql(context: SqlfuRouterContext) {
+async function applySyncSql(
+  context: SqlfuRouterContext,
+  confirm: SqlfuCommandConfirm = acceptConfirmation,
+) {
   const definitionsSql = await readDefinitionsSql(context.config.definitionsPath);
   await using database = await openMainDevDatabase(context.config.db);
   const baselineSql = await extractSchema(database.client, 'main', {
@@ -413,8 +402,17 @@ async function syncSql(context: SqlfuRouterContext) {
       return;
     }
 
+    const confirmedSql = await confirm({
+      title: 'Apply sync SQL?',
+      body: diffLines.join('\n').trim(),
+      editable: true,
+    });
+    if (!confirmedSql?.trim()) {
+      return;
+    }
+
     await database.client.transaction(async (tx) => {
-      await tx.raw(diffLines.join('\n'));
+      await tx.raw(confirmedSql.trim());
     });
   } catch (error) {
     throw new Error(
@@ -428,18 +426,59 @@ async function syncSql(context: SqlfuRouterContext) {
   }
 }
 
-async function migrateSql(context: SqlfuRouterContext) {
+async function applyMigrateSql(
+  context: SqlfuRouterContext,
+  confirm: SqlfuCommandConfirm = acceptConfirmation,
+) {
   const migrations = await createRuntime(context).readMigrations();
+  await using database = await openMainDevDatabase(context.config.db);
+  const applied = await readMigrationHistory(database.client);
+  const appliedNames = new Set(applied.map((migration) => migration.name));
+  const pendingMigrations = migrations.filter((migration) => !appliedNames.has(migrationName(migration)));
+  if (pendingMigrations.length === 0) {
+    return;
+  }
+  const ok = await confirm({
+    title: 'Apply pending migrations?',
+    body: pendingMigrations.map((migration) => [
+      `-- ${migrationName(migration)}`,
+      migration.content.trim(),
+    ].join('\n')).join('\n\n'),
+  });
+  if (!ok) {
+    return;
+  }
   await applyMigrationsToDatabase(context.config.db, migrations);
 }
 
-async function baselineSql(context: SqlfuRouterContext, input: {target: string}) {
+async function applyBaselineSql(
+  context: SqlfuRouterContext,
+  input: {target: string},
+  confirm: SqlfuCommandConfirm = acceptConfirmation,
+) {
   const migrations = await createRuntime(context).readMigrations();
+  const targetMigrations = getMigrationsThroughTarget(migrations, input.target);
+  const ok = await confirm({
+    title: 'Record migration history?',
+    body: [
+      `Target: ${input.target}`,
+      '',
+      'These migrations will be recorded as applied:',
+      ...targetMigrations.map((migration) => `- ${migrationName(migration)}`),
+    ].join('\n'),
+  });
+  if (!ok) {
+    return;
+  }
   await using database = await openMainDevDatabase(context.config.db);
   await baselineMigrationHistory(database.client, {migrations, target: input.target});
 }
 
-async function gotoSql(context: SqlfuRouterContext, input: {target: string}) {
+async function applyGotoSql(
+  context: SqlfuRouterContext,
+  input: {target: string},
+  confirm: SqlfuCommandConfirm = acceptConfirmation,
+) {
   const runtime = createRuntime(context);
   const migrations = await runtime.readMigrations();
   const targetMigrations = getMigrationsThroughTarget(migrations, input.target);
@@ -455,9 +494,18 @@ async function gotoSql(context: SqlfuRouterContext, input: {target: string}) {
     desiredSql: targetSchema,
     allowDestructive: true,
   });
+  const confirmedSql = await confirm({
+    title: `Move database to ${input.target}?`,
+    body: diffLines.join('\n').trim(),
+    editable: true,
+  });
+  if (confirmedSql == null) {
+    return;
+  }
+
   await database.client.transaction(async (tx) => {
-    if (diffLines.length > 0) {
-      await tx.raw(diffLines.join('\n'));
+    if (confirmedSql?.trim()) {
+      await tx.raw(confirmedSql.trim());
     }
     await replaceMigrationHistory(tx, targetMigrations);
   });

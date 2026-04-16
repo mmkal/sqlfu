@@ -141,6 +141,7 @@ const uiRouter = {
     command: uiBase
       .input(z.object({
         command: z.string(),
+        confirmation: z.string().optional(),
       }))
       .handler(async ({context, input}) => {
         if (!input.command.trim()) {
@@ -148,8 +149,27 @@ const uiRouter = {
         }
 
         try {
-          await runSqlfuCommand({config: context.config}, input.command);
+          await runSqlfuCommand(
+            {config: context.config},
+            input.command,
+            async (params) => {
+              const body = params.body.trim();
+              if (!body) {
+                return null;
+              }
+
+              const confirmation = input.confirmation?.trim();
+              if (!confirmation) {
+                throw toClientError(new Error(`confirmation_missing:${JSON.stringify({...params, body})}`));
+              }
+
+              return confirmation;
+            },
+          );
         } catch (error) {
+          if (error instanceof ORPCError) {
+            throw error;
+          }
           throw toClientError(error);
         }
         return {ok: true} as const;

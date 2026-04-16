@@ -50,6 +50,70 @@ table {
   min-height: 100vh;
 }
 
+.shad-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(47, 36, 22, 0.45);
+  backdrop-filter: blur(6px);
+}
+
+.shad-dialog-content {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  z-index: 101;
+  width: min(54rem, calc(100vw - 2rem));
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(86, 65, 36, 0.18);
+  border-radius: 1.4rem;
+  background: var(--panel-strong);
+  box-shadow: var(--shadow);
+  padding: 1.25rem;
+}
+
+.shad-dialog-header {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.shad-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.shad-dialog-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.shad-dialog-description {
+  color: var(--muted);
+}
+
+.confirmation-dialog-card {
+  display: grid;
+  gap: 1rem;
+}
+
+.app-toast {
+  border: 1px solid rgba(86, 65, 36, 0.18);
+  border-radius: 1rem;
+  background: var(--panel-strong);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+.app-toast-error {
+  border-color: rgba(139, 45, 24, 0.25);
+}
+
+.app-toast-success {
+  border-color: rgba(65, 120, 72, 0.25);
+}
+
 .sidebar {
   padding: 2rem 1.25rem;
   border-right: 1px solid var(--line);

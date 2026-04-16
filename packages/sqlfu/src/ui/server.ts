@@ -495,6 +495,10 @@ export async function startSqlfuServer(input: StartSqlfuServerOptions = {}) {
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+  void runCliServer();
+}
+
+async function runCliServer() {
   const projectRoot = readOption('--project-root');
   const port = readOption('--port');
   const dev = process.argv.includes('--dev');

@@ -48,7 +48,34 @@ test('sqlfu server serves a local backend page and the ui rpc contract from pack
   });
 });
 
-async function createUiServerFixture() {
+test('sqlfu server can serve the packages/ui Vite client in dev mode', async () => {
+  await using fixture = await createUiServerFixture({
+    dev: true,
+    uiRoot: path.resolve(process.cwd(), '..', 'ui'),
+  });
+
+  const homeResponse = await fetch(fixture.baseUrl, {
+    signal: AbortSignal.timeout(15_000),
+  });
+
+  expect(homeResponse.status).toBe(200);
+  expect(await homeResponse.text()).toMatch(/@vite\/client|\/src\/client\.tsx/u);
+
+  expect(await fixture.client.schema.get()).toMatchObject({
+    projectName: path.basename(fixture.root),
+    relations: [
+      {
+        name: 'posts',
+        kind: 'table',
+      },
+    ],
+  });
+});
+
+async function createUiServerFixture(input: {
+  dev?: boolean;
+  uiRoot?: string;
+} = {}) {
   const root = await createTempFixtureRoot('ui-server');
   const dbPath = path.join(root, 'app.db');
 
@@ -90,6 +117,12 @@ async function createUiServerFixture() {
   const server = await startSqlfuServer({
     port: 0,
     projectRoot: root,
+    dev: input.dev,
+    ui: input.uiRoot
+      ? {
+          root: input.uiRoot,
+        }
+      : undefined,
   });
   const baseUrl = `http://127.0.0.1:${server.port}`;
   const client: RouterClient<UiRouter> = createORPCClient(new RPCLink({

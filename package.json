@@ -4,6 +4,7 @@
   "packageManager": "pnpm@10.30.1",
   "scripts": {
     "dev": "pnpm --filter sqlfu-ui dev",
+    "local-sqlfu-dev": "pnpm exec tsx scripts/local-sqlfu-dev.ts",
     "sqlfu": "cd packages/sqlfu && pnpm",
     "ui": "cd packages/ui && pnpm",
     "website": "cd website && node build.mjs",

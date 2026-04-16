@@ -39,18 +39,13 @@ test('the goto shape works when destructive drops are explicitly enabled', async
 
     const diff = await diffSchemaSql({
       projectRoot: process.cwd(),
-      baselineSql: await extractSchema(liveClient),
-      desiredSql: await extractSchema(targetClient),
+      baselineSql: await extractSchema(liveClient, 'main', {excludedTables: ['sqlfu_migrations']}),
+      desiredSql: await extractSchema(targetClient, 'main', {excludedTables: ['sqlfu_migrations']}),
       allowDestructive: true,
     });
 
     expect(diff).toMatchInlineSnapshot(`
       [
-        "create table sqlfu_migrations(",
-        "  name text primary key check(name not like '%.sql'),",
-        "  checksum text not null,",
-        "  applied_at text not null",
-        ");",
         "drop table pet;",
         "drop table toy;",
       ]
@@ -58,12 +53,7 @@ test('the goto shape works when destructive drops are explicitly enabled', async
 
     await liveClient.raw(diff.join('\n'));
 
-    expect(await extractSchema(liveClient)).toBe(`create table person(name text not null);
-create table sqlfu_migrations(
-  name text primary key check(name not like '%.sql'),
-  checksum text not null,
-  applied_at text not null
-);`);
+    expect(await extractSchema(liveClient, 'main', {excludedTables: ['sqlfu_migrations']})).toBe('create table person(name text not null);');
   } finally {
     liveDb.close();
     targetDb.close();

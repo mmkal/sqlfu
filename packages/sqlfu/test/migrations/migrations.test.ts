@@ -90,7 +90,7 @@ describe('migrate', () => {
 
     await fixture.api.migrate();
 
-    expect(await extractSchema(fixture.db)).toMatchInlineSnapshot(`
+    expect(await extractSchema(fixture.db, 'main', {excludedTables: ['sqlfu_migrations']})).toMatchInlineSnapshot(`
       "create table person(name text);
       create table pet(name text, species text);"
     `);
@@ -411,7 +411,7 @@ describe('baseline', () => {
 
     await fixture.api.baseline({target: '2026-04-10T00.00.00.000Z_create_person'});
 
-    expect(await extractSchema(fixture.db)).toMatchInlineSnapshot(`
+    expect(await extractSchema(fixture.db, 'main', {excludedTables: ['sqlfu_migrations']})).toMatchInlineSnapshot(`
       "create table person(name text);"
     `);
     expect(await fixture.migrationNames()).toEqual([
@@ -457,7 +457,7 @@ describe('goto', () => {
 
     await fixture.api.goto({target: path.parse(await fixture.globOne('*/*create_person*')).name});
 
-    expect(await extractSchema(fixture.db)).toMatchInlineSnapshot(`
+    expect(await extractSchema(fixture.db, 'main', {excludedTables: ['sqlfu_migrations']})).toMatchInlineSnapshot(`
       "create table person(name text);"
     `);
     expect(await fixture.migrationNames()).toEqual([
@@ -469,7 +469,7 @@ describe('goto', () => {
 
     await fixture.api.goto({target: path.parse(await fixture.globOne('*/*create_pet*')).name});
 
-    expect(await extractSchema(fixture.db)).toMatchInlineSnapshot(`
+    expect(await extractSchema(fixture.db, 'main', {excludedTables: ['sqlfu_migrations']})).toMatchInlineSnapshot(`
       "create table person(name text);
       create table pet(name text);"
     `);
@@ -500,7 +500,7 @@ describe('goto', () => {
 
     await fixture.api.goto({target: '2026-04-10T01.00.00.000Z_add_person_name_idx'});
 
-    expect(await extractSchema(fixture.db)).toMatchInlineSnapshot(`
+    expect(await extractSchema(fixture.db, 'main', {excludedTables: ['sqlfu_migrations']})).toMatchInlineSnapshot(`
       "create index person_name_idx on person(name);
       create table person(name text);"
     `);
@@ -524,7 +524,7 @@ describe('sync', () => {
     await fixture.api.sync();
 
     expect(await extractSchema(fixture.db)).toMatchInlineSnapshot(`
-      "create table person(name text, "nickname" text);"
+      "create table person(name text, nickname text);"
     `);
     expect(await fixture.db.sql`select name, nickname from person order by name`).toMatchObject([
       {name: 'ada', nickname: null},

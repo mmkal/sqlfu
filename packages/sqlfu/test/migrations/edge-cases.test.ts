@@ -22,7 +22,7 @@ describe('draft edge cases', () => {
     const draftedMigration = (await fixture.listMigrationFiles()).at(-1)!;
 
     expect(await fixture.readFile(draftedMigration)).toMatchInlineSnapshot(`
-      "drop table "pet";
+      "drop table pet;
       "
     `);
   });
@@ -390,7 +390,7 @@ describe('baseline edge cases', () => {
 
     await fixture.api.baseline({target: '2026-04-10T01.00.00.000Z_create_pet'});
 
-    expect(await extractSchema(fixture.db)).toMatchInlineSnapshot(`
+    expect(await extractSchema(fixture.db, 'main', {excludedTables: ['sqlfu_migrations']})).toMatchInlineSnapshot(`
       "create table person(name text);"
     `);
     expect(await fixture.migrationNames()).toEqual([

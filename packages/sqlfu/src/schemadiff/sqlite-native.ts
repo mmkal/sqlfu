@@ -10,6 +10,7 @@ import {createBunClient, createNodeSqliteClient} from '../client.js';
 import {splitSqlStatements} from '../core/sqlite.js';
 import type {Client} from '../core/types.js';
 import {graphSequencer} from './graph-sequencer.js';
+import {SQL_KEYWORDS} from './keywords.js';
 
 export type SqliteInspectedDatabase = {
   readonly tables: Record<string, SqliteInspectedTable>;
@@ -349,7 +350,7 @@ function planSchemaDiff(input: {
 
     if (classification.kind === 'add-columns') {
       for (const column of classification.columns) {
-        statements.push(`alter table ${quoteIdentifier(tableName)} add column ${columnDefinition(column)};`);
+        statements.push(`alter table ${maybeQuoteIdentifier(tableName)} add column ${columnDefinition(column)};`);
       }
       continue;
     }
@@ -389,11 +390,11 @@ function planSchemaDiff(input: {
     const desiredIndexes = desiredTable.indexes;
 
     for (const indexName of sortedRemovedKeys(baselineIndexes, desiredIndexes)) {
-      explicitIndexDrops.push(`drop index ${quoteIdentifier(indexName)};`);
+      explicitIndexDrops.push(`drop index ${maybeQuoteIdentifier(indexName)};`);
     }
 
     for (const indexName of sortedModifiedKeys(baselineIndexes, desiredIndexes, indexEquals)) {
-      explicitIndexDrops.push(`drop index ${quoteIdentifier(indexName)};`);
+      explicitIndexDrops.push(`drop index ${maybeQuoteIdentifier(indexName)};`);
       explicitIndexCreates.push(withSemicolon(desiredIndexes[indexName]!.createSql));
     }
 
@@ -420,14 +421,14 @@ function planSchemaDiff(input: {
     if (handledRemovedTriggerNames.has(triggerName) && !addedTriggerNames.includes(triggerName) && !modifiedTriggerNames.includes(triggerName)) {
       continue;
     }
-    prefixes.push(`drop trigger ${quoteIdentifier(triggerName)};`);
+    prefixes.push(`drop trigger ${maybeQuoteIdentifier(triggerName)};`);
   }
 
   for (const viewName of [...removedViewNames, ...modifiedViewNames].sort((left, right) => left.localeCompare(right))) {
     if (handledRemovedViewNames.has(viewName) && !addedViewNames.includes(viewName) && !modifiedViewNames.includes(viewName)) {
       continue;
     }
-    prefixes.push(`drop view ${quoteIdentifier(viewName)};`);
+    prefixes.push(`drop view ${maybeQuoteIdentifier(viewName)};`);
   }
 
   for (const indexStatement of explicitIndexDrops.sort((left, right) => left.localeCompare(right))) {
@@ -442,7 +443,7 @@ function planSchemaDiff(input: {
   }
 
   for (const tableName of removedTableNames) {
-    statements.push(`drop table ${quoteIdentifier(tableName)};`);
+    statements.push(`drop table ${maybeQuoteIdentifier(tableName)};`);
   }
 
   for (const createIndex of explicitIndexCreates) {
@@ -630,7 +631,7 @@ function planDirectDropColumnOperations(input: {
     operations.push({
       id,
       kind: 'drop-index',
-      sql: `drop index ${quoteIdentifier(index.name)};`,
+      sql: `drop index ${maybeQuoteIdentifier(index.name)};`,
       dependencies: [],
     });
   }
@@ -642,7 +643,7 @@ function planDirectDropColumnOperations(input: {
     operations.push({
       id,
       kind: 'drop-view',
-      sql: `drop view ${quoteIdentifier(view.name)};`,
+      sql: `drop view ${maybeQuoteIdentifier(view.name)};`,
       dependencies: [],
     });
   }
@@ -654,7 +655,7 @@ function planDirectDropColumnOperations(input: {
     operations.push({
       id,
       kind: 'drop-trigger',
-      sql: `drop trigger ${quoteIdentifier(trigger.name)};`,
+      sql: `drop trigger ${maybeQuoteIdentifier(trigger.name)};`,
       dependencies: [],
     });
   }
@@ -664,7 +665,7 @@ function planDirectDropColumnOperations(input: {
     id: dropColumnId,
     kind: 'drop-column',
     sql: removedColumns
-      .map((column) => `alter table ${quoteIdentifier(tableName)} drop column ${quoteIdentifier(column.name)};`)
+      .map((column) => `alter table ${maybeQuoteIdentifier(tableName)} drop column ${maybeQuoteIdentifier(column.name)};`)
       .join('\n'),
     dependencies: blockerDropIds,
   });
@@ -773,7 +774,7 @@ function planTableRebuild(baseline: SqliteInspectedTable, desired: SqliteInspect
   statements.push(withSemicolon(desired.createSql));
 
   if (copyableColumns.length > 0) {
-    const columnList = copyableColumns.map((column) => quoteIdentifier(column.name)).join(', ');
+    const columnList = copyableColumns.map((column) => maybeQuoteIdentifier(column.name)).join(', ');
     statements.push(
       `insert into ${renderTableName(desired.name)}(${columnList}) select ${columnList} from ${renderTableName(tempName)};`,
     );
@@ -827,7 +828,7 @@ function triggerEquals(left: SqliteInspectedTrigger, right: SqliteInspectedTrigg
 }
 
 function columnDefinition(column: SqliteInspectedColumn): string {
-  let sql = `${quoteIdentifier(column.name)} ${column.declaredType}`.trimEnd();
+  let sql = `${maybeQuoteIdentifier(column.name)} ${column.declaredType}`.trimEnd();
   if (column.collation) {
     sql += ` collate ${column.collation}`;
   }
@@ -1017,12 +1018,20 @@ function quoteIdentifier(value: string): string {
   return `"${value.replaceAll('"', '""')}"`;
 }
 
+function maybeQuoteIdentifier(value: string): string {
+  return isSimpleIdentifier(value) && !SQL_KEYWORDS.has(value.toLowerCase()) ? value : quoteIdentifier(value);
+}
+
 function quoteSqlString(value: string): string {
   return `'${value.replaceAll("'", "''")}'`;
 }
 
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+}
+
+function isSimpleIdentifier(value: string): boolean {
+  return /^[a-z_]+$/u.test(value);
 }
 
 function arraysEqual(left: readonly string[], right: readonly string[]): boolean {
@@ -1167,10 +1176,20 @@ function withSemicolon(sql: string): string {
 }
 
 function splitStatementForOutput(statement: string): string[] {
-  return statement
+  const lines = statement
     .split('\n')
     .map((line) => line.trim())
     .filter((line) => line.trim().length > 0);
+
+  if (lines.length > 1 && /^create\s+table\b/iu.test(lines[0]!)) {
+    return [
+      lines[0]!,
+      ...lines.slice(1, -1).map((line) => `  ${line}`),
+      lines[lines.length - 1]!,
+    ];
+  }
+
+  return lines;
 }
 
 function pushStatements(target: string[], source: readonly string[]) {
@@ -1178,7 +1197,7 @@ function pushStatements(target: string[], source: readonly string[]) {
 }
 
 function renderTableName(value: string): string {
-  return /^[a-z_][a-z0-9_]*$/u.test(value) ? value : quoteIdentifier(value);
+  return maybeQuoteIdentifier(value);
 }
 
 function extractTableColumnCollations(createSql: string): Map<string, string> {

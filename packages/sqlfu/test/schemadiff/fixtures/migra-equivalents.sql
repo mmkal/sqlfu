@@ -15,11 +15,11 @@ create table t(
 -- output:
 alter table t rename to __sqlfu_old_t;
 create table t(
-a text,
-b text collate rtrim,
-c text collate rtrim
+  a text,
+  b text collate rtrim,
+  c text collate rtrim
 );
-insert into t("a", "b") select "a", "b" from __sqlfu_old_t;
+insert into t(a, b) select a, b from __sqlfu_old_t;
 drop table __sqlfu_old_t;
 -- #endregion
 
@@ -31,12 +31,13 @@ create table a(b text not null unique);
 -- output:
 alter table a rename to __sqlfu_old_a;
 create table a(b text not null unique);
-insert into a("b") select "b" from __sqlfu_old_a;
+insert into a(b) select b from __sqlfu_old_a;
 drop table __sqlfu_old_a;
 -- #endregion
 
 -- #region: sqlite-migra dependencies
 -- baseline:
+
 -- desired:
 create table a(id int primary key not null);
 
@@ -47,8 +48,8 @@ create table b(
 -- output:
 create table a(id int primary key not null);
 create table b(
-id int primary key not null,
-a_id int not null references a(id)
+  id int primary key not null,
+  a_id int not null references a(id)
 );
 -- #endregion
 
@@ -74,10 +75,10 @@ create view q as
 select * from data;
 -- output:
 create table t_data(
-id integer,
-name text
+  id integer,
+  name text
 );
-drop table "data";
+drop table data;
 create view data as
 select * from t_data;
 -- #endregion
@@ -111,8 +112,8 @@ create view "strange_view(what)" as
 select cast(id as int) * 2 as a from "strange_name(((yo?)))";
 -- output:
 drop view "strange_view(what)";
-drop view "switcharoo";
-alter table "t" add column "b" int;
+drop view switcharoo;
+alter table t add column b int;
 create view "strange_view(what)" as
 select cast(id as int) * 2 as a from "strange_name(((yo?)))";
 create view switcharoo as
@@ -138,9 +139,9 @@ create view mv as
 select id from v;
 -- output:
 create table t(
-id integer not null primary key,
-a text,
-b integer
+  id integer not null primary key,
+  a text,
+  b integer
 );
 drop table "t2";
 create view mv as
@@ -167,11 +168,11 @@ create table demo(
 -- output:
 alter table demo rename to __sqlfu_old_demo;
 create table demo(
-id integer primary key,
-the_column text,
-the_column2 text generated always as ('the original generated value') stored
+  id integer primary key,
+  the_column text,
+  the_column2 text generated always as ('the original generated value') stored
 );
-insert into demo("id") select "id" from __sqlfu_old_demo;
+insert into demo(id) select id from __sqlfu_old_demo;
 drop table __sqlfu_old_demo;
 -- #endregion
 
@@ -189,10 +190,10 @@ create table demo(
 -- output:
 alter table demo rename to __sqlfu_old_demo;
 create table demo(
-id integer primary key,
-the_column text generated always as ('the original generated value') stored
+  id integer primary key,
+  the_column text generated always as ('the original generated value') stored
 );
-insert into demo("id") select "id" from __sqlfu_old_demo;
+insert into demo(id) select id from __sqlfu_old_demo;
 drop table __sqlfu_old_demo;
 -- #endregion
 
@@ -255,8 +256,8 @@ create trigger emp_stamp_create after insert on emp begin
   insert into audit_log(message) values ('create:' || new.empname);
 end;
 -- output:
-drop trigger "emp_stamp";
-drop trigger "emp_stamp_drop";
+drop trigger emp_stamp;
+drop trigger emp_stamp_drop;
 create trigger emp_stamp after update on emp begin
 insert into audit_log(message) values ('updated:' || new.empname);
 end;
@@ -305,7 +306,7 @@ create trigger trigger_name_1 after insert on table1 begin
 end;
 -- output:
 drop trigger "trigger_name_2";
-alter table "table2" drop column "t";
+alter table "table2" drop column t;
 create trigger trigger_name_2 after insert on table2 begin
 insert into audit_log(message) values ('t2');
 end;
@@ -338,15 +339,15 @@ create trigger trigger_on_view instead of insert on view_on_table begin
   insert into my_table(some_text, some_date) values (new.some_text, new.some_date);
 end;
 -- output:
-drop trigger "trigger_on_view";
-drop view "view_on_table";
+drop trigger trigger_on_view;
+drop view view_on_table;
 alter table my_table rename to __sqlfu_old_my_table;
 create table my_table(
-some_text text,
-some_date text,
-some_count int
+  some_text text,
+  some_date text,
+  some_count int
 );
-insert into my_table("some_text", "some_count") select "some_text", "some_count" from __sqlfu_old_my_table;
+insert into my_table(some_text, some_count) select some_text, some_count from __sqlfu_old_my_table;
 drop table __sqlfu_old_my_table;
 create view view_on_table as
 select some_text, some_date, some_count from my_table;

@@ -6,7 +6,7 @@ create table a(x int, y int);
 -- desired:
 create table a(x int);
 -- output:
-alter table "a" drop column "y";
+alter table a drop column y;
 -- #endregion
 
 -- #region: indexed column removal drops and recreates index blockers
@@ -16,8 +16,8 @@ create index a_y_idx on a(y);
 -- desired:
 create table a(x int);
 -- output:
-drop index "a_y_idx";
-alter table "a" drop column "y";
+drop index a_y_idx;
+alter table a drop column y;
 -- #endregion
 
 -- #region: foreign key column removal falls back to rebuild
@@ -30,7 +30,7 @@ create table child(x int);
 -- output:
 alter table child rename to __sqlfu_old_child;
 create table child(x int);
-insert into child("x") select "x" from __sqlfu_old_child;
+insert into child(x) select x from __sqlfu_old_child;
 drop table __sqlfu_old_child;
 -- #endregion
 
@@ -42,7 +42,7 @@ create table a(x int);
 -- output:
 alter table a rename to __sqlfu_old_a;
 create table a(x int);
-insert into a("x") select "x" from __sqlfu_old_a;
+insert into a(x) select x from __sqlfu_old_a;
 drop table __sqlfu_old_a;
 -- #endregion
 
@@ -55,8 +55,8 @@ end;
 -- desired:
 create table person(name text);
 -- output:
-drop trigger "person_log";
-alter table "person" drop column "nickname";
+drop trigger person_log;
+alter table person drop column nickname;
 -- #endregion
 
 -- #region: view reference drops blockers around direct column drop
@@ -66,6 +66,6 @@ create view person_names as select name, nickname from person;
 -- desired:
 create table person(name text);
 -- output:
-drop view "person_names";
-alter table "person" drop column "nickname";
+drop view person_names;
+alter table person drop column nickname;
 -- #endregion

@@ -1,16 +1,17 @@
 size: medium
-status: in-progress
+status: done
 ---
 
 ## Status
 
-Starting implementation. Plan:
+All checklist items complete. Implementation shape:
 
-1. Extract `analyzeMigrateHealth(runtime)` helper that filters `analyzeDatabase` mismatches/recommendations to the ones that matter for `migrate` (repoDrift, historyDrift, schemaDrift).
-2. Preflight in `applyMigrateSql` - throw recommendation-style error if unhealthy.
-3. Wrap migration execution. On failure, rerun analysis and produce different error messages for "safe to retry" vs "reconciliation required".
-4. Write tests for the 4 scenarios.
-5. Update README + migration-model.md.
+- New `analyzeMigrateHealth` in `packages/sqlfu/src/api.ts` is narrower than `analyzeDatabase`: it only looks at applied history (+ prefix order) and live-vs-history schema drift. It deliberately does not replay pending migrations, so broken pending SQL still reaches the real migrate path.
+- `applyMigrateSql` preflights before applying anything (even with zero pending migrations), wraps `applyMigrations` in a try/catch, and reruns the same narrow health check from the post-failure state.
+- Error strings are operator-facing and reuse the existing recommendation-style diagnostics.
+- History drift now additionally flags "out-of-order": a new migration file sorting before an already-applied one.
+- `surroundWithBeginCommitRollbackSync` now swallows rollback errors so the original migration error survives (previously a migration containing its own `commit` would mask the real error with a `cannot rollback - no transaction is active`).
+- Tests cover the four required scenarios; the "reconciliation required" case is exercised with a real migration that includes `commit;` mid-way and then an intentional syntax error.
 
 Handle failed migrations properly.
 
@@ -143,8 +144,8 @@ Explain the reasoning in more detail:
   - [x] failed migration but safe-to-retry _`formatMigrateFailure` with no blockers_
   - [x] failed migration and reconciliation-needed _`formatMigrateFailure` with blockers + recommendations_
 - [x] add migration tests covering the four required scenarios above _4 new tests at the end of `describe('migrate', ...)` in `packages/sqlfu/test/migrations/migrations.test.ts`_
-- [ ] update `packages/sqlfu/README.md`
-- [ ] update `packages/sqlfu/docs/migration-model.md`
+- [x] update `packages/sqlfu/README.md` _added "When a migration fails" subsection under Draft and Apply Migrations_
+- [x] update `packages/sqlfu/docs/migration-model.md` _added "Failed Migrations" section with the four pieces of explanation the task asked for_
 - [x] run the relevant test file(s) _all 55 migration tests pass_
 
 ## Acceptance Criteria

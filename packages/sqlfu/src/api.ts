@@ -654,7 +654,7 @@ async function analyzeMigrateHealthWithClient(
     // it resets the database to a trusted recorded state. falling back to the latest migration
     // in the repo could recommend a broken pending migration.
     const recommendedGotoTarget = applied.at(-1)?.name
-      ?? (migrations.length > 0 ? migrationName(migrations.at(-1)!) : null);
+      || (migrations.length > 0 ? migrationName(migrations.at(-1)!) : null);
     blockers.push({
       kind: 'schemaDrift',
       title: 'Schema Drift',

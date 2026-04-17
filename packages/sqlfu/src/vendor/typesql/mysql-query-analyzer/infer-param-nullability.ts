@@ -7,7 +7,7 @@ import {
 	type SelectStatementContext,
 	type QueryExpressionContext
 } from '../../typesql-parser/mysql/MySQLParser.js';
-import { ParserRuleContext, RuleContext } from '../../typesql-parser';
+import { ParserRuleContext, RuleContext } from '../../typesql-parser/index.js';
 import { getAllQuerySpecificationsFromSelectStatement } from './parse.js';
 
 export function inferParamNullabilityQuery(queryContext: SelectStatementContext | InsertQueryExpressionContext): boolean[] {

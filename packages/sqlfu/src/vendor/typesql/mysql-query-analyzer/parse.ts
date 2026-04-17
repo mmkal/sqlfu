@@ -1,5 +1,5 @@
 import MySQLParser from '../../typesql-parser/mysql/index.js'
-import { TerminalNode, ParseTree, ParserRuleContext } from '../../typesql-parser';
+import { TerminalNode, ParseTree, ParserRuleContext } from '../../typesql-parser/index.js';
 import {
 	type QueryContext,
 	QuerySpecificationContext,

@@ -29,7 +29,7 @@ import {
 import type { Relation2 } from './sqlite-describe-nested-query.js';
 import { type Either, left, right } from '../../small-utils.js';
 import type { TypeSqlError } from '../types.js';
-import type { ParserRuleContext } from '../../typesql-parser';
+import type { ParserRuleContext } from '../../typesql-parser/index.js';
 
 function traverse_Sql_stmtContext(sql_stmt: Sql_stmtContext, traverseContext: TraverseContext): TraverseResult2 {
 	const select_stmt = sql_stmt.select_stmt();

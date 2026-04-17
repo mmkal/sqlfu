@@ -1,5 +1,5 @@
 import { A_expr_addContext, A_expr_andContext, A_expr_at_time_zoneContext, A_expr_betweenContext, A_expr_caretContext, A_expr_collateContext, A_expr_compareContext, A_expr_inContext, A_expr_is_notContext, A_expr_isnullContext, A_expr_lesslessContext, A_expr_likeContext, A_expr_mulContext, A_expr_orContext, A_expr_qual_opContext, A_expr_qualContext, A_expr_typecastContext, A_expr_unary_notContext, A_expr_unary_qualopContext, A_expr_unary_signContext, A_exprContext, AexprconstContext, Array_expr_listContext, Array_exprContext, C_expr_caseContext, C_expr_existsContext, C_expr_exprContext, C_exprContext, Case_defaultContext, ColidContext, ColumnElemContext, ColumnrefContext, Common_table_exprContext, CopystmtContext, DeletestmtContext, Expr_listContext, From_clauseContext, From_listContext, Func_applicationContext, Func_arg_exprContext, Func_expr_common_subexprContext, Func_expr_windowlessContext, Func_exprContext, Func_tableContext, IdentifierContext, In_expr_listContext, In_expr_selectContext, In_exprContext, IndirectionContext, Insert_column_itemContext, InsertstmtContext, Join_qualContext, Join_typeContext, Qualified_nameContext, Relation_exprContext, Select_clauseContext, Select_no_parensContext, Select_with_parensContext, SelectstmtContext, Set_clauseContext, Simple_select_intersectContext, Simple_select_pramaryContext, StmtContext, Table_refContext, Target_elContext, Target_labelContext, Target_listContext, Unreserved_keywordContext, UpdatestmtContext, Values_clauseContext, When_clauseContext, Where_clauseContext } from '../../typesql-parser/postgres/PostgreSQLParser.js';
-import { ParserRuleContext } from '../../typesql-parser';
+import { ParserRuleContext } from '../../typesql-parser/index.js';
 import { PostgresColumnSchema } from '../drivers/types.js';
 import { extractOriginalSql, splitName, splitTableName } from '../mysql-query-analyzer/select-columns.js';
 import { DynamicSqlInfo2, FieldName } from '../mysql-query-analyzer/types.js';
@@ -2990,4 +2990,3 @@ function traverse_columnElem(columnElem: ColumnElemContext, fromColumns: Postgre
 	const colid = columnElem.colid();
 	return traverse_colid(colid, fromColumns);
 }
-

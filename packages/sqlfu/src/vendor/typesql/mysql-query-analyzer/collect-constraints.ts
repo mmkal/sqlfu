@@ -4,7 +4,7 @@ import type { ColumnSchema, ColumnDef, TypeVar, Type, Constraint, SubstitutionHa
 import { findColumn, splitName } from './select-columns.js';
 import type { MySqlType, InferType } from '../mysql-mapping.js';
 import { unify } from './unify.js';
-import { TerminalNode } from '../../typesql-parser';
+import { TerminalNode } from '../../typesql-parser/index.js';
 import {isIsoDateLiteral, isIsoDateTimeLiteral, isIsoTimeLiteral} from '../../small-utils.js';
 
 let counter = 0;

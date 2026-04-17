@@ -1,5 +1,5 @@
-import { ParserRuleContext } from '../../typesql-parser';
-import type { ParseTree } from '../../typesql-parser';
+import { ParserRuleContext } from '../../typesql-parser/index.js';
+import type { ParseTree } from '../../typesql-parser/index.js';
 
 import {
 	type JoinedTableContext,

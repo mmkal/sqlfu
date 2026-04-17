@@ -1,7 +1,7 @@
 import { A_expr_andContext, A_expr_betweenContext, A_expr_inContext, A_expr_isnullContext, A_expr_lesslessContext, A_expr_orContext, A_expr_qualContext, A_expr_unary_notContext, A_exprContext, Case_defaultContext, ColumnrefContext } from '../../typesql-parser/postgres/PostgreSQLParser.js';
 import { FieldName } from '../mysql-query-analyzer/types.js';
 import { splitName } from '../mysql-query-analyzer/select-columns.js';
-import { ParserRuleContext } from '../../typesql-parser';
+import { ParserRuleContext } from '../../typesql-parser/index.js';
 
 function getSingleColumnRefOrNull(elseExpr: ParserRuleContext) {
 	if (elseExpr.children?.length != 1) {

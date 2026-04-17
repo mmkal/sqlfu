@@ -36,14 +36,12 @@ export const router = {
       port: z.number().int().positive(),
     }).partial().optional())
     .handler(async ({context, input}) => {
-      const server = await startSqlfuServer({
+      await startSqlfuServer({
         port: input?.port,
         projectRoot: context.config.projectRoot,
       });
 
-      console.log(`sqlfu local server listening on http://localhost:${server.port}`);
-      console.log(`project root: ${context.config.projectRoot}`);
-      console.log('open the UI against http://local.sqlfu.dev or point a client at /api/rpc');
+      console.log('sqlfu ready at https://local.sqlfu.dev');
 
       await new Promise(() => {});
     }),

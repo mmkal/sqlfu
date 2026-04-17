@@ -2,7 +2,6 @@ import fs from 'node:fs/promises';
 import http from 'node:http';
 import https from 'node:https';
 import path from 'node:path';
-import {DatabaseSync} from 'node:sqlite';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {ORPCError, os} from '@orpc/server';
 import {RPCHandler} from '@orpc/server/fetch';
@@ -28,9 +27,11 @@ import {createNodeSqliteClient} from '../client.js';
 import {splitSqlStatements} from '../core/sqlite.js';
 import type {QueryArg, SqlfuProjectConfig} from '../core/types.js';
 import type {QueryExecutionResponse, SchemaCheckCard, SchemaCheckRecommendation, SqlAnalysisResponse, SqlEditorDiagnostic, StudioColumn, TableRowKey, TableRowsResponse} from './shared.js';
+import type {DatabaseSync as DatabaseSyncType} from 'node:sqlite';
 
 const sourceDir = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.resolve(sourceDir, '..', '..');
+const {DatabaseSync} = await loadNodeSqliteModule();
 
 type UiRouterContext = {
   config: SqlfuProjectConfig;
@@ -541,8 +542,8 @@ async function runCliServer() {
         }
       : undefined,
   });
-  const protocol = (tlsKeyPath && tlsCertPath) ? 'https' : 'http';
-  console.log(`sqlfu local server listening on ${protocol}://localhost:${server.port}`);
+  void server;
+  console.log('sqlfu ready at https://local.sqlfu.dev');
 }
 
 async function normalizeListenError(error: unknown, port: number) {
@@ -555,6 +556,32 @@ async function normalizeListenError(error: unknown, port: number) {
 
 function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error;
+}
+
+async function loadNodeSqliteModule() {
+  const originalEmitWarning = process.emitWarning.bind(process);
+  process.emitWarning = ((warning: string | Error, ...args: unknown[]) => {
+    if (isNodeSqliteExperimentalWarning(warning, args)) {
+      return;
+    }
+
+    return Reflect.apply(originalEmitWarning, process, [warning, ...args]);
+  }) as typeof process.emitWarning;
+
+  try {
+    return await import('node:sqlite');
+  } finally {
+    process.emitWarning = originalEmitWarning;
+  }
+}
+
+function isNodeSqliteExperimentalWarning(warning: string | Error, args: unknown[]) {
+  const message = typeof warning === 'string' ? warning : warning.message;
+  const type = typeof warning === 'string'
+    ? (typeof args[0] === 'string' ? args[0] : '')
+    : warning.name;
+
+  return type === 'ExperimentalWarning' && message.includes('SQLite is an experimental feature');
 }
 
 async function loadCatalog(config: SqlfuProjectConfig): Promise<QueryCatalog> {
@@ -1033,7 +1060,7 @@ function normalizeSqlRunnerParams(value: unknown): Record<string, unknown> | rea
 }
 
 function runSqlStatement(
-  database: DatabaseSync,
+  database: DatabaseSyncType,
   sql: string,
   params: Record<string, unknown> | readonly unknown[] | undefined,
 ) {
@@ -1045,7 +1072,7 @@ function runSqlStatement(
 }
 
 function executePreparedAll<TRow extends Record<string, unknown>>(
-  statement: ReturnType<DatabaseSync['prepare']>,
+  statement: ReturnType<DatabaseSyncType['prepare']>,
   params: Record<string, unknown> | readonly unknown[] | undefined,
 ) {
   if (params == null) {
@@ -1057,7 +1084,7 @@ function executePreparedAll<TRow extends Record<string, unknown>>(
 }
 
 function executePreparedRun(
-  statement: ReturnType<DatabaseSync['prepare']>,
+  statement: ReturnType<DatabaseSyncType['prepare']>,
   params: Record<string, unknown> | readonly unknown[] | undefined,
 ) {
   if (params == null) {

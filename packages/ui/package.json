@@ -7,7 +7,7 @@
     "dev": "pnpm exec tsx test/start-server.ts dev-project --dev",
     "local.sqlfu.dev": "pnpm exec tsx test/local.sqlfu.dev.ts",
     "build": "vite build",
-    "test:node": "vitest run src/runtime.test.ts",
+    "test:node": "vitest run src/runtime.test.ts src/startup-error.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "playwright test"
   },

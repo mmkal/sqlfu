@@ -46,6 +46,7 @@ import {
 } from './components/ui/dialog.js';
 import {AppToaster} from './components/ui/toaster.js';
 import {resolveApiOrigin, resolveApiRpcUrl} from './runtime.js';
+import {classifyStartupError} from './startup-error.js';
 import './styles.css';
 
 const queryClient = new QueryClient({
@@ -193,22 +194,46 @@ function StartupFailureScreen(input: {
   const apiOrigin = resolveApiOrigin();
   const apiHost = new URL(apiOrigin).host;
   const browserName = detectBrowserName();
-  const errorMessage = input.error instanceof Error ? input.error.message : String(input.error);
+  const startupError = classifyStartupError(input.error);
+  const errorMessage = startupError.message;
 
   return (
     <main className="startup-shell">
       <section className="startup-card">
-        <div className="eyebrow">Hey there</div>
         <h1><code>sqlfu</code></h1>
         <p className="startup-lede">Connecting to the sqlfu backend on {apiHost}</p>
 
         <div className="startup-grid">
           <section className="startup-section">
-            <h2><code>npx sqlfu</code>?</h2>
-            <p>Make sure the local sqlfu backend is up and running.</p>
-            <ol className="startup-steps">
-              <li>Run <code>npx sqlfu</code>.</li>
-            </ol>
+            {startupError.kind === 'unreachable' ? (
+              <>
+                <h2><code>npx sqlfu</code>?</h2>
+                <p>Make sure the local sqlfu backend is up and running.</p>
+                <ol className="startup-steps">
+                  <li>Run <code>npx sqlfu</code>.</li>
+                </ol>
+              </>
+            ) : null}
+            {startupError.kind === 'client-error' ? (
+              <>
+                <h2>Backend returned {startupError.status}</h2>
+                <p>The sqlfu backend on {apiHost} responded with a client error.</p>
+                <ol className="startup-steps">
+                  <li>Restart the local backend with the latest <code>sqlfu</code> version.</li>
+                  <li>Reload this page.</li>
+                </ol>
+              </>
+            ) : null}
+            {startupError.kind === 'server-error' ? (
+              <>
+                <h2>Backend returned {startupError.status}</h2>
+                <p>The sqlfu backend on {apiHost} is reachable, but it crashed while handling the request.</p>
+                <ol className="startup-steps">
+                  <li>Check the terminal where <code>npx sqlfu</code> is running.</li>
+                  <li>Fix the backend error, then reload this page.</li>
+                </ol>
+              </>
+            ) : null}
             <div className="startup-actions">
               <button
                 className="button primary"
@@ -232,7 +257,7 @@ function StartupFailureScreen(input: {
           </section>
 
           <section className="startup-section">
-            {browserName === 'Safari' || browserName === 'Brave' ? (
+            {startupError.kind === 'unreachable' && (browserName === 'Safari' || browserName === 'Brave') ? (
               <>
                 <h2>Using Safari or Brave?</h2>
                 <p>
@@ -248,7 +273,8 @@ function StartupFailureScreen(input: {
                   <p>On Brave you can also disable Brave Shields for this site.</p>
                 ) : null}
               </>
-            ) : (
+            ) : null}
+            {startupError.kind === 'unreachable' && browserName !== 'Safari' && browserName !== 'Brave' ? (
               <>
                 <h2>Chrome Local Network Access</h2>
                 <p>
@@ -261,7 +287,25 @@ function StartupFailureScreen(input: {
                   <li>Reload the page.</li>
                 </ol>
               </>
-            )}
+            ) : null}
+            {startupError.kind === 'client-error' ? (
+              <>
+                <h2>Client request rejected</h2>
+                <p>
+                  The browser reached the local backend, but the backend rejected the request with HTTP {startupError.status}.
+                </p>
+                <p>This usually means the local backend is out of date, or the local project is in a bad state.</p>
+              </>
+            ) : null}
+            {startupError.kind === 'server-error' ? (
+              <>
+                <h2>Backend error</h2>
+                <p>
+                  The browser reached the local backend, but it responded with HTTP {startupError.status}.
+                </p>
+                <p>The detailed stack trace should be in the terminal where <code>npx sqlfu</code> is running.</p>
+              </>
+            ) : null}
           </section>
         </div>
 

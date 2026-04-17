@@ -6,7 +6,7 @@ Linked reference: https://sqlite.org/wasm/doc/trunk/demo-123.md (official `@sqli
 
 ## Status
 
-first pass implemented and manually smoke-tested in dev. Deploy step (adding the demo domain via Cloudflare) still needs to be run by hand with `alchemy deploy` — the config entry is in place.
+phase 2 landed: all UiRouter endpoints now run in-browser. Schema drift detection, migrations (draft / baseline / migrate / sync / goto), authorities view, and save/rename/delete/execute for saved queries all work end-to-end against the in-browser SQLite. Deploy still needs `alchemy deploy` run by hand.
 
 ## Decisions (filled in from the original sketch)
 
@@ -29,15 +29,13 @@ first pass implemented and manually smoke-tested in dev. Deploy step (adding the
 - **Mode detection:** `hostname === 'demo.local.sqlfu.dev'` OR URL search param `?demo=1` (for local testing without DNS).
 - **Deployment:** add a Cloudflare `Website` entry in `alchemy.run.mts` for the demo host, pointing at the same `packages/ui` dist (same build, served at a different domain).
 
-## Deliberately out of scope (for this first pass)
+## Deliberately out of scope
 
-- Migrations, definitions.sql editing, and the full schema authorities UI in demo mode.
-- Saving generated queries / catalog in demo mode.
-- OPFS persistence / per-session URLs you can share.
-- Bundling the full `sqlfu` backend (schemadiff, typegen, migration engine) into the browser. The task hints at this and it's possible but messy — keep it out of phase 1.
-- Playwright coverage for demo mode — leave a manual-test note; the existing local.sqlfu.dev spec is the reference integration path.
+- **TypeSQL-style type inference for saved queries.** In demo mode the catalog is built from a tiny regex pass over the SQL (detects `:slug` etc. and stubs JSON schemas as `{type: 'string'}`). Type inference in the browser would need porting the vendored typesql pipeline and `ts-morph`, which is far heavier than the rest of the demo combined.
+- **OPFS persistence / per-session URLs.** Everything resets on reload; demo is ephemeral by design.
+- **Playwright coverage for demo mode.** The existing `local.sqlfu.dev` spec remains the reference integration path.
 
-These are reasonable "v2" follow-ups once the basic demo ships.
+These are reasonable "v3" follow-ups.
 
 ## Checklist
 
@@ -55,10 +53,24 @@ These are reasonable "v2" follow-ups once the basic demo ships.
 
 ## Implementation notes (log during work)
 
+### Phase 1
+
 - **Wasm URL in Vite.** The default `sqlite3InitModule()` call looks for `sqlite3.wasm` at a URL relative to the ESM entrypoint. Under Vite's dev dep-bundling (`node_modules/.vite/deps/...`), that resolves to a path that the SPA fallback serves as `index.html`, which then fails to compile as wasm. Fix: `import sqlite3WasmUrl from '@sqlite.org/sqlite-wasm/sqlite3.wasm?url';` and pass it through `locateFile`. `@sqlite.org/sqlite-wasm/package.json` exports `./sqlite3.wasm` → `./dist/sqlite3.wasm`, so this path is stable.
 - **Init signature type.** `sqlite3InitModule` is declared as `(): Promise<...>` by design (see sqlite-wasm PR #129); the runtime still accepts the Emscripten-style options object. Cast to the options-accepting signature locally rather than patching the package types.
-- **Transitively bundling `@orpc/server` through the type import.** `RouterClient<UiRouter>` comes from `@orpc/server`, but it's already a runtime dep of `packages/ui` (used in the existing `createORPCClient` typing path), so no new runtime surface was added.
 - **Lazy proxy vs `createRouterClient`.** First pass tried to build a sibling oRPC router with the `os` builder so `createRouterClient` could produce the client. That pulled the whole oRPC server pipeline into the browser bundle for no real win, so I collapsed it to a plain object of async handlers + a deep Proxy that awaits wasm init on first call. Same type, much less code.
-- **Bundle size.** Build output: `index-*.js ~ 1.73 MB` (550 KB gzipped), `sqlite3-*.wasm ~ 860 KB` (398 KB gzipped). Vite warns about the main chunk; chunk-splitting is a follow-up, not a blocker for a demo page.
-- **Smoke test.** Ran `pnpm --filter sqlfu-ui dev`, navigated to `?demo=1`, confirmed: demo banner renders, posts/post_cards tables appear, `/#table/posts` shows the 2 seeded rows, `/#sql` runs `select name, type from sqlite_schema` and returns `posts | table`, `post_cards | view`. Also navigated to `/` (no `?demo=1`) and confirmed the "Open the demo →" banner appears instead.
-- **Deploy.** `alchemy.run.mts` now lists both `local.sqlfu.dev` and `demo.local.sqlfu.dev` under the same Cloudflare Website. The actual deploy (`pnpm alchemy deploy` or whatever the convention is) is left to run by hand — it touches shared infrastructure and isn't something to trigger from a task agent.
+
+### Phase 2
+
+- **Key insight: the pure parts of `packages/sqlfu` are already browser-safe.** `core/sqlite.ts`, `schemadiff/sqlite/inspect.ts`, `schemadiff/sqlite/plan.ts`, `schemadiff/sqlite/identifiers.ts`, `schemadiff/graph-sequencer.ts`, `core/sql.ts`, `core/naming.ts` — none of them import Node APIs. The only Node-coupled layer is `schemadiff/sqlite/index.ts`'s wrapper that creates temp scratch database *files*, plus `api.ts`'s scratch-db-via-DatabaseSync. Expanded `sqlfu/browser` to re-export the pure modules (plus the types I need), then wrote wasm-backed equivalents of the Node-coupled glue directly in `packages/ui/src/demo/`. No memfs needed — the filesystem layer collapses into a plain in-memory state because the demo only cares about three known paths (`definitions.sql`, `migrations/`, `sql/`).
+- **Wasm-backed sqlfu `AsyncClient` adapter** (`demo/sqlfu-client-adapter.ts`). Same shape as `createLibsqlClient` and friends — wraps a `WasmSqliteClient` driver and satisfies the `AsyncClient` interface from `sqlfu`, so the pure modules work against it unchanged.
+- **Scratch databases** (`demo/scratch-db.ts`) are just fresh `:memory:` wasm DBs with an `asyncDispose` that closes them. One wasm DB per scratch; no cross-talk.
+- **Schema diff** (`demo/schema-diff.ts`) replicates `diffBaselineSqlToDesiredSqlNative` directly (30 lines): open two scratches, apply SQL to each, inspect, call `planSchemaDiff`. Also replicates `schemasEqual`/`toComparableSchema` locally — needed for the comparisons the analyzer makes.
+- **Migration helpers** (`demo/migrations.ts`) are a copy of `sqlfu/migrations/index.ts` with `migrationChecksum` switched from `node:crypto.createHash` to Web Crypto's async `subtle.digest`. All callers are already async, so propagating `await` is harmless.
+- **Analyzer** (`demo/analyze.ts`) is a straight copy of `analyzeDatabase` in `api.ts`, plus the recommendation helpers. No behavior changes — same 5-drift matrix, same recommendations. Worth a future refactor in `packages/sqlfu` to split the pure analysis from the I/O; for now the duplication is contained.
+- **Commands** (`demo/router.ts`'s `runDemoCommand`) mirror `sqlfu`'s CLI — `draft`/`sync`/`migrate`/`baseline`/`goto`/`check`/`init`. Same confirmation-dialog protocol (`confirmation_missing:<json>` error → UI dialog → re-call with `confirmation` arg) as the real server.
+- **Catalog** (`demo/catalog.ts`) builds `QueryCatalogEntry` objects from saved SQL without type inference. Arg detection is a regex for `:name` / `@name` / `$name`; each gets a `{type: 'string'}` schema in `paramsSchema`. RJSF refuses to render a field without a type; that tripped me up twice.
+- **Named parameter binding quirk.** sqlite-wasm's `bind` option expects object keys to carry the SQL prefix character (`:slug`, not `slug`). `DatabaseSync` from `node:sqlite` accepts both. Normalize at the wasm client boundary rather than at every caller.
+- **`await using` + bare `return someAsync()`.** This one bit me. `await using scratch = ...; return inspectSchema(scratch.client);` disposes the scratch *before* the returned promise resolves — so `inspect` runs against a closed DB. `return await ...` fixes it. I now treat `return` inside an `await using` block the same as `return` inside a `try`/`finally` — always `await` before returning.
+- **Bundle size.** Main chunk grew from 1.73 MB → 1.78 MB (550 → 564 KB gzipped) for the extra demo router + imported pure modules. Still well under what Cloudflare cares about.
+- **Smoke test, end to end.** From a fresh demo load, ran: `sqlfu draft` (produced `<timestamp>_create_table_posts.sql` in the vfs), `sqlfu baseline <migration>` (recorded it in live DB's `sqlfu_migrations`), `find-post-by-slug` query with `slug=hello-world` (returned the seeded row), `select name, type from sqlite_schema` in the SQL runner. All 5 drift checks went green after baseline. Schema authorities view shows the migration entry and its "Applied" status correctly.
+- **Deploy.** `alchemy.run.mts` lists both `local.sqlfu.dev` and `demo.local.sqlfu.dev` under the same Cloudflare Website. Actual deploy is left to run by hand.

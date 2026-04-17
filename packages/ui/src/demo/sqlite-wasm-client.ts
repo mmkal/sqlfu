@@ -84,7 +84,13 @@ function normalizeBindings(args: BindArgs) {
   if (entries.length === 0) {
     return undefined;
   }
-  return Object.fromEntries(entries.map(([key, value]) => [key, normalizeBindValue(value)])) as Record<string, SqlValue>;
+  return Object.fromEntries(
+    entries.map(([key, value]) => [normalizeBindKey(key), normalizeBindValue(value)]),
+  ) as Record<string, SqlValue>;
+}
+
+function normalizeBindKey(key: string): string {
+  return /^[:@$]/.test(key) ? key : `:${key}`;
 }
 
 function normalizeBindValue(value: BindValue): SqlValue {

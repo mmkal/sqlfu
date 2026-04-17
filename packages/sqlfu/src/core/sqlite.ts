@@ -145,9 +145,12 @@ export function rawSqlWithSqlSplittingSync(
     return {};
   }
 
-  const statements = splitSqlStatements(sql);
+  const statements = splitSqlStatements(sql).filter((statement) => !isCommentOnlySql(statement));
+  if (statements.length === 0) {
+    return {};
+  }
   if (statements.length <= 1) {
-    return runOne({sql, args: []});
+    return runOne({sql: statements[0]!, args: []});
   }
 
   let lastResult = {};
@@ -165,9 +168,12 @@ export async function rawSqlWithSqlSplittingAsync(
     return {};
   }
 
-  const statements = splitSqlStatements(sql);
+  const statements = splitSqlStatements(sql).filter((statement) => !isCommentOnlySql(statement));
+  if (statements.length === 0) {
+    return {};
+  }
   if (statements.length <= 1) {
-    return runOne({sql, args: []});
+    return runOne({sql: statements[0]!, args: []});
   }
 
   let lastResult = {};
@@ -277,6 +283,73 @@ export function splitSqlStatements(sql: string): string[] {
   }
 
   return statements;
+}
+
+function isCommentOnlySql(sql: string) {
+  let index = 0;
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+  let inLineComment = false;
+  let inBlockComment = false;
+
+  while (index < sql.length) {
+    const char = sql[index]!;
+    const next = sql[index + 1];
+
+    if (inLineComment) {
+      if (char === '\n') {
+        inLineComment = false;
+      }
+      index += 1;
+      continue;
+    }
+
+    if (inBlockComment) {
+      if (char === '*' && next === '/') {
+        inBlockComment = false;
+        index += 2;
+        continue;
+      }
+      index += 1;
+      continue;
+    }
+
+    if (!inSingleQuote && !inDoubleQuote && char === '-' && next === '-') {
+      inLineComment = true;
+      index += 2;
+      continue;
+    }
+
+    if (!inSingleQuote && !inDoubleQuote && char === '/' && next === '*') {
+      inBlockComment = true;
+      index += 2;
+      continue;
+    }
+
+    if (char === "'" && !inDoubleQuote) {
+      if (inSingleQuote && next === "'") {
+        index += 2;
+        continue;
+      }
+      inSingleQuote = !inSingleQuote;
+      index += 1;
+      continue;
+    }
+
+    if (char === '"' && !inSingleQuote) {
+      inDoubleQuote = !inDoubleQuote;
+      index += 1;
+      continue;
+    }
+
+    if (!inSingleQuote && !inDoubleQuote && !/\s/u.test(char)) {
+      return false;
+    }
+
+    index += 1;
+  }
+
+  return true;
 }
 
 export function surroundWithBeginCommitRollbackSync<TDriver, TResult>(

@@ -52,6 +52,7 @@ export async function createMigrationsFixture(
 
   const api = createRouterClient(router, {
     context: {
+      projectRoot: root,
       config: projectConfig,
       now: fakeNow,
       confirm: async ({body}) => body,

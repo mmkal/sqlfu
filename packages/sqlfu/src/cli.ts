@@ -10,17 +10,21 @@ import * as prompts from '@clack/prompts';
 
 import type {SqlfuCommandConfirm} from './api.js';
 import {router} from './api.js';
-import {loadProjectConfig} from './core/config.js';
+import {loadProjectState} from './core/config.js';
 import packageJson from '../package.json' with { type: 'json' };
 
 export async function createSqlfuCli() {
-  const projectConfig = await loadProjectConfig();
+  const project = await loadProjectState();
   return createCli({
     router,
     name: packageJson.name,
     version: packageJson.version,
     description: packageJson.description,
-    context: {config: projectConfig, confirm},
+    context: {
+      projectRoot: project.projectRoot,
+      config: project.initialized ? project.config : undefined,
+      confirm,
+    },
   });
 }
 
@@ -85,7 +89,7 @@ function availableEditors() {
     });
 }
 
-async function editTempFile(input: string, editor: string, bodyType: 'markdown' | 'sql' | undefined) {
+async function editTempFile(input: string, editor: string, bodyType: 'markdown' | 'sql' | 'typescript' | undefined) {
   const tempFile = path.join(
     os.tmpdir(),
     'sqlfu-confirm',
@@ -121,9 +125,12 @@ async function editTempFile(input: string, editor: string, bodyType: 'markdown' 
   }
 }
 
-function bodyTypeToExtension(bodyType: 'markdown' | 'sql' | undefined) {
+function bodyTypeToExtension(bodyType: 'markdown' | 'sql' | 'typescript' | undefined) {
   if (bodyType === 'sql') {
     return '.sql';
+  }
+  if (bodyType === 'typescript') {
+    return '.ts';
   }
   if (bodyType === 'markdown') {
     return '.md';

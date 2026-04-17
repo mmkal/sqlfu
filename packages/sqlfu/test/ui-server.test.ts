@@ -12,8 +12,9 @@ import {expect, test} from 'vitest';
 
 import type {UiRouter} from '../src/ui/server.js';
 import {startSqlfuServer} from '../src/ui/server.js';
+import {createDefaultInitPreview} from '../src/core/config.js';
 import {ensureBuilt, packageRoot} from './adapters/ensure-built.js';
-import {createTempFixtureRoot, writeFixtureFiles} from './fs-fixture.js';
+import {createTempFixtureRoot, dumpFixtureFs, writeFixtureFiles} from './fs-fixture.js';
 
 test('sqlfu server serves a local backend page and the ui rpc contract from packages/sqlfu', async () => {
   await using fixture = await createUiServerFixture();
@@ -130,6 +131,33 @@ test('sqlfu server reports a useful error when the requested port is already in 
   );
 });
 
+test('sqlfu server can initialize a fresh directory through the ui rpc', async () => {
+  const root = await createTempFixtureRoot('ui-server-init');
+  await using fixture = await createUiServerFixture({projectRoot: root});
+
+  expect(await fixture.client.project.status()).toMatchObject({
+    initialized: false,
+    projectRoot: root,
+  });
+
+  await fixture.client.schema.command({
+    command: 'sqlfu init',
+    confirmation: createDefaultInitPreview(root).configContents,
+  });
+
+  expect(await fixture.client.project.status()).toMatchObject({
+    initialized: true,
+    projectRoot: root,
+  });
+  const check = await fixture.client.schema.check();
+  expect(check.recommendations).toMatchObject([]);
+  expect(check.cards.every((card) => card.ok)).toBe(true);
+  expect(await dumpFixtureFs(root)).toContain('sqlfu.config.ts');
+  expect(await dumpFixtureFs(root)).toContain('definitions.sql');
+  expect(await dumpFixtureFs(root)).toContain('migrations/');
+  expect(await dumpFixtureFs(root)).toContain('sql/');
+});
+
 test('sqlfu kill stops the process listening on the requested port', async () => {
   await ensureBuilt();
   await using fixture = await createUiServerFixture();
@@ -148,43 +176,46 @@ async function createUiServerFixture(input: {
   dev?: boolean;
   uiRoot?: string;
   allowUnknownHosts?: boolean;
+  projectRoot?: string;
 } = {}) {
-  const root = await createTempFixtureRoot('ui-server');
+  const root = input.projectRoot ?? await createTempFixtureRoot('ui-server');
   const dbPath = path.join(root, 'app.db');
 
-  await writeFixtureFiles(root, {
-    'sqlfu.config.ts': `
-      export default {
-        db: './app.db',
-        migrationsDir: './migrations',
-        definitionsPath: './definitions.sql',
-        sqlDir: './sql',
-      };
-    `,
-    'definitions.sql': `
-      create table posts (
-        id integer primary key,
-        slug text not null,
-        title text not null
-      );
-    `,
-    'sql/.gitkeep': '',
-    'migrations/.gitkeep': '',
-  });
+  if (!input.projectRoot) {
+    await writeFixtureFiles(root, {
+      'sqlfu.config.ts': `
+        export default {
+          db: './app.db',
+          migrationsDir: './migrations',
+          definitionsPath: './definitions.sql',
+          sqlDir: './sql',
+        };
+      `,
+      'definitions.sql': `
+        create table posts (
+          id integer primary key,
+          slug text not null,
+          title text not null
+        );
+      `,
+      'sql/.gitkeep': '',
+      'migrations/.gitkeep': '',
+    });
 
-  const database = new DatabaseSync(dbPath);
-  try {
-    database.exec(`
-      create table posts (
-        id integer primary key,
-        slug text not null,
-        title text not null
-      );
+    const database = new DatabaseSync(dbPath);
+    try {
+      database.exec(`
+        create table posts (
+          id integer primary key,
+          slug text not null,
+          title text not null
+        );
 
-      insert into posts (slug, title) values ('hello-world', 'Hello World');
-    `);
-  } finally {
-    database.close();
+        insert into posts (slug, title) values ('hello-world', 'Hello World');
+      `);
+    } finally {
+      database.close();
+    }
   }
 
   const server = await startSqlfuServer({

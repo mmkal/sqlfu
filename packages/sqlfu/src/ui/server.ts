@@ -7,7 +7,7 @@ import {ORPCError, os} from '@orpc/server';
 import {RPCHandler} from '@orpc/server/fetch';
 import type {ViteDevServer} from 'vite';
 import {z} from 'zod';
-import {resolveProjectConfig} from '../core/config.js';
+import {loadProjectStateFrom, resolveProjectConfig} from '../core/config.js';
 import {PortInUseError, getListeningProcesses} from '../core/port-process.js';
 
 import {
@@ -33,14 +33,26 @@ const sourceDir = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.resolve(sourceDir, '..', '..');
 const {DatabaseSync} = await loadNodeSqliteModule();
 
+type ResolvedUiProject =
+  | {
+      initialized: true;
+      projectRoot: string;
+      config: SqlfuProjectConfig;
+    }
+  | {
+      initialized: false;
+      projectRoot: string;
+      configPath: string;
+    };
+
 type UiRouterContext = {
-  config: SqlfuProjectConfig;
+  project: ResolvedUiProject;
 };
 
 type ProjectResolver = (request: {
   readonly host: string;
   readonly projectHeader?: string;
-}) => Promise<SqlfuProjectConfig>;
+}) => Promise<ResolvedUiProject>;
 
 type UiAssetOptions = {
   root: string;
@@ -81,10 +93,17 @@ const tableRowKeySchema = z.discriminatedUnion('kind', [
 ]) satisfies z.ZodType<TableRowKey>;
 
 const uiRouter = {
+  project: {
+    status: uiBase.handler(({context}) => ({
+      initialized: context.project.initialized,
+      projectRoot: context.project.projectRoot,
+    })),
+  },
   schema: {
     get: uiBase.handler(async ({context}) => {
-      const projectRoot = path.dirname(context.config.db);
-      const database = new DatabaseSync(context.config.db);
+      const config = requireProjectConfig(context.project);
+      const projectRoot = path.dirname(config.db);
+      const database = new DatabaseSync(config.db);
       const client = createNodeSqliteClient(database);
 
       try {
@@ -115,8 +134,9 @@ const uiRouter = {
       }
     }),
     check: uiBase.handler(async ({context}) => {
+      const config = requireProjectConfig(context.project);
       try {
-        const analysis = await getCheckAnalysis({config: context.config});
+        const analysis = await getCheckAnalysis({config});
         return {
           cards: buildSchemaCheckCards(analysis),
           recommendations: buildSchemaCheckRecommendations(analysis),
@@ -131,7 +151,7 @@ const uiRouter = {
     }),
     authorities: {
       get: uiBase.handler(async ({context}) => {
-        const authorities = await getSchemaAuthorities({config: context.config});
+        const authorities = await getSchemaAuthorities({config: requireProjectConfig(context.project)});
         return {
           desiredSchemaSql: authorities.desiredSchemaSql,
           migrations: authorities.migrations.map((migration) => ({
@@ -166,7 +186,7 @@ const uiRouter = {
           }
 
           return {
-            sql: await getMigrationResultantSchema({config: context.config}, input),
+            sql: await getMigrationResultantSchema({config: requireProjectConfig(context.project)}, input),
           };
         }),
     },
@@ -182,7 +202,10 @@ const uiRouter = {
 
         try {
           await runSqlfuCommand(
-            {config: context.config},
+            {
+              projectRoot: context.project.projectRoot,
+              config: context.project.initialized ? context.project.config : undefined,
+            },
             input.command,
             async (params) => {
               const body = params.body.trim();
@@ -215,18 +238,18 @@ const uiRouter = {
           throw new Error('Desired Schema is required');
         }
 
-        await writeDefinitionsSql({config: context.config}, input.sql);
+        await writeDefinitionsSql({config: requireProjectConfig(context.project)}, input.sql);
         return {ok: true} as const;
       }),
   },
-  catalog: uiBase.handler(({context}) => loadCatalog(context.config)),
+  catalog: uiBase.handler(({context}) => loadCatalog(requireProjectConfig(context.project))),
   table: {
     list: uiBase
       .input(z.object({
         relationName: z.string(),
         page: z.number().int(),
       }))
-      .handler(({context, input}) => getTableRows(context.config.db, input.relationName, input.page)),
+      .handler(({context, input}) => getTableRows(requireProjectConfig(context.project).db, input.relationName, input.page)),
     save: uiBase
       .input(z.object({
         relationName: z.string(),
@@ -235,7 +258,7 @@ const uiRouter = {
         rows: z.array(rowRecordSchema),
         rowKeys: z.array(tableRowKeySchema),
       }))
-      .handler(({context, input}) => saveTableRows(context.config.db, input.relationName, input)),
+      .handler(({context, input}) => saveTableRows(requireProjectConfig(context.project).db, input.relationName, input)),
     delete: uiBase
       .input(z.object({
         relationName: z.string(),
@@ -243,7 +266,7 @@ const uiRouter = {
         originalRow: rowRecordSchema,
         rowKey: tableRowKeySchema,
       }))
-      .handler(({context, input}) => deleteTableRow(context.config.db, input.relationName, input)),
+      .handler(({context, input}) => deleteTableRow(requireProjectConfig(context.project).db, input.relationName, input)),
   },
   sql: {
     run: uiBase
@@ -252,6 +275,7 @@ const uiRouter = {
         params: z.unknown().optional(),
       }))
       .handler(({context, input}) => {
+        const config = requireProjectConfig(context.project);
         const trimmedSql = input.sql.trim();
         if (!trimmedSql) {
           throw new Error('SQL is required');
@@ -259,7 +283,7 @@ const uiRouter = {
 
         const statements = splitSqlStatements(trimmedSql);
         const params = normalizeSqlRunnerParams(input.params);
-        const database = new DatabaseSync(context.config.db);
+        const database = new DatabaseSync(config.db);
 
         try {
           try {
@@ -290,13 +314,14 @@ const uiRouter = {
       .input(z.object({
         sql: z.string(),
       }))
-      .handler(({context, input}) => analyzeSql(context.config, input)),
+      .handler(({context, input}) => analyzeSql(requireProjectConfig(context.project), input)),
     save: uiBase
       .input(z.object({
         sql: z.string(),
         name: z.string(),
       }))
       .handler(async ({context, input}) => {
+        const config = requireProjectConfig(context.project);
         const sql = input.sql.trim();
         if (!sql) {
           throw new Error('SQL is required');
@@ -308,10 +333,10 @@ const uiRouter = {
         }
 
         const relativePath = `sql/${baseName}.sql`;
-        const targetPath = path.join(context.config.projectRoot, relativePath);
+        const targetPath = path.join(config.projectRoot, relativePath);
         await fs.mkdir(path.dirname(targetPath), {recursive: true});
         await fs.writeFile(targetPath, `${sql}\n`);
-        await generateCatalogForProject(context.config.projectRoot);
+        await generateCatalogForProject(config.projectRoot);
         return {savedPath: relativePath};
       }),
   },
@@ -323,7 +348,8 @@ const uiRouter = {
         params: z.record(z.string(), z.unknown()).optional(),
       }))
       .handler(async ({context, input}): Promise<QueryExecutionResponse> => {
-        const catalog = await loadCatalog(context.config);
+        const config = requireProjectConfig(context.project);
+        const catalog = await loadCatalog(config);
         const query = catalog.queries.find((entry) => entry.id === input.queryId);
         if (!query || query.kind !== 'query') {
           throw new Error(`Unknown query: ${input.queryId}`);
@@ -334,7 +360,7 @@ const uiRouter = {
           return encodeArgument(arg, source?.[arg.name]);
         }) as readonly QueryArg[];
 
-        const database = new DatabaseSync(context.config.db);
+        const database = new DatabaseSync(config.db);
         const client = createNodeSqliteClient(database);
 
         try {
@@ -359,7 +385,8 @@ const uiRouter = {
         sql: z.string(),
       }))
       .handler(async ({context, input}) => {
-        const catalog = await loadCatalog(context.config);
+        const config = requireProjectConfig(context.project);
+        const catalog = await loadCatalog(config);
         const query = catalog.queries.find((entry) => entry.id === input.queryId);
         if (!query) {
           throw new Error(`Unknown query: ${input.queryId}`);
@@ -369,8 +396,8 @@ const uiRouter = {
           throw new Error('SQL is required');
         }
 
-        await fs.writeFile(path.join(context.config.projectRoot, query.sqlFile), `${sql}\n`);
-        await generateCatalogForProject(context.config.projectRoot);
+        await fs.writeFile(path.join(config.projectRoot, query.sqlFile), `${sql}\n`);
+        await generateCatalogForProject(config.projectRoot);
         return {
           id: query.id,
           sqlFile: query.sqlFile,
@@ -382,7 +409,8 @@ const uiRouter = {
         name: z.string(),
       }))
       .handler(async ({context, input}) => {
-        const catalog = await loadCatalog(context.config);
+        const config = requireProjectConfig(context.project);
+        const catalog = await loadCatalog(config);
         const query = catalog.queries.find((entry) => entry.id === input.queryId);
         if (!query) {
           throw new Error(`Unknown query: ${input.queryId}`);
@@ -393,9 +421,9 @@ const uiRouter = {
         }
 
         const nextRelativePath = `sql/${nextId}.sql`;
-        const nextPath = path.join(context.config.projectRoot, nextRelativePath);
-        await fs.rename(path.join(context.config.projectRoot, query.sqlFile), nextPath);
-        await generateCatalogForProject(context.config.projectRoot);
+        const nextPath = path.join(config.projectRoot, nextRelativePath);
+        await fs.rename(path.join(config.projectRoot, query.sqlFile), nextPath);
+        await generateCatalogForProject(config.projectRoot);
         return {
           id: nextId,
           sqlFile: nextRelativePath,
@@ -406,13 +434,14 @@ const uiRouter = {
         queryId: z.string(),
       }))
       .handler(async ({context, input}) => {
-        const catalog = await loadCatalog(context.config);
+        const config = requireProjectConfig(context.project);
+        const catalog = await loadCatalog(config);
         const query = catalog.queries.find((entry) => entry.id === input.queryId);
         if (!query) {
           throw new Error(`Unknown query: ${input.queryId}`);
         }
-        await fs.rm(path.join(context.config.projectRoot, query.sqlFile), {force: true});
-        await generateCatalogForProject(context.config.projectRoot);
+        await fs.rm(path.join(config.projectRoot, query.sqlFile), {force: true});
+        await generateCatalogForProject(config.projectRoot);
         return {
           id: query.id,
           sqlFile: query.sqlFile,
@@ -454,7 +483,7 @@ export async function startSqlfuServer(input: StartSqlfuServerOptions = {}) {
         return;
       }
 
-      const config = await resolveProject({
+      const project = await resolveProject({
         host: req.headers.host ?? url.host,
         projectHeader: headerValue(req.headers['x-sqlfu-project']),
       });
@@ -463,7 +492,7 @@ export async function startSqlfuServer(input: StartSqlfuServerOptions = {}) {
         const request = await toWebRequest(req, url);
         const {matched, response} = await rpcHandler.handle(request, {
           prefix: '/api/rpc',
-          context: {config},
+          context: {project},
         });
         await sendWebResponse(res, withApiCors(req, matched ? response : new Response('Not found', {status: 404})));
         return;
@@ -479,7 +508,7 @@ export async function startSqlfuServer(input: StartSqlfuServerOptions = {}) {
         return;
       }
 
-      await sendWebResponse(res, htmlResponse(renderServerHomePage(config), 200));
+      await sendWebResponse(res, htmlResponse(renderServerHomePage(project), 200));
     } catch (error) {
       await sendWebResponse(res, requestErrorResponse(error, req.url ?? '/'));
     }
@@ -1326,11 +1355,7 @@ export async function generateCatalogForProject(projectRoot: string) {
 }
 
 function createFixedProjectResolver(projectRoot: string): ProjectResolver {
-  let configPromise: Promise<SqlfuProjectConfig> | undefined;
-  return async () => {
-    configPromise ??= loadProjectConfigFrom(projectRoot);
-    return await configPromise;
-  };
+  return async () => await loadProjectStateFrom(projectRoot);
 }
 
 function createSubdomainProjectResolver(input: {
@@ -1339,8 +1364,6 @@ function createSubdomainProjectResolver(input: {
   defaultProjectName: string;
   allowUnknownHosts: boolean;
 }): ProjectResolver {
-  const initPromises = new Map<string, Promise<SqlfuProjectConfig>>();
-
   return async ({host, projectHeader}) => {
     const projectName = projectNameFromRequest({
       host,
@@ -1348,20 +1371,11 @@ function createSubdomainProjectResolver(input: {
       defaultProjectName: input.defaultProjectName,
       allowUnknownHosts: input.allowUnknownHosts,
     });
-    const existing = initPromises.get(projectName);
-    if (existing) {
-      return await existing;
-    }
-
-    const next = ensureProjectConfig({
+    return await ensureProjectConfig({
       projectName,
       projectsRoot: input.projectsRoot,
       templateRoot: input.templateRoot,
-    }).finally(() => {
-      initPromises.delete(projectName);
     });
-    initPromises.set(projectName, next);
-    return await next;
   };
 }
 
@@ -1377,7 +1391,7 @@ async function ensureProjectConfig(input: {
     templateRoot: input.templateRoot,
   });
   await ensureDatabase(projectRoot);
-  return await loadProjectConfigFrom(projectRoot);
+  return await loadProjectStateFrom(projectRoot);
 }
 
 async function ensureProjectFiles(input: {
@@ -1424,6 +1438,14 @@ async function loadProjectConfigFrom(projectRoot: string) {
   const configPath = path.join(projectRoot, 'sqlfu.config.ts');
   const configModule = await importConfigFile(configPath);
   return resolveProjectConfig(configModule, configPath);
+}
+
+function requireProjectConfig(project: ResolvedUiProject) {
+  if (!project.initialized) {
+    throw toClientError(new Error(`No sqlfu config found in ${project.projectRoot}. Run 'sqlfu init' first.`));
+  }
+
+  return project.config;
 }
 
 async function importConfigFile(configPath: string) {
@@ -1630,7 +1652,37 @@ function htmlResponse(html: string, status: number) {
   });
 }
 
-function renderServerHomePage(config: SqlfuProjectConfig) {
+function renderServerHomePage(project: ResolvedUiProject) {
+  if (!project.initialized) {
+    return [
+      '<!doctype html>',
+      '<html lang="en">',
+      '<head>',
+      '  <meta charset="utf-8" />',
+      '  <meta name="viewport" content="width=device-width, initial-scale=1" />',
+      '  <title>sqlfu local server</title>',
+      '  <style>',
+      '    :root { color-scheme: light; font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif; }',
+      '    body { margin: 0; background: linear-gradient(180deg, #f8f0df 0%, #fffdf8 100%); color: #1f1a14; }',
+      '    main { max-width: 48rem; margin: 0 auto; padding: 4rem 1.5rem 5rem; }',
+      '    .eyebrow { letter-spacing: 0.12em; text-transform: uppercase; font: 600 0.72rem/1.4 ui-monospace, SFMono-Regular, monospace; color: #8a5a22; }',
+      '    h1 { font-size: clamp(2.6rem, 8vw, 4.8rem); line-height: 0.95; margin: 0.5rem 0 1rem; }',
+      '    p { font-size: 1.08rem; line-height: 1.7; margin: 0.75rem 0; }',
+      '    code { font-family: ui-monospace, SFMono-Regular, monospace; font-size: 0.95em; }',
+      '  </style>',
+      '</head>',
+      '<body>',
+      '  <main>',
+      '    <div class="eyebrow">sqlfu local backend</div>',
+      '    <h1>This directory is not initialized yet.</h1>',
+      `    <p>Run <code>sqlfu init</code> or open <code>local.sqlfu.dev</code> to initialize <code>${escapeHtml(project.projectRoot)}</code>.</p>`,
+      '  </main>',
+      '</body>',
+      '</html>',
+    ].join('\n');
+  }
+
+  const config = project.config;
   return [
     '<!doctype html>',
     '<html lang="en">',

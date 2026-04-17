@@ -160,19 +160,23 @@ The default layout is:
 └── sqlfu.config.ts
 ```
 
+Bootstrap a fresh directory with:
+
+```sh
+sqlfu init
+```
+
 ### Configuration
 
 Create `sqlfu.config.ts` in your project root:
 
 ```ts
-import {defineConfig} from 'sqlfu';
-
-export default defineConfig({
+export default {
   db: './db/app.sqlite',
   migrationsDir: './migrations',
   definitionsPath: './definitions.sql',
   sqlDir: './sql',
-});
+};
 ```
 
 Required config fields:
@@ -238,7 +242,19 @@ For end users, start the local backend from your sqlfu project root:
 npx sqlfu
 ```
 
-That starts the UI backend on `localhost:56081`. The intended browser origin is `local.sqlfu.dev`, which should resolve to that local server.
+In a fresh directory, initialize the project first:
+
+```sh
+sqlfu init
+```
+
+Then start the local backend:
+
+```sh
+npx sqlfu
+```
+
+That starts the UI backend on `localhost:56081`. Open `https://local.sqlfu.dev` in your browser.
 
 If you ever need to avoid a local port conflict, `sqlfu serve --port <port>` overrides the default. Most users should never need this.
 

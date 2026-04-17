@@ -6,6 +6,7 @@ import {os} from '@orpc/server';
 import {z} from 'zod';
 
 import type {Client, SqlfuProjectConfig} from './core/types.js';
+import {createDefaultInitPreview, initializeProject} from './core/config.js';
 import {createBunClient, createNodeSqliteClient, migrationNickname} from './client.js';
 import {extractSchema} from './core/sqlite.js';
 import {
@@ -38,12 +39,37 @@ export const router = {
     .handler(async ({context, input}) => {
       await startSqlfuServer({
         port: input?.port,
-        projectRoot: context.config.projectRoot,
+        projectRoot: context.projectRoot,
       });
 
       console.log('sqlfu ready at https://local.sqlfu.dev');
 
       await new Promise(() => {});
+    }),
+
+  init: base
+    .meta({
+      description: `Initialize a new sqlfu project in the current directory.`,
+    })
+    .handler(async ({context}) => {
+      const preview = createDefaultInitPreview(context.projectRoot);
+      const configContents = await context.confirm({
+        title: 'Create sqlfu.config.ts?',
+        body: preview.configContents,
+        bodyType: 'typescript',
+        editable: true,
+      });
+
+      if (!configContents?.trim()) {
+        return 'Initialization cancelled.';
+      }
+
+      await initializeProject({
+        projectRoot: context.projectRoot,
+        configContents,
+      });
+
+      return `Initialized sqlfu project in ${context.projectRoot}.`;
     }),
 
   kill: base
@@ -74,7 +100,7 @@ export const router = {
     }),
 
   config: base.handler(async ({context}) => {
-    return context.config;
+    return requireContextConfig(context).config;
   }),
 
   sync: base
@@ -83,7 +109,7 @@ export const router = {
         `This command fails if semantic changes are required. You can run 'sqlfu draft' to create a migration file with the necessary changes.`,
     })
     .handler(async ({context}) => {
-      await applySyncSql(context, context.confirm);
+      await applySyncSql(requireContextConfig(context), context.confirm);
     }),
 
   draft: base
@@ -96,7 +122,7 @@ export const router = {
       }).partial().optional(),
     )
     .handler(async ({context, input}) => {
-      await applyDraftSql(context, input, context.confirm);
+      await applyDraftSql(requireContextConfig(context), input, context.confirm);
     }),
 
   migrate: base
@@ -104,7 +130,7 @@ export const router = {
       description: `Apply pending migrations to the configured database.`,
     })
     .handler(async ({context}) => {
-      await applyMigrateSql(context, context.confirm);
+      await applyMigrateSql(requireContextConfig(context), context.confirm);
     }),
 
   pending: base
@@ -112,8 +138,9 @@ export const router = {
       description: `List migrations that exist but have not been applied to the configured database.`,
     })
     .handler(async ({context}) => {
-      const migrations = await createRuntime(context).readMigrations();
-      await using database = await openMainDevDatabase(context.config.db);
+      const initializedContext = requireContextConfig(context);
+      const migrations = await createRuntime(initializedContext).readMigrations();
+      await using database = await openMainDevDatabase(initializedContext.config.db);
       const applied = await readMigrationHistory(database.client);
       const appliedNames = new Set(applied.map((migration) => migration.name));
       return migrations
@@ -126,7 +153,7 @@ export const router = {
       description: `List migrations recorded in the configured database history.`,
     })
     .handler(async ({context}) => {
-      await using database = await openMainDevDatabase(context.config.db);
+      await using database = await openMainDevDatabase(requireContextConfig(context).config.db);
       const applied = await readMigrationHistory(database.client);
       return applied.map((migration) => migration.name);
     }),
@@ -139,8 +166,9 @@ export const router = {
       text: z.string().min(1),
     }))
     .handler(async ({context, input}) => {
-      const migrations = await createRuntime(context).readMigrations();
-      await using database = await openMainDevDatabase(context.config.db);
+      const initializedContext = requireContextConfig(context);
+      const migrations = await createRuntime(initializedContext).readMigrations();
+      await using database = await openMainDevDatabase(initializedContext.config.db);
       const applied = await readMigrationHistory(database.client);
       const appliedNames = new Set(applied.map((migration) => migration.name));
       return migrations
@@ -162,7 +190,7 @@ export const router = {
       }),
     )
     .handler(async ({context, input}) => {
-      await applyBaselineSql(context, input, context.confirm);
+      await applyBaselineSql(requireContextConfig(context), input, context.confirm);
     }),
 
   goto: base
@@ -175,7 +203,7 @@ export const router = {
       }),
     )
     .handler(async ({context, input}) => {
-      await applyGotoSql(context, input, context.confirm);
+      await applyGotoSql(requireContextConfig(context), input, context.confirm);
     }),
 
   check: {
@@ -184,13 +212,13 @@ export const router = {
         description: `Run all checks and recommend the next action.`,
       })
       .handler(async ({context}) => {
-        const analysis = await analyzeDatabase(createRuntime(context));
+        const analysis = await analyzeDatabase(createRuntime(requireContextConfig(context)));
         if (analysis.mismatches.length > 0) {
           throw new Error(formatCheckFailure(analysis));
         }
       }),
     migrationsMatchDefinitions: base.handler(async ({context}) => {
-      const runtime = createRuntime(context);
+      const runtime = createRuntime(requireContextConfig(context));
       const [definitionsSchema, migrationsSchema] = await Promise.all([
         materializeDefinitionsSchema(runtime.config, await runtime.readDefinitionsSql()),
         materializeMigrationsSchema(runtime.config, await runtime.readMigrations()),
@@ -291,7 +319,7 @@ export async function getMigrationResultantSchema(
 export type SqlfuCommandConfirmParams = {
   readonly title: string;
   readonly body: string;
-  readonly bodyType?: 'markdown' | 'sql';
+  readonly bodyType?: 'markdown' | 'sql' | 'typescript';
   readonly editable?: boolean;
 };
 
@@ -300,43 +328,63 @@ export type SqlfuCommandConfirm = (
 ) => Promise<string | null>;
 
 export async function runSqlfuCommand(
-  context: SqlfuContext,
+  context: SqlfuCommandContext,
   command: string,
   confirm: SqlfuCommandConfirm,
 ): Promise<void> {
   const normalized = command.trim();
 
+  if (normalized === 'sqlfu init') {
+    const preview = createDefaultInitPreview(context.projectRoot);
+    const configContents = await confirm({
+      title: 'Create sqlfu.config.ts?',
+      body: preview.configContents,
+      bodyType: 'typescript',
+      editable: true,
+    });
+    if (!configContents?.trim()) {
+      return;
+    }
+    await initializeProject({
+      projectRoot: context.projectRoot,
+      configContents,
+    });
+    return;
+  }
+
+  const initializedContext = requireContextConfig(context);
+
   if (normalized === 'sqlfu draft') {
-    await applyDraftSql(context, {}, confirm);
+    await applyDraftSql(initializedContext, {}, confirm);
     return;
   }
 
   if (normalized === 'sqlfu sync') {
-    await applySyncSql(context, confirm);
+    await applySyncSql(initializedContext, confirm);
     return;
   }
 
   if (normalized === 'sqlfu migrate') {
-    await applyMigrateSql(context, confirm);
+    await applyMigrateSql(initializedContext, confirm);
     return;
   }
 
   if (normalized.startsWith('sqlfu baseline ')) {
-    await applyBaselineSql(context, {
+    await applyBaselineSql(initializedContext, {
       target: normalized.replace(/^sqlfu baseline /u, '').trim(),
     }, confirm);
     return;
   }
 
   if (normalized.startsWith('sqlfu goto ')) {
-    await applyGotoSql(context, {
+    await applyGotoSql(initializedContext, {
       target: normalized.replace(/^sqlfu goto /u, '').trim(),
     }, confirm);
     return;
   }
 
   if (normalized === 'sqlfu check') {
-    const analysis = await analyzeDatabase(createRuntime(context));
+    const analysis = await analyzeDatabase(createRuntime(initializedContext));
     if (analysis.mismatches.length > 0) {
       throw new Error(formatCheckFailure(analysis));
     }
@@ -900,10 +948,27 @@ export interface SqlfuContext {
   readonly now?: () => Date;
 }
 
+export interface SqlfuCommandContext {
+  readonly projectRoot: string;
+  readonly config?: SqlfuProjectConfig;
+  readonly now?: () => Date;
+}
+
 export interface SqlfuRouterContext extends SqlfuContext {}
 
-export interface SqlfuCommandRouterContext extends SqlfuContext {
+export interface SqlfuCommandRouterContext extends SqlfuCommandContext {
   readonly confirm: SqlfuCommandConfirm;
+}
+
+function requireContextConfig(context: SqlfuCommandContext): SqlfuContext {
+  if (!context.config) {
+    throw new Error(`No sqlfu config found in ${context.projectRoot}. Run 'sqlfu init' first.`);
+  }
+
+  return {
+    config: context.config,
+    now: context.now,
+  };
 }
 
 export type CheckMismatch = {

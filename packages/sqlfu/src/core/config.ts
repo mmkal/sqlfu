@@ -5,6 +5,7 @@ import {pathToFileURL} from 'node:url';
 import type {SqlfuConfig, SqlfuProjectConfig} from './types.js';
 
 const defaultConfigFileNames = ['sqlfu.config.ts', 'sqlfu.config.mjs', 'sqlfu.config.js', 'sqlfu.config.cjs'] as const;
+const defaultSqlfuConfigFileName = 'sqlfu.config.ts';
 
 export function defineConfig(config: SqlfuConfig): SqlfuConfig {
   return config;
@@ -12,10 +13,70 @@ export function defineConfig(config: SqlfuConfig): SqlfuConfig {
 
 export async function loadProjectConfig(): Promise<SqlfuProjectConfig> {
   const cwd = path.resolve(process.cwd());
-  const configPath = await resolveConfigPath(cwd);
+  const project = await loadProjectStateFrom(cwd);
+  if (!project.initialized) {
+    throw new Error(`No sqlfu config found in ${cwd}. Create sqlfu.config.ts.`);
+  }
+  return project.config;
+}
+
+export async function loadProjectState() {
+  return loadProjectStateFrom(path.resolve(process.cwd()));
+}
+
+export async function loadProjectStateFrom(projectRoot: string): Promise<LoadedSqlfuProject> {
+  const configPath = await resolveConfigPath(projectRoot);
+  if (!configPath) {
+    return {
+      initialized: false,
+      projectRoot,
+      configPath: path.join(projectRoot, defaultSqlfuConfigFileName),
+    };
+  }
+
   const fileConfig = await loadConfigFile(configPath);
   const tsconfigPreferences = await loadTsconfigPreferences(path.dirname(configPath));
-  return resolveProjectConfig(fileConfig, configPath, tsconfigPreferences);
+  return {
+    initialized: true,
+    projectRoot,
+    configPath,
+    config: resolveProjectConfig(fileConfig, configPath, tsconfigPreferences),
+  };
+}
+
+export function createDefaultInitPreview(projectRoot: string) {
+  return {
+    projectRoot,
+    configPath: path.join(projectRoot, defaultSqlfuConfigFileName),
+    configContents: [
+      'export default {',
+      `  db: './db/app.sqlite',`,
+      `  migrationsDir: './migrations',`,
+      `  definitionsPath: './definitions.sql',`,
+      `  sqlDir: './sql',`,
+      '};',
+      '',
+    ].join('\n'),
+  };
+}
+
+export async function initializeProject(input: {
+  projectRoot: string;
+  configContents: string;
+}) {
+  const preview = createDefaultInitPreview(input.projectRoot);
+  const state = await loadProjectStateFrom(input.projectRoot);
+  if (state.initialized) {
+    throw new Error(`sqlfu is already initialized in ${input.projectRoot}`);
+  }
+
+  await fs.mkdir(path.join(input.projectRoot, 'db'), {recursive: true});
+  await fs.mkdir(path.join(input.projectRoot, 'migrations'), {recursive: true});
+  await fs.mkdir(path.join(input.projectRoot, 'sql'), {recursive: true});
+  await fs.writeFile(preview.configPath, withTrailingNewline(input.configContents));
+  await fs.writeFile(path.join(input.projectRoot, 'definitions.sql'), '-- write your schema here\n');
+  await fs.writeFile(path.join(input.projectRoot, 'migrations', '.gitkeep'), '');
+  await fs.writeFile(path.join(input.projectRoot, 'sql', '.gitkeep'), '');
 }
 
 export function resolveProjectConfig(
@@ -39,7 +100,7 @@ type TsconfigPreferences = {
   readonly prefersTsImportExtensions?: boolean;
 };
 
-async function resolveConfigPath(cwd: string): Promise<string> {
+async function resolveConfigPath(cwd: string): Promise<string | undefined> {
   for (const candidate of defaultConfigFileNames) {
     const resolved = path.resolve(cwd, candidate);
     try {
@@ -50,7 +111,7 @@ async function resolveConfigPath(cwd: string): Promise<string> {
     }
   }
 
-  throw new Error(`No sqlfu config found in ${cwd}. Create sqlfu.config.ts.`);
+  return undefined;
 }
 
 async function loadConfigFile(configPath: string): Promise<SqlfuConfig> {
@@ -148,3 +209,20 @@ function assertConfigShape(configPath: string, config: object): asserts config i
 function resolveConfigPathValue(configDir: string, configValue: string): string {
   return path.resolve(configDir, configValue);
 }
+
+function withTrailingNewline(value: string) {
+  return value.endsWith('\n') ? value : `${value}\n`;
+}
+
+export type LoadedSqlfuProject =
+  | {
+      readonly initialized: true;
+      readonly projectRoot: string;
+      readonly configPath: string;
+      readonly config: SqlfuProjectConfig;
+    }
+  | {
+      readonly initialized: false;
+      readonly projectRoot: string;
+      readonly configPath: string;
+    };

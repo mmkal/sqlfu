@@ -84,7 +84,7 @@ export function TextCodeMirror(input: {
   ariaLabel: string;
   readOnly?: boolean;
   height?: string;
-  language?: 'plain' | 'yaml' | 'markdown';
+  language?: 'plain' | 'yaml' | 'markdown' | 'typescript';
   onChange?: (value: string) => void;
 }) {
   return (
@@ -144,7 +144,7 @@ function buildSqlSchema(relations: readonly StudioRelation[]): SQLNamespace {
   );
 }
 
-function buildTextExtensions(readOnly: boolean, language: 'plain' | 'yaml' | 'markdown'): Extension[] {
+function buildTextExtensions(readOnly: boolean, language: 'plain' | 'yaml' | 'markdown' | 'typescript'): Extension[] {
   return [
     ...(language === 'yaml' ? [yaml()] : []),
     EditorView.lineWrapping,

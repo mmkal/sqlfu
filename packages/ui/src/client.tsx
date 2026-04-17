@@ -72,7 +72,7 @@ const orpc = createTanstackQueryUtils(orpcClient);
 type ConfirmationRequest = {
   title: string;
   body: string;
-  bodyType?: 'markdown' | 'sql';
+  bodyType?: 'markdown' | 'sql' | 'typescript';
   editable?: boolean;
 };
 
@@ -152,6 +152,29 @@ type StartupErrorBoundaryState = {
   error: unknown;
 };
 
+function createStartupBoundaryStore() {
+  let resetKey = 0;
+  const listeners = new Set<() => void>();
+
+  return {
+    subscribe(listener: () => void) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    getSnapshot() {
+      return resetKey;
+    },
+    reset() {
+      resetKey += 1;
+      for (const listener of listeners) {
+        listener();
+      }
+    },
+  };
+}
+
+const startupBoundaryStore = createStartupBoundaryStore();
+
 class StartupErrorBoundary extends Component<{children: ReactNode}, StartupErrorBoundaryState> {
   state: StartupErrorBoundaryState = {
     error: null,
@@ -171,9 +194,14 @@ class StartupErrorBoundary extends Component<{children: ReactNode}, StartupError
 }
 
 function App() {
+  const startupBoundaryResetKey = useSyncExternalStore(
+    startupBoundaryStore.subscribe,
+    startupBoundaryStore.getSnapshot,
+  );
+
   return (
     <QueryClientProvider client={queryClient}>
-      <StartupErrorBoundary>
+      <StartupErrorBoundary key={startupBoundaryResetKey}>
         <Suspense fallback={<Shell loading />}>
           <Studio />
         </Suspense>
@@ -361,7 +389,7 @@ function ConfirmationDialogHost() {
                 ariaLabel="Confirmation body editor"
                 readOnly={params.editable !== true}
                 height="18rem"
-                language="markdown"
+                language={params.bodyType === 'markdown' ? 'markdown' : params.bodyType === 'typescript' ? 'typescript' : 'plain'}
                 onChange={(value) => {
                   if (params.editable === true) {
                     confirmationDialogStore.setDraftBody(value);
@@ -397,6 +425,11 @@ function ConfirmationDialogHost() {
 }
 
 function Studio() {
+  const projectStatusQuery = useSuspenseQuery(orpc.project.status.queryOptions());
+  if (!projectStatusQuery.data.initialized) {
+    return <ProjectInitScreen projectRoot={projectStatusQuery.data.projectRoot} />;
+  }
+
   const route = useHashRoute();
   const schemaQuery = useSuspenseQuery(orpc.schema.get.queryOptions());
   const catalogQuery = useSuspenseQuery(orpc.catalog.queryOptions());
@@ -476,6 +509,93 @@ function Studio() {
       </main>
     </Shell>
   );
+}
+
+function ProjectInitScreen(input: {
+  projectRoot: string;
+}) {
+  const initializeMutation = useMutation({
+    ...orpc.schema.command.mutationOptions(),
+    onSuccess: async () => {
+      await queryClient.refetchQueries({queryKey: orpc.project.status.key()});
+      startupBoundaryStore.reset();
+      await Promise.all([
+        queryClient.prefetchQuery(orpc.schema.get.queryOptions()),
+        queryClient.prefetchQuery(orpc.catalog.queryOptions()),
+        queryClient.prefetchQuery(orpc.schema.check.queryOptions()),
+        queryClient.prefetchQuery(orpc.schema.authorities.get.queryOptions()),
+      ]);
+    },
+  });
+
+  const handleInitialize = async () => {
+    try {
+      await initializeMutation.mutateAsync({command: 'sqlfu init'});
+    } catch (error) {
+      const confirmation = parseConfirmationRequest(error);
+      if (!confirmation) {
+        return;
+      }
+
+      const result = await confirmationDialogStore.confirm(confirmation);
+      if (!result.confirmed || !result.body?.trim()) {
+        return;
+      }
+
+      await initializeMutation.mutateAsync({
+        command: 'sqlfu init',
+        confirmation: result.body,
+      });
+    }
+  };
+
+  const displayProjectRoot = abbreviateHomeDirectory(input.projectRoot);
+
+  return (
+    <main className="startup-shell">
+      <section className="startup-card project-init-card">
+        <div className="eyebrow">Fresh directory</div>
+        <h1><code>sqlfu</code></h1>
+        <p className="startup-lede">This directory is ready to initialize.</p>
+
+        <section className="startup-section startup-section-wide">
+          <h2>Initialize sqlfu</h2>
+          <p>
+            Create the default <code>sqlfu.config.ts</code>, <code>definitions.sql</code>, and empty
+            <code> migrations/</code> and <code>sql/</code> directories.
+          </p>
+          <p className="startup-path">
+            <span className="startup-path-label">Project root</span>{' '}
+            <code>{displayProjectRoot}</code>
+          </p>
+          <p>
+            The config contents are editable before anything is written, using the same confirmation
+            flow as the rest of the app.
+          </p>
+          <div className="startup-actions">
+            <button
+              className="button primary"
+              type="button"
+              onClick={() => void handleInitialize()}
+              disabled={initializeMutation.isPending}
+            >
+              {initializeMutation.isPending ? 'Initializing…' : 'Initialize sqlfu project'}
+            </button>
+          </div>
+          {initializeMutation.error ? (
+            <p className="error-text">{String(initializeMutation.error)}</p>
+          ) : null}
+        </section>
+      </section>
+    </main>
+  );
+}
+
+function abbreviateHomeDirectory(path: string) {
+  return path
+    .replace(/^\/Users\/[^/]+/, '~')
+    .replace(/^\/home\/[^/]+/, '~')
+    .replace(/^[A-Za-z]:\\Users\\[^\\]+/, '~');
 }
 
 function SchemaPanel(input: {
@@ -1853,21 +1973,19 @@ function Shell(input: {
   children?: ReactNode;
   loading?: boolean;
 }) {
-  return (
-    <div className="app-shell">
-      {input.loading ? (
-        <main className="main">
-          <section className="panel">
-            <section className="card">
-              <div className="card-title">Loading</div>
-            </section>
-          </section>
-        </main>
-      ) : (
-        input.children
-      )}
-    </div>
-  );
+  if (input.loading) {
+    return (
+      <main className="startup-shell">
+        <section className="startup-card">
+          <div className="eyebrow">Starting up</div>
+          <h1><code>sqlfu</code></h1>
+          <p className="startup-lede">Loading…</p>
+        </section>
+      </main>
+    );
+  }
+
+  return <div className="app-shell">{input.children}</div>;
 }
 
 function ErrorView(input: {
@@ -1895,7 +2013,11 @@ function parseConfirmationRequest(error: unknown) {
     return {
       title: parsed.title,
       body: parsed.body,
-      bodyType: parsed.bodyType === 'sql' ? ('sql' as const) : ('markdown' as const),
+      bodyType: parsed.bodyType === 'sql'
+        ? ('sql' as const)
+        : parsed.bodyType === 'typescript'
+          ? ('typescript' as const)
+          : ('markdown' as const),
       editable: parsed.editable === true ? true : undefined,
     };
   } catch {
@@ -2122,7 +2244,7 @@ function useHashRoute(): Route {
 function parseHash(hash: string): Route {
   const value = hash.replace(/^#/, '');
   if (!value) {
-    return {kind: 'home'};
+    return {kind: 'schema'};
   }
 
   const [kind, first, second] = value.split('/').map(decodeURIComponent);

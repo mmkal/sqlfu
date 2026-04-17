@@ -27,6 +27,7 @@ It is built around a simple idea: SQL should be the source language for schema, 
   - [Launch the UI](#launch-the-ui)
 - [Command Reference](#command-reference)
 - [Limitations and Non-Goals](#limitations-and-non-goals)
+- [Prior Art and Acknowledgements](#prior-art-and-acknowledgements)
 
 ## What Is sqlfu?
 
@@ -333,3 +334,18 @@ Current limits also matter:
 - SQLite view typing is still imperfect in TypeSQL
 - some expressions still need the sqlfu post-pass to get better generated result types
 - the formatter is opinionated and still evolving
+
+## Prior Art and Acknowledgements
+
+`sqlfu` is not built in a vacuum. Several existing projects directly shape what it looks like today, either as vendored code or as ideas we lean on.
+
+- [TypeSQL](https://github.com/wsporto/typesql) by Wanderson Camargo (MIT). TypeSQL is vendored under [`src/vendor/typesql`](./src/vendor/typesql) and powers SQL-to-TypeScript analysis for `sqlfu generate`. sqlfu adds a small post-pass for SQLite result typing but otherwise relies on TypeSQL's query analyzer, its ANTLR4-based parser ([`typesql-parser`](https://github.com/wsporto/typesql-parser), vendored under [`src/vendor/typesql-parser`](./src/vendor/typesql-parser)), and its code generator.
+- [sql-formatter](https://github.com/sql-formatter-org/sql-formatter) (MIT). The formatter is essentially vendored whole under [`src/vendor/sql-formatter`](./src/vendor/sql-formatter) and then wrapped by [`src/formatter.ts`](./src/formatter.ts) with sqlfu-specific defaults (SQLite-first, lowercase by default, biased toward keeping simple clause bodies inline).
+- [antlr4](https://github.com/antlr/antlr4) JavaScript runtime (BSD-3-Clause). Vendored under [`src/vendor/antlr4`](./src/vendor/antlr4) so TypeSQL's parser can run without loading from `node_modules`.
+- [code-block-writer](https://github.com/dsherret/code-block-writer) by David Sherret (MIT). Vendored under [`src/vendor/code-block-writer`](./src/vendor/code-block-writer) and used by TypeSQL's code generator.
+- [Drizzle](https://orm.drizzle.team/). The [`local.drizzle.studio`](https://local.drizzle.studio/) product model - hosted UI shell talking to a local backend via a permissioned localhost API - is the direct inspiration for `local.sqlfu.dev` and the shape of the sqlfu UI package. More generally, Drizzle raised the bar for what modern SQL-oriented tooling should feel like, and sqlfu is trying to meet that bar for a different slice of the workflow.
+- [`@pgkit/schemainspect`](https://github.com/mmkal/pgkit/tree/main/packages/schemainspect) and [`@pgkit/migra`](https://github.com/mmkal/pgkit/tree/main/packages/migra). The sqlfu schemadiff engine under [`src/schemadiff`](./src/schemadiff) is structurally inspired by these libraries: materialize both schemas into scratch databases, inspect them into a typed model, diff the inspected models, and emit an ordered statement plan. The SQLite-specific implementation does not copy their code, but the shape is taken from them. See [`src/schemadiff/AGENTS.md`](./src/schemadiff/AGENTS.md) for more detail.
+- [`djrobstep/schemainspect`](https://github.com/djrobstep/schemainspect) and [`djrobstep/migra`](https://github.com/djrobstep/migra) by Robert Lechte. These are the Python originals that the `@pgkit/*` packages ported to TypeScript, and therefore the upstream lineage of the sqlfu diff engine.
+- [pgkit](https://github.com/mmkal/pgkit) (same author). pgkit is sqlfu's Postgres-focused prior art. A lot of the mental model for sqlfu - "SQL as the authored source, generated types next to queries, schema-diff-driven migrations, a web UI that sits on the real client" - comes from trying that approach in pgkit first. sqlfu is the SQLite-first version of that idea, with the goal of eventually growing back to Postgres.
+
+Vendored directories each carry a short `AGENTS.md` that pins the upstream commit or version and lists the local modifications, so future updates from upstream can be applied intelligently.

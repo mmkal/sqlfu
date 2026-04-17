@@ -1,6 +1,16 @@
 size: medium
-status: grilled
+status: in-progress
 ---
+
+## Status
+
+Starting implementation. Plan:
+
+1. Extract `analyzeMigrateHealth(runtime)` helper that filters `analyzeDatabase` mismatches/recommendations to the ones that matter for `migrate` (repoDrift, historyDrift, schemaDrift).
+2. Preflight in `applyMigrateSql` - throw recommendation-style error if unhealthy.
+3. Wrap migration execution. On failure, rerun analysis and produce different error messages for "safe to retry" vs "reconciliation required".
+4. Write tests for the 4 scenarios.
+5. Update README + migration-model.md.
 
 Handle failed migrations properly.
 

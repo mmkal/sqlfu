@@ -46,9 +46,16 @@ await fs.mkdir(path.join(distRoot, 'docs'), {recursive: true});
 await fs.copyFile(stylesSourcePath, path.join(distRoot, 'styles.css'));
 
 const renderedDocs = await Promise.all(docs.map(renderDoc));
+const assetPaths = [...new Set(renderedDocs.flatMap((doc) => doc.assetPaths))];
 const mainDoc = renderedDocs.find((doc) => doc.slug === 'sqlfu');
 if (!mainDoc) {
   throw new Error('Missing main sqlfu README doc');
+}
+
+for (const assetPath of assetPaths) {
+  const destinationPath = path.join(distRoot, assetRoute(assetPath));
+  await fs.mkdir(path.dirname(destinationPath), {recursive: true});
+  await fs.copyFile(assetPath, destinationPath);
 }
 
 await fs.writeFile(path.join(distRoot, 'index.html'), renderLandingPage(renderedDocs));
@@ -65,6 +72,7 @@ async function renderDoc(doc) {
   const renderer = createMarkdownRenderer(doc);
   const env = {
     headings: [],
+    assetPaths: [],
   };
   let html = renderer.render(markdown, env);
   if (doc.slug === 'sqlfu') {
@@ -76,6 +84,7 @@ async function renderDoc(doc) {
     markdown,
     html,
     headings: buildNestedHeadings(env.headings),
+    assetPaths: env.assetPaths,
     sourceUrl: githubPermalink(doc.sourcePath),
   };
 }
@@ -118,6 +127,18 @@ function createMarkdownRenderer(currentDoc) {
       }
     }
     return defaultLinkOpen(tokens, index, options, env, self);
+  };
+
+  const defaultImage = md.renderer.rules.image
+    ?? ((tokens, index, options, env, self) => self.renderToken(tokens, index, options));
+  md.renderer.rules.image = (tokens, index, options, env, self) => {
+    const token = tokens[index];
+    const src = token.attrGet('src');
+    if (src) {
+      const rewritten = rewriteImageSrc(src, currentDoc.sourcePath, env);
+      token.attrSet('src', rewritten.src);
+    }
+    return defaultImage(tokens, index, options, env, self);
   };
 
   return md;
@@ -313,6 +334,25 @@ function rewriteHref(href, currentSourcePath) {
   };
 }
 
+function rewriteImageSrc(src, currentSourcePath, env) {
+  if (src.startsWith('#') || /^https?:\/\//.test(src) || src.startsWith('data:')) {
+    return {src};
+  }
+
+  const absoluteTarget = resolveRepoTarget(src, currentSourcePath);
+  if (!absoluteTarget) {
+    return {src};
+  }
+
+  const [absolutePath] = String(absoluteTarget).split('#');
+  env.assetPaths ??= [];
+  env.assetPaths.push(absolutePath);
+
+  return {
+    src: assetRoute(absolutePath),
+  };
+}
+
 function resolveRepoTarget(href, currentSourcePath) {
   const [rawPath, rawHash] = href.split('#');
   const cleanPath = rawPath.trim();
@@ -352,6 +392,11 @@ function readGit(args) {
 
 function docRoute(slug) {
   return `/docs/${slug}/`;
+}
+
+function assetRoute(assetPath) {
+  const relativePath = path.relative(repoRoot, assetPath).split(path.sep).join('/');
+  return `/docs/assets/${relativePath}`;
 }
 
 function normalizePath(value) {

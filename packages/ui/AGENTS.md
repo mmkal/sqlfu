@@ -1,0 +1,104 @@
+# `local.sqlfu.dev` explainer
+
+This package is the browser client for sqlfu. The intended product model is inspired by `local.drizzle.studio`, but there are two different modes in this repo and it is easy to confuse them.
+
+## The intended product model
+
+The real target architecture is:
+
+- a hosted UI shell at `https://local.sqlfu.dev`
+- a local sqlfu backend started by the user, typically via `npx sqlfu`
+- the hosted UI talks from that public HTTPS origin back to the user's localhost sqlfu backend
+
+That is the same basic idea as `https://local.drizzle.studio`:
+
+1. the browser loads a real hosted website
+2. that website's frontend JS talks to a local server on the user's machine
+3. the local server talks to the user's database and files
+
+Important: this is not a DNS trick where `local.sqlfu.dev` resolves to `127.0.0.1`. The browser loads a real hosted site first. The "local" part is the follow-up API traffic from the hosted frontend to the localhost backend.
+
+## Why this needs special handling
+
+Modern browsers treat "public HTTPS page talks to localhost" as a special case.
+
+- Chrome / Chromium usually show a "local network access" permission prompt
+- Safari and Brave are stricter and may require localhost HTTPS with `mkcert`
+- the local backend needs the right CORS and private-network headers
+
+That is why the sqlfu backend in `packages/sqlfu` owns:
+
+- the UI RPC API
+- localhost HTTPS / `mkcert` support
+- the CORS / private-network behavior
+
+## Repo-local dev/test modes
+
+There are two relevant modes here.
+
+### 1. Normal UI tests and dev harness
+
+`packages/ui/test/start-server.ts` is the default Playwright `webServer`.
+
+It starts one integrated local server that serves:
+
+- the Vite UI
+- the local backend API
+
+This is the general-purpose harness for normal UI development and most UI tests. It is not trying to simulate the hosted/public split exactly. It is the convenient "everything local" path.
+
+### 2. `local.sqlfu.dev` simulation
+
+`pnpm local.sqlfu.dev` is the more realistic simulation.
+
+It starts:
+
+- one local sqlfu backend server on `3217`
+- one local Vite UI server on `3218`
+- one `ngrok` tunnel pointed only at the UI server
+
+So the browser sees:
+
+- public HTTPS for the UI via `ngrok`
+
+while the UI itself talks to:
+
+- the separate local backend origin
+
+This is much closer to the eventual `local.sqlfu.dev` product model.
+
+In test coverage, this behavior is intentionally an extra spec layered on top of the normal harness:
+
+- `packages/ui/playwright.config.ts` still uses `test/start-server.ts`
+- `packages/ui/test/local-sqlfu-dev.spec.ts` covers the extra `ngrok` piece
+
+That split is deliberate. The `local.sqlfu.dev` scenario is one important integration path, not the default shape for every UI test.
+
+## Package export conventions
+
+This repo uses source-first workspace exports for local development, with publish-time `dist` exports in `packages/sqlfu/package.json`.
+
+That means:
+
+- repo-local imports like `import {startSqlfuServer} from 'sqlfu/ui'` should resolve to source
+- published `sqlfu` still resolves to built `dist` files
+
+There are also browser-safe entrypoints to avoid pulling Node-only code into Vite:
+
+- `sqlfu/browser`
+- `sqlfu/ui/browser`
+
+Use those from browser code when you only need browser-safe helpers or types.
+
+Use these from Node-side code:
+
+- `sqlfu`
+- `sqlfu/ui`
+
+## Practical rule of thumb
+
+If you are working on:
+
+- normal UI behavior, use the integrated harness and normal UI tests
+- hosted-frontend-to-localhost behavior, think in terms of the `local.sqlfu.dev` simulation and the separate ngrok spec
+- localhost certs / CORS / private-network issues, those belong in `packages/sqlfu`, not in the UI package

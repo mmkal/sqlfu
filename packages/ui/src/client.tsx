@@ -561,16 +561,11 @@ function ProjectInitScreen(input: {
         <section className="startup-section startup-section-wide">
           <h2>Initialize sqlfu</h2>
           <p>
-            Create the default <code>sqlfu.config.ts</code>, <code>definitions.sql</code>, and empty
-            <code> migrations/</code> and <code>sql/</code> directories.
+            Create your <code>sqlfu.config.ts</code> file pointing to your database, migrations and queries.
           </p>
           <p className="startup-path">
             <span className="startup-path-label">Project root</span>{' '}
             <code>{displayProjectRoot}</code>
-          </p>
-          <p>
-            The config contents are editable before anything is written, using the same confirmation
-            flow as the rest of the app.
           </p>
           <div className="startup-actions">
             <button

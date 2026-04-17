@@ -74,7 +74,7 @@ export async function initializeProject(input: {
   await fs.mkdir(path.join(input.projectRoot, 'migrations'), {recursive: true});
   await fs.mkdir(path.join(input.projectRoot, 'sql'), {recursive: true});
   await fs.writeFile(preview.configPath, withTrailingNewline(input.configContents));
-  await fs.writeFile(path.join(input.projectRoot, 'definitions.sql'), '-- write your schema here\n');
+  await fs.writeFile(path.join(input.projectRoot, 'definitions.sql'), '-- create table yourtable(id int, body text);\n');
   await fs.writeFile(path.join(input.projectRoot, 'migrations', '.gitkeep'), '');
   await fs.writeFile(path.join(input.projectRoot, 'sql', '.gitkeep'), '');
 }

@@ -1,20 +1,9 @@
-import {Website, Zone} from 'alchemy/cloudflare';
+process.env.CLOUDFLARE_PROFILE ||= 'mishagmail';
 
-// This is the authoritative Cloudflare DNS zone for sqlfu.dev. The two
-// Websites attach their custom domains through this zone, and it gives us one
-// place to manage DNS and Pages bindings as code.
-const zone = await Zone('sqlfu-zone', {
-  name: 'sqlfu.dev',
-  type: 'full',
-  jumpStart: true,
-  settings: {
-    alwaysUseHttps: 'on',
-    automaticHttpsRewrites: 'on',
-    http2: 'on',
-    http3: 'on',
-    brotli: 'on',
-  },
-});
+import alchemy from 'alchemy';
+import {Website} from 'alchemy/cloudflare';
+
+const app = await alchemy('sqlfu');
 
 await Website('www', {
   name: 'sqlfu-www',
@@ -24,7 +13,6 @@ await Website('www', {
   domains: [
     {
       domainName: 'www.sqlfu.dev',
-      zoneId: zone.id,
     },
   ],
 });
@@ -40,7 +28,8 @@ await Website('local-ui', {
   domains: [
     {
       domainName: 'local.sqlfu.dev',
-      zoneId: zone.id,
     },
   ],
 });
+
+await app.finalize();

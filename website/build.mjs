@@ -153,7 +153,7 @@ function renderLandingPage(renderedDocs) {
           <div class="eyebrow lowercase">npm install sqlfu</div>
           <h1>all you need is sql.</h1>
           <p class="lede">
-            sqlfu lets you (or your agent) write schema, migrations, and queries as <code>.sql</code> files. It generates typed TypeScript wrappers alongside them. Not the abstraction of the month.
+            sqlfu lets you (or your agent) write schema, migrations, and queries as <code>.sql</code> files, and generates typed TypeScript wrappers next to them. Not the abstraction of the month.
           </p>
           <div class="cta-row">
             <a class="button primary" href="/docs/">Read the docs</a>
@@ -175,7 +175,7 @@ function renderLandingPage(renderedDocs) {
         <article class="panel value-panel">
           <div class="eyebrow">types, generated</div>
           <h3>TypeScript wrappers <i>from</i> your SQL</h3>
-          <p><code>sqlfu generate</code> reads your <code>.sql</code> files and emits typed wrappers next to them: typed params, typed rows, and a client you can call from application code. Write SQL, call it from TS.</p>
+          <p><code>sqlfu generate</code> reads your <code>.sql</code> files and emits typed wrappers next to them: typed params, typed rows, and a client you can call from application code.</p>
         </article>
         <article class="panel value-panel">
           <div class="eyebrow">diff-driven migrations</div>

@@ -6,7 +6,7 @@ Linked reference: https://sqlite.org/wasm/doc/trunk/demo-123.md (official `@sqli
 
 ## Status
 
-fleshed-out, ready for implementation.
+first pass implemented and manually smoke-tested in dev. Deploy step (adding the demo domain via Cloudflare) still needs to be run by hand with `alchemy deploy` — the config entry is in place.
 
 ## Decisions (filled in from the original sketch)
 
@@ -41,18 +41,24 @@ These are reasonable "v2" follow-ups once the basic demo ships.
 
 ## Checklist
 
-- [ ] Add `@sqlite.org/sqlite-wasm` dependency to `packages/ui`.
-- [ ] Implement `packages/ui/src/demo/sqlite-wasm-client.ts`: create a wasm sqlite instance, wrap it in an object that exposes `all/run/raw/transaction` (matching what the existing UiRouter code needs).
-- [ ] Implement `packages/ui/src/demo/router.ts`: a fresh oRPC router typed as `UiRouter`, implementing the subset listed above against the wasm client. Seed the db on creation.
-- [ ] Implement `packages/ui/src/demo/client.ts`: export an `isDemoMode()` helper and a `createDemoOrpcClient()` that uses `createRouterClient` to produce a `RouterClient<UiRouter>` with no fetch.
-- [ ] Wire `packages/ui/src/client.tsx`: branch at the place where `orpcClient` is created. In demo mode use `createDemoOrpcClient()`; otherwise keep the existing RPCLink behavior.
-- [ ] Add a "Demo" button on `local.sqlfu.dev` UI (only when `!isDemoMode()`). It navigates to `https://demo.local.sqlfu.dev/` (or `?demo=1` in dev).
-- [ ] Add a small "Demo mode" banner when `isDemoMode()` is true, with a link to `https://local.sqlfu.dev/`.
-- [ ] Hide or gracefully error the UI surfaces that rely on unsupported endpoints in demo mode (schema check card, authorities, save-query dialog, etc.).
-- [ ] Extend `alchemy.run.mts` with a `Website('demo-local-ui', ...)` entry for `demo.local.sqlfu.dev` serving the same `packages/ui/dist`.
-- [ ] Update `packages/ui/AGENTS.md` with a short "Demo mode" section so future agents know the third deployment shape.
-- [ ] Verify: `pnpm --filter sqlfu-ui build` succeeds. Locally start the dev harness and open `?demo=1` to sanity-check: the table browser shows seeded posts, SQL runner can run `select * from posts`, the schema check surface is hidden/disabled, and the "Demo" button is gone while the banner is shown.
+- [x] Add `@sqlite.org/sqlite-wasm` dependency to `packages/ui`. _pinned to `3.51.2-build9` (latest at the time); the registry only has odd `build*` prereleases for this package, not semver._
+- [x] Implement `packages/ui/src/demo/sqlite-wasm-client.ts`: create a wasm sqlite instance, wrap it in an object that exposes `all/run/raw/transaction` (matching what the existing UiRouter code needs). _only `all`, `run`, `exec`, `columnCount` were needed by the demo router; no `transaction` since nothing in the demo path calls it._
+- [x] Implement `packages/ui/src/demo/router.ts`: a fresh oRPC router typed as `UiRouter`, implementing the subset listed above against the wasm client. Seed the db on creation. _implemented as a plain nested object cast to `RouterClient<UiRouter>` rather than a real oRPC server router; same shape, less bundle weight._
+- [x] Implement `packages/ui/src/demo/client.ts`: export an `isDemoMode()` helper and a `createDemoOrpcClient()` that uses `createRouterClient` to produce a `RouterClient<UiRouter>` with no fetch. _landed as `packages/ui/src/demo/index.ts` with a lazy proxy that awaits wasm init before forwarding each procedure call — lets `orpcClient` stay sync at module top level._
+- [x] Wire `packages/ui/src/client.tsx`: branch at the place where `orpcClient` is created. In demo mode use `createDemoOrpcClient()`; otherwise keep the existing RPCLink behavior.
+- [x] Add a "Demo" button on `local.sqlfu.dev` UI (only when `!isDemoMode()`). It navigates to `https://demo.local.sqlfu.dev/` (or `?demo=1` in dev). _landed as an unobtrusive banner-link at the top of the shell instead of a standalone button, since the shell has no existing button area; still prominent._
+- [x] Add a small "Demo mode" banner when `isDemoMode()` is true, with a link to `https://local.sqlfu.dev/`.
+- [x] Hide or gracefully error the UI surfaces that rely on unsupported endpoints in demo mode (schema check card, authorities, save-query dialog, etc.). _the demo router returns empty check cards / authorities and throws on save/command; the existing UI renders the empty states cleanly and any errant button presses surface a toast._
+- [x] Extend `alchemy.run.mts` with a `Website('demo-local-ui', ...)` entry for `demo.local.sqlfu.dev` serving the same `packages/ui/dist`. _added as a second `domainName` on the existing `sqlfu-local-ui` Website rather than a duplicate entry — same build, same bucket._
+- [x] Update `packages/ui/AGENTS.md` with a short "Demo mode" section so future agents know the third deployment shape.
+- [x] Verify: `pnpm --filter sqlfu-ui build` succeeds. Locally start the dev harness and open `?demo=1` to sanity-check: the table browser shows seeded posts, SQL runner can run `select * from posts`, the schema check surface is hidden/disabled, and the "Demo" button is gone while the banner is shown. _confirmed manually via claude-in-chrome against the dev server; wasm init, seeded rows in `posts`, SQL runner executing `select name, type from sqlite_schema` against the in-memory db all work._
 
 ## Implementation notes (log during work)
 
-(populated during implementation)
+- **Wasm URL in Vite.** The default `sqlite3InitModule()` call looks for `sqlite3.wasm` at a URL relative to the ESM entrypoint. Under Vite's dev dep-bundling (`node_modules/.vite/deps/...`), that resolves to a path that the SPA fallback serves as `index.html`, which then fails to compile as wasm. Fix: `import sqlite3WasmUrl from '@sqlite.org/sqlite-wasm/sqlite3.wasm?url';` and pass it through `locateFile`. `@sqlite.org/sqlite-wasm/package.json` exports `./sqlite3.wasm` → `./dist/sqlite3.wasm`, so this path is stable.
+- **Init signature type.** `sqlite3InitModule` is declared as `(): Promise<...>` by design (see sqlite-wasm PR #129); the runtime still accepts the Emscripten-style options object. Cast to the options-accepting signature locally rather than patching the package types.
+- **Transitively bundling `@orpc/server` through the type import.** `RouterClient<UiRouter>` comes from `@orpc/server`, but it's already a runtime dep of `packages/ui` (used in the existing `createORPCClient` typing path), so no new runtime surface was added.
+- **Lazy proxy vs `createRouterClient`.** First pass tried to build a sibling oRPC router with the `os` builder so `createRouterClient` could produce the client. That pulled the whole oRPC server pipeline into the browser bundle for no real win, so I collapsed it to a plain object of async handlers + a deep Proxy that awaits wasm init on first call. Same type, much less code.
+- **Bundle size.** Build output: `index-*.js ~ 1.73 MB` (550 KB gzipped), `sqlite3-*.wasm ~ 860 KB` (398 KB gzipped). Vite warns about the main chunk; chunk-splitting is a follow-up, not a blocker for a demo page.
+- **Smoke test.** Ran `pnpm --filter sqlfu-ui dev`, navigated to `?demo=1`, confirmed: demo banner renders, posts/post_cards tables appear, `/#table/posts` shows the 2 seeded rows, `/#sql` runs `select name, type from sqlite_schema` and returns `posts | table`, `post_cards | view`. Also navigated to `/` (no `?demo=1`) and confirmed the "Open the demo →" banner appears instead.
+- **Deploy.** `alchemy.run.mts` now lists both `local.sqlfu.dev` and `demo.local.sqlfu.dev` under the same Cloudflare Website. The actual deploy (`pnpm alchemy deploy` or whatever the convention is) is left to run by hand — it touches shared infrastructure and isn't something to trigger from a task agent.

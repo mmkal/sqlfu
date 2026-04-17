@@ -29,6 +29,9 @@ await Website('local-ui', {
     {
       domainName: 'local.sqlfu.dev',
     },
+    {
+      domainName: 'demo.local.sqlfu.dev',
+    },
   ],
 });
 

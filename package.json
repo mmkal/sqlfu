@@ -4,15 +4,22 @@
   "packageManager": "pnpm@10.30.1",
   "scripts": {
     "dev": "pnpm --filter sqlfu-ui dev",
-    "local.sqlfu.dev": "pnpm --filter sqlfu-ui local.sqlfu.dev",
+    "local.sqlfu.dev": "pnpm --filter sqlfu-ui build && pnpm --filter sqlfu-ui local.sqlfu.dev -- --skip-build",
     "sqlfu": "cd packages/sqlfu && pnpm",
     "ui": "cd packages/ui && pnpm",
     "website": "cd website && node build.mjs && pnpx serve dist",
+    "infra": "pnpm exec alchemy run alchemy.run.mts",
+    "deploy": "pnpm exec alchemy deploy alchemy.run.mts",
+    "destroy": "pnpm exec alchemy destroy alchemy.run.mts",
     "build": "pnpm --filter sqlfu build && pnpm --filter sqlfu-ui build && cd website && node build.mjs",
     "build:website": "cd website && node build.mjs",
     "test": "pnpm --filter sqlfu test && pnpm --filter sqlfu-ui test",
     "typecheck": "pnpm --filter sqlfu typecheck && pnpm --filter sqlfu-ui typecheck",
     "generate": "pnpm --filter sqlfu generate",
     "cli": "pnpm --filter sqlfu cli"
+  },
+  "devDependencies": {
+    "alchemy": "^0.91.2",
+    "tsx": "^4.21.0"
   }
 }

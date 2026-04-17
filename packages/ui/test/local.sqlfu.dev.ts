@@ -18,6 +18,7 @@ const uiPort = Number(readOption('--ui-port') || '3218');
 const ngrokDomain = readOption('--ngrok-domain') || process.env.SQLFU_NGROK_DOMAIN || '';
 const ngrokUrl = readOption('--ngrok-url') || process.env.SQLFU_NGROK_URL || '';
 const useNgrok = !process.argv.includes('--no-ngrok');
+const skipBuild = process.argv.includes('--skip-build');
 
 assertPort(apiPort, '--api-port');
 assertPort(uiPort, '--ui-port');
@@ -49,20 +50,27 @@ async function main() {
   try {
     await waitForHttpServerOrExit(backend, apiOrigin, certs ? true : false);
 
+    if (!skipBuild) {
+      await runProcess('ui-build', [
+        'pnpm',
+        'build',
+      ], {
+        cwd: uiRoot,
+      });
+    }
+
+    await writeRuntimeConfig(uiRoot, apiOrigin);
+
     const ui = spawnProcess('ui', [
-      'pnpm',
-      'exec',
-      'vite',
-      '--host',
-      '127.0.0.1',
-      '--port',
-      String(uiPort),
+      'pnpx',
+      'serve',
+      '-l',
+      `tcp://127.0.0.1:${uiPort}`,
+      '-s',
+      '-n',
+      'dist',
     ], {
       cwd: uiRoot,
-      env: {
-        ...process.env,
-        VITE_SQLFU_API_ORIGIN: apiOrigin,
-      },
     });
 
     let ngrokProcess: childProcess.ChildProcess | undefined;
@@ -137,6 +145,30 @@ function spawnProcess(
   });
 
   return child;
+}
+
+async function runProcess(
+  label: string,
+  command: string[],
+  options: {
+    cwd: string;
+    env?: NodeJS.ProcessEnv;
+  },
+) {
+  const child = spawnProcess(label, command, options);
+  const [exitCode, signal] = await onceExit(child);
+  if (exitCode === 0) {
+    return;
+  }
+  throw new Error(`${label} failed with code ${exitCode} signal ${signal}`);
+}
+
+async function writeRuntimeConfig(root: string, apiOrigin: string) {
+  const fs = await import('node:fs/promises');
+  const distDir = path.join(root, 'dist');
+  const filePath = path.join(distDir, 'runtime-config.js');
+  const contents = `window.SQLFU_API_ORIGIN = ${JSON.stringify(apiOrigin)};\n`;
+  await fs.writeFile(filePath, contents, 'utf8');
 }
 
 async function waitForHttpServer(origin: string, insecureTls: boolean) {
@@ -226,6 +258,16 @@ function waitForExit(child: childProcess.ChildProcess) {
       return;
     }
     child.once('exit', () => resolve());
+  });
+}
+
+function onceExit(child: childProcess.ChildProcess) {
+  return new Promise<[number | null, NodeJS.Signals | null]>((resolve) => {
+    if (child.exitCode != null) {
+      resolve([child.exitCode, null]);
+      return;
+    }
+    child.once('exit', (code, signal) => resolve([code, signal]));
   });
 }
 

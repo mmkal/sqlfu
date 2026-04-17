@@ -1,6 +1,7 @@
 node_modules
 *ignoreme*
 .pnpm-store
+.alchemy
 dist
 .sqlfu
 packages/sqlfu/.typesql

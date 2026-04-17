@@ -5,9 +5,9 @@ size: large
 
 ## Status Summary
 
-- Roughly 75% done: the backend move, local-server entrypoint, and website scaffold are in place.
-- Main completed pieces: the UI API now lives in `packages/sqlfu`, `npx sqlfu` starts the local backend, `packages/ui` is client-only, `website/` renders existing markdown into a static docs site, and the local launcher now simulates a hosted frontend talking to a separate local backend.
-- Main missing pieces: validate the localhost HTTPS path on a machine with `mkcert` installed, and add a fuller end-to-end path that exercises the website-to-local-backend story directly.
+- Roughly 85% done: the backend move, local-server entrypoint, website scaffold, and Cloudflare IaC are in place.
+- Main completed pieces: the UI API now lives in `packages/sqlfu`, `npx sqlfu` starts the local backend, `packages/ui` is client-only, `website/` renders existing markdown into a static docs site, the local launcher simulates a hosted frontend talking to a separate local backend, and `alchemy.run.mts` now defines the Cloudflare zone plus the two hosted sites.
+- Main missing pieces: validate the localhost HTTPS path on a machine with `mkcert` installed, and add a fuller end-to-end path that exercises the deployed hosted UI talking back to a real local backend.
 
 ## Goal
 
@@ -16,8 +16,8 @@ Ship a public-facing sqlfu website plus a hosted version of the existing UI so l
 Current working idea:
 
 - docs / marketing site deployed on Cloudflare at `www.sqlfu.dev`
-- `local.sqlfu.dev` resolves to `localhost:3217`
-- `npx sqlfu` runs the local backend that `local.sqlfu.dev` talks to
+- hosted UI shell deployed at `local.sqlfu.dev`
+- `npx sqlfu` runs the local backend that the hosted `local.sqlfu.dev` frontend talks to
 - the browser-facing API currently living in `packages/ui` moves into `packages/sqlfu`
 - `packages/ui` stays a client-only bundle plus local test/dev glue that imports the backend from `packages/sqlfu`
 
@@ -33,7 +33,7 @@ Current working idea:
 
 - [x] Pick the product split. *`packages/sqlfu` owns the backend API; `packages/ui` becomes a client-only app plus test/dev scripts.*
 - [x] Pick the website deployment model. *`www.sqlfu.dev` is a static docs site.*
-- [x] Pick the local studio model. *`local.sqlfu.dev` points to `localhost:3217` and expects a local `sqlfu` server process.*
+- [x] Pick the local studio model. *`local.sqlfu.dev` is a hosted UI shell that talks back to a local `sqlfu` server process, inspired by `local.drizzle.studio`.*
 - [x] Decide what `npx sqlfu` should do. *Default invocation starts the local backend server for the UI.*
 - [ ] Decide how polished the fallback UX should be when `local.sqlfu.dev` is opened without a working local server.
 
@@ -55,6 +55,7 @@ Current working idea:
   *Added `website/` with a static build script, landing page, docs index, and rendered markdown pages.*
 - [x] Move or rewrite the current README material into docs pages so the website is not empty on day one. *The website build renders `packages/sqlfu/README.md`, `packages/sqlfu/docs/*.md`, and `packages/ui/README.md` directly.*
 - [x] Add simple deployment config/scripts for the static website. *Root `build` now runs `website/build.mjs`, and `website/package.json` exposes a standalone build script.*
+- [x] Add IaC for the public docs site and hosted local UI shell. *`alchemy.run.mts` now defines the `sqlfu.dev` Cloudflare zone plus `sqlfu-www` and `sqlfu-local-ui` website deployments.*
 - [x] Keep `sqlfu` package publish size lean.
   That likely means:
   - no shipping the website bundle inside `packages/sqlfu`
@@ -82,9 +83,9 @@ That gives us the intended local product model without taking on remote executio
 
 ## Open Questions
 
-- Should `local.sqlfu.dev` serve only the backend plus a helpful info page, or should it eventually also serve a production UI shell?
 - Should the website build render markdown ahead of time, or is client-side markdown rendering acceptable for the first version?
 - Do we want a custom local error page only in the `sqlfu` server, or also a browser-side fallback on the website when the local backend is unavailable?
+- Should the hosted `local.sqlfu.dev` frontend auto-detect `https://localhost:3217` versus `http://127.0.0.1:3217`, or should the local backend story require HTTPS once we harden the browser support matrix?
 
 ## Risks
 
@@ -99,10 +100,11 @@ That gives us the intended local product model without taking on remote executio
   - `packages/sqlfu` owns the backend API
   - `packages/ui` is client-only
   - `www.sqlfu.dev` is the static docs site
-  - `local.sqlfu.dev` targets `localhost:3217`
+  - `local.sqlfu.dev` is the hosted UI shell
   - `npx sqlfu` starts the local backend
 - 2026-04-16: implemented backend move to `packages/sqlfu/src/ui/server.ts`, added `sqlfu/ui` exports, deleted `packages/ui/src/server.ts`, and switched the UI test harness to import the backend from `sqlfu`.
 - 2026-04-16: `packages/sqlfu/src/cli.ts` now starts the local backend by default when invoked as `npx sqlfu`.
 - 2026-04-16: added `website/` with a zero-dependency static build script that renders existing markdown into a web docs site.
 - 2026-04-16: added a root `pnpm local.sqlfu.dev` launcher that now delegates to the UI package script, runs the UI and backend on separate ports, points `ngrok` only at the UI server, and configures the browser client to talk to the standalone backend origin.
 - 2026-04-17: kept the default Playwright `webServer` on `packages/ui/test/start-server.ts`, switched that harness to import the sqlfu UI server from source, and added `packages/ui/test/local-sqlfu-dev.spec.ts` so the ngrok path is tested as an extra layer instead of replacing the normal UI+API test server.
+- 2026-04-17: added `alchemy.run.mts` plus root `infra`/`deploy`/`destroy` scripts so `www.sqlfu.dev` and `local.sqlfu.dev` can be managed as Cloudflare Websites from this repo.

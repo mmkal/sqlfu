@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "pnpm exec tsx test/start-server.ts dev-project --dev",
+    "demo": "vite --open /?demo=1",
     "local.sqlfu.dev": "pnpm exec tsx test/local.sqlfu.dev.ts",
     "build": "vite build",
     "test:node": "vitest run src/runtime.test.ts src/startup-error.test.ts",

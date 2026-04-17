@@ -1,5 +1,5 @@
 ---
-status: ready
+status: done
 size: medium
 ---
 
@@ -7,7 +7,7 @@ size: medium
 
 ## Status
 
-Not started. Plan fleshed out; implementation pending.
+Implementation complete. Integration tests cover insert/update/delete, pragma, pure DDL, alter-table, and drop-cancels-create cases. Docs note added in `migration-model.md`. Ready for rename into `tasks/complete/`.
 
 ## Problem
 
@@ -57,23 +57,24 @@ The `insert` has no effect on the declared schema. sqlfu happily parses and runs
 
 ## Acceptance criteria
 
-- [ ] `sqlfu check` fails when `definitions.sql` contains `insert`/`update`/`delete`/`pragma` statements (anything that doesn't mutate the schema).
-- [ ] The failure message lists which statements were spurious, with enough context that the user can find and fix them (statement text, trimmed; line number would be nice if easy).
-- [ ] `sqlfu check` passes with a pure DDL `definitions.sql` containing `create table`, `create index`, `create view`, `create trigger`, `alter table add column`, `drop table` (when there's a matching create).
-- [ ] An `alter table` that modifies a table created by an earlier statement is NOT flagged (it's load-bearing).
-- [ ] A `drop table`/`drop index` that matches an earlier `create` is NOT flagged.
-- [ ] A statement that errors when isolated is NOT flagged (conservative default).
-- [ ] Existing `sqlfu check` behaviors still pass.
-- [ ] A short docs note is added warning about `insert`s in migrations being wiped by `goto`.
+- [x] `sqlfu check` fails when `definitions.sql` contains `insert`/`update`/`delete`/`pragma` statements (anything that doesn't mutate the schema). _covered by tests in `packages/sqlfu/test/migrations/spurious-definitions.test.ts`_
+- [x] The failure message lists which statements were spurious. _statements trimmed to a single line; line numbers deferred — trimmed statement text is usually enough to grep_
+- [x] `sqlfu check` passes with a pure DDL `definitions.sql` containing `create table`, `create index`, `create view`, `create trigger`, `alter table add column`, `drop table` (when there's a matching create). _covered_
+- [x] An `alter table` that modifies a table created by an earlier statement is NOT flagged. _covered_
+- [x] A `drop table`/`drop index` that matches an earlier `create` is NOT flagged. _covered — leave-one-out proves the drop is load-bearing_
+- [x] A statement that errors when isolated is NOT flagged. _covered implicitly via `materializeDefinitionsSchemaTolerant` returning null_
+- [x] Existing `sqlfu check` behaviors still pass. _full sqlfu test run green except pre-existing better-sqlite3 native-binding env issue unrelated to this change_
+- [x] A short docs note is added warning about `insert`s in migrations being wiped by `goto`. _added to `packages/sqlfu/docs/migration-model.md` under the `sqlfu goto` section_
 
 ## Checklist
 
-- [ ] Write an integration test for the check — multiple scenarios as a table-driven / parametrized test in `packages/sqlfu/test/migrations/`.
-- [ ] Implement the `spuriousDefinitions` detector in `packages/sqlfu/src/api.ts` (or extract into a helper module if the function becomes too big).
-- [ ] Wire the detector into `analyzeDatabase`, adding to the `CheckMismatch` union.
-- [ ] Update `formatCheckFailure` to render statement fragments in the message body.
-- [ ] Add docs callout about data-mutating statements in migrations (`migration-model.md` or `README.md`).
-- [ ] Rename task file to `tasks/complete/2026-04-18-detect-spurious-definitions.md` when done.
+- [x] Write an integration test for the check — multiple scenarios as a table-driven / parametrized test in `packages/sqlfu/test/migrations/`. _went with separate tests rather than parametrized since the assertions differ enough to warrant it; readable top-first_
+- [x] Implement the `spuriousDefinitions` detector in `packages/sqlfu/src/api.ts` (or extract into a helper module if the function becomes too big). _kept inline in `api.ts` next to `materializeDefinitionsSchema`_
+- [x] Wire the detector into `analyzeDatabase`, adding to the `CheckMismatch` union. _done; placed as the most-upstream mismatch_
+- [x] Update `formatCheckFailure` to render statement fragments in the message body. _details already render line-by-line; just added the strings with `- ` prefix_
+- [x] Add docs callout about data-mutating statements in migrations (`migration-model.md` or `README.md`). _added under the `sqlfu goto` docs and to the Authority Mismatches table_
+- [x] Update UI `SchemaCheckCard` surface so the new mismatch kind appears in the UI cards too. _added `spuriousDefinitions` to the card list and to `SchemaCheckCard['key']`_
+- [ ] Rename task file to `tasks/complete/2026-04-18-detect-spurious-definitions.md` when done. _do this last_
 
 ## Non-goals
 
@@ -89,4 +90,41 @@ The `insert` has no effect on the declared schema. sqlfu happily parses and runs
 
 ## Implementation notes
 
-(append as we go)
+### Where the detector lives
+
+`findSpuriousDefinitionStatements` in `packages/sqlfu/src/api.ts`. Called from `analyzeDatabase` before any other mismatch is computed. Produces a `spuriousDefinitions` entry in the `mismatches` array.
+
+### Algorithm
+
+For a definitions.sql with N statements:
+
+1. Apply all N statements to a fresh scratch db, extract schema (baseline).
+2. For each statement i (0-indexed), apply the remaining N-1 statements to another fresh scratch db. If apply fails, treat the statement as load-bearing and move on. Otherwise extract the schema and compare to the baseline.
+3. Flag any statement for which the N-1 schema equals the baseline schema.
+
+Extraction uses the existing `extractSchema` function and the same `schemaDriftExcludedTables` list used everywhere else. This means the detector is consistent with what `sqlfu` treats as the declared schema — including ignoring `sqlfu_migrations`.
+
+### Why leave-one-out (not sequential diff)
+
+Sequential diff would break for legitimate DDL sequences like `create table scratch(x int); drop table scratch;` — the drop looks like it makes no schema change at that step (it reverses the create). Leave-one-out correctly recognizes that removing the drop leaves `scratch` in the schema, so the drop is load-bearing.
+
+### Conservative error handling
+
+If removing a statement causes subsequent statements to fail (e.g. removing `create table posts` would make the following `insert into posts` fail), we treat that statement as load-bearing. Rationale: we'd rather miss a rare false-negative than surface a confusing false-positive for a statement whose removal isn't a clean counterfactual.
+
+### Display format
+
+Spurious statements are rendered into the `details` array as `- <statement>`, with internal whitespace collapsed so a multi-line `insert` fits on one line. That keeps the error message compact and greppable.
+
+### UI
+
+`SchemaCheckCard` now has `spuriousDefinitions` in its key union, and `buildSchemaCheckCards` emits a matching card at the top of the list. UI users see the same information as the CLI check.
+
+### Why no recommendation
+
+There's no mechanical fix. Moving the statement to a migration changes the schema semantics; deleting it is a judgement call. We report and leave the action to the user.
+
+### Per-statement scratch db cost
+
+N+1 scratch databases for a definitions.sql with N statements. `definitions.sql` is usually small (tens of statements at most) so this is fine for a `check`-time operation. If it ever becomes a hotspot, we can short-circuit: if `baselineSchema` and the leave-one-out schema for a DDL statement like `create table` differ, skip ahead to the next statement without constructing every leave-one-out. Not worth it today.
+

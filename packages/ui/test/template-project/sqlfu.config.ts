@@ -1,7 +1,7 @@
 export default {
   db: './app.db',
-  migrationsDir: './migrations',
-  definitionsPath: './definitions.sql',
-  sqlDir: './sql',
+  migrations: './migrations',
+  definitions: './definitions.sql',
+  queries: './sql',
   generatedImportExtension: '.ts',
 };

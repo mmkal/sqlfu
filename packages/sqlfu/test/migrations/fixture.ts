@@ -26,9 +26,9 @@ export async function createMigrationsFixture(
   const projectConfig: SqlfuProjectConfig = {
     projectRoot: root,
     db: dbPath,
-    migrationsDir: path.join(root, 'migrations'),
-    definitionsPath: path.join(root, 'definitions.sql'),
-    sqlDir: path.join(root, 'sql'),
+    migrations: path.join(root, 'migrations'),
+    definitions: path.join(root, 'definitions.sql'),
+    queries: path.join(root, 'sql'),
     generatedImportExtension: '.js',
   };
 

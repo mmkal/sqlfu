@@ -174,18 +174,18 @@ Create `sqlfu.config.ts` in your project root:
 ```ts
 export default {
   db: './db/app.sqlite',
-  migrationsDir: './migrations',
-  definitionsPath: './definitions.sql',
-  sqlDir: './sql',
+  migrations: './migrations',
+  definitions: './definitions.sql',
+  queries: './sql',
 };
 ```
 
 Required config fields:
 
 - `db`: path to the main dev database used by tooling commands like `sync`, `migrate`, and `generate`
-- `migrationsDir`: directory containing migration files
-- `definitionsPath`: schema source of truth
-- `sqlDir`: directory containing checked-in `.sql` queries
+- `migrations`: directory containing migration files
+- `definitions`: schema source of truth
+- `queries`: directory containing checked-in `.sql` queries
 
 `sqlfu` manages its own temporary files under `.sqlfu/`, including scratch databases used for schema diffing. These are generally safe to delete at any time.
 

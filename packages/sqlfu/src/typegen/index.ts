@@ -34,7 +34,7 @@ export async function generateQueryTypes(): Promise<void> {
 export async function generateQueryTypesForConfig(config: SqlfuProjectConfig): Promise<void> {
   const databasePath = await materializeTypegenDatabase(config);
   const schema = await loadSchema(databasePath);
-  const queryFiles = await loadQueryFiles(config.sqlDir);
+  const queryFiles = await loadQueryFiles(config.queries);
   const queryAnalyses = await analyzeVendoredTypesqlQueries(
     databasePath,
     queryFiles.map((query) => ({
@@ -43,7 +43,7 @@ export async function generateQueryTypesForConfig(config: SqlfuProjectConfig): P
     })),
   );
 
-  const generatedDir = path.join(config.sqlDir, '.generated');
+  const generatedDir = path.join(config.queries, '.generated');
   await fs.mkdir(generatedDir, {recursive: true});
 
   await Promise.all(
@@ -76,7 +76,7 @@ export async function analyzeAdHocSqlForConfig(
   const schema = await loadSchema(databasePath);
   const [analysis] = await analyzeVendoredTypesqlQueries(databasePath, [
     {
-      sqlPath: path.join(config.sqlDir, '__sql_runner__.sql'),
+      sqlPath: path.join(config.queries, '__sql_runner__.sql'),
       sqlContent: sql,
     },
   ]);
@@ -181,15 +181,15 @@ async function openMainDevDatabase(dbPath: string): Promise<DisposableClient> {
   };
 }
 
-async function loadQueryFiles(sqlDir: string): Promise<readonly QueryFile[]> {
-  const entries = await fs.readdir(sqlDir, {withFileTypes: true});
+async function loadQueryFiles(queriesDir: string): Promise<readonly QueryFile[]> {
+  const entries = await fs.readdir(queriesDir, {withFileTypes: true});
   const sqlEntries = entries
     .filter((entry) => entry.isFile() && entry.name.endsWith('.sql'))
     .sort((left, right) => left.name.localeCompare(right.name));
 
   return Promise.all(
     sqlEntries.map(async (entry) => {
-      const sqlPath = path.join(sqlDir, entry.name);
+      const sqlPath = path.join(queriesDir, entry.name);
       return {
         sqlPath,
         sqlContent: await fs.readFile(sqlPath, 'utf8'),

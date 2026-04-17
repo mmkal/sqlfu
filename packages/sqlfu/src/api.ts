@@ -240,7 +240,7 @@ export async function getCheckAnalysis(context: SqlfuContext): Promise<CheckAnal
 }
 
 export async function writeDefinitionsSql(context: SqlfuContext, sql: string): Promise<void> {
-  await fs.writeFile(context.config.definitionsPath, `${sql.trimEnd()}\n`);
+  await fs.writeFile(context.config.definitions, `${sql.trimEnd()}\n`);
 }
 
 export async function getSchemaAuthorities(context: SqlfuContext) {
@@ -398,16 +398,16 @@ function createRuntime(context: SqlfuContext) {
   return {
     config: context.config,
     now: () => context.now?.() ?? new Date(),
-    readDefinitionsSql: () => readDefinitionsSql(context.config.definitionsPath),
+    readDefinitionsSql: () => readDefinitionsSql(context.config.definitions),
     async readMigrations() {
       try {
-        const fileNames = (await fs.readdir(context.config.migrationsDir))
+        const fileNames = (await fs.readdir(context.config.migrations))
           .filter((fileName) => fileName.endsWith('.sql'))
           .sort();
 
         const migrations = [];
         for (const fileName of fileNames) {
-          const filePath = path.join(context.config.migrationsDir, fileName);
+          const filePath = path.join(context.config.migrations, fileName);
           const content = await fs.readFile(filePath, 'utf8');
           migrations.push({path: filePath, content});
         }
@@ -463,15 +463,15 @@ async function applyDraftSql(
     return;
   }
   const fileName = `${getMigrationPrefix(runtime.now())}_${slugify(input?.name ?? migrationNickname(body))}.sql`;
-  await fs.mkdir(context.config.migrationsDir, {recursive: true});
-  await fs.writeFile(path.join(context.config.migrationsDir, fileName), `${body.trim()}\n`);
+  await fs.mkdir(context.config.migrations, {recursive: true});
+  await fs.writeFile(path.join(context.config.migrations, fileName), `${body.trim()}\n`);
 }
 
 async function applySyncSql(
   context: SqlfuContext,
   confirm: SqlfuCommandConfirm,
 ) {
-  const definitionsSql = await readDefinitionsSql(context.config.definitionsPath);
+  const definitionsSql = await readDefinitionsSql(context.config.definitions);
   await using database = await openMainDevDatabase(context.config.db);
   const baselineSql = await extractSchema(database.client, 'main', {
     excludedTables: schemaDriftExcludedTables,

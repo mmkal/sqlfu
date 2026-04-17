@@ -2,7 +2,7 @@ import {defineConfig} from 'sqlfu';
 
 export default defineConfig({
   db: './db/app.sqlite',
-  migrationsDir: './migrations',
-  definitionsPath: './definitions.sql',
-  sqlDir: './sql',
+  migrations: './migrations',
+  definitions: './definitions.sql',
+  queries: './sql',
 });

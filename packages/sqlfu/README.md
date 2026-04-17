@@ -44,7 +44,7 @@ The intended shape is simple:
 - your desired schema lives in `definitions.sql`
 - your migration history lives in `migrations/`
 - your queries live in a flat `sql/` directory
-- generated TypeScript wrappers live next to those queries
+- generated TypeScript wrappers live in `sql/.generated/`
 
 ## Philosophy
 
@@ -77,7 +77,7 @@ You should still get strong TypeScript output from SQL: generated wrappers, type
 - `sql/`
   A flat directory of checked-in query files.
 - generated query wrappers
-  TypeScript code generated next to those `.sql` files.
+  TypeScript code generated into `sql/.generated/` as `<name>.sql.ts`.
 - `sqlfu_migrations`
   The table that records applied migrations in a real database.
 - live schema
@@ -114,7 +114,7 @@ For the engine model itself, see [docs/schema-diff-model.md](./docs/schema-diff-
 
 ### Type Generator
 
-`sqlfu generate` reads checked-in `.sql` files and generates TypeScript wrappers next to them. The implementation uses vendored TypeSQL analysis, with a small sqlfu post-pass to improve some SQLite result types.
+`sqlfu generate` reads checked-in `.sql` files and generates TypeScript wrappers into a `.generated/` subdirectory (e.g. `sql/.generated/foo-bar.sql.ts`). The implementation uses vendored TypeSQL analysis, with a small sqlfu post-pass to improve some SQLite result types.
 
 The goal is to keep SQL as the authored source while still getting useful TypeScript output in application code.
 
@@ -156,7 +156,8 @@ The default layout is:
 │   └── 20260326120000_add_posts_table.sql
 ├── sql/
 │   ├── some-query.sql
-│   └── some-query.ts
+│   └── .generated/
+│       └── some-query.sql.ts
 └── sqlfu.config.ts
 ```
 
@@ -199,7 +200,7 @@ sqlfu generate
 `sqlfu generate`:
 
 1. exports the schema from your configured main database into a temporary SQLite database for TypeSQL
-2. generates TypeScript wrappers next to those `.sql` files
+2. generates TypeScript wrappers into a `.generated/` subdirectory next to those `.sql` files
 3. refines generated result types for some SQLite cases that TypeSQL currently misses
 
 ### Draft and Apply Migrations

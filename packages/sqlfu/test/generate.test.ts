@@ -12,7 +12,7 @@ import {createTempFixtureRoot, dumpFixtureFs, withTrailingNewline, writeFixtureF
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const generatedTsDump = {
-  includeGlobs: ['sql/*.ts'],
+  includeGlobs: ['sql/.generated/*.ts'],
 } as const;
 
 test('generate writes wrappers and a barrel for every checked-in query', async () => {
@@ -32,49 +32,50 @@ test('generate writes wrappers and a barrel for every checked-in query', async (
   await expect(project.getCompileDiagnostics()).resolves.toEqual([]);
   expect(await project.dumpFs(generatedTsDump)).toMatchInlineSnapshot(`
     "sql/
-      find-post-by-slug.ts
-        import type {Client, SqlQuery} from 'sqlfu';
-        
-        export type FindPostBySlugParams = {
-        	slug: string;
-        }
-        
-        export type FindPostBySlugResult = {
-        	id: number;
-        	slug: string;
-        	excerpt: string;
-        }
-        
-        const FindPostBySlugSql = \`
-        select id, slug, body as excerpt from posts where slug = ? limit 1;
-        \`
-        
-        export async function findPostBySlug(client: Client, params: FindPostBySlugParams): Promise<FindPostBySlugResult | null> {
-        	const query: SqlQuery = { sql: FindPostBySlugSql, args: [params.slug] };
-        	const rows = await client.all<FindPostBySlugResult>(query);
-        	return rows.length > 0 ? rows[0] : null;
-        }
-      index.ts
-        export * from "./find-post-by-slug.js";
-        export * from "./list-post-summaries.js";
-      list-post-summaries.ts
-        import type {Client, SqlQuery} from 'sqlfu';
-        
-        export type ListPostSummariesResult = {
-        	id: number;
-        	slug: string;
-        	published_at?: string;
-        	excerpt: string;
-        }
-        
-        const ListPostSummariesSql = \`
-        select id, slug, published_at, excerpt from post_summaries;
-        \`
-        
-        export async function listPostSummaries(client: Client): Promise<ListPostSummariesResult[]> {
-        	const query: SqlQuery = { sql: ListPostSummariesSql, args: [] };
-        	return client.all<ListPostSummariesResult>(query);
-        }
+      .generated/
+        find-post-by-slug.sql.ts
+          import type {Client, SqlQuery} from 'sqlfu';
+          
+          export type FindPostBySlugParams = {
+          	slug: string;
+          }
+          
+          export type FindPostBySlugResult = {
+          	id: number;
+          	slug: string;
+          	excerpt: string;
+          }
+          
+          const FindPostBySlugSql = \`
+          select id, slug, body as excerpt from posts where slug = ? limit 1;
+          \`
+          
+          export async function findPostBySlug(client: Client, params: FindPostBySlugParams): Promise<FindPostBySlugResult | null> {
+          	const query: SqlQuery = { sql: FindPostBySlugSql, args: [params.slug] };
+          	const rows = await client.all<FindPostBySlugResult>(query);
+          	return rows.length > 0 ? rows[0] : null;
+          }
+        index.ts
+          export * from "./find-post-by-slug.sql.js";
+          export * from "./list-post-summaries.sql.js";
+        list-post-summaries.sql.ts
+          import type {Client, SqlQuery} from 'sqlfu';
+          
+          export type ListPostSummariesResult = {
+          	id: number;
+          	slug: string;
+          	published_at?: string;
+          	excerpt: string;
+          }
+          
+          const ListPostSummariesSql = \`
+          select id, slug, published_at, excerpt from post_summaries;
+          \`
+          
+          export async function listPostSummaries(client: Client): Promise<ListPostSummariesResult[]> {
+          	const query: SqlQuery = { sql: ListPostSummariesSql, args: [] };
+          	return client.all<ListPostSummariesResult>(query);
+          }
     "
   `);
 });
@@ -196,24 +197,25 @@ test('generate can use .ts extensions in the barrel file', async () => {
   await project.generate();
   expect(await project.dumpFs(generatedTsDump)).toMatchInlineSnapshot(`
     "sql/
-      index.ts
-        export * from "./list-posts.ts";
-      list-posts.ts
-        import type {Client, SqlQuery} from 'sqlfu';
-        
-        export type ListPostsResult = {
-        	id: number;
-        	slug: string;
-        }
-        
-        const ListPostsSql = \`
-        select id, slug from posts;
-        \`
-        
-        export async function listPosts(client: Client): Promise<ListPostsResult[]> {
-        	const query: SqlQuery = { sql: ListPostsSql, args: [] };
-        	return client.all<ListPostsResult>(query);
-        }
+      .generated/
+        index.ts
+          export * from "./list-posts.sql.ts";
+        list-posts.sql.ts
+          import type {Client, SqlQuery} from 'sqlfu';
+          
+          export type ListPostsResult = {
+          	id: number;
+          	slug: string;
+          }
+          
+          const ListPostsSql = \`
+          select id, slug from posts;
+          \`
+          
+          export async function listPosts(client: Client): Promise<ListPostsResult[]> {
+          	const query: SqlQuery = { sql: ListPostsSql, args: [] };
+          	return client.all<ListPostsResult>(query);
+          }
     "
   `);
 });
@@ -234,24 +236,25 @@ test('generate defaults to .ts extensions when tsconfig opts into ts import exte
   await project.generate();
   expect(await project.dumpFs(generatedTsDump)).toMatchInlineSnapshot(`
     "sql/
-      index.ts
-        export * from "./list-posts.ts";
-      list-posts.ts
-        import type {Client, SqlQuery} from 'sqlfu';
-        
-        export type ListPostsResult = {
-        	id: number;
-        	slug: string;
-        }
-        
-        const ListPostsSql = \`
-        select id, slug from posts;
-        \`
-        
-        export async function listPosts(client: Client): Promise<ListPostsResult[]> {
-        	const query: SqlQuery = { sql: ListPostsSql, args: [] };
-        	return client.all<ListPostsResult>(query);
-        }
+      .generated/
+        index.ts
+          export * from "./list-posts.sql.ts";
+        list-posts.sql.ts
+          import type {Client, SqlQuery} from 'sqlfu';
+          
+          export type ListPostsResult = {
+          	id: number;
+          	slug: string;
+          }
+          
+          const ListPostsSql = \`
+          select id, slug from posts;
+          \`
+          
+          export async function listPosts(client: Client): Promise<ListPostsResult[]> {
+          	const query: SqlQuery = { sql: ListPostsSql, args: [] };
+          	return client.all<ListPostsResult>(query);
+          }
     "
   `);
 });
@@ -275,24 +278,25 @@ test('explicit generatedImportExtension overrides tsconfig detection', async () 
   await project.generate();
   expect(await project.dumpFs(generatedTsDump)).toMatchInlineSnapshot(`
     "sql/
-      index.ts
-        export * from "./list-posts.js";
-      list-posts.ts
-        import type {Client, SqlQuery} from 'sqlfu';
-        
-        export type ListPostsResult = {
-        	id: number;
-        	slug: string;
-        }
-        
-        const ListPostsSql = \`
-        select id, slug from posts;
-        \`
-        
-        export async function listPosts(client: Client): Promise<ListPostsResult[]> {
-        	const query: SqlQuery = { sql: ListPostsSql, args: [] };
-        	return client.all<ListPostsResult>(query);
-        }
+      .generated/
+        index.ts
+          export * from "./list-posts.sql.js";
+        list-posts.sql.ts
+          import type {Client, SqlQuery} from 'sqlfu';
+          
+          export type ListPostsResult = {
+          	id: number;
+          	slug: string;
+          }
+          
+          const ListPostsSql = \`
+          select id, slug from posts;
+          \`
+          
+          export async function listPosts(client: Client): Promise<ListPostsResult[]> {
+          	const query: SqlQuery = { sql: ListPostsSql, args: [] };
+          	return client.all<ListPostsResult>(query);
+          }
     "
   `);
 });
@@ -311,30 +315,31 @@ test('generate emits named param types and a nullable single-row result for limi
   await expect(project.getCompileDiagnostics()).resolves.toEqual([]);
   expect(await project.dumpFs(generatedTsDump)).toMatchInlineSnapshot(`
     "sql/
-      find-post-by-slug.ts
-        import type {Client, SqlQuery} from 'sqlfu';
-        
-        export type FindPostBySlugParams = {
-        	slug: string;
-        }
-        
-        export type FindPostBySlugResult = {
-        	id: number;
-        	slug: string;
-        	title?: string;
-        }
-        
-        const FindPostBySlugSql = \`
-        select id, slug, title from posts where slug = ? limit 1;
-        \`
-        
-        export async function findPostBySlug(client: Client, params: FindPostBySlugParams): Promise<FindPostBySlugResult | null> {
-        	const query: SqlQuery = { sql: FindPostBySlugSql, args: [params.slug] };
-        	const rows = await client.all<FindPostBySlugResult>(query);
-        	return rows.length > 0 ? rows[0] : null;
-        }
-      index.ts
-        export * from "./find-post-by-slug.js";
+      .generated/
+        find-post-by-slug.sql.ts
+          import type {Client, SqlQuery} from 'sqlfu';
+          
+          export type FindPostBySlugParams = {
+          	slug: string;
+          }
+          
+          export type FindPostBySlugResult = {
+          	id: number;
+          	slug: string;
+          	title?: string;
+          }
+          
+          const FindPostBySlugSql = \`
+          select id, slug, title from posts where slug = ? limit 1;
+          \`
+          
+          export async function findPostBySlug(client: Client, params: FindPostBySlugParams): Promise<FindPostBySlugResult | null> {
+          	const query: SqlQuery = { sql: FindPostBySlugSql, args: [params.slug] };
+          	const rows = await client.all<FindPostBySlugResult>(query);
+          	return rows.length > 0 ? rows[0] : null;
+          }
+        index.ts
+          export * from "./find-post-by-slug.sql.js";
     "
   `);
 });
@@ -353,24 +358,25 @@ test('generate uses schema types for aliased selected columns instead of leaving
   await expect(project.getCompileDiagnostics()).resolves.toEqual([]);
   expect(await project.dumpFs(generatedTsDump)).toMatchInlineSnapshot(`
     "sql/
-      find-post-preview.ts
-        import type {Client, SqlQuery} from 'sqlfu';
-        
-        export type FindPostPreviewResult = {
-        	id: number;
-        	excerpt: string;
-        }
-        
-        const FindPostPreviewSql = \`
-        select id, body as excerpt from posts limit 5;
-        \`
-        
-        export async function findPostPreview(client: Client): Promise<FindPostPreviewResult[]> {
-        	const query: SqlQuery = { sql: FindPostPreviewSql, args: [] };
-        	return client.all<FindPostPreviewResult>(query);
-        }
-      index.ts
-        export * from "./find-post-preview.js";
+      .generated/
+        find-post-preview.sql.ts
+          import type {Client, SqlQuery} from 'sqlfu';
+          
+          export type FindPostPreviewResult = {
+          	id: number;
+          	excerpt: string;
+          }
+          
+          const FindPostPreviewSql = \`
+          select id, body as excerpt from posts limit 5;
+          \`
+          
+          export async function findPostPreview(client: Client): Promise<FindPostPreviewResult[]> {
+          	const query: SqlQuery = { sql: FindPostPreviewSql, args: [] };
+          	return client.all<FindPostPreviewResult>(query);
+          }
+        index.ts
+          export * from "./find-post-preview.sql.js";
     "
   `);
 });
@@ -389,25 +395,26 @@ test('generate treats selected columns as required when the query narrows them w
   await expect(project.getCompileDiagnostics()).resolves.toEqual([]);
   expect(await project.dumpFs(generatedTsDump)).toMatchInlineSnapshot(`
     "sql/
-      find-published-post-by-slug.ts
-        import type {Client, SqlQuery} from 'sqlfu';
-        
-        export type FindPublishedPostBySlugResult = {
-        	id: number;
-        	published_at: string;
-        }
-        
-        const FindPublishedPostBySlugSql = \`
-        select id, published_at from posts where published_at is not null limit 1;
-        \`
-        
-        export async function findPublishedPostBySlug(client: Client): Promise<FindPublishedPostBySlugResult | null> {
-        	const query: SqlQuery = { sql: FindPublishedPostBySlugSql, args: [] };
-        	const rows = await client.all<FindPublishedPostBySlugResult>(query);
-        	return rows.length > 0 ? rows[0] : null;
-        }
-      index.ts
-        export * from "./find-published-post-by-slug.js";
+      .generated/
+        find-published-post-by-slug.sql.ts
+          import type {Client, SqlQuery} from 'sqlfu';
+          
+          export type FindPublishedPostBySlugResult = {
+          	id: number;
+          	published_at: string;
+          }
+          
+          const FindPublishedPostBySlugSql = \`
+          select id, published_at from posts where published_at is not null limit 1;
+          \`
+          
+          export async function findPublishedPostBySlug(client: Client): Promise<FindPublishedPostBySlugResult | null> {
+          	const query: SqlQuery = { sql: FindPublishedPostBySlugSql, args: [] };
+          	const rows = await client.all<FindPublishedPostBySlugResult>(query);
+          	return rows.length > 0 ? rows[0] : null;
+          }
+        index.ts
+          export * from "./find-published-post-by-slug.sql.js";
     "
   `);
 });
@@ -427,24 +434,25 @@ test('generate preserves useful result types for queries that read through views
   await expect(project.getCompileDiagnostics()).resolves.toEqual([]);
   expect(await project.dumpFs(generatedTsDump)).toMatchInlineSnapshot(`
     "sql/
-      index.ts
-        export * from "./list-post-summaries.js";
-      list-post-summaries.ts
-        import type {Client, SqlQuery} from 'sqlfu';
-        
-        export type ListPostSummariesResult = {
-        	id: number;
-        	excerpt: string;
-        }
-        
-        const ListPostSummariesSql = \`
-        select id, excerpt from post_summaries;
-        \`
-        
-        export async function listPostSummaries(client: Client): Promise<ListPostSummariesResult[]> {
-        	const query: SqlQuery = { sql: ListPostSummariesSql, args: [] };
-        	return client.all<ListPostSummariesResult>(query);
-        }
+      .generated/
+        index.ts
+          export * from "./list-post-summaries.sql.js";
+        list-post-summaries.sql.ts
+          import type {Client, SqlQuery} from 'sqlfu';
+          
+          export type ListPostSummariesResult = {
+          	id: number;
+          	excerpt: string;
+          }
+          
+          const ListPostSummariesSql = \`
+          select id, excerpt from post_summaries;
+          \`
+          
+          export async function listPostSummaries(client: Client): Promise<ListPostSummariesResult[]> {
+          	const query: SqlQuery = { sql: ListPostSummariesSql, args: [] };
+          	return client.all<ListPostSummariesResult>(query);
+          }
     "
   `);
 });
@@ -462,11 +470,12 @@ test('generate infers simple expression aliases like substr in result types', as
   await project.generate();
   expect(await project.dumpFs(generatedTsDump)).toMatchInlineSnapshot(`
     "sql/
-      index.ts
-        export * from "./list-post-cards.js";
-      list-post-cards.ts
-        //Invalid SQL
-        export {};
+      .generated/
+        index.ts
+          export * from "./list-post-cards.sql.js";
+        list-post-cards.sql.ts
+          //Invalid SQL
+          export {};
     "
   `);
 });
@@ -485,38 +494,39 @@ test('generate snapshots insert queries', async () => {
   await expect(project.getCompileDiagnostics()).resolves.toEqual([]);
   expect(await project.dumpFs(generatedTsDump)).toMatchInlineSnapshot(`
     "sql/
-      index.ts
-        export * from "./insert-post.js";
-      insert-post.ts
-        import type {Client, SqlQuery} from 'sqlfu';
-        
-        export type InsertPostParams = {
-        	slug: string;
-        }
-        
-        export type InsertPostResult = {
-        	rowsAffected: number;
-        	lastInsertRowid: number;
-        }
-        
-        const InsertPostSql = \`
-        insert into posts (slug) values (?);
-        \`
-        
-        export async function insertPost(client: Client, params: InsertPostParams): Promise<InsertPostResult> {
-        	const query: SqlQuery = { sql: InsertPostSql, args: [params.slug] };
-        	const result = await client.run(query);
-        	if (result.rowsAffected === undefined) {
-        		throw new Error('Expected rowsAffected to be present on query result');
-        	}
-        	if (result.lastInsertRowid === undefined || result.lastInsertRowid === null) {
-        		throw new Error('Expected lastInsertRowid to be present on query result');
-        	}
-        	return {
-        		rowsAffected: result.rowsAffected,
-        		lastInsertRowid: Number(result.lastInsertRowid),
-        	};
-        }
+      .generated/
+        index.ts
+          export * from "./insert-post.sql.js";
+        insert-post.sql.ts
+          import type {Client, SqlQuery} from 'sqlfu';
+          
+          export type InsertPostParams = {
+          	slug: string;
+          }
+          
+          export type InsertPostResult = {
+          	rowsAffected: number;
+          	lastInsertRowid: number;
+          }
+          
+          const InsertPostSql = \`
+          insert into posts (slug) values (?);
+          \`
+          
+          export async function insertPost(client: Client, params: InsertPostParams): Promise<InsertPostResult> {
+          	const query: SqlQuery = { sql: InsertPostSql, args: [params.slug] };
+          	const result = await client.run(query);
+          	if (result.rowsAffected === undefined) {
+          		throw new Error('Expected rowsAffected to be present on query result');
+          	}
+          	if (result.lastInsertRowid === undefined || result.lastInsertRowid === null) {
+          		throw new Error('Expected lastInsertRowid to be present on query result');
+          	}
+          	return {
+          		rowsAffected: result.rowsAffected,
+          		lastInsertRowid: Number(result.lastInsertRowid),
+          	};
+          }
     "
   `);
 });
@@ -535,31 +545,32 @@ test('generate treats insert returning queries as single-row results', async () 
   await expect(project.getCompileDiagnostics()).resolves.toEqual([]);
   expect(await project.dumpFs(generatedTsDump)).toMatchInlineSnapshot(`
     "sql/
-      add-user.ts
-        import type {Client, SqlQuery} from 'sqlfu';
-        
-        export type AddUserParams = {
-        	fullName: string;
-        	emailAddress: string;
-        }
-        
-        export type AddUserResult = {
-        	id: number;
-        	name: string;
-        	email: string;
-        }
-        
-        const AddUserSql = \`
-        insert into users (name, email) values (?, ?) returning *;
-        \`
-        
-        export async function addUser(client: Client, params: AddUserParams): Promise<AddUserResult> {
-        	const query: SqlQuery = { sql: AddUserSql, args: [params.fullName, params.emailAddress] };
-        	const rows = await client.all<AddUserResult>(query);
-        	return rows[0];
-        }
-      index.ts
-        export * from "./add-user.js";
+      .generated/
+        add-user.sql.ts
+          import type {Client, SqlQuery} from 'sqlfu';
+          
+          export type AddUserParams = {
+          	fullName: string;
+          	emailAddress: string;
+          }
+          
+          export type AddUserResult = {
+          	id: number;
+          	name: string;
+          	email: string;
+          }
+          
+          const AddUserSql = \`
+          insert into users (name, email) values (?, ?) returning *;
+          \`
+          
+          export async function addUser(client: Client, params: AddUserParams): Promise<AddUserResult> {
+          	const query: SqlQuery = { sql: AddUserSql, args: [params.fullName, params.emailAddress] };
+          	const rows = await client.all<AddUserResult>(query);
+          	return rows[0];
+          }
+        index.ts
+          export * from "./add-user.sql.js";
     "
   `);
 });
@@ -578,37 +589,38 @@ test('generate snapshots update queries', async () => {
   await expect(project.getCompileDiagnostics()).resolves.toEqual([]);
   expect(await project.dumpFs(generatedTsDump)).toMatchInlineSnapshot(`
     "sql/
-      index.ts
-        export * from "./update-post.js";
-      update-post.ts
-        import type {Client, SqlQuery} from 'sqlfu';
-        
-        export type UpdatePostData = {
-        	slug: string;
-        }
-        
-        export type UpdatePostParams = {
-        	id: number;
-        }
-        
-        export type UpdatePostResult = {
-        	rowsAffected: number;
-        }
-        
-        const UpdatePostSql = \`
-        update posts set slug = ? where id = ?;
-        \`
-        
-        export async function updatePost(client: Client, data: UpdatePostData, params: UpdatePostParams): Promise<UpdatePostResult> {
-        	const query: SqlQuery = { sql: UpdatePostSql, args: [data.slug, params.id] };
-        	const result = await client.run(query);
-        	if (result.rowsAffected === undefined) {
-        		throw new Error('Expected rowsAffected to be present on query result');
-        	}
-        	return {
-        		rowsAffected: result.rowsAffected,
-        	};
-        }
+      .generated/
+        index.ts
+          export * from "./update-post.sql.js";
+        update-post.sql.ts
+          import type {Client, SqlQuery} from 'sqlfu';
+          
+          export type UpdatePostData = {
+          	slug: string;
+          }
+          
+          export type UpdatePostParams = {
+          	id: number;
+          }
+          
+          export type UpdatePostResult = {
+          	rowsAffected: number;
+          }
+          
+          const UpdatePostSql = \`
+          update posts set slug = ? where id = ?;
+          \`
+          
+          export async function updatePost(client: Client, data: UpdatePostData, params: UpdatePostParams): Promise<UpdatePostResult> {
+          	const query: SqlQuery = { sql: UpdatePostSql, args: [data.slug, params.id] };
+          	const result = await client.run(query);
+          	if (result.rowsAffected === undefined) {
+          		throw new Error('Expected rowsAffected to be present on query result');
+          	}
+          	return {
+          		rowsAffected: result.rowsAffected,
+          	};
+          }
     "
   `);
 });
@@ -627,33 +639,34 @@ test('generate snapshots delete queries', async () => {
   await expect(project.getCompileDiagnostics()).resolves.toEqual([]);
   expect(await project.dumpFs(generatedTsDump)).toMatchInlineSnapshot(`
     "sql/
-      delete-post.ts
-        import type {Client, SqlQuery} from 'sqlfu';
-        
-        export type DeletePostParams = {
-        	id: number;
-        }
-        
-        export type DeletePostResult = {
-        	rowsAffected: number;
-        }
-        
-        const DeletePostSql = \`
-        delete from posts where id = ?;
-        \`
-        
-        export async function deletePost(client: Client, params: DeletePostParams): Promise<DeletePostResult> {
-        	const query: SqlQuery = { sql: DeletePostSql, args: [params.id] };
-        	const result = await client.run(query);
-        	if (result.rowsAffected === undefined) {
-        		throw new Error('Expected rowsAffected to be present on query result');
-        	}
-        	return {
-        		rowsAffected: result.rowsAffected,
-        	};
-        }
-      index.ts
-        export * from "./delete-post.js";
+      .generated/
+        delete-post.sql.ts
+          import type {Client, SqlQuery} from 'sqlfu';
+          
+          export type DeletePostParams = {
+          	id: number;
+          }
+          
+          export type DeletePostResult = {
+          	rowsAffected: number;
+          }
+          
+          const DeletePostSql = \`
+          delete from posts where id = ?;
+          \`
+          
+          export async function deletePost(client: Client, params: DeletePostParams): Promise<DeletePostResult> {
+          	const query: SqlQuery = { sql: DeletePostSql, args: [params.id] };
+          	const result = await client.run(query);
+          	if (result.rowsAffected === undefined) {
+          		throw new Error('Expected rowsAffected to be present on query result');
+          	}
+          	return {
+          		rowsAffected: result.rowsAffected,
+          	};
+          }
+        index.ts
+          export * from "./delete-post.sql.js";
     "
   `);
 });
@@ -672,24 +685,25 @@ test('generate snapshots function queries', async () => {
   await expect(project.getCompileDiagnostics()).resolves.toEqual([]);
   expect(await project.dumpFs(generatedTsDump)).toMatchInlineSnapshot(`
     "sql/
-      count-posts.ts
-        import type {Client, SqlQuery} from 'sqlfu';
-        
-        export type CountPostsResult = {
-        	total: number;
-        }
-        
-        const CountPostsSql = \`
-        select count(*) as total from posts;
-        \`
-        
-        export async function countPosts(client: Client): Promise<CountPostsResult | null> {
-        	const query: SqlQuery = { sql: CountPostsSql, args: [] };
-        	const rows = await client.all<CountPostsResult>(query);
-        	return rows.length > 0 ? rows[0] : null;
-        }
-      index.ts
-        export * from "./count-posts.js";
+      .generated/
+        count-posts.sql.ts
+          import type {Client, SqlQuery} from 'sqlfu';
+          
+          export type CountPostsResult = {
+          	total: number;
+          }
+          
+          const CountPostsSql = \`
+          select count(*) as total from posts;
+          \`
+          
+          export async function countPosts(client: Client): Promise<CountPostsResult | null> {
+          	const query: SqlQuery = { sql: CountPostsSql, args: [] };
+          	const rows = await client.all<CountPostsResult>(query);
+          	return rows.length > 0 ? rows[0] : null;
+          }
+        index.ts
+          export * from "./count-posts.sql.js";
     "
   `);
 });
@@ -708,11 +722,12 @@ test('generate snapshots user-defined function queries', async () => {
   await expect(project.getCompileDiagnostics()).resolves.toEqual([]);
   expect(await project.dumpFs(generatedTsDump)).toMatchInlineSnapshot(`
     "sql/
-      index.ts
-        export * from "./list-normalized-slugs.js";
-      list-normalized-slugs.ts
-        //Invalid SQL
-        export {};
+      .generated/
+        index.ts
+          export * from "./list-normalized-slugs.sql.js";
+        list-normalized-slugs.sql.ts
+          //Invalid SQL
+          export {};
     "
   `);
 });
@@ -748,11 +763,12 @@ test('generate snapshots cte queries with the works in one query', async () => {
   await expect(project.getCompileDiagnostics()).resolves.toEqual([]);
   expect(await project.dumpFs(generatedTsDump)).toMatchInlineSnapshot(`
     "sql/
-      index.ts
-        export * from "./sync-post-from-cte.js";
-      sync-post-from-cte.ts
-        //Invalid SQL
-        export {};
+      .generated/
+        index.ts
+          export * from "./sync-post-from-cte.sql.js";
+        sync-post-from-cte.sql.ts
+          //Invalid SQL
+          export {};
     "
   `);
 });
@@ -838,8 +854,8 @@ async function createGenerateFixture(input: {
           project.removeSourceFile(sourceFile);
         }
       }
-      project.addSourceFilesAtPaths(path.join(root, 'sql', '**', '*.ts'));
-      project.addSourceFilesAtPaths(path.join(root, 'sql', '**', '*.d.ts'));
+      project.addSourceFilesAtPaths(path.join(root, 'sql', '.generated', '*.ts'));
+      project.addSourceFilesAtPaths(path.join(root, 'sql', '.generated', '*.d.ts'));
 
       return project
         .getPreEmitDiagnostics()

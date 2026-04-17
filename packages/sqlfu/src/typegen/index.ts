@@ -43,6 +43,9 @@ export async function generateQueryTypesForConfig(config: SqlfuProjectConfig): P
     })),
   );
 
+  const generatedDir = path.join(config.sqlDir, '.generated');
+  await fs.mkdir(generatedDir, {recursive: true});
+
   await Promise.all(
     queryFiles.map(async (queryFile) => {
       const analysis = queryAnalyses.find((query) => query.sqlPath === queryFile.sqlPath);
@@ -50,7 +53,7 @@ export async function generateQueryTypesForConfig(config: SqlfuProjectConfig): P
         throw new Error(`Missing vendored TypeSQL analysis for ${queryFile.sqlPath}`);
       }
 
-      const wrapperPath = path.join(config.sqlDir, replaceExtension(path.basename(queryFile.sqlPath), '.ts'));
+      const wrapperPath = path.join(generatedDir, `${path.basename(queryFile.sqlPath)}.ts`);
       const contents = analysis.ok
         ? renderQueryWrapper({
           sqlPath: queryFile.sqlPath,
@@ -61,7 +64,7 @@ export async function generateQueryTypesForConfig(config: SqlfuProjectConfig): P
     }),
   );
 
-  await writeGeneratedBarrel(config.sqlDir, queryFiles, config.generatedImportExtension);
+  await writeGeneratedBarrel(generatedDir, queryFiles, config.generatedImportExtension);
   await writeQueryCatalog(config, queryFiles, queryAnalyses, schema);
 }
 
@@ -196,15 +199,15 @@ async function loadQueryFiles(sqlDir: string): Promise<readonly QueryFile[]> {
 }
 
 async function writeGeneratedBarrel(
-  sqlDir: string,
+  generatedDir: string,
   queryFiles: readonly QueryFile[],
   generatedImportExtension: '.js' | '.ts',
 ): Promise<void> {
   const lines = queryFiles
     .map((queryFile) => path.basename(queryFile.sqlPath, '.sql'))
     .sort((left, right) => left.localeCompare(right))
-    .map((baseName) => `export * from "./${baseName}${generatedImportExtension}";`);
-  await fs.writeFile(path.join(sqlDir, 'index.ts'), lines.join('\n') + (lines.length > 0 ? '\n' : ''));
+    .map((baseName) => `export * from "./${baseName}.sql${generatedImportExtension}";`);
+  await fs.writeFile(path.join(generatedDir, 'index.ts'), lines.join('\n') + (lines.length > 0 ? '\n' : ''));
 }
 
 async function writeQueryCatalog(
@@ -1006,10 +1009,6 @@ function mapSqliteTypeToTs(columnType: string): string {
     return 'Date';
   }
   return 'number';
-}
-
-function replaceExtension(fileName: string, nextExtension: '.ts' | '.d.ts'): string {
-  return fileName.replace(/\.sql$/, nextExtension);
 }
 
 function escapeSqliteIdentifier(value: string): string {

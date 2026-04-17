@@ -245,9 +245,18 @@ Useful tools confirmed by docs:
 
 ### Recommended Implementation Order
 
-- first add the name plumbing and a small wrapper snapshot test
-- then add the execution hook and runtime test
-- then build the Hono + OTel end-to-end fixture
+- start with writing a "normal" hono app in a test
+- set it up as a sqlfu project, with some imaginary realistic tables
+- add a couple of query files under `sql/*.sql`
+- set the project up with otel using whatever the industry standard otel lib is in js/ts (research this)
+- set up a local otel collector as necessary
+- create an realistic product app api endpoint which exercises the db (ideally inside some larger span)
+- set up sqlfu to write otel traces via some imaginary helper function that we'll eventually implement as part of the library api surface
+- dump the otel trace(s) in some readable text format
+- add a simple assertion that somewhere in that trace the name of the query that was exercised
+- inline snapshot it too - may need to fudge timings etc.
+
+After that we can take a look, but at that point it would be good to pause and validate the design is what we want it to be, and then suggest more tests including things like parameterised queries.
 
 That order keeps the proof incremental and avoids debugging OTel before the core metadata flow exists.
 

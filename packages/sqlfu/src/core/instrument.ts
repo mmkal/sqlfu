@@ -9,10 +9,52 @@ export interface QueryExecutionContext {
   readonly system: string;
 }
 
+/**
+ * Run `execute` and call `onSuccess` on the result. If `execute` throws
+ * synchronously, or returns a Promise that rejects, `onError` is called —
+ * if `onError` is omitted, the error propagates. The shape of the return
+ * value matches the shape of `execute`'s return: sync in, sync out;
+ * Promise in, Promise out. Abstracts the "is it a Promise" check so hook
+ * authors don't write it every time.
+ */
+export type ProcessResult = <T>(
+  execute: () => T,
+  onSuccess: (value: Awaited<T>) => Awaited<T>,
+  onError?: (error: unknown) => Awaited<T>,
+) => T;
+
+export interface QueryExecutionHookArgs<TResult> {
+  readonly context: QueryExecutionContext;
+  readonly execute: () => TResult;
+  readonly processResult: ProcessResult;
+}
+
 export type QueryExecutionHook = <TResult>(
-  context: QueryExecutionContext,
-  execute: () => TResult,
+  args: QueryExecutionHookArgs<TResult>,
 ) => TResult;
+
+const processResult: ProcessResult = <T>(
+  execute: () => T,
+  onSuccess: (value: Awaited<T>) => Awaited<T>,
+  onError?: (error: unknown) => Awaited<T>,
+): T => {
+  let result: T;
+  try {
+    result = execute();
+  } catch (error) {
+    if (onError) return onError(error) as T;
+    throw error;
+  }
+  if (isPromiseLike(result)) {
+    return (result as unknown as Promise<Awaited<T>>).then(
+      onSuccess,
+      onError ?? ((error: unknown) => {
+        throw error;
+      }),
+    ) as T;
+  }
+  return onSuccess(result as Awaited<T>) as T;
+};
 
 /**
  * Wrap a Client so every `all`/`run` flows through `hook`. `raw`, `iterate`,
@@ -32,17 +74,17 @@ export function instrumentClient<TClient extends Client>(client: TClient, hook: 
  */
 export function composeHooks(...hooks: readonly QueryExecutionHook[]): QueryExecutionHook {
   if (hooks.length === 0) {
-    return (_context, execute) => execute();
+    return ({execute}) => execute();
   }
   if (hooks.length === 1) {
     return hooks[0]!;
   }
-  return <TResult>(context: QueryExecutionContext, execute: () => TResult): TResult => {
-    let chained: () => TResult = execute;
+  return <TResult>(args: QueryExecutionHookArgs<TResult>): TResult => {
+    let chained: () => TResult = args.execute;
     for (let index = hooks.length - 1; index >= 0; index -= 1) {
       const hook = hooks[index]!;
       const next = chained;
-      chained = () => hook(context, next);
+      chained = () => hook({...args, execute: next});
     }
     return chained();
   };
@@ -69,34 +111,30 @@ export interface QueryErrorReport {
 export function createErrorReporterHook(
   report: (params: QueryErrorReport) => unknown,
 ): QueryExecutionHook {
-  return <TResult>(context: QueryExecutionContext, execute: () => TResult): TResult => {
-    const fail = (error: unknown): never => {
+  return ({context, execute, processResult}) =>
+    processResult(execute, (value) => value, (error) => {
       try {
         report({context, error});
       } catch {
         // the error handler itself failing shouldn't mask the original error
       }
       throw error;
-    };
+    });
+}
 
-    try {
-      const result = execute();
-      if (isPromiseLike(result)) {
-        return result.then((value) => value, fail) as TResult;
-      }
-      return result;
-    } catch (error) {
-      return fail(error);
-    }
-  };
+function buildHookArgs<TResult>(
+  context: QueryExecutionContext,
+  execute: () => TResult,
+): QueryExecutionHookArgs<TResult> {
+  return {context, execute, processResult};
 }
 
 function instrumentAsync<TDriver>(client: AsyncClient<TDriver>, hook: QueryExecutionHook): AsyncClient<TDriver> {
   const wrapped: Omit<AsyncClient<TDriver>, 'sql'> & {sql: AsyncClient<TDriver>['sql']} = {
     driver: client.driver,
     system: client.system,
-    all: (query) => hook({query, operation: 'all', system: client.system}, () => client.all(query)),
-    run: (query) => hook({query, operation: 'run', system: client.system}, () => client.run(query)),
+    all: (query) => hook(buildHookArgs({query, operation: 'all', system: client.system}, () => client.all(query))),
+    run: (query) => hook(buildHookArgs({query, operation: 'run', system: client.system}, () => client.run(query))),
     raw: (sql) => client.raw(sql),
     iterate: (query) => client.iterate(query),
     transaction: (fn) => client.transaction((tx) => fn(instrumentAsync(tx, hook))),
@@ -110,8 +148,8 @@ function instrumentSync<TDriver>(client: SyncClient<TDriver>, hook: QueryExecuti
   const wrapped: Omit<SyncClient<TDriver>, 'sql'> & {sql: SyncClient<TDriver>['sql']} = {
     driver: client.driver,
     system: client.system,
-    all: (query) => hook({query, operation: 'all', system: client.system}, () => client.all(query)),
-    run: (query) => hook({query, operation: 'run', system: client.system}, () => client.run(query)),
+    all: (query) => hook(buildHookArgs({query, operation: 'all', system: client.system}, () => client.all(query))),
+    run: (query) => hook(buildHookArgs({query, operation: 'run', system: client.system}, () => client.run(query))),
     raw: (sql) => client.raw(sql),
     iterate: (query) => client.iterate(query),
     transaction: (<TResult>(fn: (tx: SyncClient<TDriver>) => TResult) =>

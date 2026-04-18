@@ -1,4 +1,4 @@
-import type {QueryExecutionContext, QueryExecutionHook} from './core/instrument.js';
+import type {QueryExecutionHook} from './core/instrument.js';
 import {spanNameFor} from './core/naming.js';
 
 /**
@@ -35,7 +35,7 @@ export function createOtelHook(options: {readonly tracer: TracerLike}): QueryExe
   const OTEL_STATUS_ERROR = 2;
 
   const {tracer} = options;
-  return <TResult>(context: QueryExecutionContext, execute: () => TResult): TResult => {
+  return ({context, execute, processResult}) => {
     const name = spanNameFor(context.query);
     return tracer.startActiveSpan(name, (span) => {
       if (context.query.name) {
@@ -44,31 +44,20 @@ export function createOtelHook(options: {readonly tracer: TracerLike}): QueryExe
       span.setAttribute('db.query.text', context.query.sql);
       span.setAttribute('db.system.name', context.system);
 
-      const success = (result: TResult): TResult => {
-        span.setStatus({code: OTEL_STATUS_OK});
-        span.end();
-        return result;
-      };
-      const failure = (error: unknown): never => {
-        span.recordException(error);
-        span.setStatus({code: OTEL_STATUS_ERROR, message: error instanceof Error ? error.message : String(error)});
-        span.end();
-        throw error;
-      };
-
-      try {
-        const result = execute();
-        if (isPromiseLike(result)) {
-          return result.then(success, failure) as TResult;
-        }
-        return success(result);
-      } catch (error) {
-        return failure(error);
-      }
+      return processResult(
+        execute,
+        (value) => {
+          span.setStatus({code: OTEL_STATUS_OK});
+          span.end();
+          return value;
+        },
+        (error) => {
+          span.recordException(error);
+          span.setStatus({code: OTEL_STATUS_ERROR, message: error instanceof Error ? error.message : String(error)});
+          span.end();
+          throw error;
+        },
+      );
     });
   };
-}
-
-function isPromiseLike<T>(value: T | Promise<T>): value is Promise<T> {
-  return value != null && typeof (value as {then?: unknown}).then === 'function';
 }

@@ -21,9 +21,9 @@ import {createNodeSqliteClient, instrument, type QueryExecutionHook} from '../..
 test('every query emits a db_query event to PostHog with name and duration', async () => {
   await using posthog = await setupPostHogForTest();
 
-  const captureQuery: QueryExecutionHook = (context, execute) => {
+  const captureQuery: QueryExecutionHook = ({context, execute, processResult}) => {
     const start = Date.now();
-    const recordAndReturn = <T>(result: T) => {
+    return processResult(execute, (value) => {
       posthog.client.capture({
         distinctId: 'app',
         event: 'db_query',
@@ -34,14 +34,8 @@ test('every query emits a db_query event to PostHog with name and duration', asy
           operation: context.operation,
         },
       });
-      return result;
-    };
-
-    const result = execute();
-    if (result != null && typeof (result as {then?: unknown}).then === 'function') {
-      return (result as Promise<unknown>).then(recordAndReturn) as typeof result;
-    }
-    return recordAndReturn(result);
+      return value;
+    });
   };
 
   const db = new DatabaseSync(':memory:');

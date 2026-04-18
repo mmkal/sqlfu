@@ -114,7 +114,7 @@ Document this behavior in the config docs. Leaving a future door open for a stru
 - [x] Implement `composeHooks`. _Commit 3e51f1c. Chains hooks left-to-right, outermost first._
 - [x] Implement `createOtelHook({ tracer })`. _Commit 3e51f1c. Emits `db.query.summary` / `db.query.text` / `db.system.name`; records exception + ERROR status on throw; handles sync and async execute via `isPromiseLike`._
 - [x] Implement `createErrorReporterHook(report)`. _Commit 3e51f1c. Fires on throw or rejected promise, always rethrows, swallows errors in the reporter itself so they can't mask the original error._
-- [x] Update `test/otel-tracing.test.ts`. _Commit 63429da. Hono + real OTLP exporter + local receiver; snapshot covers named + ad-hoc + failing query; asserts the errorReporter hook captured the failure._
+- [x] Update `test/observability/opentelemetry.test.ts` (originally `test/otel-tracing.test.ts`). _Commits 63429da, 63e1fe3. Hono + real OTLP exporter + local receiver; snapshot covers named + ad-hoc + failing query; asserts the errorReporter hook captured the failure. Moved into `test/observability/` alongside `sentry.test.ts` and `posthog.test.ts` so each file doubles as a copy-pasteable recipe._
 - [ ] User-facing docs (see [Docs plan](#docs-plan) below). Inline JSDoc covers the `client.raw()` caveat for now.
 - [ ] User-facing docs: nested query folder naming rule (same page as above).
 
@@ -163,6 +163,10 @@ Commits on `named-and-loved-queries`:
 | 63429da | test: otel trace snapshot covers named, ad-hoc, failing queries |
 | 01e2f67 | tasks: mark checklist complete |
 | f0c007e | typegen: support nested query directories |
+| 31475cf | instrument: error reporter takes {context, error} bag; inline OTel status codes |
+| 34589cd | (superseded) move OTel helper to sqlfu/otel subpath |
+| cb8bc47 | collapse instrumentation surface to a single `instrument` export |
+| 63e1fe3 | test/observability: sentry and posthog recipes; defer error taxonomy |
 
 Notable decisions reaffirmed during implementation:
 

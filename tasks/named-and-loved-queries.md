@@ -133,9 +133,20 @@ Not built yet — sketched after the implementation so it's locked in before any
 3. **`packages/sqlfu/README.md`** — one paragraph under core concepts noting that generated queries carry names and those names reach observability tools. NOTE this file IS the website's "sqlfu" overview docs page (synced via `website/build.mjs`), so edit it once.
 4. **Root `README.md`** — **do not edit directly**. It's generated from `packages/ui/README.md` via `scripts/sync-root-readme.ts`. Irrelevant to this feature since it's the UI readme.
 
-**Positioning of the reference hooks.** Docs should invite copy-paste. `createOtelHook` and `createErrorReporterHook` are ~40 lines each, sitting under `sqlfu/otel` and `sqlfu` root respectively. They're reference implementations, not the blessed-forever API. The stable contract is `QueryExecutionHook`; the helpers are one valid satisfaction of it. Doc should say so plainly.
+**Positioning of the reference hooks.** Docs should invite copy-paste. `instrument.otel` and `instrument.onError` are ~40 lines each. They're reference implementations, not the blessed-forever API. The stable contract is `QueryExecutionHook`; the helpers are one valid satisfaction of it. Doc should say so plainly.
 
-**Why `sqlfu/otel` subpath, not root.** Core instrumentation (hook contract, compose, instrumentClient, errorReporter) stays at root — library-general. OTel-specific types (`TracerLike`, `SpanLike`) and `createOtelHook` live at `sqlfu/otel`. Makes tree-shaking obvious and clearly labels which types are "happens to match OTel" vs general. Commit 34589cd.
+**Public API shape (final).** Single `instrument` export from `sqlfu` root — callable-with-attached-helpers pattern (`Object.assign` of a variadic function plus `.otel`/`.onError`). Example:
+
+```ts
+import {instrument} from 'sqlfu'
+
+const client = instrument(baseClient,
+  instrument.otel({tracer}),
+  instrument.onError(({context, error}) => Sentry.captureException(error)),
+)
+```
+
+One import, autocomplete-driven discovery. Any function matching `QueryExecutionHook` works in the variadic slot, so custom hooks (metrics, slow-query loggers) aren't penalized. The earlier `sqlfu/otel` subpath was dropped — it created a "some from `sqlfu`, some from `sqlfu/otel`" split-brain for users. See commit `cb8bc47`. `createOtelHook` still lives in `src/otel.ts` internally, just isn't directly importable.
 
 ## Implementation log (2026-04-18)
 

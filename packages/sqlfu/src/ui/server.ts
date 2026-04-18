@@ -255,6 +255,7 @@ async function ensureDatabase(host: SqlfuHost, projectRoot: string) {
     migrations: path.join(projectRoot, 'migrations'),
     queries: path.join(projectRoot, 'sql'),
     generatedImportExtension: '.js',
+    zod: false,
   });
   try {
     const definitionsSql = await fs.readFile(path.join(projectRoot, 'definitions.sql'), 'utf8');
@@ -293,6 +294,7 @@ async function importConfigFile(configPath: string) {
     readonly definitions: string;
     readonly queries: string;
     readonly generatedImportExtension?: '.js' | '.ts';
+    readonly zod?: boolean;
   };
 }
 

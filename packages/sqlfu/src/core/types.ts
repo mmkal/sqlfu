@@ -86,6 +86,8 @@ export interface SqlfuConfig {
   readonly definitions: string;
   readonly queries: string;
   readonly generatedImportExtension?: '.js' | '.ts';
+  /** when true, typegen emits zod schemas alongside the TypeScript types for each query. defaults to false. */
+  readonly zod?: boolean;
 }
 
 export interface SqlfuProjectConfig {
@@ -95,6 +97,7 @@ export interface SqlfuProjectConfig {
   readonly definitions: string;
   readonly queries: string;
   readonly generatedImportExtension: '.js' | '.ts';
+  readonly zod: boolean;
 }
 
 export interface MigrateDiffResult {

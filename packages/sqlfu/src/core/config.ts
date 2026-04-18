@@ -80,6 +80,7 @@ export function resolveProjectConfig(
     definitions: resolveConfigPathValue(configDir, fileConfig.definitions),
     queries: resolveConfigPathValue(configDir, fileConfig.queries),
     generatedImportExtension: fileConfig.generatedImportExtension ?? inferGeneratedImportExtension(tsconfigPreferences),
+    zod: fileConfig.zod === true,
   };
 }
 

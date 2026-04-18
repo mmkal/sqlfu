@@ -59,6 +59,7 @@ export async function generateQueryTypesForConfig(config: SqlfuProjectConfig): P
         ? renderQueryWrapper({
           relativePath: queryFile.relativePath,
           descriptor: refineDescriptor(analysis.descriptor, queryFile.sqlContent, schema),
+          emitZod: config.zod,
         })
         : `//Invalid SQL\nexport {};\n`;
       await fs.writeFile(wrapperPath, contents);
@@ -313,6 +314,7 @@ function toAdHocQueryAnalysis(descriptor: GeneratedQueryDescriptor): AdHocQueryA
 function renderQueryWrapper(input: {
   relativePath: string;
   descriptor: GeneratedQueryDescriptor;
+  emitZod: boolean;
 }): string {
   const queryName = input.relativePath;
   const functionName = toCamelCase(queryName);
@@ -327,6 +329,13 @@ function renderQueryWrapper(input: {
     paramsTypeName,
     resultTypeName,
   });
+  const zodBlocks = input.emitZod
+    ? buildZodSchemaBlocks(input.descriptor, {
+      dataTypeName,
+      paramsTypeName,
+      resultTypeName,
+    })
+    : [];
   const queryArgs = buildQueryArgs(input.descriptor);
   const restParameters = buildFunctionParameters(input.descriptor, {
     dataTypeName,
@@ -334,9 +343,11 @@ function renderQueryWrapper(input: {
   });
 
   return [
+    ...(input.emitZod ? [`import {z} from 'zod';`] : []),
     `import type {Client, SqlQuery} from 'sqlfu';`,
     ``,
     ...typeBlocks,
+    ...(zodBlocks.length > 0 ? ['', ...zodBlocks] : []),
     ``,
     `const ${sqlConstantName} = \``,
     normalizeSqlForTemplate(input.descriptor.sql).join('\n').trim(),
@@ -408,6 +419,76 @@ function renderObjectType(
     return `\t${field.name}${optional ? '?' : ''}: ${field.tsType}${orNull};`;
   });
   return [`export type ${typeName} = {`, ...lines, `}`].join('\n');
+}
+
+function buildZodSchemaBlocks(
+  descriptor: GeneratedQueryDescriptor,
+  names: {
+    dataTypeName: string;
+    paramsTypeName: string;
+    resultTypeName: string;
+  },
+): string[] {
+  const blocks: string[] = [];
+  if ((descriptor.data?.length ?? 0) > 0) {
+    blocks.push(renderZodObjectSchema(`${names.dataTypeName}Schema`, descriptor.data!, 'parameter'));
+  }
+  if (descriptor.parameters.length > 0) {
+    blocks.push(renderZodObjectSchema(`${names.paramsTypeName}Schema`, descriptor.parameters, 'parameter'));
+  }
+  blocks.push(renderZodObjectSchema(`${names.resultTypeName}Schema`, getResultFields(descriptor), 'result'));
+  return blocks.flatMap((block, index) => (index === 0 ? [block] : ['', block]));
+}
+
+function renderZodObjectSchema(
+  schemaName: string,
+  fields: readonly GeneratedField[],
+  fieldKind: 'parameter' | 'result',
+): string {
+  const lines = fields.map((field) => `\t${field.name}: ${zodExpressionForField(field, fieldKind)},`);
+  return [`export const ${schemaName} = z.object({`, ...lines, `});`].join('\n');
+}
+
+function zodExpressionForField(field: GeneratedField, fieldKind: 'parameter' | 'result'): string {
+  let expression = zodForTsType(field.tsType);
+  if (!field.notNull) {
+    expression = `${expression}.nullable()`;
+  }
+  if (fieldKind === 'parameter' && Boolean(field.optional)) {
+    expression = `${expression}.optional()`;
+  }
+  return expression;
+}
+
+function zodForTsType(tsType: string): string {
+  if (tsType === 'string') {
+    return 'z.string()';
+  }
+  if (tsType === 'number') {
+    return 'z.number()';
+  }
+  if (tsType === 'boolean') {
+    return 'z.boolean()';
+  }
+  if (tsType === 'Date') {
+    return 'z.date()';
+  }
+  if (tsType === 'Uint8Array' || tsType === 'ArrayBuffer') {
+    return 'z.instanceof(Uint8Array)';
+  }
+  if (tsType === 'any') {
+    return 'z.unknown()';
+  }
+  if (tsType.endsWith('[]')) {
+    return `z.array(${zodForTsType(tsType.slice(0, -2))})`;
+  }
+
+  const enumValues = parseStringLiteralUnion(tsType);
+  if (enumValues) {
+    return `z.enum([${enumValues.map((value) => JSON.stringify(value)).join(', ')}])`;
+  }
+
+  return 'z.unknown()';
 }
 
 function objectSchema(

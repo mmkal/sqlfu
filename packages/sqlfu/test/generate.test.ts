@@ -832,11 +832,134 @@ test('generate preserves nested query directories in output, name, and functionN
   `);
 });
 
+test('generate emits zod schemas that accept valid rows and reject bad data when zod is enabled', async () => {
+  await using project = await createGenerateFixture({
+    definitionsSql: dedent`
+      create table posts (
+        id integer primary key,
+        slug text not null,
+        title text,
+        is_published boolean not null,
+        status text not null check (status in ('draft', 'published'))
+      );
+    `,
+    files: {
+      'sql/find-posts.sql': dedent`
+        select id, slug, title, is_published, status
+        from posts
+        where status = :status and is_published = :is_published
+        limit 10;
+      `,
+    },
+    config: {zod: true},
+  });
+
+  await project.generate();
+  await expect(project.getCompileDiagnostics()).resolves.toEqual([]);
+
+  const module = await project.importTranspiledModule<{
+    FindPostsParamsSchema: {parse(value: unknown): unknown};
+    FindPostsResultSchema: {parse(value: unknown): unknown; safeParse(value: unknown): {success: boolean}};
+  }>('sql/.generated/find-posts.sql.ts');
+
+  expect(module.FindPostsParamsSchema.parse({status: 'draft', is_published: 1})).toEqual({status: 'draft', is_published: 1});
+  expect(module.FindPostsResultSchema.parse({
+    id: 7,
+    slug: 'hello',
+    title: null,
+    is_published: 1,
+    status: 'published',
+  })).toEqual({
+    id: 7,
+    slug: 'hello',
+    title: null,
+    is_published: 1,
+    status: 'published',
+  });
+
+  expect(() => module.FindPostsParamsSchema.parse({status: 'bogus', is_published: 1})).toThrow();
+  expect(module.FindPostsResultSchema.safeParse({id: 'not-a-number', slug: 'hello', title: null, is_published: 1, status: 'draft'}).success).toBe(false);
+});
+
+test('generate emits zod schema declarations alongside the TS types', async () => {
+  await using project = await createGenerateFixture({
+    definitionsSql: dedent`
+      create table users (id integer primary key, name text not null, email text not null);
+    `,
+    files: {
+      'sql/add-user.sql': `insert into users (name, email) values (:fullName, :emailAddress) returning *;`,
+    },
+    config: {zod: true},
+  });
+
+  await project.generate();
+  await expect(project.getCompileDiagnostics()).resolves.toEqual([]);
+  expect(await project.dumpFs(generatedTsDump)).toMatchInlineSnapshot(`
+    "sql/
+      .generated/
+        add-user.sql.ts
+          import {z} from 'zod';
+          import type {Client, SqlQuery} from 'sqlfu';
+          
+          export type AddUserParams = {
+          	fullName: string;
+          	emailAddress: string;
+          }
+          
+          export type AddUserResult = {
+          	id: number;
+          	name: string;
+          	email: string;
+          }
+          
+          export const AddUserParamsSchema = z.object({
+          	fullName: z.string(),
+          	emailAddress: z.string(),
+          });
+          
+          export const AddUserResultSchema = z.object({
+          	id: z.number(),
+          	name: z.string(),
+          	email: z.string(),
+          });
+          
+          const AddUserSql = \`
+          insert into users (name, email) values (?, ?) returning *;
+          \`
+          
+          export async function addUser(client: Client, params: AddUserParams): Promise<AddUserResult> {
+          	const query: SqlQuery = { sql: AddUserSql, args: [params.fullName, params.emailAddress], name: "add-user" };
+          	const rows = await client.all<AddUserResult>(query);
+          	return rows[0];
+          }
+        index.ts
+          export * from "./add-user.sql.js";
+    "
+  `);
+});
+
+test('generate does not import zod or emit schemas when zod is disabled', async () => {
+  await using project = await createGenerateFixture({
+    definitionsSql: dedent`
+      create table posts (id integer primary key, slug text not null);
+    `,
+    files: {
+      'sql/list-posts.sql': `select id, slug from posts;`,
+    },
+  });
+
+  await project.generate();
+  const contents = await project.readFile('sql/.generated/list-posts.sql.ts');
+  expect(contents).not.toContain(`from 'zod'`);
+  expect(contents).not.toContain('Schema');
+});
+
 async function createGenerateFixture(input: {
   definitionsSql: string;
   files: Record<string, string>;
   config?: {
     generatedImportExtension?: '.js' | '.ts';
+    zod?: boolean;
   };
 }) {
   const root = await createTempFixtureRoot('generate');
@@ -850,6 +973,7 @@ async function createGenerateFixture(input: {
         definitions: './definitions.sql',
         queries: './sql',
         ${input.config?.generatedImportExtension ? `generatedImportExtension: '${input.config.generatedImportExtension}',` : ''}
+        ${input.config?.zod ? `zod: true,` : ''}
       };
     `,
     ...input.files,
@@ -902,6 +1026,7 @@ async function createGenerateFixture(input: {
             sqlfu: [path.join(packageRoot, 'src', 'index.ts')],
             'sqlfu/client': [path.join(packageRoot, 'src', 'client.ts')],
             'better-sqlite3': [path.join(packageRoot, 'node_modules', 'better-sqlite3')],
+            zod: [path.join(packageRoot, 'node_modules', 'zod')],
           },
           types: ['node'],
         },

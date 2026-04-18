@@ -2018,7 +2018,19 @@ function TryDemoBanner() {
   return (
     <div className="mode-banner">
       <span>Want to try sqlfu without installing it? Demo mode runs entirely in-browser on sqlite-wasm.</span>
-      <a className="mode-banner-link" href={DEMO_URL}>Open the demo →</a>
+      <a
+        className="mode-banner-link"
+        href={DEMO_URL}
+        onClick={(event) => {
+          event.preventDefault();
+          const url = new URL(window.location.href);
+          url.search = '?demo=1';
+          url.hash = '';
+          window.location.assign(url.toString());
+        }}
+      >
+        Open the demo →
+      </a>
     </div>
   );
 }

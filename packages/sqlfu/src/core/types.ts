@@ -20,6 +20,8 @@ export type RunResult = QueryMetadata;
 
 export interface SyncClient<TDriver = unknown> {
   readonly driver: TDriver;
+  /** OTel `db.system.name`. Stamped by each adapter ('sqlite', 'postgresql', etc.). */
+  readonly system: string;
   all<TRow extends ResultRow = ResultRow>(query: SqlQuery): TRow[];
   run(query: SqlQuery): RunResult;
   raw(sql: string): RunResult;
@@ -31,6 +33,8 @@ export interface SyncClient<TDriver = unknown> {
 
 export interface AsyncClient<TDriver = unknown> {
   readonly driver: TDriver;
+  /** OTel `db.system.name`. Stamped by each adapter ('sqlite', 'postgresql', etc.). */
+  readonly system: string;
   all<TRow extends ResultRow = ResultRow>(query: SqlQuery): Promise<TRow[]>;
   run(query: SqlQuery): Promise<RunResult>;
   raw(sql: string): Promise<RunResult>;

@@ -294,7 +294,8 @@ function renderQueryWrapper(input: {
   sqlPath: string;
   descriptor: GeneratedQueryDescriptor;
 }): string {
-  const functionName = toCamelCase(path.basename(input.sqlPath, '.sql'));
+  const queryName = path.basename(input.sqlPath, '.sql');
+  const functionName = toCamelCase(queryName);
   const capitalizedName = functionName[0]!.toUpperCase() + functionName.slice(1);
   const dataTypeName = `${capitalizedName}Data`;
   const paramsTypeName = `${capitalizedName}Params`;
@@ -322,7 +323,7 @@ function renderQueryWrapper(input: {
     `\``,
     ``,
     `export async function ${functionName}(client: Client${restParameters ? `, ${restParameters}` : ''}): Promise<${returnType}> {`,
-    `\tconst query: SqlQuery = { sql: ${sqlConstantName}, args: ${queryArgs} };`,
+    `\tconst query: SqlQuery = { sql: ${sqlConstantName}, args: ${queryArgs}, name: ${JSON.stringify(queryName)} };`,
     ...buildGeneratedImplementation({
       resultMode: getResultMode(input.descriptor),
       resultType: resultTypeName,

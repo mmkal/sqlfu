@@ -7,7 +7,9 @@ export interface SqlFragment {
   readonly args: readonly QueryArg[];
 }
 
-export interface SqlQuery extends SqlFragment {}
+export interface SqlQuery extends SqlFragment {
+  readonly name?: string;
+}
 
 export interface QueryMetadata {
   readonly rowsAffected?: number;

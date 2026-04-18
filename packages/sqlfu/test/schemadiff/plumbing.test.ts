@@ -5,10 +5,13 @@ import path from 'node:path';
 import {DatabaseSync} from 'node:sqlite';
 
 import {createNodeSqliteClient} from '../../src/client.js';
+import {createNodeHost, createAsyncNodeSqliteClient} from '../../src/core/node-host.js';
 import {extractSchema} from '../../src/core/sqlite.js';
 import {applyMigrations} from '../../src/migrations/index.js';
 import {diffSchemaSql} from '../../src/schemadiff/index.js';
 import {parseSchemadiffFixture, runFixtureCase} from './fixture-helpers.js';
+
+const sharedHost = await createNodeHost();
 
 test('the goto shape works when destructive drops are explicitly enabled', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'sqlfu-old-goto-'));
@@ -28,7 +31,7 @@ test('the goto shape works when destructive drops are explicitly enabled', async
       create table toy(name text not null);
     `);
 
-    await applyMigrations(targetClient, {
+    await applyMigrations(sharedHost, createAsyncNodeSqliteClient(targetDb), {
       migrations: [
         {
           path: '2026-04-10T00.00.00.000Z_create_person.sql',
@@ -37,8 +40,7 @@ test('the goto shape works when destructive drops are explicitly enabled', async
       ],
     });
 
-    const diff = await diffSchemaSql({
-      projectRoot: process.cwd(),
+    const diff = await diffSchemaSql(sharedHost, {
       baselineSql: await extractSchema(liveClient, 'main', {excludedTables: ['sqlfu_migrations']}),
       desiredSql: await extractSchema(targetClient, 'main', {excludedTables: ['sqlfu_migrations']}),
       allowDestructive: true,
@@ -79,8 +81,7 @@ test('diffSchemaSql rebuilds a table when sqlite needs semantic constraint chang
     `);
     await targetClient.raw(`create table a(b text not null unique);`);
 
-    const diff = await diffSchemaSql({
-      projectRoot: process.cwd(),
+    const diff = await diffSchemaSql(sharedHost, {
       baselineSql: await extractSchema(liveClient),
       desiredSql: await extractSchema(targetClient),
       allowDestructive: true,
@@ -135,14 +136,12 @@ for (const fixtureCase of migraEquivalentFixtureCases) {
       ]);
 
       const [baselineToDesired, desiredToBaseline] = await Promise.all([
-        diffSchemaSql({
-          projectRoot: process.cwd(),
+        diffSchemaSql(sharedHost, {
           baselineSql: baselineSchema,
           desiredSql: desiredSchema,
           allowDestructive: true,
         }),
-        diffSchemaSql({
-          projectRoot: process.cwd(),
+        diffSchemaSql(sharedHost, {
           baselineSql: desiredSchema,
           desiredSql: baselineSchema,
           allowDestructive: true,

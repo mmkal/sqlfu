@@ -1,8 +1,8 @@
-import type {RouterClient} from '@orpc/server';
+import {createRouterClient, type RouterClient} from '@orpc/server';
 import type {UiRouter} from 'sqlfu/ui/browser';
+import {uiRouter} from 'sqlfu/ui/browser';
 
-import {createWasmSqliteClient} from './sqlite-wasm-client.js';
-import {createDemoRouterClient} from './router.js';
+import {buildDemoConfig, createBrowserHost, DEMO_PROJECT_ROOT} from './browser-host.js';
 
 export const DEMO_HOST = 'demo.local.sqlfu.dev';
 export const DEMO_URL = `https://${DEMO_HOST}/`;
@@ -21,14 +21,18 @@ export function isDemoMode() {
 export function createDemoClient(input: {
   onSchemaChange: () => void;
 }): RouterClient<UiRouter> {
-  const clientPromise = createWasmSqliteClient().then((client) =>
-    createDemoRouterClient({
-      client,
-      onSchemaChange: input.onSchemaChange,
+  const clientPromise = createBrowserHost({onSchemaChange: input.onSchemaChange}).then(({host, config}) =>
+    createRouterClient(uiRouter, {
+      context: {
+        host,
+        project: {initialized: true as const, projectRoot: DEMO_PROJECT_ROOT, config},
+      },
     }),
   );
   return lazyRouterClientProxy<RouterClient<UiRouter>>(clientPromise, []);
 }
+
+export {buildDemoConfig};
 
 function lazyRouterClientProxy<T>(target: Promise<unknown>, segments: readonly string[]): T {
   const fn = () => {};

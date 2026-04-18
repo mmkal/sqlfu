@@ -7,6 +7,29 @@ export type Migration = {
   content: string;
 };
 
+/**
+ * A migrations bundle as emitted by `sqlfu generate` into
+ * `<migrations>/.generated/migrations.ts`. Keys are the project-root-relative
+ * path of each migration file (e.g. `"migrations/2020-…_create_posts.sql"`);
+ * values are the file contents.
+ *
+ * The bundle lets runtimes without filesystem access (durable objects, edge
+ * workers, browsers) import migrations as a plain typescript module and apply
+ * them without ever touching `fs`.
+ */
+export type MigrationBundle = Record<string, string>;
+
+/**
+ * Convert a `MigrationBundle` (as emitted by `sqlfu generate`) into the
+ * `Migration[]` shape `applyMigrations` consumes. Migrations are returned
+ * sorted by bundle key, which is the same order the CLI applies them in.
+ */
+export function migrationsFromBundle(bundle: MigrationBundle): Migration[] {
+  return Object.entries(bundle)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([path, content]) => ({path, content}));
+}
+
 export type AppliedMigration = {
   name: string;
   checksum: string;

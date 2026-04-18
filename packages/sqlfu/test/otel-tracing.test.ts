@@ -12,10 +12,10 @@ import {
   composeHooks,
   createErrorReporterHook,
   createNodeSqliteClient,
-  createOtelHook,
   instrumentClient,
   type SqlQuery,
 } from '../src/client.js';
+import {createOtelHook} from '../src/otel.js';
 
 test('named and ad-hoc queries surface on OTel spans and error reporter fires on failure', async () => {
   await using otel = await createOtelFixture();

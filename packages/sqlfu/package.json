@@ -16,6 +16,7 @@
     "./client": "./src/client.ts",
     "./api": "./src/api.ts",
     "./cli": "./src/cli.ts",
+    "./otel": "./src/otel.ts",
     "./ui": {
       "browser": "./src/ui/browser.ts",
       "default": "./src/ui/index.ts"
@@ -43,6 +44,10 @@
       "./cli": {
         "types": "./dist/cli.d.ts",
         "default": "./dist/cli.js"
+      },
+      "./otel": {
+        "types": "./dist/otel.d.ts",
+        "default": "./dist/otel.js"
       },
       "./ui": {
         "types": "./dist/ui/index.d.ts",

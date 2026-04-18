@@ -79,10 +79,12 @@
   "devDependencies": {
     "@orpc/client": "1.13.13",
     "@libsql/client": "^0.17.2",
+    "@sqlite.org/sqlite-wasm": "3.51.2-build9",
     "@types/node": "^24.5.2",
     "better-sqlite3": "^12.8.0",
     "dedent": "^1.7.2",
     "devalue": "^5.7.1",
+    "esbuild": "^0.25.0",
     "execa": "^9.6.1",
     "libsql": "0.5.29",
     "miniflare": "^4.20260409.0",

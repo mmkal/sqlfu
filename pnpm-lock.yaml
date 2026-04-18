@@ -42,6 +42,9 @@ importers:
       '@orpc/client':
         specifier: 1.13.13
         version: 1.13.13
+      '@sqlite.org/sqlite-wasm':
+        specifier: 3.51.2-build9
+        version: 3.51.2-build9
       '@types/node':
         specifier: ^24.5.2
         version: 24.12.0
@@ -54,6 +57,9 @@ importers:
       devalue:
         specifier: ^5.7.1
         version: 5.7.1
+      esbuild:
+        specifier: ^0.25.0
+        version: 0.25.12
       execa:
         specifier: ^9.6.1
         version: 9.6.1
@@ -2035,6 +2041,10 @@ packages:
 
   '@speed-highlight/core@1.2.15':
     resolution: {integrity: sha512-BMq1K3DsElxDWawkX6eLg9+CKJrTVGCBAWVuHXVUV2u0s2711qiChLSId6ikYPfxhdYocLNt3wWwSvDiTvFabw==}
+
+  '@sqlite.org/sqlite-wasm@3.51.2-build9':
+    resolution: {integrity: sha512-tj2Sa6X4gVZqS9SiT2xlEeChSUklSGq8Hz6zKNbHW6NRiGyrSXiFcspnrWru1wPBT76RX/VxweESKxawCxfDxg==}
+    engines: {node: '>=22'}
 
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
@@ -5542,6 +5552,8 @@ snapshots:
       tslib: 2.8.1
 
   '@speed-highlight/core@1.2.15': {}
+
+  '@sqlite.org/sqlite-wasm@3.51.2-build9': {}
 
   '@standard-schema/spec@1.1.0': {}
 

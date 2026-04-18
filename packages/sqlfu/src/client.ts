@@ -9,3 +9,4 @@ export * from './adapters/better-sqlite3.js';
 export * from './adapters/node-sqlite.js';
 export * from './adapters/durable-object.js';
 export * from './adapters/expo-sqlite.js';
+export * from './adapters/sqlite-wasm.js';

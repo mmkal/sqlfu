@@ -1,50 +1,60 @@
-For targets without filesystems, it might be beneficial to pickle migrations to a json file looking like
+## Status
 
-```json
-{
-    "migrations/2020-01-01T00:00:00.000Z_create_table_posts.sql": "create table posts(id int, slug text, title text, body text)",
-    "migrations/2020-01-01T00:00:00.001Z_create_table_user.sql": "create table users(id int, name text)",
-    "migrations/2020-01-01T00:00:00.002Z_post_author.sql": "alter table posts add column author_id int references users(id)"
-}
-```
+Not started. Fleshed-out plan below.
 
-or for max compatibility a typescript file
+## Summary
 
-```ts
-export default {
-    "migrations/2020-01-01T00:00:00.000Z_create_table_posts.sql": "create table posts(id int, slug text, title text, body text)",
-    "migrations/2020-01-01T00:00:00.001Z_create_table_user.sql": "create table users(id int, name text)",
-    "migrations/2020-01-01T00:00:00.002Z_post_author.sql": "alter table posts add column author_id int references users(id)"
-}
-```
+For runtimes without filesystem access (Cloudflare Durable Objects, Workers, any "edge" JS runtime, the browser, etc.) we can't read migration `.sql` files at runtime. `sqlfu generate` should emit a typed bundle of migrations so those runtimes can import it and apply migrations without any filesystem calls.
 
-It can be imported by the runtime more easily that way and we can provide a way of running migrations on a durable object for example:
+## Decisions
 
-```ts
-import migrations from './db/.generated/migrations.ts'
-import {loadDynamic} from 'sqlfu'
-import * as path from 'node:path'
+1. **Emit TS only**, not JSON. The TS file is trivially typed, importable by every bundler (esbuild, vite, rollup, tsx, wrangler, etc.), and can be consumed directly with no parser step. A JSON file adds runtime overhead (fetch + parse) and a second artifact to keep in sync for no real benefit.
+2. **Emit to `<migrations>/.generated/migrations.ts`** (alongside the migration files themselves), not to `<queries>/.generated/`. That generated folder is right next to the thing it's generated from, which makes it easy to reason about. We'll add `.generated` to the migrations reader's skip-list the same way query typegen does.
+3. **Shape**: default-exported object mapping the relative-to-project-root migration path to its sql content, in lexicographic order (same order `applyMigrations` already uses):
+   ```ts
+   // migrations/.generated/migrations.ts
+   const bundle = {
+     "migrations/2020-01-01T00.00.00.000Z_create_posts.sql": "create table posts(...)",
+     "migrations/2020-01-01T00.00.00.001Z_create_users.sql": "create table users(...)",
+   };
+   export default bundle;
+   export type MigrationBundle = typeof bundle;
+   ```
+   Path keys are only used as a hint for humans and as the "path" that becomes the `Migration.path` when loaded — `migrationName()` already strips the directory + `.sql` extension. Keeping the full relative path makes the bundle self-describing.
+4. **Consumption API**: add a single helper `migrationsFromBundle(bundle)` that converts the object into the existing `readonly Migration[]` shape. Users then call the existing `applyMigrations(host, client, {migrations})`. No new `loadDynamic` / no memfs — both add API surface / deps for no functional benefit. Users who want the "just give me a client that can migrate itself" experience can trivially write their own three-line wrapper.
+5. **Emit by default** from `generate` (no opt-out for this first slice). It's cheap, and having it always present makes runtime setup frictionless. If it proves annoying we can add a config flag later.
+6. **Defer integrity checks / scratch temp dbs in DO**. The `migrate` CLI command uses `host.openScratchDb` heavily for drift analysis, but the bundled-migration consumer only needs `applyMigrations`, which does not use scratch dbs. Users running `sqlfu migrate` from the CLI still have a filesystem, so this is a non-issue for this slice. Noted explicitly as deferred.
+7. **Keep `applyMigrations` async**. Making it sync is a separate, larger concern (requires sync `host.digest`, and at least for DO the natural transaction primitive is `blockConcurrencyWhile` which takes an async callback anyway). Out of scope.
 
-export class MyDO {
-  constructor() {
-    const sqlfu = loadDynamic({
-        db: () => ({}), // ???
-        migrations: Object.entries(migrations).map(([filepath, content]) => ({name: path.parse(filepath).name, content}))
-    })
-    this.blockConcurrencyWhile(async () => {
-        await sqlfu.migrate()
-    })
-  }
-}
-```
+## Open questions resolved
 
-A few things to worry about though:
+- Do we emit TS, JSON, or both? → **TS only**.
+- Where does it emit? → **`<migrations>/.generated/migrations.ts`**.
+- How do users consume it? → **`migrationsFromBundle(bundle)` helper** that returns `Migration[]`, then pass to the existing `applyMigrations`.
+- Memfs? → **No**. Small Map-in-object conversion is sufficient.
+- Sync `migrate()`? → **Deferred**.
+- Integrity checks / scratch db in DO? → **Deferred**; not required for `applyMigrations`.
 
-- `migrate()` currently does integrity checks, to make sure the Live Schema is indeed in the state the migrations imply it should be. Those checks are now in theory all javascript but might be impossible or difficult in things like durable objects, because they involve creating temp databases. Would need to either make those checks disable-able, or do more cleverneess so they can run in DOs too.
-- `await sqlfu.migrate()`/`blockConcurrencyWhile` is annoying. everything should ideally be synchronous
+## Checklist
 
-We should consider emitting this by default from `generate` because it's cheap and means it's ready to go without adjusting ur setup
+- [ ] Emit `<migrations>/.generated/migrations.ts` during `generateQueryTypesForConfig`. Walks `config.migrations`, sorts filenames, writes `export default { "migrations/<file>": "<content>", ... }` with a `MigrationBundle` type alias.
+- [ ] Skip `.generated` when reading migration files in `readMigrationsFromContext` (same way typegen's `loadQueryFiles` already skips `.generated`).
+- [ ] Add `migrationsFromBundle(bundle)` helper exported from the package entry point. Returns `Migration[]` sorted by path key.
+- [ ] Add a test under `packages/sqlfu/test/migrations/` that:
+  - builds a project fixture with two migrations,
+  - runs `generate`,
+  - imports the emitted `migrations.ts`,
+  - calls `migrationsFromBundle` then `applyMigrations` against a fresh node-sqlite client,
+  - asserts the resulting schema matches expectations.
+- [ ] Snapshot the emitted bundle file inside an existing or new generate test so the shape is visible at a glance.
 
----
+## Non-goals for this slice
 
-Possible alternative to the `loadDynamic` option. Something like `memfs.Vol.fromJSON(...)` - i.e. ship a minimal fs-like object that lets you pretend you have a whole filesystem.
+- Sync `applyMigrations` / sync `migrate`.
+- Disabling integrity checks or running scratch db drift checks inside DO.
+- `loadDynamic` / memfs-style whole-virtual-fs adapter.
+- Any CLI command that runs against a bundle instead of a config.
+
+## Implementation notes
+
+_(to be filled in during implementation)_

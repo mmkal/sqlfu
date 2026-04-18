@@ -1,13 +1,13 @@
-status: spec-revised
+status: revised-impl-done-pending-review
 size: medium
 
 # Named And Loved Queries
 
 ## Status Summary
 
-- First-pass AFK implementation (originally `status: done-pending-review`) has been reviewed. Several decisions are being revised. See [Revision — post-review](#revision--post-review-2026-04-18) for the new scope.
-- First-pass changes currently sit in the working tree unstaged (not committed). They'll be salvaged into the revised implementation rather than committed as-is.
-- Revised implementation will land as a series of small commits on this branch, each pushable in isolation.
+- Revised implementation landed as a series of small commits on `named-and-loved-queries`. All 1651 sqlfu tests pass (1626 baseline + 25 new naming tests; otel test rewritten).
+- Shipped: packaged `createOtelHook` + `createErrorReporterHook` + `composeHooks` with structural `TracerLike`/`SpanLike` types (no peer deps); `db.query.summary` / `db.query.text` / `db.system.name` emitted; span name via `queryNickname` + 7-char djb2 hash; `dedent` tag + `shortHash` in core/util.
+- Deferred to follow-up: nested query directory support (typegen — see [Revision §5](#5-nested-query-directories-relative-to-the-globs-static-prefix)). Turns out this touches the generated barrel, function-name derivation, and output tree layout; not a blocker for the OTel work.
 
 ## Revision — post-review (2026-04-18)
 
@@ -105,19 +105,40 @@ Document this behavior in the config docs. Leaving a future door open for a stru
 
 ### Revised checklist
 
-- [ ] Rename `dbQueryName` → `name` on `SqlQuery` + update typegen emission + update generate.test.ts snapshots
-- [ ] Add `system: string` to `Client` interface; stamp on every adapter
-- [ ] Add `dedent` tag util
-- [ ] Add `packages/sqlfu/test/naming.test.ts` covering `queryNickname` + `migrationNickname`
-- [ ] Add span-name helper in `naming.ts` that handles named + ad-hoc + hash
-- [ ] Implement path-relative-to-glob-base naming in typegen
-- [ ] Add `TracerLike` / `SpanLike` structural types
-- [ ] Implement `composeHooks`
-- [ ] Implement `createOtelHook({ tracer })` — emits `db.query.summary`, `db.query.text`, `db.system`; records exception + ERROR status on throw
-- [ ] Implement `createErrorReporterHook(report)` — calls `report(ctx, error)` on thrown errors and rethrows
-- [ ] Update `test/otel-tracing.test.ts` to use the packaged helper and composed hooks; add failing-query case; assert `db.query.summary` / `db.query.text` / `db.system`
-- [ ] Doc note: `client.raw()` is not uniquely identified in observability; use `client.run({ sql, args, name })` if you need named observability on dynamic SQL
-- [ ] Doc note: nested query folder naming rule
+- [x] Add `name?: string` on `SqlQuery` + typegen emission + generate.test.ts snapshots. _Commit eb2ba5a. The first-pass `dbQueryName` field was never committed, so this landed as an addition rather than a rename._
+- [x] Add `system: string` to `Client` interface; stamp on every adapter. _Commit bb84864. All 8 current adapters stamp `'sqlite'`._
+- [x] Add `dedent` tag util. _Commit fb4e74b. Also added `normalizeSqlForHash` and djb2-based `shortHash` in the same util file (runtime-agnostic — no `node:crypto` dep so it works in workerd / expo)._
+- [x] Add `packages/sqlfu/test/naming.test.ts` covering `queryNickname` + `migrationNickname`. _Commit 812b9e1. Table-driven with 11 queryNickname + 7 migrationNickname cases plus spanNameFor / dedent / shortHash sanity tests._
+- [x] Add span-name helper in `naming.ts`. _Commit 812b9e1. `spanNameFor(query)` returns `query.name` verbatim or `sql-<nickname>-<hash>` for ad-hoc. Also fixed an existing bug where `queryNickname` returned `insert-into` instead of `insert-<table>` for INSERT statements — test caught it._
+- [ ] ~~Implement path-relative-to-glob-base naming in typegen~~ — **deferred**. Touches the generated barrel + function-name derivation + output tree layout; bigger than intended. Follow-up task.
+- [x] Add `TracerLike` / `SpanLike` structural types. _Commit 3e51f1c. Five methods total across two interfaces; verified that real `@opentelemetry/api` Tracer is assignable to `TracerLike`._
+- [x] Implement `composeHooks`. _Commit 3e51f1c. Chains hooks left-to-right, outermost first._
+- [x] Implement `createOtelHook({ tracer })`. _Commit 3e51f1c. Emits `db.query.summary` / `db.query.text` / `db.system.name`; records exception + ERROR status on throw; handles sync and async execute via `isPromiseLike`._
+- [x] Implement `createErrorReporterHook(report)`. _Commit 3e51f1c. Fires on throw or rejected promise, always rethrows, swallows errors in the reporter itself so they can't mask the original error._
+- [x] Update `test/otel-tracing.test.ts`. _Commit 63429da. Hono + real OTLP exporter + local receiver; snapshot covers named + ad-hoc + failing query; asserts the errorReporter hook captured the failure._
+- [ ] Doc note: `client.raw()` caveat (documented inline in `spanNameFor` JSDoc; no user-facing docs updated yet).
+- [ ] Doc note: nested query folder naming rule (deferred with the feature).
+
+## Implementation log (2026-04-18)
+
+Commits on `named-and-loved-queries`:
+
+| commit | summary |
+|---|---|
+| 08c78b4 | spec: revise after first-pass review |
+| eb2ba5a | typegen: emit `name` field on every generated SqlQuery |
+| bb84864 | adapters: stamp `system` on every Client |
+| fb4e74b | add core/util.ts (dedent, normalizeSqlForHash, shortHash) |
+| 812b9e1 | add `spanNameFor` + naming.test.ts; fix queryNickname insert bug |
+| 3e51f1c | add `instrumentClient`, `composeHooks`, `createOtelHook`, `createErrorReporterHook` |
+| 63429da | test: otel trace snapshot covers named, ad-hoc, failing queries |
+
+Notable decisions reaffirmed during implementation:
+
+- **djb2 over sha256.** `shortHash` uses djb2 rather than `node:crypto` so it runs on workerd, expo, and anywhere else the sqlfu adapters might land. 7 hex chars from a 32-bit hash is still fine for per-app ad-hoc query distinguishability.
+- **`iterate` and `raw` remain pass-through.** First-pass description of `iterate` as "lazy" was wrong — it's just pass-through, and the revision keeps it that way. Queries inside transactions still fire the hook because the tx client is re-instrumented in `transaction: (fn) => client.transaction((tx) => fn(instrumentAsync(tx, hook)))`.
+- **Structural types actually work.** Verified that a real `Tracer` from `@opentelemetry/api` is assignable to `TracerLike` without gymnastics. Users pass their tracer directly with no adapter layer.
+- **Exception branch runs in tests.** The `/broken` route in the snapshot test verifies the OTel hook records the exception as a span event AND the composed error reporter captures it with the query name — demonstrating the Sentry-style forwarding without the library owning any Sentry SDK.
 
 ## Goal
 

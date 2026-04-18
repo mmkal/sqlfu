@@ -11,7 +11,17 @@ export function isDemoMode() {
   if (typeof window === 'undefined') {
     return false;
   }
-  return new URLSearchParams(window.location.search).get('demo') === '1';
+  if (new URLSearchParams(window.location.search).get('demo') === '1') {
+    return true;
+  }
+  // Fallback: some environments expose a URL in window.location.href but leave
+  // window.location.search empty (observed on iOS Chrome via remote control).
+  // Parse the full href with the URL constructor as a belt-and-suspenders check.
+  try {
+    return new URL(window.location.href).searchParams.get('demo') === '1';
+  } catch {
+    return false;
+  }
 }
 
 export function createDemoClient(input: {

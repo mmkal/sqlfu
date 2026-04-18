@@ -242,6 +242,7 @@ function runPreparedRun(statement: ReturnType<NodeSqliteDatabase['prepare']>, pa
 export function createAsyncNodeSqliteClient(database: NodeSqliteDatabase): AsyncClient<NodeSqliteDatabase> {
   const client: AsyncClient<NodeSqliteDatabase> = {
     driver: database,
+    system: 'sqlite',
     async all<TRow extends ResultRow = ResultRow>(query: SqlQuery): Promise<TRow[]> {
       return database.prepare(query.sql).all(...(query.args as never[])) as TRow[];
     },

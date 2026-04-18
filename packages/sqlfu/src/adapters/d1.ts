@@ -49,6 +49,7 @@ export function createD1Client(database: D1DatabaseLike): AsyncClient<D1Database
   };
   const d1Client: Omit<AsyncClient<D1DatabaseLike>, 'sql'> & {sql: AsyncClient<D1DatabaseLike>['sql']} = {
     driver: database,
+    system: 'sqlite',
     all,
     run,
     raw,

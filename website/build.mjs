@@ -31,6 +31,12 @@ const docs = [
     description: 'Migration history, drift checks, and the intended production path.',
   },
   {
+    slug: 'observability',
+    title: 'Observability',
+    sourcePath: path.join(repoRoot, 'packages', 'sqlfu', 'docs', 'observability.md'),
+    description: 'Named queries reach OpenTelemetry, Sentry, PostHog, Datadog via a single instrument() hook.',
+  },
+  {
     slug: 'ui',
     title: 'UI',
     sourcePath: path.join(repoRoot, 'packages', 'ui', 'README.md'),
@@ -191,7 +197,7 @@ function renderLandingPage(renderedDocs) {
         <article class="panel value-panel">
           <div class="eyebrow">types, generated</div>
           <h3>TypeScript wrappers <i>from</i> your SQL</h3>
-          <p><code>sqlfu generate</code> reads your <code>.sql</code> files and emits typed wrappers next to them: typed params, typed rows, and a client you can call from application code.</p>
+          <p><code>sqlfu generate</code> reads your <code>.sql</code> files and emits typed wrappers next to them: typed params, typed rows, and a client you can call from application code. Your query names travel with them &mdash; to <a href="/docs/observability/">OpenTelemetry, Sentry, Datadog, PostHog</a>, whatever.</p>
         </article>
         <article class="panel value-panel">
           <div class="eyebrow">diff-driven migrations</div>

@@ -51,7 +51,7 @@ test('generate writes wrappers and a barrel for every checked-in query', async (
           \`
           
           export async function findPostBySlug(client: Client, params: FindPostBySlugParams): Promise<FindPostBySlugResult | null> {
-          	const query: SqlQuery = { sql: FindPostBySlugSql, args: [params.slug] };
+          	const query: SqlQuery = { sql: FindPostBySlugSql, args: [params.slug], name: "find-post-by-slug" };
           	const rows = await client.all<FindPostBySlugResult>(query);
           	return rows.length > 0 ? rows[0] : null;
           }
@@ -73,7 +73,7 @@ test('generate writes wrappers and a barrel for every checked-in query', async (
           \`
           
           export async function listPostSummaries(client: Client): Promise<ListPostSummariesResult[]> {
-          	const query: SqlQuery = { sql: ListPostSummariesSql, args: [] };
+          	const query: SqlQuery = { sql: ListPostSummariesSql, args: [], name: "list-post-summaries" };
           	return client.all<ListPostSummariesResult>(query);
           }
     "
@@ -213,7 +213,7 @@ test('generate can use .ts extensions in the barrel file', async () => {
           \`
           
           export async function listPosts(client: Client): Promise<ListPostsResult[]> {
-          	const query: SqlQuery = { sql: ListPostsSql, args: [] };
+          	const query: SqlQuery = { sql: ListPostsSql, args: [], name: "list-posts" };
           	return client.all<ListPostsResult>(query);
           }
     "
@@ -252,7 +252,7 @@ test('generate defaults to .ts extensions when tsconfig opts into ts import exte
           \`
           
           export async function listPosts(client: Client): Promise<ListPostsResult[]> {
-          	const query: SqlQuery = { sql: ListPostsSql, args: [] };
+          	const query: SqlQuery = { sql: ListPostsSql, args: [], name: "list-posts" };
           	return client.all<ListPostsResult>(query);
           }
     "
@@ -294,7 +294,7 @@ test('explicit generatedImportExtension overrides tsconfig detection', async () 
           \`
           
           export async function listPosts(client: Client): Promise<ListPostsResult[]> {
-          	const query: SqlQuery = { sql: ListPostsSql, args: [] };
+          	const query: SqlQuery = { sql: ListPostsSql, args: [], name: "list-posts" };
           	return client.all<ListPostsResult>(query);
           }
     "
@@ -334,7 +334,7 @@ test('generate emits named param types and a nullable single-row result for limi
           \`
           
           export async function findPostBySlug(client: Client, params: FindPostBySlugParams): Promise<FindPostBySlugResult | null> {
-          	const query: SqlQuery = { sql: FindPostBySlugSql, args: [params.slug] };
+          	const query: SqlQuery = { sql: FindPostBySlugSql, args: [params.slug], name: "find-post-by-slug" };
           	const rows = await client.all<FindPostBySlugResult>(query);
           	return rows.length > 0 ? rows[0] : null;
           }
@@ -372,7 +372,7 @@ test('generate uses schema types for aliased selected columns instead of leaving
           \`
           
           export async function findPostPreview(client: Client): Promise<FindPostPreviewResult[]> {
-          	const query: SqlQuery = { sql: FindPostPreviewSql, args: [] };
+          	const query: SqlQuery = { sql: FindPostPreviewSql, args: [], name: "find-post-preview" };
           	return client.all<FindPostPreviewResult>(query);
           }
         index.ts
@@ -409,7 +409,7 @@ test('generate treats selected columns as required when the query narrows them w
           \`
           
           export async function findPublishedPostBySlug(client: Client): Promise<FindPublishedPostBySlugResult | null> {
-          	const query: SqlQuery = { sql: FindPublishedPostBySlugSql, args: [] };
+          	const query: SqlQuery = { sql: FindPublishedPostBySlugSql, args: [], name: "find-published-post-by-slug" };
           	const rows = await client.all<FindPublishedPostBySlugResult>(query);
           	return rows.length > 0 ? rows[0] : null;
           }
@@ -450,7 +450,7 @@ test('generate preserves useful result types for queries that read through views
           \`
           
           export async function listPostSummaries(client: Client): Promise<ListPostSummariesResult[]> {
-          	const query: SqlQuery = { sql: ListPostSummariesSql, args: [] };
+          	const query: SqlQuery = { sql: ListPostSummariesSql, args: [], name: "list-post-summaries" };
           	return client.all<ListPostSummariesResult>(query);
           }
     "
@@ -514,7 +514,7 @@ test('generate snapshots insert queries', async () => {
           \`
           
           export async function insertPost(client: Client, params: InsertPostParams): Promise<InsertPostResult> {
-          	const query: SqlQuery = { sql: InsertPostSql, args: [params.slug] };
+          	const query: SqlQuery = { sql: InsertPostSql, args: [params.slug], name: "insert-post" };
           	const result = await client.run(query);
           	if (result.rowsAffected === undefined) {
           		throw new Error('Expected rowsAffected to be present on query result');
@@ -565,7 +565,7 @@ test('generate treats insert returning queries as single-row results', async () 
           \`
           
           export async function addUser(client: Client, params: AddUserParams): Promise<AddUserResult> {
-          	const query: SqlQuery = { sql: AddUserSql, args: [params.fullName, params.emailAddress] };
+          	const query: SqlQuery = { sql: AddUserSql, args: [params.fullName, params.emailAddress], name: "add-user" };
           	const rows = await client.all<AddUserResult>(query);
           	return rows[0];
           }
@@ -612,7 +612,7 @@ test('generate snapshots update queries', async () => {
           \`
           
           export async function updatePost(client: Client, data: UpdatePostData, params: UpdatePostParams): Promise<UpdatePostResult> {
-          	const query: SqlQuery = { sql: UpdatePostSql, args: [data.slug, params.id] };
+          	const query: SqlQuery = { sql: UpdatePostSql, args: [data.slug, params.id], name: "update-post" };
           	const result = await client.run(query);
           	if (result.rowsAffected === undefined) {
           		throw new Error('Expected rowsAffected to be present on query result');
@@ -656,7 +656,7 @@ test('generate snapshots delete queries', async () => {
           \`
           
           export async function deletePost(client: Client, params: DeletePostParams): Promise<DeletePostResult> {
-          	const query: SqlQuery = { sql: DeletePostSql, args: [params.id] };
+          	const query: SqlQuery = { sql: DeletePostSql, args: [params.id], name: "delete-post" };
           	const result = await client.run(query);
           	if (result.rowsAffected === undefined) {
           		throw new Error('Expected rowsAffected to be present on query result');
@@ -698,7 +698,7 @@ test('generate snapshots function queries', async () => {
           \`
           
           export async function countPosts(client: Client): Promise<CountPostsResult | null> {
-          	const query: SqlQuery = { sql: CountPostsSql, args: [] };
+          	const query: SqlQuery = { sql: CountPostsSql, args: [], name: "count-posts" };
           	const rows = await client.all<CountPostsResult>(query);
           	return rows.length > 0 ? rows[0] : null;
           }
@@ -769,6 +769,65 @@ test('generate snapshots cte queries with the works in one query', async () => {
         sync-post-from-cte.sql.ts
           //Invalid SQL
           export {};
+    "
+  `);
+});
+
+test('generate preserves nested query directories in output, name, and functionName', async () => {
+  await using project = await createGenerateFixture({
+    definitionsSql: dedent`
+      create table profiles (id integer primary key, name text not null);
+      create table orders (id integer primary key, total integer not null);
+    `,
+    files: {
+      'sql/users/list-profiles.sql': `select id, name from profiles;`,
+      'sql/orders/list-orders.sql': `select id, total from orders;`,
+    },
+  });
+
+  await project.generate();
+
+  await expect(project.getCompileDiagnostics()).resolves.toEqual([]);
+  expect(await project.dumpFs({includeGlobs: ['sql/.generated/**/*.ts']})).toMatchInlineSnapshot(`
+    "sql/
+      .generated/
+        index.ts
+          export * from "./orders/list-orders.sql.js";
+          export * from "./users/list-profiles.sql.js";
+        orders/
+          list-orders.sql.ts
+            import type {Client, SqlQuery} from 'sqlfu';
+            
+            export type OrdersListOrdersResult = {
+            	id: number;
+            	total: number;
+            }
+            
+            const OrdersListOrdersSql = \`
+            select id, total from orders;
+            \`
+            
+            export async function ordersListOrders(client: Client): Promise<OrdersListOrdersResult[]> {
+            	const query: SqlQuery = { sql: OrdersListOrdersSql, args: [], name: "orders/list-orders" };
+            	return client.all<OrdersListOrdersResult>(query);
+            }
+        users/
+          list-profiles.sql.ts
+            import type {Client, SqlQuery} from 'sqlfu';
+            
+            export type UsersListProfilesResult = {
+            	id: number;
+            	name: string;
+            }
+            
+            const UsersListProfilesSql = \`
+            select id, name from profiles;
+            \`
+            
+            export async function usersListProfiles(client: Client): Promise<UsersListProfilesResult[]> {
+            	const query: SqlQuery = { sql: UsersListProfilesSql, args: [], name: "users/list-profiles" };
+            	return client.all<UsersListProfilesResult>(query);
+            }
     "
   `);
 });

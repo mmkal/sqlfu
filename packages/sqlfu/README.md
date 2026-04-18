@@ -131,6 +131,23 @@ If you want to see or change that behavior, start here:
 - [test/formatter/sqlite.fixture.sql](./test/formatter/sqlite.fixture.sql)
 - [test/formatter.test.ts](./test/formatter.test.ts)
 
+### Observability
+
+Generated queries carry their filename to runtime as a `name` field on the emitted `SqlQuery`. That name reaches OpenTelemetry spans, Sentry errors, PostHog events, and Datadog metrics through a single `instrument()` call:
+
+```ts
+import {instrument} from 'sqlfu';
+
+const client = instrument(baseClient,
+  instrument.otel({tracer}),
+  instrument.onError(({context, error}) => Sentry.captureException(error, {
+    tags: {'db.query.summary': context.query.name ?? 'sql'},
+  })),
+);
+```
+
+No peer dependencies on OpenTelemetry or Sentry — `TracerLike` is structural, hook consumers bring their own SDK. Copy-pasteable recipes for OpenTelemetry, Sentry, PostHog, and Datadog (DogStatsD metrics) live in [docs/observability.md](./docs/observability.md).
+
 ### UI
 
 `sqlfu` also has a UI package for working with the project interactively. It sits on top of the same SQL-first model rather than inventing a separate one.

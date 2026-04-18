@@ -44,7 +44,7 @@ describe('draft', () => {
       migrations/
         2026-04-10T00.00.00.000Z_create_person.sql
           create table person(name text)
-        2026-04-10T01.00.00.000Z_create_table_pet.sql
+        2026-04-10T02.00.00.000Z_create_table_pet.sql
           create table pet(name text);
       "
     `);

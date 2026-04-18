@@ -1,0 +1,49 @@
+import type {AsyncClient, ResultRow, RunResult, SqlfuProjectConfig} from './types.js';
+import type {QueryCatalog} from '../typegen/query-catalog.js';
+import type {SqlAnalysisResponse} from '../ui/shared.js';
+
+export type AdHocSqlResult =
+  | {readonly mode: 'rows'; readonly rows: readonly ResultRow[]}
+  | {readonly mode: 'metadata'; readonly metadata: RunResult};
+
+export type AdHocSqlParams = Record<string, unknown> | readonly unknown[] | undefined;
+
+export interface HostFs {
+  readFile(path: string): Promise<string>;
+  writeFile(path: string, contents: string): Promise<void>;
+  readdir(path: string): Promise<string[]>;
+  mkdir(path: string): Promise<void>;
+  rm(path: string, options?: {force?: boolean}): Promise<void>;
+  rename(from: string, to: string): Promise<void>;
+  exists(path: string): Promise<boolean>;
+}
+
+export interface DisposableAsyncClient {
+  readonly client: AsyncClient;
+  [Symbol.asyncDispose](): Promise<void>;
+}
+
+export interface HostLogger {
+  log(...args: unknown[]): void;
+  warn(...args: unknown[]): void;
+  error(...args: unknown[]): void;
+}
+
+export interface HostCatalog {
+  load(config: SqlfuProjectConfig): Promise<QueryCatalog>;
+  refresh(config: SqlfuProjectConfig): Promise<void>;
+  analyzeSql(config: SqlfuProjectConfig, sql: string): Promise<SqlAnalysisResponse>;
+}
+
+export interface SqlfuHost {
+  readonly fs: HostFs;
+  openDb(config: SqlfuProjectConfig): Promise<DisposableAsyncClient>;
+  openScratchDb(slug: string): Promise<DisposableAsyncClient>;
+  execAdHocSql(client: AsyncClient, sql: string, params: AdHocSqlParams): Promise<AdHocSqlResult>;
+  initializeProject(input: {projectRoot: string; configContents: string}): Promise<void>;
+  digest(content: string): Promise<string>;
+  now(): Date;
+  uuid(): string;
+  readonly logger: HostLogger;
+  readonly catalog: HostCatalog;
+}

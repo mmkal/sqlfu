@@ -47,6 +47,7 @@ import {
 import {AppToaster} from './components/ui/toaster.js';
 import {resolveApiOrigin, resolveApiRpcUrl} from './runtime.js';
 import {classifyStartupError} from './startup-error.js';
+import {DEMO_URL, LOCAL_URL, createDemoClient, isDemoMode} from './demo/index.js';
 import './styles.css';
 
 const queryClient = new QueryClient({
@@ -64,9 +65,16 @@ const queryClient = new QueryClient({
     },
   }),
 });
-const orpcClient: RouterClient<UiRouter> = createORPCClient(new RPCLink({
-  url: resolveApiRpcUrl(),
-}));
+const demoMode = isDemoMode();
+const orpcClient: RouterClient<UiRouter> = demoMode
+  ? createDemoClient({
+      onSchemaChange: () => {
+        void queryClient.invalidateQueries();
+      },
+    })
+  : createORPCClient(new RPCLink({
+      url: resolveApiRpcUrl(),
+    }));
 const orpc = createTanstackQueryUtils(orpcClient);
 
 type ConfirmationRequest = {
@@ -227,6 +235,7 @@ function StartupFailureScreen(input: {
 
   return (
     <main className="startup-shell">
+      <TryDemoBanner />
       <section className="startup-card">
         <h1><code>sqlfu</code></h1>
         <p className="startup-lede">Connecting to the sqlfu backend on {apiHost}</p>
@@ -1971,6 +1980,7 @@ function Shell(input: {
   if (input.loading) {
     return (
       <main className="startup-shell">
+        <ModeBanner />
         <section className="startup-card">
           <div className="eyebrow">Starting up</div>
           <h1><code>sqlfu</code></h1>
@@ -1980,7 +1990,37 @@ function Shell(input: {
     );
   }
 
-  return <div className="app-shell">{input.children}</div>;
+  return (
+    <div className="app-shell">
+      <ModeBanner />
+      {input.children}
+    </div>
+  );
+}
+
+function ModeBanner() {
+  if (!demoMode) {
+    return null;
+  }
+  return (
+    <div className="mode-banner demo">
+      <strong>Demo mode</strong>
+      <span>In-browser SQLite. Nothing is saved. Refresh to reset.</span>
+      <a className="mode-banner-link" href={LOCAL_URL}>Back to local.sqlfu.dev</a>
+    </div>
+  );
+}
+
+function TryDemoBanner() {
+  if (demoMode) {
+    return null;
+  }
+  return (
+    <div className="mode-banner">
+      <span>Want to try sqlfu without installing it? Demo mode runs entirely in-browser on sqlite-wasm.</span>
+      <a className="mode-banner-link" href={DEMO_URL}>Open the demo →</a>
+    </div>
+  );
 }
 
 function ErrorView(input: {

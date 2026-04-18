@@ -9,12 +9,13 @@ import {createCli, yamlTableConsoleLogger} from 'trpc-cli';
 import * as prompts from '@clack/prompts';
 
 import type {SqlfuCommandConfirm} from './api.js';
-import {router} from './api.js';
+import {router} from './cli-router.js';
 import {loadProjectState} from './core/config.js';
+import {createNodeHost} from './core/node-host.js';
 import packageJson from '../package.json' with { type: 'json' };
 
 export async function createSqlfuCli() {
-  const project = await loadProjectState();
+  const [project, host] = await Promise.all([loadProjectState(), createNodeHost()]);
   return createCli({
     router,
     name: packageJson.name,
@@ -23,6 +24,7 @@ export async function createSqlfuCli() {
     context: {
       projectRoot: project.projectRoot,
       config: project.initialized ? project.config : undefined,
+      host,
       confirm,
     },
   });

@@ -1,18 +1,12 @@
-import fs from 'node:fs/promises';
-import path from 'node:path';
-import {randomUUID} from 'node:crypto';
-
-import {os} from '@orpc/server';
-import {z} from 'zod';
-
-import type {Client, SqlfuProjectConfig} from './core/types.js';
-import {createDefaultInitPreview, initializeProject} from './core/config.js';
-import {createBunClient, createNodeSqliteClient, migrationNickname} from './client.js';
+import type {SqlfuProjectConfig} from './core/types.js';
+import type {SqlfuHost} from './core/host.js';
+import {basename, joinPath} from './core/paths.js';
+import {createDefaultInitPreview} from './core/init-preview.js';
+import {migrationNickname} from './core/naming.js';
 import {extractSchema} from './core/sqlite.js';
 import {
   applyMigrations,
   baselineMigrationHistory,
-  migrationChecksum,
   migrationName,
   readMigrationHistory,
   replaceMigrationHistory,
@@ -20,235 +14,27 @@ import {
 } from './migrations/index.js';
 import {diffSchemaSql} from './schemadiff/index.js';
 import {inspectSqliteSchemaSql, schemasEqual} from './schemadiff/sqlite/index.js';
-import {generateQueryTypes} from './typegen/index.js';
-import {startSqlfuServer} from './ui/server.js';
-import {stopProcessesListeningOnPort} from './core/port-process.js';
 
-const base = os.$context<SqlfuCommandRouterContext>();
 const schemaDriftExcludedTables = ['sqlfu_migrations'] as const;
 
-export const router = {
-  serve: base
-    .meta({
-      default: true,
-      description: `Start the local sqlfu backend server used by local.sqlfu.dev.`,
-    })
-    .input(z.object({
-      port: z.number().int().positive(),
-    }).partial().optional())
-    .handler(async ({context, input}) => {
-      await startSqlfuServer({
-        port: input?.port,
-        projectRoot: context.projectRoot,
-      });
-
-      console.log('sqlfu ready at https://local.sqlfu.dev');
-
-      await new Promise(() => {});
-    }),
-
-  init: base
-    .meta({
-      description: `Initialize a new sqlfu project in the current directory.`,
-    })
-    .handler(async ({context}) => {
-      const preview = createDefaultInitPreview(context.projectRoot);
-      const configContents = await context.confirm({
-        title: 'Create sqlfu.config.ts?',
-        body: preview.configContents,
-        bodyType: 'typescript',
-        editable: true,
-      });
-
-      if (!configContents?.trim()) {
-        return 'Initialization cancelled.';
-      }
-
-      await initializeProject({
-        projectRoot: context.projectRoot,
-        configContents,
-      });
-
-      return `Initialized sqlfu project in ${context.projectRoot}.`;
-    }),
-
-  kill: base
-    .meta({
-      description: `Stop the process listening on the local sqlfu backend port.`,
-    })
-    .input(z.object({
-      port: z.number().int().positive(),
-    }).partial().optional())
-    .handler(async ({input}) => {
-      const port = input?.port || 56081;
-      const stopped = await stopProcessesListeningOnPort(port);
-
-      if (stopped.length === 0) {
-        return `No process listening on port ${port}.`;
-      }
-
-      return `Stopped process on port ${port}: ${stopped.map((process) => process.command ? `${process.command} (${process.pid})` : String(process.pid)).join(', ')}`;
-    }),
-
-  generate: base
-    .meta({
-      description: `Generate TypeScript functions for all queries in the sql/ directory.`,
-    })
-    .handler(async () => {
-      await generateQueryTypes();
-      return 'Generated schema-derived database and TypeSQL outputs.';
-    }),
-
-  config: base.handler(async ({context}) => {
-    return requireContextConfig(context).config;
-  }),
-
-  sync: base
-    .meta({
-      description: `Update the current database to match definitions.sql. Note: this should only be used for local development. For production databases, use 'sqlfu migrate' instead. ` +
-        `This command fails if semantic changes are required. You can run 'sqlfu draft' to create a migration file with the necessary changes.`,
-    })
-    .handler(async ({context}) => {
-      await applySyncSql(requireContextConfig(context), context.confirm);
-    }),
-
-  draft: base
-    .meta({
-      description: `Create a migration file from the diff between replayed migrations and definitions.sql.`,
-    })
-    .input(
-      z.object({
-        name: z.string().min(1).describe('The name of the migration to create. If omitted one is derived from the drafted SQL.'),
-      }).partial().optional(),
-    )
-    .handler(async ({context, input}) => {
-      await applyDraftSql(requireContextConfig(context), input, context.confirm);
-    }),
-
-  migrate: base
-    .meta({
-      description: `Apply pending migrations to the configured database.`,
-    })
-    .handler(async ({context}) => {
-      await applyMigrateSql(requireContextConfig(context), context.confirm);
-    }),
-
-  pending: base
-    .meta({
-      description: `List migrations that exist but have not been applied to the configured database.`,
-    })
-    .handler(async ({context}) => {
-      const initializedContext = requireContextConfig(context);
-      const migrations = await createRuntime(initializedContext).readMigrations();
-      await using database = await openMainDevDatabase(initializedContext.config.db);
-      const applied = await readMigrationHistory(database.client);
-      const appliedNames = new Set(applied.map((migration) => migration.name));
-      return migrations
-        .map((migration) => migrationName(migration))
-        .filter((name) => !appliedNames.has(name));
-    }),
-
-  applied: base
-    .meta({
-      description: `List migrations recorded in the configured database history.`,
-    })
-    .handler(async ({context}) => {
-      await using database = await openMainDevDatabase(requireContextConfig(context).config.db);
-      const applied = await readMigrationHistory(database.client);
-      return applied.map((migration) => migration.name);
-    }),
-
-  find: base
-    .meta({
-      description: `Find migrations by substring and show whether each one is applied.`,
-    })
-    .input(z.object({
-      text: z.string().min(1),
-    }))
-    .handler(async ({context, input}) => {
-      const initializedContext = requireContextConfig(context);
-      const migrations = await createRuntime(initializedContext).readMigrations();
-      await using database = await openMainDevDatabase(initializedContext.config.db);
-      const applied = await readMigrationHistory(database.client);
-      const appliedNames = new Set(applied.map((migration) => migration.name));
-      return migrations
-        .map((migration) => migrationName(migration))
-        .filter((name) => name.includes(input.text))
-        .map((name) => ({
-          name,
-          applied: appliedNames.has(name),
-        }));
-    }),
-
-  baseline: base
-    .meta({
-      description: `Set migration history to an exact target without changing the live schema.`,
-    })
-    .input(
-      z.object({
-        target: z.string().min(1),
-      }),
-    )
-    .handler(async ({context, input}) => {
-      await applyBaselineSql(requireContextConfig(context), input, context.confirm);
-    }),
-
-  goto: base
-    .meta({
-      description: `Change the database schema and migration history to match an exact migration target.`,
-    })
-    .input(
-      z.object({
-        target: z.string().min(1).meta({positional: true}),
-      }),
-    )
-    .handler(async ({context, input}) => {
-      await applyGotoSql(requireContextConfig(context), input, context.confirm);
-    }),
-
-  check: {
-    all: base
-      .meta({
-        description: `Run all checks and recommend the next action.`,
-      })
-      .handler(async ({context}) => {
-        const analysis = await analyzeDatabase(createRuntime(requireContextConfig(context)));
-        if (analysis.mismatches.length > 0) {
-          throw new Error(formatCheckFailure(analysis));
-        }
-      }),
-    migrationsMatchDefinitions: base.handler(async ({context}) => {
-      const runtime = createRuntime(requireContextConfig(context));
-      const [definitionsSchema, migrationsSchema] = await Promise.all([
-        materializeDefinitionsSchema(runtime.config, await runtime.readDefinitionsSql()),
-        materializeMigrationsSchema(runtime.config, await runtime.readMigrations()),
-      ]);
-      if ((await compareSchemas(runtime.config, definitionsSchema, migrationsSchema)).isDifferent) {
-        throw new Error('replayed migrations do not match definitions.sql');
-      }
-    }),
-  },
-};
-
 export async function getCheckMismatches(context: SqlfuContext): Promise<readonly CheckMismatch[]> {
-  const analysis = await analyzeDatabase(createRuntime(context));
+  const analysis = await analyzeDatabase(context);
   return analysis.mismatches;
 }
 
 export async function getCheckAnalysis(context: SqlfuContext): Promise<CheckAnalysis> {
-  return analyzeDatabase(createRuntime(context));
+  return analyzeDatabase(context);
 }
 
 export async function writeDefinitionsSql(context: SqlfuContext, sql: string): Promise<void> {
-  await fs.writeFile(context.config.definitions, `${sql.trimEnd()}\n`);
+  await context.host.fs.writeFile(context.config.definitions, `${sql.trimEnd()}\n`);
 }
 
 export async function getSchemaAuthorities(context: SqlfuContext) {
-  const runtime = createRuntime(context);
-  const definitionsSql = await runtime.readDefinitionsSql();
-  const migrations = await runtime.readMigrations();
+  const definitionsSql = await readDefinitionsSql(context.host, context.config.definitions);
+  const migrations = await readMigrationsFromContext(context);
 
-  await using database = await openMainDevDatabase(context.config.db);
+  await using database = await context.host.openDb(context.config);
   const applied = await readMigrationHistory(database.client);
   const liveSchema = await extractSchema(database.client, 'main', {
     excludedTables: schemaDriftExcludedTables,
@@ -256,26 +42,37 @@ export async function getSchemaAuthorities(context: SqlfuContext) {
   const appliedByName = new Map(applied.map((migration) => [migration.name, migration]));
   const migrationByName = new Map(migrations.map((migration) => [migrationName(migration), migration]));
 
-  return {
-    desiredSchemaSql: definitionsSql,
-    migrations: migrations.map((migration) => ({
-      id: migrationName(migration),
-      fileName: path.basename(migration.path),
+  const migrationEntries = await Promise.all(migrations.map(async (migration) => {
+    const name = migrationName(migration);
+    const appliedEntry = appliedByName.get(name);
+    return {
+      id: name,
+      fileName: basename(migration.path),
       content: migration.content,
-      applied: appliedByName.has(migrationName(migration)),
-      appliedAt: appliedByName.get(migrationName(migration))?.appliedAt ?? null,
-      integrity: appliedByName.has(migrationName(migration))
-        ? getMigrationIntegrity(migration.content, appliedByName.get(migrationName(migration))?.checksum)
+      applied: appliedByName.has(name),
+      appliedAt: appliedEntry?.appliedAt ?? null,
+      integrity: appliedEntry
+        ? await getMigrationIntegrity(context.host, migration.content, appliedEntry.checksum)
         : null,
-    })),
-    migrationHistory: applied.map((migration) => ({
+    };
+  }));
+
+  const historyEntries = await Promise.all(applied.map(async (migration) => {
+    const current = migrationByName.get(migration.name);
+    return {
       id: migration.name,
-      fileName: migrationByName.get(migration.name) ? path.basename(migrationByName.get(migration.name)!.path) : null,
-      content: migrationByName.get(migration.name)?.content ?? '-- migration file missing from repo',
+      fileName: current ? basename(current.path) : null,
+      content: current?.content ?? '-- migration file missing from repo',
       applied: true,
       appliedAt: migration.appliedAt,
-      integrity: getMigrationIntegrity(migrationByName.get(migration.name)?.content, migration.checksum),
-    })),
+      integrity: await getMigrationIntegrity(context.host, current?.content, migration.checksum),
+    };
+  }));
+
+  return {
+    desiredSchemaSql: definitionsSql,
+    migrations: migrationEntries,
+    migrationHistory: historyEntries,
     liveSchemaSql: liveSchema,
   };
 }
@@ -287,30 +84,29 @@ export async function getMigrationResultantSchema(
     id: string;
   },
 ) {
-  const runtime = createRuntime(context);
   if (input.source === 'migrations') {
-    const migrations = await runtime.readMigrations();
+    const migrations = await readMigrationsFromContext(context);
     const targetIndex = migrations.findIndex((migration) => migrationName(migration) === input.id);
     if (targetIndex === -1) {
       throw new Error(`migration ${input.id} not found`);
     }
-    const schemaSql = await materializeMigrationsSchema(runtime.config, migrations.slice(0, targetIndex + 1));
+    const schemaSql = await materializeMigrationsSchemaForContext(context.host, migrations.slice(0, targetIndex + 1));
     return `-- schema that would be produced by \`sqlfu goto ${input.id}\`\n${schemaSql}`;
   }
 
-  await using database = await openMainDevDatabase(context.config.db);
+  await using database = await context.host.openDb(context.config);
   const applied = await readMigrationHistory(database.client);
   const targetIndex = applied.findIndex((migration) => migration.name === input.id);
   if (targetIndex === -1) {
     throw new Error(`migration history entry ${input.id} not found`);
   }
-  const migrations = await runtime.readMigrations();
+  const migrations = await readMigrationsFromContext(context);
   const targetMigrationIndex = migrations.findIndex((migration) => migrationName(migration) === input.id);
   if (targetMigrationIndex === -1) {
     throw new Error(`migration ${input.id} not found in repo`);
   }
-  const schemaSql = await materializeMigrationsSchema(
-    runtime.config,
+  const schemaSql = await materializeMigrationsSchemaForContext(
+    context.host,
     migrations.slice(0, targetMigrationIndex + 1),
   );
   return `-- schema produced by sqlfu goto ${input.id}\n${schemaSql}`;
@@ -345,7 +141,7 @@ export async function runSqlfuCommand(
     if (!configContents?.trim()) {
       return;
     }
-    await initializeProject({
+    await context.host.initializeProject({
       projectRoot: context.projectRoot,
       configContents,
     });
@@ -384,7 +180,7 @@ export async function runSqlfuCommand(
   }
 
   if (normalized === 'sqlfu check') {
-    const analysis = await analyzeDatabase(createRuntime(initializedContext));
+    const analysis = await analyzeDatabase(initializedContext);
     if (analysis.mismatches.length > 0) {
       throw new Error(formatCheckFailure(analysis));
     }
@@ -394,37 +190,31 @@ export async function runSqlfuCommand(
   throw new Error(`Unsupported sqlfu command: ${command}`);
 }
 
-function createRuntime(context: SqlfuContext) {
-  return {
-    config: context.config,
-    now: () => context.now?.() ?? new Date(),
-    readDefinitionsSql: () => readDefinitionsSql(context.config.definitions),
-    async readMigrations() {
-      try {
-        const fileNames = (await fs.readdir(context.config.migrations))
-          .filter((fileName) => fileName.endsWith('.sql'))
-          .sort();
+export async function readMigrationsFromContext(context: SqlfuContext): Promise<Migration[]> {
+  let fileNames: string[];
+  try {
+    fileNames = (await context.host.fs.readdir(context.config.migrations))
+      .filter((fileName) => fileName.endsWith('.sql'))
+      .sort();
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return [];
+    }
+    throw error;
+  }
 
-        const migrations = [];
-        for (const fileName of fileNames) {
-          const filePath = path.join(context.config.migrations, fileName);
-          const content = await fs.readFile(filePath, 'utf8');
-          migrations.push({path: filePath, content});
-        }
-        return migrations;
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-          return [];
-        }
-        throw error;
-      }
-    },
-  };
+  const migrations: Migration[] = [];
+  for (const fileName of fileNames) {
+    const filePath = joinPath(context.config.migrations, fileName);
+    const content = await context.host.fs.readFile(filePath);
+    migrations.push({path: filePath, content});
+  }
+  return migrations;
 }
 
-async function readDefinitionsSql(definitionsPath: string) {
+async function readDefinitionsSql(host: SqlfuHost, definitionsPath: string) {
   try {
-    return await fs.readFile(definitionsPath, 'utf8');
+    return await host.fs.readFile(definitionsPath);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
       throw new Error('definitions.sql not found');
@@ -433,17 +223,15 @@ async function readDefinitionsSql(definitionsPath: string) {
   }
 }
 
-async function applyDraftSql(
+export async function applyDraftSql(
   context: SqlfuContext,
   input: {name?: string} | undefined,
   confirm: SqlfuCommandConfirm,
 ) {
-  const runtime = createRuntime(context);
-  const migrations = await runtime.readMigrations();
-  const definitionsSql = await runtime.readDefinitionsSql();
-  const baselineSql = migrations.length === 0 ? '' : await materializeMigrationsSchema(runtime.config, migrations);
-  const diffLines = await diffSchemaSql({
-    projectRoot: runtime.config.projectRoot,
+  const migrations = await readMigrationsFromContext(context);
+  const definitionsSql = await readDefinitionsSql(context.host, context.config.definitions);
+  const baselineSql = migrations.length === 0 ? '' : await materializeMigrationsSchemaForContext(context.host, migrations);
+  const diffLines = await diffSchemaSql(context.host, {
     baselineSql,
     desiredSql: definitionsSql,
     allowDestructive: true,
@@ -462,23 +250,22 @@ async function applyDraftSql(
   if (!body?.trim()) {
     return;
   }
-  const fileName = `${getMigrationPrefix(runtime.now())}_${slugify(input?.name ?? migrationNickname(body))}.sql`;
-  await fs.mkdir(context.config.migrations, {recursive: true});
-  await fs.writeFile(path.join(context.config.migrations, fileName), `${body.trim()}\n`);
+  const fileName = `${getMigrationPrefix(context.host.now())}_${slugify(input?.name ?? migrationNickname(body))}.sql`;
+  await context.host.fs.mkdir(context.config.migrations);
+  await context.host.fs.writeFile(joinPath(context.config.migrations, fileName), `${body.trim()}\n`);
 }
 
-async function applySyncSql(
+export async function applySyncSql(
   context: SqlfuContext,
   confirm: SqlfuCommandConfirm,
 ) {
-  const definitionsSql = await readDefinitionsSql(context.config.definitions);
-  await using database = await openMainDevDatabase(context.config.db);
+  const definitionsSql = await readDefinitionsSql(context.host, context.config.definitions);
+  await using database = await context.host.openDb(context.config);
   const baselineSql = await extractSchema(database.client, 'main', {
     excludedTables: schemaDriftExcludedTables,
   });
   try {
-    const diffLines = await diffSchemaSql({
-      projectRoot: context.config.projectRoot,
+    const diffLines = await diffSchemaSql(context.host, {
       baselineSql,
       desiredSql: definitionsSql,
       allowDestructive: true,
@@ -513,12 +300,12 @@ async function applySyncSql(
   }
 }
 
-async function applyMigrateSql(
+export async function applyMigrateSql(
   context: SqlfuContext,
   confirm: SqlfuCommandConfirm,
 ) {
-  const migrations = await createRuntime(context).readMigrations();
-  await using database = await openMainDevDatabase(context.config.db);
+  const migrations = await readMigrationsFromContext(context);
+  await using database = await context.host.openDb(context.config);
   const applied = await readMigrationHistory(database.client);
   const appliedNames = new Set(applied.map((migration) => migration.name));
   const pendingMigrations = migrations.filter((migration) => !appliedNames.has(migrationName(migration)));
@@ -536,15 +323,15 @@ async function applyMigrateSql(
     }
   }
   // apply migrations even if there are zero pending, because this will validate migration history
-  await applyMigrationsToDatabase(context.config.db, migrations);
+  await applyMigrations(context.host, database.client, {migrations});
 }
 
-async function applyBaselineSql(
+export async function applyBaselineSql(
   context: SqlfuContext,
   input: {target: string},
   confirm: SqlfuCommandConfirm,
 ) {
-  const migrations = await createRuntime(context).readMigrations();
+  const migrations = await readMigrationsFromContext(context);
   const targetMigrations = getMigrationsThroughTarget(migrations, input.target);
   const ok = await confirm({
     title: 'Record migration history?',
@@ -558,26 +345,24 @@ async function applyBaselineSql(
   if (!ok) {
     return;
   }
-  await using database = await openMainDevDatabase(context.config.db);
-  await baselineMigrationHistory(database.client, {migrations, target: input.target});
+  await using database = await context.host.openDb(context.config);
+  await baselineMigrationHistory(context.host, database.client, {migrations, target: input.target});
 }
 
-async function applyGotoSql(
+export async function applyGotoSql(
   context: SqlfuContext,
   input: {target: string},
   confirm: SqlfuCommandConfirm,
 ) {
-  const runtime = createRuntime(context);
-  const migrations = await runtime.readMigrations();
+  const migrations = await readMigrationsFromContext(context);
   const targetMigrations = getMigrationsThroughTarget(migrations, input.target);
-  const targetSchema = await materializeMigrationsSchema(runtime.config, targetMigrations);
+  const targetSchema = await materializeMigrationsSchemaForContext(context.host, targetMigrations);
 
-  await using database = await openMainDevDatabase(context.config.db);
+  await using database = await context.host.openDb(context.config);
   const liveSchema = await extractSchema(database.client, 'main', {
     excludedTables: schemaDriftExcludedTables,
   });
-  const diffLines = await diffSchemaSql({
-    projectRoot: runtime.config.projectRoot,
+  const diffLines = await diffSchemaSql(context.host, {
     baselineSql: liveSchema,
     desiredSql: targetSchema,
     allowDestructive: true,
@@ -596,7 +381,7 @@ async function applyGotoSql(
     if (confirmedSql?.trim()) {
       await tx.raw(confirmedSql.trim());
     }
-    await replaceMigrationHistory(tx, targetMigrations);
+    await replaceMigrationHistory(context.host, tx, targetMigrations);
   });
 }
 
@@ -613,25 +398,20 @@ function slugify(value: string) {
     .replace(/_+/gu, '_');
 }
 
-async function materializeDefinitionsSchema(config: SqlfuProjectConfig, definitionsSql: string) {
-  await using database = await createScratchDatabase(config, 'materialize-definitions');
+export async function materializeDefinitionsSchemaForContext(host: SqlfuHost, definitionsSql: string) {
+  await using database = await host.openScratchDb('materialize-definitions');
   await database.client.raw(definitionsSql);
   return await extractSchema(database.client, 'main', {
     excludedTables: schemaDriftExcludedTables,
   });
 }
 
-async function materializeMigrationsSchema(config: SqlfuProjectConfig, migrations: readonly Migration[]) {
-  await using database = await createScratchDatabase(config, 'materialize-migrations');
-  await applyMigrations(database.client, {migrations});
+export async function materializeMigrationsSchemaForContext(host: SqlfuHost, migrations: readonly Migration[]) {
+  await using database = await host.openScratchDb('materialize-migrations');
+  await applyMigrations(host, database.client, {migrations});
   return await extractSchema(database.client, 'main', {
     excludedTables: schemaDriftExcludedTables,
   });
-}
-
-async function applyMigrationsToDatabase(dbPath: string, migrations: readonly Migration[]) {
-  await using database = await openMainDevDatabase(dbPath);
-  await applyMigrations(database.client, {migrations});
 }
 
 function getMigrationsThroughTarget(migrations: readonly Migration[], target: string) {
@@ -642,86 +422,35 @@ function getMigrationsThroughTarget(migrations: readonly Migration[], target: st
   return migrations.slice(0, targetIndex + 1);
 }
 
-type DisposableClient = {
-  readonly client: Client;
-  [Symbol.asyncDispose](): Promise<void>;
-};
-
-async function createScratchDatabase(config: SqlfuProjectConfig, slug: string): Promise<DisposableClient> {
-  const dbPath = path.join(config.projectRoot, '.sqlfu', `${slug}-${randomUUID()}.db`);
-  await fs.mkdir(path.dirname(dbPath), {recursive: true});
-  const database = await openSqliteDatabase(dbPath);
-  return {
-    client: database.client,
-    async [Symbol.asyncDispose]() {
-      await database[Symbol.asyncDispose]();
-      await Promise.allSettled([
-        fs.rm(dbPath, {force: true}),
-        fs.rm(`${dbPath}-shm`, {force: true}),
-        fs.rm(`${dbPath}-wal`, {force: true}),
-      ]);
-    },
-  };
-}
-
-
-async function openMainDevDatabase(dbPath: string): Promise<DisposableClient> {
-  await fs.mkdir(path.dirname(dbPath), {recursive: true});
-  return openSqliteDatabase(dbPath);
-}
-
-async function openSqliteDatabase(dbPath: string): Promise<DisposableClient> {
-  if ('Bun' in globalThis) {
-    const {Database} = await import('bun:sqlite' as any);
-    const database = new Database(dbPath);
-    return {
-      client: createBunClient(database as Parameters<typeof createBunClient>[0]),
-      async [Symbol.asyncDispose]() {
-        database.close();
-      },
-    };
-  }
-
-  const {DatabaseSync} = await import('node:sqlite');
-  const database = new DatabaseSync(dbPath);
-  return {
-    client: createNodeSqliteClient(database as Parameters<typeof createNodeSqliteClient>[0]),
-    async [Symbol.asyncDispose]() {
-      database.close();
-    },
-  };
-}
-
-async function analyzeDatabase(runtime: ReturnType<typeof createRuntime>) {
-  const migrations = await runtime.readMigrations();
-  const definitionsSql = await runtime.readDefinitionsSql();
+export async function analyzeDatabase(context: SqlfuContext) {
+  const host = context.host;
+  const migrations = await readMigrationsFromContext(context);
+  const definitionsSql = await readDefinitionsSql(host, context.config.definitions);
   const [desiredSchema, migrationsSchema] = await Promise.all([
-    materializeDefinitionsSchema(runtime.config, definitionsSql),
-    materializeMigrationsSchema(runtime.config, migrations),
+    materializeDefinitionsSchemaForContext(host, definitionsSql),
+    materializeMigrationsSchemaForContext(host, migrations),
   ]);
 
-  let liveSchema: string;
-  let applied: readonly {name: string; checksum: string}[];
-  await using database = await openMainDevDatabase(runtime.config.db);
-  liveSchema = await extractSchema(database.client, 'main', {
+  await using database = await host.openDb(context.config);
+  const liveSchema = await extractSchema(database.client, 'main', {
     excludedTables: schemaDriftExcludedTables,
   });
-  applied = await readMigrationHistory(database.client);
+  const applied = await readMigrationHistory(database.client);
   const hasAppliedHistory = applied.length > 0;
   const appliedNames = new Set(applied.map((migration) => migration.name));
   const migrationByName = new Map(migrations.map((migration) => [migrationName(migration), migration]));
 
-  const repoDrift = await compareSchemas(runtime.config, desiredSchema, migrationsSchema);
-  const historyMismatch = findHistoryMismatch(applied, migrationByName);
+  const repoDrift = await compareSchemasForContext(host, desiredSchema, migrationsSchema);
+  const historyMismatch = await findHistoryMismatch(host, applied, migrationByName);
   const hasPendingMigrations = !historyMismatch && migrations.some((migration) => !appliedNames.has(migrationName(migration)));
 
   const historicalMigrations = applied
     .map((historical) => migrationByName.get(historical.name))
     .filter((migration): migration is Migration => Boolean(migration));
-  const historicalSchema = await materializeMigrationsSchema(runtime.config, historicalMigrations);
-  const schemaDrift = await compareSchemas(runtime.config, historicalSchema, liveSchema);
-  const syncDrift = await compareSchemas(runtime.config, desiredSchema, liveSchema);
-  const recommendedBaselineTarget = await findRecommendedTarget(runtime.config, migrations, liveSchema);
+  const historicalSchema = await materializeMigrationsSchemaForContext(host, historicalMigrations);
+  const schemaDrift = await compareSchemasForContext(host, historicalSchema, liveSchema);
+  const syncDrift = await compareSchemasForContext(host, desiredSchema, liveSchema);
+  const recommendedBaselineTarget = await findRecommendedTarget(host, migrations, liveSchema);
   const recommendedGotoTarget = !repoDrift.isDifferent && !historyMismatch && migrations.length > 0
     ? migrationName(migrations.at(-1)!)
     : null;
@@ -736,9 +465,7 @@ async function analyzeDatabase(runtime: ReturnType<typeof createRuntime>) {
       kind: 'historyDrift',
       title: 'History Drift',
       summary: 'Migration History does not match Migrations.',
-      details: [
-        problemLine,
-      ],
+      details: [problemLine],
     });
 
     if (historyMismatch.kind === 'deleted') {
@@ -870,7 +597,8 @@ async function analyzeDatabase(runtime: ReturnType<typeof createRuntime>) {
   };
 }
 
-function findHistoryMismatch(
+async function findHistoryMismatch(
+  host: SqlfuHost,
   applied: readonly {name: string; checksum: string}[],
   migrationByName: ReadonlyMap<string, Migration>,
 ) {
@@ -879,36 +607,35 @@ function findHistoryMismatch(
     if (!current) {
       return {kind: 'deleted' as const, name: historical.name};
     }
-    if (migrationChecksum(current.content) !== historical.checksum) {
+    if (await host.digest(current.content) !== historical.checksum) {
       return {kind: 'checksumMismatch' as const, name: historical.name};
     }
   }
   return null;
 }
 
-async function findRecommendedTarget(config: SqlfuProjectConfig, migrations: readonly Migration[], liveSchema: string) {
+async function findRecommendedTarget(host: SqlfuHost, migrations: readonly Migration[], liveSchema: string) {
   for (let index = 0; index < migrations.length; index += 1) {
     const candidate = migrations.slice(0, index + 1);
-    const candidateSchema = await materializeMigrationsSchema(config, candidate);
-    if (!(await compareSchemas(config, candidateSchema, liveSchema)).isDifferent) {
+    const candidateSchema = await materializeMigrationsSchemaForContext(host, candidate);
+    if (!(await compareSchemasForContext(host, candidateSchema, liveSchema)).isDifferent) {
       return migrationName(candidate.at(-1)!);
     }
   }
   return null;
 }
 
-async function compareSchemas(config: SqlfuProjectConfig, left: string, right: string) {
+export async function compareSchemasForContext(host: SqlfuHost, left: string, right: string) {
   const [leftInspected, rightInspected] = await Promise.all([
-    inspectSqliteSchemaSql(config, left),
-    inspectSqliteSchemaSql(config, right),
+    inspectSqliteSchemaSql(host, left),
+    inspectSqliteSchemaSql(host, right),
   ]);
 
   const isDifferent = !schemasEqual(leftInspected, rightInspected);
   let isSyncable = false;
   if (isDifferent) {
     try {
-      const syncPlan = await diffSchemaSql({
-        projectRoot: config.projectRoot,
+      const syncPlan = await diffSchemaSql(host, {
         baselineSql: right,
         desiredSql: left,
         allowDestructive: true,
@@ -925,12 +652,12 @@ async function compareSchemas(config: SqlfuProjectConfig, left: string, right: s
   };
 }
 
-function getMigrationIntegrity(currentContent: string | undefined, appliedChecksum: string | undefined) {
+async function getMigrationIntegrity(host: SqlfuHost, currentContent: string | undefined, appliedChecksum: string | undefined) {
   if (!currentContent || !appliedChecksum) {
     return 'checksum mismatch' as const;
   }
 
-  return migrationChecksum(currentContent) === appliedChecksum ? 'ok' as const : 'checksum mismatch' as const;
+  return await host.digest(currentContent) === appliedChecksum ? 'ok' as const : 'checksum mismatch' as const;
 }
 
 function summarizeSqlite3defError(error: unknown) {
@@ -945,13 +672,13 @@ function summarizeSqlite3defError(error: unknown) {
 
 export interface SqlfuContext {
   readonly config: SqlfuProjectConfig;
-  readonly now?: () => Date;
+  readonly host: SqlfuHost;
 }
 
 export interface SqlfuCommandContext {
   readonly projectRoot: string;
   readonly config?: SqlfuProjectConfig;
-  readonly now?: () => Date;
+  readonly host: SqlfuHost;
 }
 
 export interface SqlfuRouterContext extends SqlfuContext {}
@@ -960,14 +687,14 @@ export interface SqlfuCommandRouterContext extends SqlfuCommandContext {
   readonly confirm: SqlfuCommandConfirm;
 }
 
-function requireContextConfig(context: SqlfuCommandContext): SqlfuContext {
+export function requireContextConfig(context: SqlfuCommandContext): SqlfuContext {
   if (!context.config) {
     throw new Error(`No sqlfu config found in ${context.projectRoot}. Run 'sqlfu init' first.`);
   }
 
   return {
     config: context.config,
-    now: context.now,
+    host: context.host,
   };
 }
 
@@ -1012,9 +739,6 @@ function withRecommendationExplainers(recommendations: readonly CheckRecommendat
     return recommendations;
   }
 
-  // Rule: if multiple next actions survive analysis, each one must explain in
-  // parentheses what it fixes so users can choose between repo-level and
-  // database-level actions without guessing.
   return recommendations.map((recommendation) => ({
     ...recommendation,
     rationale: getRecommendationExplainer(recommendation),
@@ -1040,7 +764,7 @@ function getRecommendationExplainer(recommendation: CheckRecommendation) {
   }
 }
 
-function formatCheckFailure(analysis: CheckAnalysis) {
+export function formatCheckFailure(analysis: CheckAnalysis) {
   const sections = analysis.mismatches.map((mismatch) =>
     [mismatch.title, mismatch.summary, ...mismatch.details].join('\n'),
   );

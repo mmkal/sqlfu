@@ -7,6 +7,9 @@
  * - falls back to `migration` instead of hashing
  */
 
+import type {SqlQuery} from './types.js';
+import {normalizeSqlForHash, shortHash} from './util.js';
+
 const tokenize = (sql: string): string[] => {
   const tokens: string[] = [];
   let index = 0;
@@ -189,6 +192,7 @@ export function queryNickname(sql: string): string {
     }
 
     if (lower === 'insert' && tokens[index + 1]?.toLowerCase() === 'into') {
+      index += 1;
       parts.push('insert', nextIdentifier() ?? 'query');
       break;
     }
@@ -222,4 +226,24 @@ export const animals = 'aardvark,alligator,alpaca,antelope,armadillo,badger,bat,
 
 export function generateRandomName(rng = Math.random) {
   return `${adjectives[Math.floor(rng() * adjectives.length)]} ${animals[Math.floor(rng() * animals.length)]}`;
+}
+
+/**
+ * Span-name derivation for observability hooks. Named queries get their
+ * author-given name verbatim; ad-hoc queries get a readable nickname plus a
+ * stable short hash of the (normalized) parameterized SQL, so the same
+ * ad-hoc call site buckets together across different parameter values.
+ *
+ * `client.raw()` is not uniquely identified — the raw SQL string has values
+ * interpolated into it, so the hash becomes per-value. If you need named
+ * observability on dynamic SQL, pass a `name` on the SqlQuery directly:
+ * `client.run({ sql, args, name: 'my-query' })`.
+ */
+export function spanNameFor(query: SqlQuery): string {
+  if (query.name) {
+    return query.name;
+  }
+  const nickname = queryNickname(query.sql);
+  const hash = shortHash(normalizeSqlForHash(query.sql));
+  return `sql-${nickname}-${hash}`;
 }

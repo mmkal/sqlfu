@@ -25,7 +25,7 @@ jobs:
 
       - name: Install website dependencies
         working-directory: website
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --ignore-workspace --no-frozen-lockfile
 
       - name: Build website
         working-directory: website

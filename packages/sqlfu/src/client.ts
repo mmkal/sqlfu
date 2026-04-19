@@ -2,6 +2,7 @@ export * from './core/sql.js';
 export * from './core/types.js';
 export * from './core/naming.js';
 export * from './core/util.js';
+export * from './core/errors.js';
 export * from './instrument.js';
 export type {
   ProcessResult,

@@ -153,10 +153,15 @@ test('sqlfu server can initialize a fresh directory through the ui rpc', async (
     projectRoot: root,
   });
 
-  await fixture.client.schema.command({
-    command: 'sqlfu init',
-    confirmation: createDefaultInitPreview(root).configContents,
-  });
+  const initEvents = await fixture.client.schema.command({command: 'sqlfu init'});
+  for await (const event of initEvents) {
+    if (event.kind === 'needsConfirmation') {
+      await fixture.client.schema.submitConfirmation({
+        id: event.id,
+        body: createDefaultInitPreview(root).configContents,
+      });
+    }
+  }
 
   expect(await fixture.client.project.status()).toMatchObject({
     initialized: true,

@@ -8,6 +8,7 @@ import {
   runSqlfuCommand,
   writeDefinitionsSql,
   type CheckAnalysis,
+  type SqlfuCommandConfirmParams,
 } from '../api.js';
 import {splitSqlStatements} from '../core/sqlite.js';
 import type {SqlfuHost} from '../core/host.js';
@@ -153,42 +154,46 @@ export const uiRouter = {
     command: uiBase
       .input(z.object({
         command: z.string(),
-        confirmation: z.string().optional(),
       }))
-      .handler(async ({context, input}) => {
+      .handler(async function* ({context, input}): AsyncGenerator<CommandEvent> {
         if (!input.command.trim()) {
           throw new Error('Command is required');
         }
 
+        const queue = createCommandEventQueue();
+        runSqlfuCommand(
+          {
+            projectRoot: context.project.projectRoot,
+            config: context.project.initialized ? context.project.config : undefined,
+            host: context.host,
+          },
+          input.command,
+          async (params) => {
+            const body = params.body.trim();
+            if (!body) {
+              return null;
+            }
+            return await queue.request(params);
+          },
+        ).then(
+          () => queue.finish(),
+          (error) => queue.fail(error instanceof ORPCError ? error : toClientError(error)),
+        );
+
         try {
-          await runSqlfuCommand(
-            {
-              projectRoot: context.project.projectRoot,
-              config: context.project.initialized ? context.project.config : undefined,
-              host: context.host,
-            },
-            input.command,
-            async (params) => {
-              const body = params.body.trim();
-              if (!body) {
-                return null;
-              }
-
-              const confirmation = input.confirmation?.trim();
-              if (!confirmation) {
-                throw toClientError(new Error(`confirmation_missing:${JSON.stringify({...params, body})}`));
-              }
-
-              return confirmation;
-            },
-          );
-        } catch (error) {
-          if (error instanceof ORPCError) {
-            throw error;
-          }
-          throw toClientError(error);
+          yield* queue.drain();
+        } finally {
+          queue.dispose();
         }
-        return {ok: true} as const;
+      }),
+    submitConfirmation: uiBase
+      .input(z.object({
+        id: z.string(),
+        body: z.string().nullable(),
+      }))
+      .handler(({input}) => {
+        resolvePendingConfirmation(input.id, input.body);
+        return {ok: true as const};
       }),
     definitions: uiBase
       .input(z.object({
@@ -407,6 +412,106 @@ export const uiRouter = {
 };
 
 export type UiRouter = typeof uiRouter;
+
+export type CommandEvent =
+  | {
+      readonly kind: 'needsConfirmation';
+      readonly id: string;
+      readonly params: SqlfuCommandConfirmParams;
+    }
+  | {
+      readonly kind: 'done';
+    };
+
+type PendingConfirmation = {
+  readonly resolve: (body: string | null) => void;
+  readonly reject: (error: unknown) => void;
+};
+
+const pendingConfirmations = new Map<string, PendingConfirmation>();
+
+function resolvePendingConfirmation(id: string, body: string | null) {
+  const pending = pendingConfirmations.get(id);
+  if (!pending) {
+    throw toClientError(new Error(`Unknown confirmation id: ${id}`));
+  }
+  pendingConfirmations.delete(id);
+  pending.resolve(body);
+}
+
+type QueueItem =
+  | {readonly kind: 'event'; readonly event: CommandEvent}
+  | {readonly kind: 'error'; readonly error: unknown};
+
+function createCommandEventQueue() {
+  const pendingIds = new Set<string>();
+  const buffer: QueueItem[] = [];
+  let notify: (() => void) | null = null;
+  let finished = false;
+
+  const poke = () => {
+    const listener = notify;
+    notify = null;
+    listener?.();
+  };
+
+  return {
+    async request(params: SqlfuCommandConfirmParams): Promise<string | null> {
+      const id = crypto.randomUUID();
+      pendingIds.add(id);
+      try {
+        return await new Promise<string | null>((resolve, reject) => {
+          pendingConfirmations.set(id, {resolve, reject});
+          buffer.push({kind: 'event', event: {kind: 'needsConfirmation', id, params}});
+          poke();
+        });
+      } finally {
+        pendingIds.delete(id);
+      }
+    },
+    finish() {
+      buffer.push({kind: 'event', event: {kind: 'done'}});
+      finished = true;
+      poke();
+    },
+    fail(error: unknown) {
+      buffer.push({kind: 'error', error});
+      finished = true;
+      poke();
+    },
+    async *drain(): AsyncGenerator<CommandEvent> {
+      while (true) {
+        while (buffer.length > 0) {
+          const item = buffer.shift()!;
+          if (item.kind === 'error') {
+            throw item.error;
+          }
+          yield item.event;
+          if (item.event.kind === 'done') {
+            return;
+          }
+        }
+        if (finished) {
+          return;
+        }
+        await new Promise<void>((resolve) => {
+          notify = resolve;
+        });
+      }
+    },
+    dispose() {
+      for (const id of pendingIds) {
+        const pending = pendingConfirmations.get(id);
+        pendingConfirmations.delete(id);
+        pending?.reject(new Error('Confirmation request cancelled'));
+      }
+      pendingIds.clear();
+      buffer.length = 0;
+      finished = true;
+      poke();
+    },
+  };
+}
 
 function requireProjectConfig(project: ResolvedUiProject) {
   if (!project.initialized) {

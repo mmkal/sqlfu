@@ -58,9 +58,6 @@ const queryClient = new QueryClient({
   },
   mutationCache: new MutationCache({
     onError: (error) => {
-      if (parseConfirmationRequest(error)) {
-        return;
-      }
       toast.error(error instanceof Error ? error.message : String(error));
     },
   }),
@@ -524,7 +521,7 @@ function ProjectInitScreen(input: {
   projectRoot: string;
 }) {
   const initializeMutation = useMutation({
-    ...orpc.schema.command.mutationOptions(),
+    mutationFn: async (variables: {command: string}) => await runSchemaCommand(variables.command),
     onSuccess: async () => {
       await queryClient.refetchQueries({queryKey: orpc.project.status.key()});
       startupBoundaryStore.reset();
@@ -538,24 +535,7 @@ function ProjectInitScreen(input: {
   });
 
   const handleInitialize = async () => {
-    try {
-      await initializeMutation.mutateAsync({command: 'sqlfu init'});
-    } catch (error) {
-      const confirmation = parseConfirmationRequest(error);
-      if (!confirmation) {
-        return;
-      }
-
-      const result = await confirmationDialogStore.confirm(confirmation);
-      if (!result.confirmed || !result.body?.trim()) {
-        return;
-      }
-
-      await initializeMutation.mutateAsync({
-        command: 'sqlfu init',
-        confirmation: result.body,
-      });
-    }
+    await initializeMutation.mutateAsync({command: 'sqlfu init'});
   };
 
   const displayProjectRoot = abbreviateHomeDirectory(input.projectRoot);
@@ -620,7 +600,7 @@ function SchemaPanel(input: {
     },
   );
   const runCommandMutation = useMutation({
-    ...orpc.schema.command.mutationOptions(),
+    mutationFn: async (variables: {command: string}) => await runSchemaCommand(variables.command),
     onMutate: (variables) => {
       setCommandErrors((current) => {
         const next = {...(current ?? {})};
@@ -633,9 +613,6 @@ function SchemaPanel(input: {
       await queryClient.refetchQueries({queryKey: orpc.schema.key()});
     },
     onError: (error, variables) => {
-      if (parseConfirmationRequest(error)) {
-        return;
-      }
       setCommandErrors((current) => ({
         ...(current ?? {}),
         [variables.command]: error instanceof Error ? error.message : String(error),
@@ -652,25 +629,7 @@ function SchemaPanel(input: {
   const desiredSchemaSql = desiredSchemaDraft ?? input.authorities.desiredSchemaSql;
   const desiredSchemaDirty = normalizeSqlDraft(desiredSchemaSql) !== normalizeSqlDraft(input.authorities.desiredSchemaSql);
   const handleSchemaCommand = async (command: readonly [string, ...string[]]) => {
-    const commandText = formatSchemaCommand(command);
-    try {
-      await runCommandMutation.mutateAsync({command: commandText});
-    } catch (error) {
-      const confirmation = parseConfirmationRequest(error);
-      if (!confirmation) {
-        return;
-      }
-
-      const result = await confirmationDialogStore.confirm(confirmation);
-      if (!result.confirmed || !result.body?.trim()) {
-        return;
-      }
-
-      await runCommandMutation.mutateAsync({
-        command: commandText,
-        confirmation: result.body,
-      });
-    }
+    await runCommandMutation.mutateAsync({command: formatSchemaCommand(command)});
   };
 
   return (
@@ -2029,34 +1988,16 @@ function ErrorView(input: {
   return <pre className="code-block error">{String(input.error)}</pre>;
 }
 
-function parseConfirmationRequest(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  const prefix = 'confirmation_missing:';
-  const index = message.indexOf(prefix);
-  if (index === -1) {
-    return null;
-  }
-  const payload = message.slice(index + prefix.length).trim();
-  if (!payload) {
-    return null;
-  }
-  try {
-    const parsed = JSON.parse(payload) as Partial<ConfirmationRequest>;
-    if (typeof parsed.title !== 'string' || typeof parsed.body !== 'string') {
-      return null;
+async function runSchemaCommand(command: string) {
+  const events = await orpcClient.schema.command({command});
+  for await (const event of events) {
+    if (event.kind === 'needsConfirmation') {
+      const result = await confirmationDialogStore.confirm(event.params);
+      await orpcClient.schema.submitConfirmation({
+        id: event.id,
+        body: result.confirmed && result.body != null ? result.body : null,
+      });
     }
-    return {
-      title: parsed.title,
-      body: parsed.body,
-      bodyType: parsed.bodyType === 'sql'
-        ? ('sql' as const)
-        : parsed.bodyType === 'typescript'
-          ? ('typescript' as const)
-          : ('markdown' as const),
-      editable: parsed.editable === true ? true : undefined,
-    };
-  } catch {
-    return null;
   }
 }
 

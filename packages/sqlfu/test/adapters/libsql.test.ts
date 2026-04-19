@@ -17,9 +17,7 @@ test('createLibsqlSyncClient works with a real libsql database', async () => {
     }),
   ).toMatchObject([{id: 1, email: 'ada@example.com'}]);
 
-  expect(
-    fixture.client.sql.all<{id: number; email: string}>`select id, email from users order by id`,
-  ).toMatchObject([
+  expect(fixture.client.sql.all<{id: number; email: string}>`select id, email from users order by id`).toMatchObject([
     {id: 1, email: 'ada@example.com'},
     {id: 2, email: 'grace@example.com'},
   ]);
@@ -40,9 +38,7 @@ test('createLibsqlSyncClient turns real sqlite syntax errors into promise reject
   using fixture = createLibsqlFixture(new Database(':memory:'));
   fixture.client.sql.run`create table users (id integer primary key, email text not null)`;
 
-  await expect(
-    fixture.client.sql`selectTYPO from users`.catch(String),
-  ).resolves.toContain('syntax error');
+  await expect(fixture.client.sql`selectTYPO from users`.catch(String)).resolves.toContain('syntax error');
 });
 
 test('createLibsqlSyncClient iterates rows', () => {
@@ -51,9 +47,9 @@ test('createLibsqlSyncClient iterates rows', () => {
   fixture.client.sql.run`insert into users (email) values (${'ada@example.com'})`;
   fixture.client.sql.run`insert into users (email) values (${'grace@example.com'})`;
 
-  expect(
-    [...fixture.client.iterate<{id: number; email: string}>({sql: 'select id, email from users order by id', args: []})],
-  ).toMatchObject([
+  expect([
+    ...fixture.client.iterate<{id: number; email: string}>({sql: 'select id, email from users order by id', args: []}),
+  ]).toMatchObject([
     {id: 1, email: 'ada@example.com'},
     {id: 2, email: 'grace@example.com'},
   ]);
@@ -68,9 +64,7 @@ test('createLibsqlSyncClient.raw runs multiple statements', () => {
     insert into users (email) values ('grace@example.com');
   `);
 
-  expect(
-    fixture.client.sql.all<{email: string}>`select email from users order by email`,
-  ).toMatchObject([
+  expect(fixture.client.sql.all<{email: string}>`select email from users order by email`).toMatchObject([
     {email: 'ada@example.com'},
     {email: 'grace@example.com'},
   ]);

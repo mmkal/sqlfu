@@ -79,7 +79,8 @@ test('applyMigrations can run inside a durable object using a migrations bundle'
       constructor(state: any) {
         this.client = createDurableObjectClient(state.storage.sql);
         const bundle = {
-          'migrations/2026-04-10T00.00.00.000Z_create_posts.sql': 'create table posts (id integer primary key, slug text not null);',
+          'migrations/2026-04-10T00.00.00.000Z_create_posts.sql':
+            'create table posts (id integer primary key, slug text not null);',
           'migrations/2026-04-10T01.00.00.000Z_add_body.sql': 'alter table posts add column body text;',
         };
         // Hand-rolled host + `as any` cast because `applyMigrations` currently
@@ -117,11 +118,7 @@ test('applyMigrations can run inside a durable object using a migrations bundle'
     },
   );
 
-  expect(await fixture.stub.getColumns()).toMatchObject([
-    {name: 'id'},
-    {name: 'slug'},
-    {name: 'body'},
-  ]);
+  expect(await fixture.stub.getColumns()).toMatchObject([{name: 'id'}, {name: 'slug'}, {name: 'body'}]);
 
   expect(await fixture.stub.getApplied()).toMatchObject([
     {name: '2026-04-10T00.00.00.000Z_create_posts'},
@@ -167,16 +164,12 @@ test('createDurableObjectClient.raw runs multiple statements', async () => {
   ]);
 });
 
-async function createDOFixture<TInstance extends object>(
-  classDef: new (...args: any[]) => TInstance,
-) {
+async function createDOFixture<TInstance extends object>(classDef: new (...args: any[]) => TInstance) {
   await ensureBuilt();
 
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'sqlfu-do-fixture-'));
   const workerPath = path.join(tempDir, 'worker.js');
-  await Promise.all([
-    fs.cp(path.join(packageRoot, 'dist'), path.join(tempDir, 'runtime'), {recursive: true}),
-  ]);
+  await Promise.all([fs.cp(path.join(packageRoot, 'dist'), path.join(tempDir, 'runtime'), {recursive: true})]);
 
   const classDefString = classDef.toString().trim();
   const className = classDefString.match(/^class (\w+) \{/)?.[1];
@@ -214,7 +207,7 @@ async function createDOFixture<TInstance extends object>(
           return new Response('ok');
         },
       };
-    `
+    `,
   );
 
   const miniflare = new Miniflare({
@@ -256,31 +249,26 @@ interface DurableObjectFetchStub {
 }
 
 function createRpcStub<TInstance extends object>(stub: DurableObjectFetchStub) {
-  return new Proxy(
-    {} as TInstance,
-    {
-      get(_target, propertyKey) {
-        if (typeof propertyKey !== 'string') {
-          return undefined;
+  return new Proxy({} as TInstance, {
+    get(_target, propertyKey) {
+      if (typeof propertyKey !== 'string') {
+        return undefined;
+      }
+
+      return async (...args: readonly unknown[]) => {
+        const response = await stub.fetch('http://do/__rpc__', {
+          method: 'POST',
+          headers: {'content-type': 'application/json'},
+          body: JSON.stringify({method: propertyKey, args}),
+        });
+        const payload = (await response.json()) as {ok: true; value: unknown} | {ok: false; error: {message: string}};
+
+        if (!response.ok || !payload.ok) {
+          throw new Error(payload.ok ? `RPC failed with status ${response.status}` : payload.error.message);
         }
 
-        return async (...args: readonly unknown[]) => {
-          const response = await stub.fetch('http://do/__rpc__', {
-            method: 'POST',
-            headers: {'content-type': 'application/json'},
-            body: JSON.stringify({method: propertyKey, args}),
-          });
-          const payload = (await response.json()) as
-            | {ok: true; value: unknown}
-            | {ok: false; error: {message: string}};
-
-          if (!response.ok || !payload.ok) {
-            throw new Error(payload.ok ? `RPC failed with status ${response.status}` : payload.error.message);
-          }
-
-          return payload.value;
-        };
-      },
+        return payload.value;
+      };
     },
-  );
+  });
 }

@@ -1,25 +1,15 @@
-import {
-  composeHooks,
-  createErrorReporterHook,
-  instrumentClient,
-  type QueryExecutionHook,
-} from './core/instrument.js';
+import {composeHooks, createErrorReporterHook, instrumentClient, type QueryExecutionHook} from './core/instrument.js';
 import type {Client} from './core/types.js';
 import {createOtelHook} from './otel.js';
 
 interface InstrumentFn {
-  <TClient extends Client>(
-    client: TClient,
-    ...hooks: readonly QueryExecutionHook[]
-  ): TClient;
+  <TClient extends Client>(client: TClient, ...hooks: readonly QueryExecutionHook[]): TClient;
   readonly otel: typeof createOtelHook;
   readonly onError: typeof createErrorReporterHook;
 }
 
-const instrumentImpl = <TClient extends Client>(
-  client: TClient,
-  ...hooks: readonly QueryExecutionHook[]
-): TClient => instrumentClient(client, composeHooks(...hooks));
+const instrumentImpl = <TClient extends Client>(client: TClient, ...hooks: readonly QueryExecutionHook[]): TClient =>
+  instrumentClient(client, composeHooks(...hooks));
 
 /**
  * Wrap a Client with one or more query-execution hooks. Hooks run

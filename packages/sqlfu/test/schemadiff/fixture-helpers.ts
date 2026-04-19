@@ -71,13 +71,13 @@ export function parseSchemadiffFixture(contents: string): SchemadiffFixtureCase[
       : outputMarker
         ? trimFixtureBlock(groups.body.slice(outputMarker.index! + outputMarker[0].length + 1))
         : undefined;
-    const error = inlineErrorMatch?.groups?.json ? JSON.parse(inlineErrorMatch.groups.json) as string : undefined;
+    const error = inlineErrorMatch?.groups?.json ? (JSON.parse(inlineErrorMatch.groups.json) as string) : undefined;
 
     cases.push({
       name: groups.name,
       config: {
         ...defaultConfig,
-        ...(configMatch?.groups?.json ? JSON.parse(configMatch.groups.json) as Record<string, unknown> : {}),
+        ...(configMatch?.groups?.json ? (JSON.parse(configMatch.groups.json) as Record<string, unknown>) : {}),
       },
       baselineSql,
       desiredSql,
@@ -101,7 +101,9 @@ export async function rewriteSchemadiffFixtures(root: string): Promise<void> {
 
 function parseDefaultConfig(contents: string): Record<string, unknown> {
   const defaultConfigMatch = contents.match(/^-- default config: (?<json>.+)$/m);
-  return defaultConfigMatch?.groups?.json ? JSON.parse(defaultConfigMatch.groups.json) as Record<string, unknown> : {};
+  return defaultConfigMatch?.groups?.json
+    ? (JSON.parse(defaultConfigMatch.groups.json) as Record<string, unknown>)
+    : {};
 }
 
 function trimFixtureBlock(value: string): string {
@@ -139,7 +141,7 @@ async function rewriteRegion(name: string, body: string, defaultConfig: Record<s
   const desiredStart = desiredMarker.index + desiredMarker[0].length + 1;
   const baselineSql = trimFixtureBlock(body.slice(baselineStart, desiredMarker.index));
   const desiredSql = trimFixtureBlock(body.slice(desiredStart, resultMarker.index));
-  const localConfig = configMatch?.groups?.json ? JSON.parse(configMatch.groups.json) as Record<string, unknown> : {};
+  const localConfig = configMatch?.groups?.json ? (JSON.parse(configMatch.groups.json) as Record<string, unknown>) : {};
 
   try {
     const output = await runFixtureCase({

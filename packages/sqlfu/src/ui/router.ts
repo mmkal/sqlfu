@@ -85,13 +85,15 @@ export const uiRouter = {
       return {
         projectName: basename(config.projectRoot),
         projectRoot: config.projectRoot,
-        relations: await Promise.all(relations.map(async (relation) => ({
-          name: String(relation.name),
-          kind: (relation.type === 'view' ? 'view' : 'table') as 'table' | 'view',
-          rowCount: relation.type === 'table' ? await getRelationCount(client, String(relation.name)) : undefined,
-          columns: await getRelationColumns(client, String(relation.name)),
-          sql: typeof relation.sql === 'string' ? relation.sql : undefined,
-        }))),
+        relations: await Promise.all(
+          relations.map(async (relation) => ({
+            name: String(relation.name),
+            kind: (relation.type === 'view' ? 'view' : 'table') as 'table' | 'view',
+            rowCount: relation.type === 'table' ? await getRelationCount(client, String(relation.name)) : undefined,
+            columns: await getRelationColumns(client, String(relation.name)),
+            sql: typeof relation.sql === 'string' ? relation.sql : undefined,
+          })),
+        ),
       };
     }),
     check: uiBase.handler(async ({context}) => {
@@ -112,7 +114,10 @@ export const uiRouter = {
     }),
     authorities: {
       get: uiBase.handler(async ({context}) => {
-        const authorities = await getSchemaAuthorities({config: requireProjectConfig(context.project), host: context.host});
+        const authorities = await getSchemaAuthorities({
+          config: requireProjectConfig(context.project),
+          host: context.host,
+        });
         return {
           desiredSchemaSql: authorities.desiredSchemaSql,
           migrations: authorities.migrations.map((migration) => ({
@@ -137,24 +142,31 @@ export const uiRouter = {
         };
       }),
       resultantSchema: uiBase
-        .input(z.object({
-          source: z.enum(['migrations', 'history']),
-          id: z.string(),
-        }))
+        .input(
+          z.object({
+            source: z.enum(['migrations', 'history']),
+            id: z.string(),
+          }),
+        )
         .handler(async ({context, input}) => {
           if (!input.id.trim()) {
             throw new Error('Migration id is required');
           }
 
           return {
-            sql: await getMigrationResultantSchema({config: requireProjectConfig(context.project), host: context.host}, input),
+            sql: await getMigrationResultantSchema(
+              {config: requireProjectConfig(context.project), host: context.host},
+              input,
+            ),
           };
         }),
     },
     command: uiBase
-      .input(z.object({
-        command: z.string(),
-      }))
+      .input(
+        z.object({
+          command: z.string(),
+        }),
+      )
       .handler(async function* ({context, input}): AsyncGenerator<CommandEvent> {
         if (!input.command.trim()) {
           throw new Error('Command is required');
@@ -187,18 +199,22 @@ export const uiRouter = {
         }
       }),
     submitConfirmation: uiBase
-      .input(z.object({
-        id: z.string(),
-        body: z.string().nullable(),
-      }))
+      .input(
+        z.object({
+          id: z.string(),
+          body: z.string().nullable(),
+        }),
+      )
       .handler(({input}) => {
         resolvePendingConfirmation(input.id, input.body);
         return {ok: true as const};
       }),
     definitions: uiBase
-      .input(z.object({
-        sql: z.string(),
-      }))
+      .input(
+        z.object({
+          sql: z.string(),
+        }),
+      )
       .handler(async ({context, input}) => {
         if (!input.sql.trim()) {
           throw new Error('Desired Schema is required');
@@ -211,35 +227,41 @@ export const uiRouter = {
   catalog: uiBase.handler(({context}) => context.host.catalog.load(requireProjectConfig(context.project))),
   table: {
     list: uiBase
-      .input(z.object({
-        relationName: z.string(),
-        page: z.number().int(),
-      }))
+      .input(
+        z.object({
+          relationName: z.string(),
+          page: z.number().int(),
+        }),
+      )
       .handler(async ({context, input}) => {
         const config = requireProjectConfig(context.project);
         await using database = await context.host.openDb(config);
         return await getTableRows(database.client, input.relationName, input.page);
       }),
     save: uiBase
-      .input(z.object({
-        relationName: z.string(),
-        page: z.number().int(),
-        originalRows: z.array(rowRecordSchema),
-        rows: z.array(rowRecordSchema),
-        rowKeys: z.array(tableRowKeySchema),
-      }))
+      .input(
+        z.object({
+          relationName: z.string(),
+          page: z.number().int(),
+          originalRows: z.array(rowRecordSchema),
+          rows: z.array(rowRecordSchema),
+          rowKeys: z.array(tableRowKeySchema),
+        }),
+      )
       .handler(async ({context, input}) => {
         const config = requireProjectConfig(context.project);
         await using database = await context.host.openDb(config);
         return await saveTableRows(database.client, input.relationName, input);
       }),
     delete: uiBase
-      .input(z.object({
-        relationName: z.string(),
-        page: z.number().int(),
-        originalRow: rowRecordSchema,
-        rowKey: tableRowKeySchema,
-      }))
+      .input(
+        z.object({
+          relationName: z.string(),
+          page: z.number().int(),
+          originalRow: rowRecordSchema,
+          rowKey: tableRowKeySchema,
+        }),
+      )
       .handler(async ({context, input}) => {
         const config = requireProjectConfig(context.project);
         await using database = await context.host.openDb(config);
@@ -248,10 +270,12 @@ export const uiRouter = {
   },
   sql: {
     run: uiBase
-      .input(z.object({
-        sql: z.string(),
-        params: z.unknown().optional(),
-      }))
+      .input(
+        z.object({
+          sql: z.string(),
+          params: z.unknown().optional(),
+        }),
+      )
       .handler(async ({context, input}) => {
         const config = requireProjectConfig(context.project);
         const trimmedSql = input.sql.trim();
@@ -280,15 +304,19 @@ export const uiRouter = {
         }
       }),
     analyze: uiBase
-      .input(z.object({
-        sql: z.string(),
-      }))
+      .input(
+        z.object({
+          sql: z.string(),
+        }),
+      )
       .handler(({context, input}) => context.host.catalog.analyzeSql(requireProjectConfig(context.project), input.sql)),
     save: uiBase
-      .input(z.object({
-        sql: z.string(),
-        name: z.string(),
-      }))
+      .input(
+        z.object({
+          sql: z.string(),
+          name: z.string(),
+        }),
+      )
       .handler(async ({context, input}) => {
         const config = requireProjectConfig(context.project);
         const sql = input.sql.trim();
@@ -310,11 +338,13 @@ export const uiRouter = {
   },
   query: {
     execute: uiBase
-      .input(z.object({
-        queryId: z.string(),
-        data: z.record(z.string(), z.unknown()).optional(),
-        params: z.record(z.string(), z.unknown()).optional(),
-      }))
+      .input(
+        z.object({
+          queryId: z.string(),
+          data: z.record(z.string(), z.unknown()).optional(),
+          params: z.record(z.string(), z.unknown()).optional(),
+        }),
+      )
       .handler(async ({context, input}): Promise<QueryExecutionResponse> => {
         const config = requireProjectConfig(context.project);
         const catalog = await context.host.catalog.load(config);
@@ -341,10 +371,12 @@ export const uiRouter = {
         };
       }),
     update: uiBase
-      .input(z.object({
-        queryId: z.string(),
-        sql: z.string(),
-      }))
+      .input(
+        z.object({
+          queryId: z.string(),
+          sql: z.string(),
+        }),
+      )
       .handler(async ({context, input}) => {
         const config = requireProjectConfig(context.project);
         const catalog = await context.host.catalog.load(config);
@@ -365,10 +397,12 @@ export const uiRouter = {
         };
       }),
     rename: uiBase
-      .input(z.object({
-        queryId: z.string(),
-        name: z.string(),
-      }))
+      .input(
+        z.object({
+          queryId: z.string(),
+          name: z.string(),
+        }),
+      )
       .handler(async ({context, input}) => {
         const config = requireProjectConfig(context.project);
         const catalog = await context.host.catalog.load(config);
@@ -391,9 +425,11 @@ export const uiRouter = {
         };
       }),
     delete: uiBase
-      .input(z.object({
-        queryId: z.string(),
-      }))
+      .input(
+        z.object({
+          queryId: z.string(),
+        }),
+      )
       .handler(async ({context, input}) => {
         const config = requireProjectConfig(context.project);
         const catalog = await context.host.catalog.load(config);
@@ -527,9 +563,7 @@ function toClientError(error: unknown) {
   });
 }
 
-function buildSchemaCheckCards(
-  analysis: CheckAnalysis,
-): readonly SchemaCheckCard[] {
+function buildSchemaCheckCards(analysis: CheckAnalysis): readonly SchemaCheckCard[] {
   const mismatchByKind = new Map(analysis.mismatches.map((mismatch) => [mismatch.kind, mismatch]));
   const recommendationKinds = new Set(analysis.recommendations.map((recommendation) => recommendation.kind));
 
@@ -588,17 +622,22 @@ function toSchemaCheckCard(
   title: string,
   okTitle: string,
   explainer: string,
-  mismatch: {
-    readonly kind: SchemaCheckCard['key'];
-    readonly summary: string;
-    readonly details: readonly string[];
-  } | undefined,
+  mismatch:
+    | {
+        readonly kind: SchemaCheckCard['key'];
+        readonly summary: string;
+        readonly details: readonly string[];
+      }
+    | undefined,
   recommendationKinds?: ReadonlySet<string>,
-  mismatchByKind?: ReadonlyMap<string, {
-    readonly kind: SchemaCheckCard['key'];
-    readonly summary: string;
-    readonly details: readonly string[];
-  }>,
+  mismatchByKind?: ReadonlyMap<
+    string,
+    {
+      readonly kind: SchemaCheckCard['key'];
+      readonly summary: string;
+      readonly details: readonly string[];
+    }
+  >,
 ): SchemaCheckCard {
   const variant = getSchemaCheckCardVariant(key, mismatch, recommendationKinds, mismatchByKind);
   return {
@@ -615,27 +654,28 @@ function toSchemaCheckCard(
 
 function getSchemaCheckCardVariant(
   key: SchemaCheckCard['key'],
-  mismatch: {
-    readonly kind: SchemaCheckCard['key'];
-    readonly summary: string;
-    readonly details: readonly string[];
-  } | undefined,
+  mismatch:
+    | {
+        readonly kind: SchemaCheckCard['key'];
+        readonly summary: string;
+        readonly details: readonly string[];
+      }
+    | undefined,
   recommendationKinds: ReadonlySet<string> = new Set(),
-  mismatchByKind: ReadonlyMap<string, {
-    readonly kind: SchemaCheckCard['key'];
-    readonly summary: string;
-    readonly details: readonly string[];
-  }> = new Map(),
+  mismatchByKind: ReadonlyMap<
+    string,
+    {
+      readonly kind: SchemaCheckCard['key'];
+      readonly summary: string;
+      readonly details: readonly string[];
+    }
+  > = new Map(),
 ): SchemaCheckCard['variant'] {
   if (!mismatch) {
     return 'ok';
   }
 
-  if (
-    key === 'syncDrift'
-    && mismatchByKind.has('pendingMigrations')
-    && !recommendationKinds.has('sync')
-  ) {
+  if (key === 'syncDrift' && mismatchByKind.has('pendingMigrations') && !recommendationKinds.has('sync')) {
     return 'info';
   }
 
@@ -690,7 +730,13 @@ function encodeScalar(
     }
     return value.replace('T', ' ').replace(/\.\d+Z?$/, '');
   }
-  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'bigint' || typeof value === 'boolean' || value instanceof Uint8Array) {
+  if (
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'bigint' ||
+    typeof value === 'boolean' ||
+    value instanceof Uint8Array
+  ) {
     return value;
   }
   return JSON.stringify(value);
@@ -738,9 +784,7 @@ async function getTableRows(client: AsyncClient, relationName: string, page: num
     page: safePage,
     pageSize,
     editable: relation.type === 'table',
-    rowKeys: relation.type === 'table'
-      ? materializedRows.map((row) => buildTableRowKey(row, primaryKeyColumns))
-      : [],
+    rowKeys: relation.type === 'table' ? materializedRows.map((row) => buildTableRowKey(row, primaryKeyColumns)) : [],
     columns,
     rows: materializedRows.map(stripInternalRowValues),
   };
@@ -773,27 +817,34 @@ async function saveTableRows(
     }
     const normalizedNextRow = normalizeEditedRow(nextRow, originalRow);
 
-    const changedColumns = Object.keys(normalizedNextRow).filter((column) => !isSameValue(normalizedNextRow[column], originalRow[column]));
+    const changedColumns = Object.keys(normalizedNextRow).filter(
+      (column) => !isSameValue(normalizedNextRow[column], originalRow[column]),
+    );
     if (changedColumns.length === 0) {
       return [];
     }
 
-    return [{
-      rowKey: input.rowKeys[index]!,
-      originalRow,
-      nextRow: normalizedNextRow,
-      changedColumns,
-    }];
+    return [
+      {
+        rowKey: input.rowKeys[index]!,
+        originalRow,
+        nextRow: normalizedNextRow,
+        changedColumns,
+      },
+    ];
   });
 
   for (const row of changedRows) {
-    const statement = row.rowKey.kind === 'new'
-      ? buildInsertRowStatement(relationName, row.nextRow, row.changedColumns)
-      : buildUpdateRowStatement(relationName, row.rowKey, row.originalRow, row.nextRow, row.changedColumns);
+    const statement =
+      row.rowKey.kind === 'new'
+        ? buildInsertRowStatement(relationName, row.nextRow, row.changedColumns)
+        : buildUpdateRowStatement(relationName, row.rowKey, row.originalRow, row.nextRow, row.changedColumns);
     try {
       await client.run({sql: statement.sql, args: statement.args as readonly QueryArg[]});
     } catch (error) {
-      throw new Error(`${error instanceof Error ? error.message : String(error)}\nSQL: ${statement.sql}\nArgs: ${JSON.stringify(statement.args)}`);
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)}\nSQL: ${statement.sql}\nArgs: ${JSON.stringify(statement.args)}`,
+      );
     }
   }
 
@@ -878,10 +929,12 @@ function escapeIdentifier(value: string) {
 }
 
 async function getRelationInfo(client: AsyncClient, relationName: string) {
-  const row = (await client.all<{name: string; type: 'table' | 'view'; sql: string | null}>({
-    sql: `select name, type, sql from sqlite_schema where name = ?`,
-    args: [relationName],
-  }))[0];
+  const row = (
+    await client.all<{name: string; type: 'table' | 'view'; sql: string | null}>({
+      sql: `select name, type, sql from sqlite_schema where name = ?`,
+      args: [relationName],
+    })
+  )[0];
   if (!row || (row.type !== 'table' && row.type !== 'view')) {
     throw new Error(`Unknown relation "${relationName}"`);
   }
@@ -926,7 +979,11 @@ function buildRowWhereClause(rowKey: TableRowKey, _originalRow: Record<string, u
 
   const entries = Object.entries(rowKey.values);
   return {
-    sql: entries.map(([column, value]) => (value == null ? `"${escapeIdentifier(column)}" is null` : `"${escapeIdentifier(column)}" = ?`)).join(' and '),
+    sql: entries
+      .map(([column, value]) =>
+        value == null ? `"${escapeIdentifier(column)}" is null` : `"${escapeIdentifier(column)}" = ?`,
+      )
+      .join(' and '),
     args: entries.flatMap(([, value]) => (value == null ? [] : [normalizeDbValue(value)])),
   };
 }
@@ -934,7 +991,11 @@ function buildRowWhereClause(rowKey: TableRowKey, _originalRow: Record<string, u
 function buildExactRowMatchClause(row: Record<string, unknown>) {
   const entries = Object.entries(row);
   return {
-    sql: entries.map(([column, value]) => (value == null ? `"${escapeIdentifier(column)}" is null` : `"${escapeIdentifier(column)}" = ?`)).join(' and '),
+    sql: entries
+      .map(([column, value]) =>
+        value == null ? `"${escapeIdentifier(column)}" is null` : `"${escapeIdentifier(column)}" = ?`,
+      )
+      .join(' and '),
     args: entries.flatMap(([, value]) => (value == null ? [] : [normalizeDbValue(value)])),
   };
 }
@@ -982,7 +1043,7 @@ function buildDeleteRowStatement(
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 }
 
 function isSameValue(left: unknown, right: unknown) {

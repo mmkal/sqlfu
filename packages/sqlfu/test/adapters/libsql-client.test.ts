@@ -41,9 +41,7 @@ test('createLibsqlClient turns real sqlite syntax errors into promise rejections
   await using fixture = await createLibsqlFixture(createClient({url: getTmpDbUrl()}));
   await fixture.client.sql.run`create table users (id integer primary key, email text not null)`;
 
-  await expect(
-    fixture.client.sql`selectTYPO from users`.catch(String),
-  ).resolves.toContain('syntax error');
+  await expect(fixture.client.sql`selectTYPO from users`.catch(String)).resolves.toContain('syntax error');
 });
 
 test('createLibsqlClient iterates rows', async () => {
@@ -74,9 +72,7 @@ test('createLibsqlClient.raw runs multiple statements', async () => {
     insert into users (email) values ('grace@example.com');
   `);
 
-  expect(
-    await fixture.client.sql.all<{email: string}>`select email from users order by email`,
-  ).toMatchObject([
+  expect(await fixture.client.sql.all<{email: string}>`select email from users order by email`).toMatchObject([
     {email: 'ada@example.com'},
     {email: 'grace@example.com'},
   ]);
@@ -94,7 +90,10 @@ async function createLibsqlFixture(raw: ReturnType<typeof createClient>) {
 }
 
 function getTmpDbUrl() {
-  const dbPath = path.join(os.tmpdir(), `sqlfu-libsql-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.db`);
+  const dbPath = path.join(
+    os.tmpdir(),
+    `sqlfu-libsql-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.db`,
+  );
   return `file:${dbPath}`;
 }
 

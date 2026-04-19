@@ -138,7 +138,10 @@ export async function inspectSchemaFingerprint(client: Client, schemaName = 'mai
 }
 
 export function rawSqlWithSqlSplittingSync(
-  runOne: (query: {sql: string; args: readonly QueryArg[]}) => {rowsAffected?: number; lastInsertRowid?: string | number | bigint | null},
+  runOne: (query: {sql: string; args: readonly QueryArg[]}) => {
+    rowsAffected?: number;
+    lastInsertRowid?: string | number | bigint | null;
+  },
   sql: string,
 ) {
   if (!sql.trim()) {
@@ -161,7 +164,10 @@ export function rawSqlWithSqlSplittingSync(
 }
 
 export async function rawSqlWithSqlSplittingAsync(
-  runOne: (query: {sql: string; args: readonly QueryArg[]}) => Promise<{rowsAffected?: number; lastInsertRowid?: string | number | bigint | null}>,
+  runOne: (query: {
+    sql: string;
+    args: readonly QueryArg[];
+  }) => Promise<{rowsAffected?: number; lastInsertRowid?: string | number | bigint | null}>,
   sql: string,
 ) {
   if (!sql.trim()) {

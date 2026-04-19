@@ -25,29 +25,26 @@ test('every query emits a timing + count metric to DogStatsD with tags', async (
   db.exec(`create table profiles (id integer primary key, name text not null);`);
   db.exec(`insert into profiles (id, name) values (1, 'ada'), (2, 'linus');`);
 
-  const client = instrument(
-    createNodeSqliteClient(db),
-    ({context, execute, processResult}) => {
-      const start = Date.now();
-      const tags = [
-        `db.query.summary:${context.query.name ?? 'sql'}`,
-        `db.system.name:${context.system}`,
-        `operation:${context.operation}`,
-      ];
-      return processResult(
-        execute,
-        (value) => {
-          statsd.client.timing('db.query.duration', Date.now() - start, tags);
-          statsd.client.increment('db.query.count', tags);
-          return value;
-        },
-        (error) => {
-          statsd.client.increment('db.query.count', [...tags, 'outcome:error']);
-          throw error;
-        },
-      );
-    },
-  );
+  const client = instrument(createNodeSqliteClient(db), ({context, execute, processResult}) => {
+    const start = Date.now();
+    const tags = [
+      `db.query.summary:${context.query.name ?? 'sql'}`,
+      `db.system.name:${context.system}`,
+      `operation:${context.operation}`,
+    ];
+    return processResult(
+      execute,
+      (value) => {
+        statsd.client.timing('db.query.duration', Date.now() - start, tags);
+        statsd.client.increment('db.query.count', tags);
+        return value;
+      },
+      (error) => {
+        statsd.client.increment('db.query.count', [...tags, 'outcome:error']);
+        throw error;
+      },
+    );
+  });
 
   client.all({sql: 'select id, name from profiles order by id', args: [], name: 'list-profiles'});
   client.run({sql: 'insert into profiles (name) values (?)', args: ['grace'], name: 'insert-profile'});

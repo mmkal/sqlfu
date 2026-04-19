@@ -42,7 +42,8 @@ export function SqlCodeMirror(input: {
         to: diagnostic.to,
         message: diagnostic.message,
         severity: 'error' as const,
-      }))),
+      })),
+    ),
     lintGutter(),
     EditorView.lineWrapping,
     EditorState.readOnly.of(Boolean(input.readOnly)),
@@ -103,11 +104,7 @@ export function TextCodeMirror(input: {
   );
 }
 
-export function TextDiffCodeMirror(input: {
-  original: string;
-  draft: string;
-  ariaLabel: string;
-}) {
+export function TextDiffCodeMirror(input: {original: string; draft: string; ariaLabel: string}) {
   return (
     <div aria-label={input.ariaLabel}>
       <CodeMirrorMerge
@@ -119,14 +116,8 @@ export function TextDiffCodeMirror(input: {
           minSize: 4,
         }}
       >
-        <Original
-          value={input.original}
-          extensions={buildTextExtensions(true, 'plain')}
-        />
-        <Modified
-          value={input.draft}
-          extensions={buildTextExtensions(true, 'plain')}
-        />
+        <Original value={input.original} extensions={buildTextExtensions(true, 'plain')} />
+        <Modified value={input.draft} extensions={buildTextExtensions(true, 'plain')} />
       </CodeMirrorMerge>
     </div>
   );

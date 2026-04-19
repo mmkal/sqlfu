@@ -6,10 +6,13 @@
     "type": "git",
     "url": "https://github.com/mmkal/sqlfu.git"
   },
-  "type": "module",
   "bin": {
     "sqlfu": "./dist/cli.js"
   },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
   "exports": {
     ".": "./src/index.ts",
     "./browser": "./src/browser.ts",
@@ -55,9 +58,6 @@
       }
     }
   },
-  "files": [
-    "dist"
-  ],
   "scripts": {
     "build": "pnpm run build:runtime && pnpm run build:vendor-typesql",
     "build:runtime": "tsc -p tsconfig.build.json",

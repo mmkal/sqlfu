@@ -55,7 +55,7 @@ export async function createMigrationsFixture(
   // migrations. this keeps the repo internally consistent by default, which matches what a real
   // user would have. tests that want to exercise repo drift specifically still pass their own
   // desiredSchema.
-  const definitionsSql = input.desiredSchema ?? await replayMigrationsSchema(Object.values(migrations));
+  const definitionsSql = input.desiredSchema ?? (await replayMigrationsSchema(Object.values(migrations)));
 
   await writeFixtureFiles(root, {
     'definitions.sql': definitionsSql,
@@ -106,7 +106,7 @@ export async function createMigrationsFixture(
     },
     async migrationNames() {
       const history = await this.readMigrationHistory();
-      return history.map(m => m.name.split('Z_').pop());
+      return history.map((m) => m.name.split('Z_').pop());
     },
     async [Symbol.asyncDispose]() {
       await fs.rm(root, {recursive: true, force: true});

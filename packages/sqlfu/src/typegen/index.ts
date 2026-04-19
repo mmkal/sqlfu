@@ -57,9 +57,9 @@ export async function generateQueryTypesForConfig(config: SqlfuProjectConfig): P
       await fs.mkdir(path.dirname(wrapperPath), {recursive: true});
       const contents = analysis.ok
         ? renderQueryWrapper({
-          relativePath: queryFile.relativePath,
-          descriptor: refineDescriptor(analysis.descriptor, queryFile.sqlContent, schema),
-        })
+            relativePath: queryFile.relativePath,
+            descriptor: refineDescriptor(analysis.descriptor, queryFile.sqlContent, schema),
+          })
         : `//Invalid SQL\nexport {};\n`;
       await fs.writeFile(wrapperPath, contents);
     }),
@@ -70,10 +70,7 @@ export async function generateQueryTypesForConfig(config: SqlfuProjectConfig): P
   await writeMigrationsBundle(config);
 }
 
-export async function analyzeAdHocSqlForConfig(
-  config: SqlfuProjectConfig,
-  sql: string,
-): Promise<AdHocQueryAnalysis> {
+export async function analyzeAdHocSqlForConfig(config: SqlfuProjectConfig, sql: string): Promise<AdHocQueryAnalysis> {
   const databasePath = await materializeTypegenDatabase(config);
   const schema = await loadSchema(databasePath);
   const [analysis] = await analyzeVendoredTypesqlQueries(databasePath, [
@@ -166,7 +163,7 @@ async function openMainDevDatabase(dbPath: string): Promise<DisposableClient> {
   const runtime = 'Bun' in globalThis ? 'bun' : 'node';
 
   if (runtime === 'bun') {
-    const {Database} = await import('bun:sqlite' as any)
+    const {Database} = await import('bun:sqlite' as any);
     const database = new Database(dbPath);
     return {
       client: createBunClient(database as Parameters<typeof createBunClient>[0]),
@@ -176,7 +173,7 @@ async function openMainDevDatabase(dbPath: string): Promise<DisposableClient> {
     };
   }
 
-  const {DatabaseSync} = await import('node:sqlite')
+  const {DatabaseSync} = await import('node:sqlite');
   const database = new DatabaseSync(dbPath);
   return {
     client: createNodeSqliteClient(database as Parameters<typeof createNodeSqliteClient>[0]),
@@ -323,7 +320,9 @@ async function writeQueryCatalog(
       resultMode: getResultMode(descriptor),
       args,
       dataSchema: descriptor.data?.length ? objectSchema(`${functionName} data`, descriptor.data) : undefined,
-      paramsSchema: descriptor.parameters.length ? objectSchema(`${functionName} params`, descriptor.parameters) : undefined,
+      paramsSchema: descriptor.parameters.length
+        ? objectSchema(`${functionName} params`, descriptor.parameters)
+        : undefined,
       resultSchema: objectSchema(`${functionName} result`, getResultFields(descriptor), {fieldKind: 'result'}),
       columns,
     };
@@ -359,10 +358,7 @@ function toAdHocQueryAnalysis(descriptor: GeneratedQueryDescriptor): AdHocQueryA
   };
 }
 
-function renderQueryWrapper(input: {
-  relativePath: string;
-  descriptor: GeneratedQueryDescriptor;
-}): string {
+function renderQueryWrapper(input: {relativePath: string; descriptor: GeneratedQueryDescriptor}): string {
   const queryName = input.relativePath;
   const functionName = toCamelCase(queryName);
   const capitalizedName = functionName[0]!.toUpperCase() + functionName.slice(1);
@@ -469,7 +465,7 @@ function objectSchema(
   const fieldKind = input.fieldKind ?? 'parameter';
   const properties = Object.fromEntries(fields.map((field) => [field.name, schemaForField(field)]));
   const required = fields
-    .filter((field) => fieldKind === 'parameter' ? !Boolean(field.optional) : field.notNull)
+    .filter((field) => (fieldKind === 'parameter' ? !Boolean(field.optional) : field.notNull))
     .map((field) => field.name);
 
   return {
@@ -550,9 +546,7 @@ function getResultFields(descriptor: GeneratedQueryDescriptor): readonly Generat
       {name: 'lastInsertRowid', tsType: 'number', notNull: true},
     ];
   }
-  return [
-    {name: 'rowsAffected', tsType: 'number', notNull: true},
-  ];
+  return [{name: 'rowsAffected', tsType: 'number', notNull: true}];
 }
 
 function buildFunctionParameters(
@@ -690,7 +684,13 @@ function toCamelCase(value: string): string {
   if (parts.length === 0) {
     return '';
   }
-  return parts[0]! + parts.slice(1).map((part) => part[0]!.toUpperCase() + part.slice(1)).join('');
+  return (
+    parts[0]! +
+    parts
+      .slice(1)
+      .map((part) => part[0]!.toUpperCase() + part.slice(1))
+      .join('')
+  );
 }
 
 function buildGeneratedImplementation(input: {
@@ -713,10 +713,7 @@ function buildGeneratedImplementation(input: {
   }
 
   if (input.resultMode === 'one') {
-    return [
-      `\tconst rows = await client.all<${input.resultType}>(query);`,
-      `\treturn rows[0];`,
-    ];
+    return [`\tconst rows = await client.all<${input.resultType}>(query);`, `\treturn rows[0];`];
   }
 
   const guards = input.resultProperties.flatMap((property) => {
@@ -737,13 +734,7 @@ function buildGeneratedImplementation(input: {
 
     return `\t\t${property.name}: result.${property.name},`;
   });
-  return [
-    `\tconst result = await client.run(query);`,
-    ...guards,
-    `\treturn {`,
-    ...resultAssignments,
-    `\t};`,
-  ];
+  return [`\tconst result = await client.run(query);`, ...guards, `\treturn {`, ...resultAssignments, `\t};`];
 }
 
 async function loadSchema(databasePath: string): Promise<ReadonlyMap<string, RelationInfo>> {
@@ -793,13 +784,11 @@ async function loadSchema(databasePath: string): Promise<ReadonlyMap<string, Rel
     }
 
     return relations;
-  } finally {}
+  } finally {
+  }
 }
 
-async function loadRelationColumns(
-  client: Client,
-  relationName: string,
-): Promise<ReadonlyMap<string, TsColumn>> {
+async function loadRelationColumns(client: Client, relationName: string): Promise<ReadonlyMap<string, TsColumn>> {
   const pragmaResult = await client.all<Record<string, unknown>>({
     sql: `PRAGMA table_xinfo("${escapeSqliteIdentifier(relationName)}")`,
     args: [],
@@ -835,7 +824,10 @@ function inferViewColumns(sql: string, schema: ReadonlyMap<string, RelationInfo>
   return inferSelectColumns(selectClause, sourceColumns);
 }
 
-function inferQueryResultColumns(sql: string, schema: ReadonlyMap<string, RelationInfo>): ReadonlyMap<string, TsColumn> {
+function inferQueryResultColumns(
+  sql: string,
+  schema: ReadonlyMap<string, RelationInfo>,
+): ReadonlyMap<string, TsColumn> {
   const sourceName = extractSingleSourceName(sql);
   const sourceColumns = sourceName ? schema.get(sourceName)?.columns : undefined;
   const selectClause = extractSelectClause(sql);
@@ -860,7 +852,10 @@ function inferQueryResultColumns(sql: string, schema: ReadonlyMap<string, Relati
   return columns;
 }
 
-function inferSelectColumns(selectClause: string, sourceColumns: ReadonlyMap<string, TsColumn>): ReadonlyMap<string, TsColumn> {
+function inferSelectColumns(
+  selectClause: string,
+  sourceColumns: ReadonlyMap<string, TsColumn>,
+): ReadonlyMap<string, TsColumn> {
   const columns = new Map<string, TsColumn>();
 
   for (const rawItem of splitTopLevelComma(selectClause)) {
@@ -902,7 +897,9 @@ function inferExpressionColumn(
 
   const lowerExpression = expression.trim().toLowerCase();
   if (lowerExpression.startsWith('substr(')) {
-    const firstArg = splitTopLevelComma(expression.slice(expression.indexOf('(') + 1, expression.lastIndexOf(')')))[0]?.trim();
+    const firstArg = splitTopLevelComma(
+      expression.slice(expression.indexOf('(') + 1, expression.lastIndexOf(')')),
+    )[0]?.trim();
     const referenced = firstArg ? getReferencedColumnName(firstArg) : undefined;
     const sourceColumn = referenced ? sourceColumns.get(referenced) : undefined;
 

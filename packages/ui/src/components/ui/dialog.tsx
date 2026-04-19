@@ -48,21 +48,7 @@ const DialogDescription = forwardRef<
   ElementRef<typeof DialogPrimitive.Description>,
   ComponentPropsWithoutRef<typeof DialogPrimitive.Description>
 >(function DialogDescription({className, ...props}, ref) {
-  return (
-    <DialogPrimitive.Description
-      ref={ref}
-      className={cn('shad-dialog-description', className)}
-      {...props}
-    />
-  );
+  return <DialogPrimitive.Description ref={ref} className={cn('shad-dialog-description', className)} {...props} />;
 });
 
-export {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-};
+export {Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle};

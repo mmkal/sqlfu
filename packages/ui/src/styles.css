@@ -9,7 +9,7 @@
   --accent: #b24c2b;
   --accent-strong: #8b2d18;
   --shadow: 0 18px 40px rgba(111, 78, 28, 0.12);
-  font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+  font-family: 'Avenir Next', 'Segoe UI', 'Helvetica Neue', sans-serif;
   color: var(--text);
   background:
     radial-gradient(circle at top left, rgba(255, 255, 255, 0.72), transparent 30rem),
@@ -41,7 +41,7 @@ code,
 pre,
 textarea,
 table {
-  font-family: "IBM Plex Mono", "SFMono-Regular", "Menlo", monospace;
+  font-family: 'IBM Plex Mono', 'SFMono-Regular', 'Menlo', monospace;
 }
 
 .app-shell {
@@ -560,7 +560,7 @@ h3 {
   background: rgba(255, 255, 255, 0.34);
   border-color: rgba(65, 47, 18, 0.12) !important;
   outline: none;
-  font-family: "IBM Plex Mono", "SFMono-Regular", "Menlo", monospace;
+  font-family: 'IBM Plex Mono', 'SFMono-Regular', 'Menlo', monospace;
 }
 
 .reactgrid-content .rg-pane .rg-cell.rg-header-cell {
@@ -857,7 +857,7 @@ h3 {
 
 .cm-scroller {
   min-height: 16rem;
-  font-family: "IBM Plex Mono", "SFMono-Regular", "Menlo", monospace;
+  font-family: 'IBM Plex Mono', 'SFMono-Regular', 'Menlo', monospace;
   padding: 0;
 }
 

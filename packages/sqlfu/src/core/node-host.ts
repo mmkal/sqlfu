@@ -39,9 +39,7 @@ async function loadNodeSqliteModule(): Promise<NodeSqliteModule> {
 
 function isNodeSqliteExperimentalWarning(warning: string | Error, args: unknown[]) {
   const message = typeof warning === 'string' ? warning : warning.message;
-  const type = typeof warning === 'string'
-    ? (typeof args[0] === 'string' ? args[0] : '')
-    : warning.name;
+  const type = typeof warning === 'string' ? (typeof args[0] === 'string' ? args[0] : '') : warning.name;
   return type === 'ExperimentalWarning' && message.includes('SQLite is an experimental feature');
 }
 
@@ -170,9 +168,10 @@ function toSqlEditorDiagnostic(sql: string, error: unknown): SqlEditorDiagnostic
   const explicitLocation = locateExplicitPosition(sql, message);
   if (explicitLocation) return {...explicitLocation, message};
 
-  const nearToken = message.match(/near ['"`]([^'"`]+)['"`]/i)?.[1]
-    ?? message.match(/no such (?:table|column):\s*([A-Za-z0-9_."]+)/i)?.[1]
-    ?? message.match(/Must select the join column:\s*([A-Za-z0-9_."]+)/i)?.[1];
+  const nearToken =
+    message.match(/near ['"`]([^'"`]+)['"`]/i)?.[1] ??
+    message.match(/no such (?:table|column):\s*([A-Za-z0-9_."]+)/i)?.[1] ??
+    message.match(/Must select the join column:\s*([A-Za-z0-9_."]+)/i)?.[1];
   const tokenLocation = nearToken ? locateToken(sql, nearToken) : null;
   if (tokenLocation) return {...tokenLocation, message};
 
@@ -193,9 +192,7 @@ function locateExplicitPosition(sql: string, message: string) {
   const targetLine = lines[lineNumber - 1];
   if (targetLine == null) return null;
 
-  const from = lines
-    .slice(0, lineNumber - 1)
-    .reduce((total, line) => total + line.length + 1, 0) + (columnNumber - 1);
+  const from = lines.slice(0, lineNumber - 1).reduce((total, line) => total + line.length + 1, 0) + (columnNumber - 1);
 
   return {
     from,
@@ -227,16 +224,14 @@ type NodeSqliteDatabase = InstanceType<typeof DatabaseSync>;
 
 function runPreparedAll(statement: ReturnType<NodeSqliteDatabase['prepare']>, params: AdHocSqlParams): ResultRow[] {
   if (params == null) return statement.all() as ResultRow[];
-  return (Array.isArray(params)
-    ? statement.all(...(params as never[]))
-    : statement.all(params as never)) as ResultRow[];
+  return (
+    Array.isArray(params) ? statement.all(...(params as never[])) : statement.all(params as never)
+  ) as ResultRow[];
 }
 
 function runPreparedRun(statement: ReturnType<NodeSqliteDatabase['prepare']>, params: AdHocSqlParams) {
   if (params == null) return statement.run();
-  return Array.isArray(params)
-    ? statement.run(...(params as never[]))
-    : statement.run(params as never);
+  return Array.isArray(params) ? statement.run(...(params as never[])) : statement.run(params as never);
 }
 
 export function createAsyncNodeSqliteClient(database: NodeSqliteDatabase): AsyncClient<NodeSqliteDatabase> {

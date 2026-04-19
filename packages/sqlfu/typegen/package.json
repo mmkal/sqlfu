@@ -1,12 +1,12 @@
 {
   "name": "@sqlfu/vendor-typesql-deps",
-  "private": true,
   "version": "0.0.0",
+  "private": true,
   "description": "Dependency inventory for the vendored TypeSQL integration in sqlfu.",
+  "dependencies": {},
   "vendorSource": {
     "repository": "https://github.com/wsporto/typesql",
     "commit": "f0356201d41f3f317824968a3f1c7a90fbafdc99",
     "license": "MIT"
-  },
-  "dependencies": {}
+  }
 }

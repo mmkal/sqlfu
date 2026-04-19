@@ -80,7 +80,10 @@ test('named and ad-hoc queries surface on OTel spans and error reporter fires on
   await using server = await startHonoServer(app);
 
   expect(await server.get('/profiles').then((r) => r.json())).toEqual({
-    profiles: [{id: 1, name: 'ada'}, {id: 2, name: 'linus'}],
+    profiles: [
+      {id: 1, name: 'ada'},
+      {id: 2, name: 'linus'},
+    ],
   });
   expect(await server.get('/ad-hoc').then((r) => r.json())).toEqual({answer: 2});
   expect((await server.get('/broken')).status).toBe(500);
@@ -165,9 +168,7 @@ async function startHonoServer(app: Hono) {
       return fetch(`${baseUrl}${path}`);
     },
     async [Symbol.asyncDispose]() {
-      await new Promise<void>((resolve, reject) =>
-        server.close((err) => (err ? reject(err) : resolve())),
-      );
+      await new Promise<void>((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
     },
   };
 }
@@ -208,7 +209,9 @@ interface RawSpan {
   readonly status?: {code?: number};
 }
 
-function flattenAttributes(attributes: readonly {key: string; value: Record<string, unknown>}[]): Record<string, string | number | boolean> {
+function flattenAttributes(
+  attributes: readonly {key: string; value: Record<string, unknown>}[],
+): Record<string, string | number | boolean> {
   const result: Record<string, string | number | boolean> = {};
   for (const attribute of attributes) {
     const value = attribute.value;

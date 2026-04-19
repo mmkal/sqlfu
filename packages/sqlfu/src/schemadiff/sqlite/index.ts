@@ -48,10 +48,7 @@ export async function diffBaselineSqlToDesiredSql(
   });
 }
 
-export async function inspectSqliteSchemaSql(
-  host: SqlfuHost,
-  sql: string,
-): Promise<SqliteInspectedDatabase> {
+export async function inspectSqliteSchemaSql(host: SqlfuHost, sql: string): Promise<SqliteInspectedDatabase> {
   await using database = await host.openScratchDb('inspect');
   if (sql.trim()) {
     await applySchemaSql(database.client, sql);
@@ -68,7 +65,9 @@ export function schemasEqual(left: SqliteInspectedDatabase, right: SqliteInspect
 function assertNoUnsupportedSqlText(sql: string, source: 'baselineSql' | 'desiredSql'): void {
   const normalizedSql = sql.toLowerCase();
   if (/\bcreate\s+virtual\s+table\b/u.test(normalizedSql)) {
-    throw new Error(`sqlite virtual tables are not supported by the native schema diff engine yet: found virtual table sql in ${source}`);
+    throw new Error(
+      `sqlite virtual tables are not supported by the native schema diff engine yet: found virtual table sql in ${source}`,
+    );
   }
 }
 
@@ -80,9 +79,7 @@ async function applySchemaSql(client: AsyncClient, sql: string): Promise<void> {
     ...statements.filter((statement) => isCreateViewStatement(statement)),
     ...statements.filter(
       (statement) =>
-        !isCreateTableStatement(statement) &&
-        !isCreateIndexStatement(statement) &&
-        !isCreateViewStatement(statement),
+        !isCreateTableStatement(statement) && !isCreateIndexStatement(statement) && !isCreateViewStatement(statement),
     ),
   ];
 

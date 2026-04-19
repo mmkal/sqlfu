@@ -47,9 +47,7 @@ export function formatSql(sql: string, options: FormatSqlOptions = {}): string {
     newlineBeforeTableName = false,
     ...rest
   } = options;
-  const vendoredOptions = style === 'sqlfu'
-    ? {...sqlfuDefaultOptions, ...rest}
-    : rest;
+  const vendoredOptions = style === 'sqlfu' ? {...sqlfuDefaultOptions, ...rest} : rest;
   const formatted = format(sql, {
     ...vendoredOptions,
     language: dialect,

@@ -15,20 +15,13 @@ export async function ensureLocalhostCertificates() {
   await fs.mkdir(certDir, {recursive: true});
 
   try {
-    await Promise.all([
-      fs.access(keyPath),
-      fs.access(certPath),
-    ]);
+    await Promise.all([fs.access(keyPath), fs.access(certPath)]);
   } catch {
-    await runCommand('mkcert', [
-      '-cert-file',
-      certPath,
-      '-key-file',
-      keyPath,
-      'localhost',
-      '127.0.0.1',
-      '::1',
-    ], certDir);
+    await runCommand(
+      'mkcert',
+      ['-cert-file', certPath, '-key-file', keyPath, 'localhost', '127.0.0.1', '::1'],
+      certDir,
+    );
   }
 
   return {

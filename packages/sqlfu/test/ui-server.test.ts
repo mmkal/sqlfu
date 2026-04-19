@@ -136,12 +136,12 @@ test('sqlfu server reports a useful error when the requested port is already in 
   const port = await getAvailablePort();
   await using blocker = await createInProcessPortBlocker(port);
 
-  await expect(startSqlfuServer({
-    port,
-    projectRoot: fixture.root,
-  })).rejects.toThrow(
-    `Port ${port} is already in use.`,
-  );
+  await expect(
+    startSqlfuServer({
+      port,
+      projectRoot: fixture.root,
+    }),
+  ).rejects.toThrow(`Port ${port} is already in use.`);
 });
 
 test('sqlfu server can initialize a fresh directory through the ui rpc', async () => {
@@ -190,13 +190,15 @@ test('sqlfu kill stops the process listening on the requested port', async () =>
   await expect(waitForExit(blocker.process, 5_000)).resolves.toBeUndefined();
 });
 
-async function createUiServerFixture(input: {
-  dev?: boolean;
-  uiRoot?: string;
-  allowUnknownHosts?: boolean;
-  projectRoot?: string;
-} = {}) {
-  const root = input.projectRoot ?? await createTempFixtureRoot('ui-server');
+async function createUiServerFixture(
+  input: {
+    dev?: boolean;
+    uiRoot?: string;
+    allowUnknownHosts?: boolean;
+    projectRoot?: string;
+  } = {},
+) {
+  const root = input.projectRoot ?? (await createTempFixtureRoot('ui-server'));
   const dbPath = path.join(root, 'app.db');
 
   if (!input.projectRoot) {
@@ -248,9 +250,11 @@ async function createUiServerFixture(input: {
       : undefined,
   });
   const baseUrl = `http://127.0.0.1:${server.port}`;
-  const client: RouterClient<UiRouter> = createORPCClient(new RPCLink({
-    url: `${baseUrl}/api/rpc`,
-  }));
+  const client: RouterClient<UiRouter> = createORPCClient(
+    new RPCLink({
+      url: `${baseUrl}/api/rpc`,
+    }),
+  );
 
   return {
     root,
@@ -264,33 +268,33 @@ async function createUiServerFixture(input: {
   };
 }
 
-function requestWithHost(input: {
-  url: string;
-  host: string;
-}) {
+function requestWithHost(input: {url: string; host: string}) {
   return new Promise<{status: number; body: string}>((resolve, reject) => {
     const url = new URL(input.url);
-    const request = http.request({
-      hostname: url.hostname,
-      port: Number(url.port),
-      path: url.pathname,
-      method: 'GET',
-      headers: {
-        host: input.host,
+    const request = http.request(
+      {
+        hostname: url.hostname,
+        port: Number(url.port),
+        path: url.pathname,
+        method: 'GET',
+        headers: {
+          host: input.host,
+        },
       },
-    }, (response) => {
-      let body = '';
-      response.setEncoding('utf8');
-      response.on('data', (chunk) => {
-        body += chunk;
-      });
-      response.on('end', () => {
-        resolve({
-          status: response.statusCode || 0,
-          body,
+      (response) => {
+        let body = '';
+        response.setEncoding('utf8');
+        response.on('data', (chunk) => {
+          body += chunk;
         });
-      });
-    });
+        response.on('end', () => {
+          resolve({
+            status: response.statusCode || 0,
+            body,
+          });
+        });
+      },
+    );
 
     request.once('error', reject);
     request.end();

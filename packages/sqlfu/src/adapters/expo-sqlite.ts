@@ -9,12 +9,17 @@ export interface ExpoSqliteRunResult {
 
 export interface ExpoSqliteDatabaseLike {
   getAllAsync<TRow extends ResultRow = ResultRow>(source: string, params?: readonly unknown[]): Promise<TRow[]>;
-  getEachAsync<TRow extends ResultRow = ResultRow>(source: string, params?: readonly unknown[]): AsyncIterableIterator<TRow>;
+  getEachAsync<TRow extends ResultRow = ResultRow>(
+    source: string,
+    params?: readonly unknown[],
+  ): AsyncIterableIterator<TRow>;
   runAsync(source: string, params?: readonly unknown[]): Promise<ExpoSqliteRunResult>;
 }
 
 export function createExpoSqliteClient(database: ExpoSqliteDatabaseLike): AsyncClient<ExpoSqliteDatabaseLike> {
-  const all: AsyncClient<ExpoSqliteDatabaseLike>['all'] = async <TRow extends ResultRow = ResultRow>(query: SqlQuery) => {
+  const all: AsyncClient<ExpoSqliteDatabaseLike>['all'] = async <TRow extends ResultRow = ResultRow>(
+    query: SqlQuery,
+  ) => {
     return database.getAllAsync<TRow>(query.sql, [...query.args]);
   };
   const run: AsyncClient<ExpoSqliteDatabaseLike>['run'] = async (query: SqlQuery) => {
@@ -33,7 +38,9 @@ export function createExpoSqliteClient(database: ExpoSqliteDatabaseLike): AsyncC
       };
     }, sql);
   };
-  const iterate: AsyncClient<ExpoSqliteDatabaseLike>['iterate'] = async function* <TRow extends ResultRow = ResultRow>(query: SqlQuery) {
+  const iterate: AsyncClient<ExpoSqliteDatabaseLike>['iterate'] = async function* <TRow extends ResultRow = ResultRow>(
+    query: SqlQuery,
+  ) {
     for await (const row of database.getEachAsync<TRow>(query.sql, [...query.args])) {
       yield row;
     }

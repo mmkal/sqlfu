@@ -9,7 +9,10 @@ export interface BunSqliteStatementLike<TRow extends ResultRow = ResultRow> {
 
 export interface BunSqliteDatabaseLike {
   query<TRow extends ResultRow = ResultRow>(query: string): BunSqliteStatementLike<TRow>;
-  run(query: string, params?: readonly unknown[]): {
+  run(
+    query: string,
+    params?: readonly unknown[],
+  ): {
     readonly changes?: number;
     readonly lastInsertRowid?: string | number | bigint | null;
   };

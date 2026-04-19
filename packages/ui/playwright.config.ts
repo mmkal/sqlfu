@@ -7,9 +7,7 @@ export default defineConfig({
     baseURL: 'http://127.0.0.1:3218',
     headless: true,
     launchOptions: {
-      args: [
-        '--host-resolver-rules=MAP *.localhost 127.0.0.1, MAP localhost 127.0.0.1',
-      ],
+      args: ['--host-resolver-rules=MAP *.localhost 127.0.0.1, MAP localhost 127.0.0.1'],
     },
   },
   webServer: {

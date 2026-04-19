@@ -62,9 +62,7 @@ export async function startSqlfuServer(input: StartSqlfuServerOptions = {}) {
       })
     : http.createServer();
   const uiAssets = input.ui ? resolveUiAssets(input.ui) : undefined;
-  const vite = input.dev && uiAssets
-    ? await createUiDevServer(uiAssets.root, httpServer)
-    : undefined;
+  const vite = input.dev && uiAssets ? await createUiDevServer(uiAssets.root, httpServer) : undefined;
 
   httpServer.on('request', async (req, res) => {
     try {
@@ -157,12 +155,13 @@ async function runCliServer() {
     templateRoot: readOption('--template-root') ?? undefined,
     port: port ? Number(port) : undefined,
     dev,
-    tls: tlsKeyPath && tlsCertPath
-      ? {
-          key: await fs.readFile(tlsKeyPath, 'utf8'),
-          cert: await fs.readFile(tlsCertPath, 'utf8'),
-        }
-      : undefined,
+    tls:
+      tlsKeyPath && tlsCertPath
+        ? {
+            key: await fs.readFile(tlsKeyPath, 'utf8'),
+            cert: await fs.readFile(tlsCertPath, 'utf8'),
+          }
+        : undefined,
   });
   void server;
   console.log('sqlfu ready at https://local.sqlfu.dev');
@@ -228,11 +227,7 @@ async function ensureProjectConfig(input: {
   return await loadProjectStateFrom(projectRoot);
 }
 
-async function ensureProjectFiles(input: {
-  projectRoot: string;
-  projectsRoot: string;
-  templateRoot: string;
-}) {
+async function ensureProjectFiles(input: {projectRoot: string; projectsRoot: string; templateRoot: string}) {
   await fs.mkdir(input.projectsRoot, {recursive: true});
   try {
     await fs.access(input.projectRoot);
@@ -347,9 +342,7 @@ async function toWebRequest(req: http.IncomingMessage, url: URL) {
     }
   }
 
-  const body = method === 'GET' || method === 'HEAD'
-    ? undefined
-    : await readIncomingMessage(req);
+  const body = method === 'GET' || method === 'HEAD' ? undefined : await readIncomingMessage(req);
 
   return new Request(url, {
     method,
@@ -415,11 +408,14 @@ async function serveBuiltUi(res: http.ServerResponse, url: URL, distDir: string)
   if (isInsideDist(candidatePath, distDir)) {
     try {
       const file = await fs.readFile(candidatePath);
-      await sendWebResponse(res, new Response(file, {
-        headers: {
-          'content-type': contentTypeForPath(candidatePath),
-        },
-      }));
+      await sendWebResponse(
+        res,
+        new Response(file, {
+          headers: {
+            'content-type': contentTypeForPath(candidatePath),
+          },
+        }),
+      );
       return;
     } catch {}
   }
@@ -467,11 +463,7 @@ async function createUiDevServer(root: string, httpServer: http.Server) {
     root,
     appType: 'custom',
     server: {
-      allowedHosts: [
-        'local.sqlfu.dev',
-        '.ngrok.app',
-        '.ngrok.dev',
-      ],
+      allowedHosts: ['local.sqlfu.dev', '.ngrok.app', '.ngrok.dev'],
       middlewareMode: true,
       hmr: {
         server: httpServer,
@@ -591,10 +583,7 @@ function renderErrorPage(error: unknown) {
 }
 
 function escapeHtml(value: string) {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;');
+  return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 }
 
 function getServerPort(server: http.Server) {

@@ -40,7 +40,7 @@ test('createD1Client works in a generated local worker fixture', async () => {
           select id, name
           from person
           order by id
-        `)
+        `);
         return Response.json(rows);
       }
 
@@ -64,7 +64,7 @@ test('createD1Client works in a generated local worker fixture', async () => {
   expect(await fixture.fetch('http://fixture/insert?id=1&name=bob')).toMatchObject({ok: true});
   expect(await fixture.fetch('http://fixture/insert?id=2&name=ada')).toMatchObject({ok: true});
 
-  const res = await fixture.fetch('http://fixture/list')
+  const res = await fixture.fetch('http://fixture/list');
   expect(await res.json()).toMatchObject([
     {id: 1, name: 'bob'},
     {id: 2, name: 'ada'},
@@ -112,9 +112,7 @@ async function createD1Fixture(workerDef: {
 
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'sqlfu-d1-fixture-'));
   const workerPath = path.join(tempDir, 'worker.js');
-  await Promise.all([
-    fs.cp(path.join(packageRoot, 'dist'), path.join(tempDir, 'runtime'), {recursive: true}),
-  ]);
+  await Promise.all([fs.cp(path.join(packageRoot, 'dist'), path.join(tempDir, 'runtime'), {recursive: true})]);
 
   await fs.writeFile(
     workerPath,
@@ -143,7 +141,7 @@ async function createD1Fixture(workerDef: {
 
   await miniflare.ready;
 
-  const worker = await miniflare.getWorker() as unknown as WorkerFetcherLike;
+  const worker = (await miniflare.getWorker()) as unknown as WorkerFetcherLike;
 
   return {
     async fetch(input: string, init?: RequestInit) {

@@ -97,7 +97,12 @@ test('createBunClient iterates rows with native statement iteration in a bun sub
       }
 
       iterateUsers() {
-        return [...this.client.iterate<{id: number; email: string}>({sql: 'select id, email from users order by id', args: []})];
+        return [
+          ...this.client.iterate<{id: number; email: string}>({
+            sql: 'select id, email from users order by id',
+            args: [],
+          }),
+        ];
       }
     },
   );
@@ -133,10 +138,7 @@ test('createBunClient.raw runs multiple statements in a bun subprocess', async (
 
   await fixture.stub.seedUsers();
 
-  expect(await fixture.stub.listUsers()).toMatchObject([
-    {email: 'ada@example.com'},
-    {email: 'grace@example.com'},
-  ]);
+  expect(await fixture.stub.listUsers()).toMatchObject([{email: 'ada@example.com'}, {email: 'grace@example.com'}]);
 });
 
 async function createBunFixture<TInstance extends object>(classDef: new (...args: any[]) => TInstance) {
@@ -221,7 +223,7 @@ async function createBunFixture<TInstance extends object>(classDef: new (...args
 }
 
 function createRpcStub<TInstance extends object>(rootUrl: string, serverLogs: () => string) {
-  return new Proxy({} as {[K in keyof TInstance]: PromisifyReturnType<TInstance[K]> }, {
+  return new Proxy({} as {[K in keyof TInstance]: PromisifyReturnType<TInstance[K]>}, {
     get(_target, propertyKey) {
       if (typeof propertyKey !== 'string') {
         return undefined;
@@ -234,9 +236,7 @@ function createRpcStub<TInstance extends object>(rootUrl: string, serverLogs: ()
             headers: {'content-type': 'application/json'},
             body: JSON.stringify({method: propertyKey, args: devalue.stringify(args)}),
           });
-          const payload = (await response.json()) as
-            | {ok: true; value: string}
-            | {ok: false; error: {message: string}};
+          const payload = (await response.json()) as {ok: true; value: string} | {ok: false; error: {message: string}};
 
           if (!response.ok || !payload.ok) {
             throw new Error(payload.ok ? `RPC failed with status ${response.status}` : payload.error.message);
@@ -251,7 +251,9 @@ function createRpcStub<TInstance extends object>(rootUrl: string, serverLogs: ()
   });
 }
 
-type PromisifyReturnType<T> = T extends (...args: infer A) => infer R ? (...args: A) => R extends Promise<any> ? R : Promise<R> : T;
+type PromisifyReturnType<T> = T extends (...args: infer A) => infer R
+  ? (...args: A) => R extends Promise<any> ? R : Promise<R>
+  : T;
 
 async function getAvailablePort(): Promise<number> {
   return new Promise<number>((resolve, reject) => {
@@ -306,12 +308,7 @@ function captureOutput(child: ExecaProcess) {
 }
 
 function formatFixtureFailure(message: string, serverLogs: string): string {
-  return [
-    message,
-    '',
-    'Server logs:',
-    serverLogs.trim() || '(none)',
-  ].join('\n');
+  return [message, '', 'Server logs:', serverLogs.trim() || '(none)'].join('\n');
 }
 
 async function stopProcess(child: ExecaProcess): Promise<void> {
@@ -320,7 +317,13 @@ async function stopProcess(child: ExecaProcess): Promise<void> {
   }
 
   child.kill('SIGINT');
-  const exited = await Promise.race([child.then(() => true, () => true), delay(5_000).then(() => false)]);
+  const exited = await Promise.race([
+    child.then(
+      () => true,
+      () => true,
+    ),
+    delay(5_000).then(() => false),
+  ]);
 
   if (!exited && child.exitCode === null && !child.killed) {
     child.kill('SIGKILL');

@@ -15,7 +15,10 @@ import type {
   SqliteInspectedView,
 } from './types.js';
 
-export function tableHasCheckConstraintReferencingColumns(createSql: string, columnNames: ReadonlySet<string>): boolean {
+export function tableHasCheckConstraintReferencingColumns(
+  createSql: string,
+  columnNames: ReadonlySet<string>,
+): boolean {
   const match = createSql.match(/\(([\s\S]*)\)$/u);
   if (!match) {
     return false;
@@ -61,7 +64,9 @@ export function analyzeColumnDropDependencies(input: {
     }
     return fact.dependsOnNames.some((name) => affectedViewNameSet.has(name));
   });
-  const affectedTriggerNames = directTriggerFacts.map((fact) => fact.ownerName).sort((left, right) => left.localeCompare(right));
+  const affectedTriggerNames = directTriggerFacts
+    .map((fact) => fact.ownerName)
+    .sort((left, right) => left.localeCompare(right));
 
   const externalBlockers: SqliteExternalBlockerRecord[] = [
     ...affectedViewNames.map((viewName) => ({
@@ -69,7 +74,8 @@ export function analyzeColumnDropDependencies(input: {
       objectId: `view:${viewName}`,
       objectName: viewName,
       tableName,
-      referencedColumnNames: viewDependencyFacts.find((fact) => fact.ownerName === viewName)?.referencedColumnNames || [],
+      referencedColumnNames:
+        viewDependencyFacts.find((fact) => fact.ownerName === viewName)?.referencedColumnNames || [],
       dependencyNames: viewDependencyFacts.find((fact) => fact.ownerName === viewName)?.dependsOnNames || [],
     })),
     ...affectedTriggerNames.map((triggerName) => ({
@@ -77,7 +83,8 @@ export function analyzeColumnDropDependencies(input: {
       objectId: `trigger:${triggerName}`,
       objectName: triggerName,
       tableName,
-      referencedColumnNames: triggerDependencyFacts.find((fact) => fact.ownerName === triggerName)?.referencedColumnNames || [],
+      referencedColumnNames:
+        triggerDependencyFacts.find((fact) => fact.ownerName === triggerName)?.referencedColumnNames || [],
       dependencyNames: triggerDependencyFacts.find((fact) => fact.ownerName === triggerName)?.dependsOnNames || [],
     })),
   ];
@@ -93,37 +100,32 @@ export function analyzeColumnDropDependencies(input: {
   };
 }
 
-export function analyzeViewDependencies(schema: SqliteInspectedDatabase): readonly (SqliteDependencyFact & {readonly referencedColumnNames: readonly string[]})[] {
-  const candidateNames = [
-    ...Object.keys(schema.tables),
-    ...Object.keys(schema.views),
-  ];
+export function analyzeViewDependencies(
+  schema: SqliteInspectedDatabase,
+): readonly (SqliteDependencyFact & {readonly referencedColumnNames: readonly string[]})[] {
+  const candidateNames = [...Object.keys(schema.tables), ...Object.keys(schema.views)];
 
-  return Object.values(schema.views)
-    .map((view) => {
-      const dependsOnNames = candidateNames
-        .filter((name) => name !== view.name)
-        .filter((name) => sqlMentionsIdentifier(view.createSql, name))
-        .sort((left, right) => left.localeCompare(right));
+  return Object.values(schema.views).map((view) => {
+    const dependsOnNames = candidateNames
+      .filter((name) => name !== view.name)
+      .filter((name) => sqlMentionsIdentifier(view.createSql, name))
+      .sort((left, right) => left.localeCompare(right));
 
-      return {
-        kind: 'view-dependency' as const,
-        ownerId: `view:${view.name}`,
-        ownerName: view.name,
-        dependsOnNames,
-        referencedColumnNames: referencedColumnNames(view.createSql),
-      };
-    });
+    return {
+      kind: 'view-dependency' as const,
+      ownerId: `view:${view.name}`,
+      ownerName: view.name,
+      dependsOnNames,
+      referencedColumnNames: referencedColumnNames(view.createSql),
+    };
+  });
 }
 
 export function analyzeTriggerDependencies(
   schema: SqliteInspectedDatabase,
   viewDependencyFacts: readonly (SqliteDependencyFact & {readonly referencedColumnNames: readonly string[]})[],
 ): readonly (SqliteDependencyFact & {readonly referencedColumnNames: readonly string[]})[] {
-  const candidateNames = [
-    ...Object.keys(schema.tables),
-    ...viewDependencyFacts.map((fact) => fact.ownerName),
-  ];
+  const candidateNames = [...Object.keys(schema.tables), ...viewDependencyFacts.map((fact) => fact.ownerName)];
 
   return Object.values(schema.triggers).map((trigger) => ({
     kind: 'trigger-dependency' as const,
@@ -135,13 +137,19 @@ export function analyzeTriggerDependencies(
 }
 
 export function directViewDependencies(viewName: string, facts: readonly SqliteDependencyFact[]): string[] {
-  return facts
-    .find((fact) => fact.ownerName === viewName)?.dependsOnNames
-    ?.slice()
-    .sort((left, right) => left.localeCompare(right)) || [];
+  return (
+    facts
+      .find((fact) => fact.ownerName === viewName)
+      ?.dependsOnNames?.slice()
+      .sort((left, right) => left.localeCompare(right)) || []
+  );
 }
 
-export function triggerSelectableNames(triggerName: string, candidateSelectableNames: ReadonlySet<string>, facts: readonly SqliteDependencyFact[]): string[] {
+export function triggerSelectableNames(
+  triggerName: string,
+  candidateSelectableNames: ReadonlySet<string>,
+  facts: readonly SqliteDependencyFact[],
+): string[] {
   const fact = facts.find((entry) => entry.ownerName === triggerName);
   if (!fact) {
     return [];
@@ -175,7 +183,9 @@ function expandAffectedViewNames(
       visited.add(current);
     }
 
-    for (const dependentViewName of (reverseDependencies.get(current) || []).sort((left, right) => left.localeCompare(right))) {
+    for (const dependentViewName of (reverseDependencies.get(current) || []).sort((left, right) =>
+      left.localeCompare(right),
+    )) {
       if (visited.has(dependentViewName)) {
         continue;
       }
@@ -202,7 +212,9 @@ function triggerDependencyNames(trigger: SqliteInspectedTrigger, candidateNames:
 
 function referencedColumnNames(sql: string): string[] {
   const identifiers = sqlIdentifierTokens(stripAliasIdentifiers(sql));
-  return [...identifiers].filter((name) => !RESERVED_REFERENCE_NAMES.has(name)).sort((left, right) => left.localeCompare(right));
+  return [...identifiers]
+    .filter((name) => !RESERVED_REFERENCE_NAMES.has(name))
+    .sort((left, right) => left.localeCompare(right));
 }
 
 function stripAliasIdentifiers(sql: string): string {

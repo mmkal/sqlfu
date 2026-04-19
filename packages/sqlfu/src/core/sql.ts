@@ -78,7 +78,11 @@ export class SyncBoundRows<TRow extends ResultRow> implements SqlRowsPromise<TRo
 
 export function isSqlFragment(value: unknown): value is SqlFragment {
   return Boolean(
-    value && typeof value === 'object' && 'sql' in value && 'args' in value && Array.isArray((value as SqlFragment).args),
+    value &&
+    typeof value === 'object' &&
+    'sql' in value &&
+    'args' in value &&
+    Array.isArray((value as SqlFragment).args),
   );
 }
 
@@ -143,10 +147,8 @@ export function bindSyncSql(client: SyncClient): SyncSqlTag {
     ...values: readonly SqlValue[]
   ) => new SyncBoundRows<TRow>(client, sql(strings, ...values));
 
-  boundSql.all = <TRow extends ResultRow = ResultRow>(
-    strings: TemplateStringsArray,
-    ...values: readonly SqlValue[]
-  ) => client.all<TRow>(sql(strings, ...values));
+  boundSql.all = <TRow extends ResultRow = ResultRow>(strings: TemplateStringsArray, ...values: readonly SqlValue[]) =>
+    client.all<TRow>(sql(strings, ...values));
 
   boundSql.run = (strings: TemplateStringsArray, ...values: readonly SqlValue[]): RunResult =>
     client.run(sql(strings, ...values));
@@ -160,10 +162,8 @@ export function bindAsyncSql(client: AsyncClient): AsyncSqlTag {
     ...values: readonly SqlValue[]
   ) => new AsyncBoundRows<TRow>(client, sql(strings, ...values));
 
-  boundSql.all = <TRow extends ResultRow = ResultRow>(
-    strings: TemplateStringsArray,
-    ...values: readonly SqlValue[]
-  ) => client.all<TRow>(sql(strings, ...values));
+  boundSql.all = <TRow extends ResultRow = ResultRow>(strings: TemplateStringsArray, ...values: readonly SqlValue[]) =>
+    client.all<TRow>(sql(strings, ...values));
 
   boundSql.run = (strings: TemplateStringsArray, ...values: readonly SqlValue[]): Promise<RunResult> =>
     client.run(sql(strings, ...values));

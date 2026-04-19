@@ -10,22 +10,26 @@ test('classifies missing HTTP status as unreachable', () => {
 });
 
 test('classifies 4xx responses as client errors', () => {
-  expect(classifyStartupError({
-    status: 404,
-    message: 'Not found',
-  })).toMatchObject({
+  expect(
+    classifyStartupError({
+      status: 404,
+      message: 'Not found',
+    }),
+  ).toMatchObject({
     kind: 'client-error',
     status: 404,
   });
 });
 
 test('classifies nested 5xx responses as server errors', () => {
-  expect(classifyStartupError({
-    response: {
-      status: 500,
-    },
-    message: 'Internal server error',
-  })).toMatchObject({
+  expect(
+    classifyStartupError({
+      response: {
+        status: 500,
+      },
+      message: 'Internal server error',
+    }),
+  ).toMatchObject({
     kind: 'server-error',
     status: 500,
   });

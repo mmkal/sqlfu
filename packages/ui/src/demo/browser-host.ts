@@ -126,8 +126,7 @@ function createVfsFs(vfs: DemoVfs, config: SqlfuProjectConfig, notify: () => voi
 
   const matchMigration = (path: string) =>
     path.startsWith(migrationsPrefix) ? path.slice(migrationsPrefix.length) : undefined;
-  const matchQuery = (path: string) =>
-    path.startsWith(queriesPrefix) ? path.slice(queriesPrefix.length) : undefined;
+  const matchQuery = (path: string) => (path.startsWith(queriesPrefix) ? path.slice(queriesPrefix.length) : undefined);
 
   const enoent = (path: string) => {
     const error = new Error(`ENOENT: ${path}`) as NodeJS.ErrnoException;

@@ -1,0 +1,29 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "react", "vitest"],
+  "categories": {
+    "correctness": "error"
+  },
+  "ignorePatterns": [
+    "**/dist/**",
+    "**/.sqlfu/**",
+    "**/.typesql/**",
+    "**/node_modules/**",
+    "**/.generated/**",
+    "packages/sqlfu/src/vendor/**"
+  ],
+  "rules": {},
+  "env": {
+    "builtin": true,
+    "node": true,
+    "browser": true
+  },
+  "overrides": [
+    {
+      "files": ["**/*.test.ts", "**/*.test.tsx", "**/test/**", "**/tests/**"],
+      "rules": {
+        "no-unused-expressions": "off"
+      }
+    }
+  ]
+}

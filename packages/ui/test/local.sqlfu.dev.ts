@@ -33,43 +33,36 @@ async function main() {
   const apiOrigin = certs ? `https://localhost:${apiPort}` : `http://127.0.0.1:${apiPort}`;
   const uiOrigin = `http://127.0.0.1:${uiPort}`;
 
-  const backend = spawnProcess('backend', [
-    'pnpm',
-    'exec',
-    'tsx',
-    'src/ui/server.ts',
-    '--project-root',
-    projectRoot,
-    '--port',
-    String(apiPort),
-    ...(certs ? ['--tls-key', certs.keyPath, '--tls-cert', certs.certPath] : []),
-  ], {
-    cwd: path.join(repoRoot, 'packages', 'sqlfu'),
-  });
+  const backend = spawnProcess(
+    'backend',
+    [
+      'pnpm',
+      'exec',
+      'tsx',
+      'src/ui/server.ts',
+      '--project-root',
+      projectRoot,
+      '--port',
+      String(apiPort),
+      ...(certs ? ['--tls-key', certs.keyPath, '--tls-cert', certs.certPath] : []),
+    ],
+    {
+      cwd: path.join(repoRoot, 'packages', 'sqlfu'),
+    },
+  );
 
   try {
     await waitForHttpServerOrExit(backend, apiOrigin, certs ? true : false);
 
     if (!skipBuild) {
-      await runProcess('ui-build', [
-        'pnpm',
-        'build',
-      ], {
+      await runProcess('ui-build', ['pnpm', 'build'], {
         cwd: uiRoot,
       });
     }
 
     await writeRuntimeConfig(uiRoot, apiOrigin);
 
-    const ui = spawnProcess('ui', [
-      'pnpx',
-      'serve',
-      '-l',
-      `tcp://127.0.0.1:${uiPort}`,
-      '-s',
-      '-n',
-      'dist',
-    ], {
+    const ui = spawnProcess('ui', ['pnpx', 'serve', '-l', `tcp://127.0.0.1:${uiPort}`, '-s', '-n', 'dist'], {
       cwd: uiRoot,
     });
 
@@ -188,15 +181,8 @@ async function waitForHttpServer(origin: string, insecureTls: boolean) {
   throw new Error(`Timed out waiting for ${origin}`);
 }
 
-async function waitForHttpServerOrExit(
-  child: childProcess.ChildProcess,
-  origin: string,
-  insecureTls: boolean,
-) {
-  await Promise.race([
-    waitForHttpServer(origin, insecureTls),
-    waitForUnexpectedExit(child),
-  ]);
+async function waitForHttpServerOrExit(child: childProcess.ChildProcess, origin: string, insecureTls: boolean) {
+  await Promise.race([waitForHttpServer(origin, insecureTls), waitForUnexpectedExit(child)]);
 }
 
 function waitForUnexpectedExit(child: childProcess.ChildProcess) {
@@ -210,17 +196,20 @@ function waitForUnexpectedExit(child: childProcess.ChildProcess) {
 function requestStatus(origin: string, insecureTls: boolean) {
   return new Promise<number>((resolve, reject) => {
     const url = new URL(origin);
-    const request = (url.protocol === 'https:' ? https : http).request({
-      hostname: url.hostname,
-      port: Number(url.port),
-      path: url.pathname || '/',
-      method: 'GET',
-      rejectUnauthorized: !insecureTls,
-      timeout: 1_000,
-    }, (response) => {
-      response.resume();
-      resolve(response.statusCode || 0);
-    });
+    const request = (url.protocol === 'https:' ? https : http).request(
+      {
+        hostname: url.hostname,
+        port: Number(url.port),
+        path: url.pathname || '/',
+        method: 'GET',
+        rejectUnauthorized: !insecureTls,
+        timeout: 1_000,
+      },
+      (response) => {
+        response.resume();
+        resolve(response.statusCode || 0);
+      },
+    );
 
     request.once('error', reject);
     request.once('timeout', () => {

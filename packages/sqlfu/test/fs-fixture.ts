@@ -32,7 +32,11 @@ export function withTrailingNewline(value: string) {
   return value.endsWith('\n') ? value : `${value}\n`;
 }
 
-async function collectFixtureFiles(root: string, relativeDir: string, ignoredNames: ReadonlySet<string>): Promise<FixtureFile[]> {
+async function collectFixtureFiles(
+  root: string,
+  relativeDir: string,
+  ignoredNames: ReadonlySet<string>,
+): Promise<FixtureFile[]> {
   const dirPath = path.join(root, relativeDir);
   const entries = (await fs.readdir(dirPath, {withFileTypes: true}))
     .filter((entry) => !ignoredNames.has(entry.name))
@@ -89,7 +93,10 @@ function matchesGlobs(
     excludeGlobs?: readonly string[];
   },
 ) {
-  const included = !input.includeGlobs || input.includeGlobs.length === 0 || input.includeGlobs.some((glob) => path.matchesGlob(relativePath, glob));
+  const included =
+    !input.includeGlobs ||
+    input.includeGlobs.length === 0 ||
+    input.includeGlobs.some((glob) => path.matchesGlob(relativePath, glob));
   if (!included) {
     return false;
   }

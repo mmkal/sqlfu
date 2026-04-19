@@ -17,31 +17,31 @@ export type AdHocQueryAnalysis = {
 
 export type QueryCatalogEntry =
   | {
-    readonly kind: 'query';
-    readonly id: string;
-    readonly sqlFile: string;
-    readonly functionName: string;
-    readonly sql: string;
-    readonly queryType: 'Select' | 'Insert' | 'Update' | 'Delete' | 'Copy';
-    readonly multipleRowsResult: boolean;
-    readonly resultMode: 'many' | 'nullableOne' | 'one' | 'metadata';
-    readonly args: readonly QueryCatalogArgument[];
-    readonly dataSchema?: JsonSchemaObject;
-    readonly paramsSchema?: JsonSchemaObject;
-    readonly resultSchema: JsonSchemaObject;
-    readonly columns: readonly QueryCatalogField[];
-  }
+      readonly kind: 'query';
+      readonly id: string;
+      readonly sqlFile: string;
+      readonly functionName: string;
+      readonly sql: string;
+      readonly queryType: 'Select' | 'Insert' | 'Update' | 'Delete' | 'Copy';
+      readonly multipleRowsResult: boolean;
+      readonly resultMode: 'many' | 'nullableOne' | 'one' | 'metadata';
+      readonly args: readonly QueryCatalogArgument[];
+      readonly dataSchema?: JsonSchemaObject;
+      readonly paramsSchema?: JsonSchemaObject;
+      readonly resultSchema: JsonSchemaObject;
+      readonly columns: readonly QueryCatalogField[];
+    }
   | {
-    readonly kind: 'error';
-    readonly id: string;
-    readonly sqlFile: string;
-    readonly functionName: string;
-    readonly sql: string;
-    readonly error: {
-      readonly name: string;
-      readonly description: string;
+      readonly kind: 'error';
+      readonly id: string;
+      readonly sqlFile: string;
+      readonly functionName: string;
+      readonly sql: string;
+      readonly error: {
+        readonly name: string;
+        readonly description: string;
+      };
     };
-  };
 
 export type QueryCatalogArgument = {
   readonly scope: 'data' | 'params';
@@ -60,9 +60,7 @@ export type QueryCatalogField = {
   readonly optional: boolean;
 };
 
-export type JsonSchema =
-  | boolean
-  | JsonSchemaObject;
+export type JsonSchema = boolean | JsonSchemaObject;
 
 export type JsonSchemaObject = {
   readonly type?: string | readonly string[];

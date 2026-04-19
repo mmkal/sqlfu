@@ -56,11 +56,7 @@ test('generate emits a typed migrations bundle that can apply migrations without
       sql: `select name from pragma_table_info('posts') order by cid`,
       args: [],
     });
-    expect(columns).toMatchObject([
-      {name: 'id'},
-      {name: 'slug'},
-      {name: 'body'},
-    ]);
+    expect(columns).toMatchObject([{name: 'id'}, {name: 'slug'}, {name: 'body'}]);
 
     const applied = await client.all<{name: string}>({
       sql: `select name from sqlfu_migrations order by name`,

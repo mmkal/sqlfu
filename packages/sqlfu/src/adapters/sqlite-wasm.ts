@@ -18,7 +18,9 @@ export interface SqliteWasmDatabaseLike {
 }
 
 export function createSqliteWasmClient(database: SqliteWasmDatabaseLike): AsyncClient<SqliteWasmDatabaseLike> {
-  const all: AsyncClient<SqliteWasmDatabaseLike>['all'] = async <TRow extends ResultRow = ResultRow>(query: SqlQuery) => {
+  const all: AsyncClient<SqliteWasmDatabaseLike>['all'] = async <TRow extends ResultRow = ResultRow>(
+    query: SqlQuery,
+  ) => {
     const rows = database.exec({
       sql: query.sql,
       bind: toPositionalBind(query.args),

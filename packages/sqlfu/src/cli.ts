@@ -12,7 +12,7 @@ import type {SqlfuCommandConfirm} from './api.js';
 import {router} from './cli-router.js';
 import {loadProjectState} from './core/config.js';
 import {createNodeHost} from './core/node-host.js';
-import packageJson from '../package.json' with { type: 'json' };
+import packageJson from '../package.json' with {type: 'json'};
 
 export async function createSqlfuCli() {
   const [project, host] = await Promise.all([loadProjectState(), createNodeHost()]);
@@ -84,7 +84,12 @@ function availableEditors() {
     .filter((value): value is string => typeof value === 'string' && !/\W/u.test(value))
     .filter((value) => {
       try {
-        return childProcess.execSync(`sh -c 'which ${value} || echo ""'`, {stdio: ['ignore', 'pipe', 'ignore']}).toString().trim().length > 0;
+        return (
+          childProcess
+            .execSync(`sh -c 'which ${value} || echo ""'`, {stdio: ['ignore', 'pipe', 'ignore']})
+            .toString()
+            .trim().length > 0
+        );
       } catch {
         return false;
       }
@@ -92,11 +97,7 @@ function availableEditors() {
 }
 
 async function editTempFile(input: string, editor: string, bodyType: 'markdown' | 'sql' | 'typescript' | undefined) {
-  const tempFile = path.join(
-    os.tmpdir(),
-    'sqlfu-confirm',
-    `changes-${Date.now()}${bodyTypeToExtension(bodyType)}`,
-  );
+  const tempFile = path.join(os.tmpdir(), 'sqlfu-confirm', `changes-${Date.now()}${bodyTypeToExtension(bodyType)}`);
   fs.mkdirSync(path.dirname(tempFile), {recursive: true});
   fs.writeFileSync(tempFile, `${input.trim()}\n`);
 

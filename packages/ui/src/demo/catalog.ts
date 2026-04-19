@@ -34,9 +34,10 @@ function buildCatalogEntry(fileName: string, rawSql: string): QueryCatalogEntry 
     multipleRowsResult,
     resultMode,
     args,
-    paramsSchema: args.length > 0
-      ? {type: 'object', properties: paramsProperties, additionalProperties: false, required: []}
-      : undefined,
+    paramsSchema:
+      args.length > 0
+        ? {type: 'object', properties: paramsProperties, additionalProperties: false, required: []}
+        : undefined,
     resultSchema: {type: 'object', properties: {}, additionalProperties: false, required: []},
     columns: [],
   };

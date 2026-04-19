@@ -5,11 +5,7 @@ import {fileURLToPath} from 'node:url';
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(currentDir, '..', '..', '..');
 
-export async function ensureNgrokTunnel(input: {
-  port: number;
-  domain: string;
-  url: string;
-}) {
+export async function ensureNgrokTunnel(input: {port: number; domain: string; url: string}) {
   if (!hasCommand('ngrok')) {
     return null;
   }
@@ -63,31 +59,32 @@ export async function stopNgrokTunnel(process: childProcess.ChildProcess | undef
   await waitForExit(process);
 }
 
-async function findExistingNgrokTunnel(input: {
-  port: number;
-  domain: string;
-  url: string;
-}) {
+async function findExistingNgrokTunnel(input: {port: number; domain: string; url: string}) {
   const tunnels = await readNgrokTunnels();
-  return tunnels.find((tunnel) => {
-    if (!tunnel.config?.addr?.endsWith(`:${input.port}`)) {
-      return false;
-    }
-    if (input.url && tunnel.public_url !== input.url) {
-      return false;
-    }
-    if (input.domain && !tunnel.public_url.includes(input.domain)) {
-      return false;
-    }
-    return true;
-  }) || null;
+  return (
+    tunnels.find((tunnel) => {
+      if (!tunnel.config?.addr?.endsWith(`:${input.port}`)) {
+        return false;
+      }
+      if (input.url && tunnel.public_url !== input.url) {
+        return false;
+      }
+      if (input.domain && !tunnel.public_url.includes(input.domain)) {
+        return false;
+      }
+      return true;
+    }) || null
+  );
 }
 
-async function waitForNgrokTunnel(input: {
-  port: number;
-  domain: string;
-  url: string;
-}, process: childProcess.ChildProcess) {
+async function waitForNgrokTunnel(
+  input: {
+    port: number;
+    domain: string;
+    url: string;
+  },
+  process: childProcess.ChildProcess,
+) {
   return await new Promise<{public_url: string; config?: {addr?: string}} | null>((resolve, reject) => {
     let output = '';
     const timeout = setTimeout(() => {
@@ -145,7 +142,7 @@ async function readNgrokTunnels() {
     if (!response.ok) {
       return [];
     }
-    const body = await response.json() as {
+    const body = (await response.json()) as {
       tunnels?: Array<{
         public_url: string;
         config?: {

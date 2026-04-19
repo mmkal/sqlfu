@@ -46,7 +46,10 @@ export function columnWidthAlgorithm(input: {
   if (remaining > 0) {
     const totalFlexCapacity = sum(columns.map((column) => column.flexCapacity));
     if (totalFlexCapacity > 0) {
-      const distributed = distributeWidth(columns.map((column) => column.flexCapacity), remaining);
+      const distributed = distributeWidth(
+        columns.map((column) => column.flexCapacity),
+        remaining,
+      );
       columns.forEach((column, index) => {
         column.width += distributed[index] ?? 0;
       });
@@ -54,7 +57,10 @@ export function columnWidthAlgorithm(input: {
     }
 
     if (remaining > 0) {
-      const even = distributeWidth(columns.map(() => 1), remaining);
+      const even = distributeWidth(
+        columns.map(() => 1),
+        remaining,
+      );
       columns.forEach((column, index) => {
         column.width += even[index] ?? 0;
       });

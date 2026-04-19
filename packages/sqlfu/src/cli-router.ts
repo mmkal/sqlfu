@@ -13,14 +13,16 @@ import {
   requireContextConfig,
 } from './api.js';
 import {createDefaultInitPreview} from './core/init-preview.js';
-import {
-  migrationName,
-  readMigrationHistory,
-} from './migrations/index.js';
+import {migrationName, readMigrationHistory} from './migrations/index.js';
 import {stopProcessesListeningOnPort} from './core/port-process.js';
 import {generateQueryTypes} from './typegen/index.js';
 import {startSqlfuServer} from './ui/server.js';
-import {materializeDefinitionsSchemaForContext, materializeMigrationsSchemaForContext, compareSchemasForContext, readMigrationsFromContext} from './api.js';
+import {
+  materializeDefinitionsSchemaForContext,
+  materializeMigrationsSchemaForContext,
+  compareSchemasForContext,
+  readMigrationsFromContext,
+} from './api.js';
 
 const base = os.$context<SqlfuCommandRouterContext>();
 
@@ -30,9 +32,14 @@ export const router = {
       default: true,
       description: `Start the local sqlfu backend server used by local.sqlfu.dev.`,
     })
-    .input(z.object({
-      port: z.number().int().positive(),
-    }).partial().optional())
+    .input(
+      z
+        .object({
+          port: z.number().int().positive(),
+        })
+        .partial()
+        .optional(),
+    )
     .handler(async ({context, input}) => {
       await startSqlfuServer({
         port: input?.port,
@@ -73,9 +80,14 @@ export const router = {
     .meta({
       description: `Stop the process listening on the local sqlfu backend port.`,
     })
-    .input(z.object({
-      port: z.number().int().positive(),
-    }).partial().optional())
+    .input(
+      z
+        .object({
+          port: z.number().int().positive(),
+        })
+        .partial()
+        .optional(),
+    )
     .handler(async ({input}) => {
       const port = input?.port || 56081;
       const stopped = await stopProcessesListeningOnPort(port);
@@ -84,7 +96,7 @@ export const router = {
         return `No process listening on port ${port}.`;
       }
 
-      return `Stopped process on port ${port}: ${stopped.map((process) => process.command ? `${process.command} (${process.pid})` : String(process.pid)).join(', ')}`;
+      return `Stopped process on port ${port}: ${stopped.map((process) => (process.command ? `${process.command} (${process.pid})` : String(process.pid))).join(', ')}`;
     }),
 
   generate: base
@@ -102,7 +114,8 @@ export const router = {
 
   sync: base
     .meta({
-      description: `Update the current database to match definitions.sql. Note: this should only be used for local development. For production databases, use 'sqlfu migrate' instead. ` +
+      description:
+        `Update the current database to match definitions.sql. Note: this should only be used for local development. For production databases, use 'sqlfu migrate' instead. ` +
         `This command fails if semantic changes are required. You can run 'sqlfu draft' to create a migration file with the necessary changes.`,
     })
     .handler(async ({context}) => {
@@ -114,9 +127,15 @@ export const router = {
       description: `Create a migration file from the diff between replayed migrations and definitions.sql.`,
     })
     .input(
-      z.object({
-        name: z.string().min(1).describe('The name of the migration to create. If omitted one is derived from the drafted SQL.'),
-      }).partial().optional(),
+      z
+        .object({
+          name: z
+            .string()
+            .min(1)
+            .describe('The name of the migration to create. If omitted one is derived from the drafted SQL.'),
+        })
+        .partial()
+        .optional(),
     )
     .handler(async ({context, input}) => {
       await applyDraftSql(requireContextConfig(context), input, context.confirm);
@@ -140,9 +159,7 @@ export const router = {
       await using database = await initializedContext.host.openDb(initializedContext.config);
       const applied = await readMigrationHistory(database.client);
       const appliedNames = new Set(applied.map((migration) => migration.name));
-      return migrations
-        .map((migration) => migrationName(migration))
-        .filter((name) => !appliedNames.has(name));
+      return migrations.map((migration) => migrationName(migration)).filter((name) => !appliedNames.has(name));
     }),
 
   applied: base
@@ -160,9 +177,11 @@ export const router = {
     .meta({
       description: `Find migrations by substring and show whether each one is applied.`,
     })
-    .input(z.object({
-      text: z.string().min(1),
-    }))
+    .input(
+      z.object({
+        text: z.string().min(1),
+      }),
+    )
     .handler(async ({context, input}) => {
       const initializedContext = requireContextConfig(context);
       const migrations = await readMigrationsFromContext(initializedContext);

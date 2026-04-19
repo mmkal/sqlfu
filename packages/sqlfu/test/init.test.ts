@@ -8,11 +8,7 @@ test('sqlfu init creates the default scaffold in a fresh directory', async () =>
   const root = await createTempFixtureRoot('init-command');
   const host = await createNodeHost();
 
-  await runSqlfuCommand(
-    {projectRoot: root, host},
-    'sqlfu init',
-    async (params) => params.body,
-  );
+  await runSqlfuCommand({projectRoot: root, host}, 'sqlfu init', async (params) => params.body);
 
   expect(await dumpFixtureFs(root)).toContain('sqlfu.config.ts');
   expect(await dumpFixtureFs(root)).toContain('definitions.sql');

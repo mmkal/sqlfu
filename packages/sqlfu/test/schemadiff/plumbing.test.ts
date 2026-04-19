@@ -55,7 +55,9 @@ test('the goto shape works when destructive drops are explicitly enabled', async
 
     await liveClient.raw(diff.join('\n'));
 
-    expect(await extractSchema(liveClient, 'main', {excludedTables: ['sqlfu_migrations']})).toBe('create table person(name text not null);');
+    expect(await extractSchema(liveClient, 'main', {excludedTables: ['sqlfu_migrations']})).toBe(
+      'create table person(name text not null);',
+    );
   } finally {
     liveDb.close();
     targetDb.close();
@@ -108,7 +110,9 @@ for (const fixtureCase of migraEquivalentFixtureCases) {
     const diffSql = await runFixtureCase(fixtureCase);
     const diffLines = diffSql ? diffSql.split('\n') : [];
 
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), `sqlfu-schemadiff-${fixtureCase.name.replaceAll(/\W+/g, '-')}-`));
+    const root = await fs.mkdtemp(
+      path.join(os.tmpdir(), `sqlfu-schemadiff-${fixtureCase.name.replaceAll(/\W+/g, '-')}-`),
+    );
     const baselineDbPath = path.join(root, 'baseline.db');
     const desiredDbPath = path.join(root, 'desired.db');
     const baselineDb = new DatabaseSync(baselineDbPath);

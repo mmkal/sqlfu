@@ -29,9 +29,7 @@ export interface QueryExecutionHookArgs<TResult> {
   readonly processResult: ProcessResult;
 }
 
-export type QueryExecutionHook = <TResult>(
-  args: QueryExecutionHookArgs<TResult>,
-) => TResult;
+export type QueryExecutionHook = <TResult>(args: QueryExecutionHookArgs<TResult>) => TResult;
 
 const processResult: ProcessResult = <T>(
   execute: () => T,
@@ -48,9 +46,10 @@ const processResult: ProcessResult = <T>(
   if (isPromiseLike(result)) {
     return (result as unknown as Promise<Awaited<T>>).then(
       onSuccess,
-      onError ?? ((error: unknown) => {
-        throw error;
-      }),
+      onError ??
+        ((error: unknown) => {
+          throw error;
+        }),
     ) as T;
   }
   return onSuccess(result as Awaited<T>) as T;
@@ -108,18 +107,20 @@ export interface QueryErrorReport {
  * Useful for Sentry-style capture without pulling Sentry into the library:
  * `createErrorReporterHook(({ context, error }) => Sentry.captureException(error, { tags: { 'db.query.summary': context.query.name ?? 'sql' } }))`.
  */
-export function createErrorReporterHook(
-  report: (params: QueryErrorReport) => unknown,
-): QueryExecutionHook {
+export function createErrorReporterHook(report: (params: QueryErrorReport) => unknown): QueryExecutionHook {
   return ({context, execute, processResult}) =>
-    processResult(execute, (value) => value, (error) => {
-      try {
-        report({context, error});
-      } catch {
-        // the error handler itself failing shouldn't mask the original error
-      }
-      throw error;
-    });
+    processResult(
+      execute,
+      (value) => value,
+      (error) => {
+        try {
+          report({context, error});
+        } catch {
+          // the error handler itself failing shouldn't mask the original error
+        }
+        throw error;
+      },
+    );
 }
 
 function buildHookArgs<TResult>(
@@ -153,7 +154,9 @@ function instrumentSync<TDriver>(client: SyncClient<TDriver>, hook: QueryExecuti
     raw: (sql) => client.raw(sql),
     iterate: (query) => client.iterate(query),
     transaction: (<TResult>(fn: (tx: SyncClient<TDriver>) => TResult) =>
-      client.transaction((tx: SyncClient<TDriver>) => fn(instrumentSync(tx, hook)))) as SyncClient<TDriver>['transaction'],
+      client.transaction((tx: SyncClient<TDriver>) =>
+        fn(instrumentSync(tx, hook)),
+      )) as SyncClient<TDriver>['transaction'],
     sql: undefined as unknown as SyncClient<TDriver>['sql'],
   };
   wrapped.sql = bindSyncSql(wrapped);

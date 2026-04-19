@@ -1,0 +1,16 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "singleQuote": true,
+  "bracketSpacing": false,
+  "printWidth": 120,
+  "ignorePatterns": [
+    "**/dist/**",
+    "**/.sqlfu/**",
+    "**/.typesql/**",
+    "**/node_modules/**",
+    "**/.generated/**",
+    "packages/sqlfu/src/vendor/**",
+    "pnpm-lock.yaml",
+    "**/*.md"
+  ]
+}

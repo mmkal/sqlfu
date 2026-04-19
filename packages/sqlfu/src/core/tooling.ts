@@ -17,7 +17,11 @@ export async function runPackageBinary(
   };
 
   const binRelativePath =
-    typeof packageJson.bin === 'string' ? packageJson.bin : packageJson.bin ? Object.values(packageJson.bin)[0] : undefined;
+    typeof packageJson.bin === 'string'
+      ? packageJson.bin
+      : packageJson.bin
+        ? Object.values(packageJson.bin)[0]
+        : undefined;
 
   if (!binRelativePath) {
     throw new Error(`Package ${packageName} does not expose a runnable binary.`);
@@ -48,7 +52,11 @@ export async function runPackageBinary(
         return;
       }
 
-      reject(new Error([stdout, stderr].filter(Boolean).join('\n').trim() || `${packageName} exited with code ${code ?? 'unknown'}`));
+      reject(
+        new Error(
+          [stdout, stderr].filter(Boolean).join('\n').trim() || `${packageName} exited with code ${code ?? 'unknown'}`,
+        ),
+      );
     });
 
     child.on('error', reject);

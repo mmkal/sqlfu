@@ -68,9 +68,10 @@ export async function stopProcessesListeningOnPort(port: number): Promise<readon
 }
 
 export function formatPortInUseMessage(port: number, processes: readonly ListeningProcess[]): string {
-  const listenerSummary = processes.length > 0
-    ? ` Listener${processes.length === 1 ? '' : 's'}: ${processes.map(formatProcessLabel).join(', ')}.`
-    : '';
+  const listenerSummary =
+    processes.length > 0
+      ? ` Listener${processes.length === 1 ? '' : 's'}: ${processes.map(formatProcessLabel).join(', ')}.`
+      : '';
 
   return `Port ${port} is already in use.${listenerSummary} Run 'sqlfu kill' to stop the existing local server, or 'sqlfu serve --port <port>' to use a different port.`;
 }

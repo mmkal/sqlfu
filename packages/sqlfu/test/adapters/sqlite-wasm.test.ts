@@ -8,105 +8,90 @@ import * as esbuild from 'esbuild';
 import {expect, test as baseTest} from 'vitest';
 
 import {packageRoot} from './ensure-built.js';
-import {
-  createBrowserRpcFixture,
-  type BrowserRpcFixture,
-  type RenderedHost,
-} from './browser-rpc-fixture.js';
+import {createBrowserRpcFixture, type BrowserRpcFixture, type RenderedHost} from './browser-rpc-fixture.js';
 
 const test = baseTest.skipIf(!process.env.SQLITE_WASM_TEST);
 
 declare const createSqliteWasmClient: typeof import('../../src/client.js').createSqliteWasmClient;
 declare const sql: typeof import('../../src/client.js').sql;
 
-test(
-  'createSqliteWasmClient works in a real browser',
-  {timeout: 60_000},
-  async () => {
-    await using fixture = await createSqliteWasmWebFixture(
-      class ClientDotAllTest {
-        client: ReturnType<typeof createSqliteWasmClient>;
+test('createSqliteWasmClient works in a real browser', {timeout: 60_000}, async () => {
+  await using fixture = await createSqliteWasmWebFixture(
+    class ClientDotAllTest {
+      client: ReturnType<typeof createSqliteWasmClient>;
 
-        constructor(db: any) {
-          this.client = createSqliteWasmClient(db);
-        }
+      constructor(db: any) {
+        this.client = createSqliteWasmClient(db);
+      }
 
-        async testme() {
-          return this.client.all(sql`select 1 as value`);
-        }
-      },
-    );
+      async testme() {
+        return this.client.all(sql`select 1 as value`);
+      }
+    },
+  );
 
-    expect(await fixture.stub.testme()).toMatchObject([{value: 1}]);
-  },
-);
+  expect(await fixture.stub.testme()).toMatchObject([{value: 1}]);
+});
 
-test(
-  'createSqliteWasmClient can write and read rows in a real browser',
-  {timeout: 60_000},
-  async () => {
-    await using fixture = await createSqliteWasmWebFixture(
-      class ClientPersonTest {
-        client: ReturnType<typeof createSqliteWasmClient>;
+test('createSqliteWasmClient can write and read rows in a real browser', {timeout: 60_000}, async () => {
+  await using fixture = await createSqliteWasmWebFixture(
+    class ClientPersonTest {
+      client: ReturnType<typeof createSqliteWasmClient>;
 
-        constructor(db: any) {
-          this.client = createSqliteWasmClient(db);
-        }
+      constructor(db: any) {
+        this.client = createSqliteWasmClient(db);
+      }
 
-        async resetPeople() {
-          await this.client.run(sql`
+      async resetPeople() {
+        await this.client.run(sql`
             drop table if exists person
           `);
-          await this.client.run(sql`
+        await this.client.run(sql`
             create table if not exists person (
               id integer primary key,
               name text not null
             )
           `);
-          await this.client.run(sql`delete from person`);
-        }
+        await this.client.run(sql`delete from person`);
+      }
 
-        async insertPerson(id: number, name: string) {
-          return this.client.run(sql`
+      async insertPerson(id: number, name: string) {
+        return this.client.run(sql`
             insert into person (id, name) values (${id}, ${name})
           `);
-        }
+      }
 
-        async listPeople() {
-          return this.client.all<{id: number; name: string}>(sql`
+      async listPeople() {
+        return this.client.all<{id: number; name: string}>(sql`
             select id, name
             from person
             order by id
           `);
-        }
-      },
-    );
+      }
+    },
+  );
 
-    await fixture.stub.resetPeople();
-    await fixture.stub.insertPerson(1, 'bob');
-    await fixture.stub.insertPerson(2, 'ada');
+  await fixture.stub.resetPeople();
+  await fixture.stub.insertPerson(1, 'bob');
+  await fixture.stub.insertPerson(2, 'ada');
 
-    expect(await fixture.stub.listPeople()).toMatchObject([
-      {id: 1, name: 'bob'},
-      {id: 2, name: 'ada'},
-    ]);
-  },
-);
+  expect(await fixture.stub.listPeople()).toMatchObject([
+    {id: 1, name: 'bob'},
+    {id: 2, name: 'ada'},
+  ]);
+});
 
-test(
-  'createSqliteWasmClient.raw runs multiple statements in a real browser',
-  {timeout: 60_000},
-  async () => {
-    await using fixture = await createSqliteWasmWebFixture(
-      class ClientMultiStatementTest {
-        client: ReturnType<typeof createSqliteWasmClient>;
+test('createSqliteWasmClient.raw runs multiple statements in a real browser', {timeout: 60_000}, async () => {
+  await using fixture = await createSqliteWasmWebFixture(
+    class ClientMultiStatementTest {
+      client: ReturnType<typeof createSqliteWasmClient>;
 
-        constructor(db: any) {
-          this.client = createSqliteWasmClient(db);
-        }
+      constructor(db: any) {
+        this.client = createSqliteWasmClient(db);
+      }
 
-        async seedPeople() {
-          return this.client.raw(`
+      async seedPeople() {
+        return this.client.raw(`
             create table person (
               id integer primary key,
               name text not null
@@ -114,26 +99,25 @@ test(
             insert into person (id, name) values (1, 'bob');
             insert into person (id, name) values (2, 'ada');
           `);
-        }
+      }
 
-        async listPeople() {
-          return this.client.all<{id: number; name: string}>(sql`
+      async listPeople() {
+        return this.client.all<{id: number; name: string}>(sql`
             select id, name
             from person
             order by id
           `);
-        }
-      },
-    );
+      }
+    },
+  );
 
-    await fixture.stub.seedPeople();
+  await fixture.stub.seedPeople();
 
-    expect(await fixture.stub.listPeople()).toMatchObject([
-      {id: 1, name: 'bob'},
-      {id: 2, name: 'ada'},
-    ]);
-  },
-);
+  expect(await fixture.stub.listPeople()).toMatchObject([
+    {id: 1, name: 'bob'},
+    {id: 2, name: 'ada'},
+  ]);
+});
 
 function createSqliteWasmWebFixture<TInstance extends object>(
   classDef: new (...args: any[]) => TInstance,

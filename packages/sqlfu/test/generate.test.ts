@@ -227,9 +227,7 @@ test('generate defaults to .ts extensions when tsconfig opts into ts import exte
     `,
     files: {
       'sql/list-posts.sql': `select id, slug from posts;`,
-      'tsconfig.json': JSON.stringify(
-        { compilerOptions: { allowImportingTsExtensions: true } },
-      ),
+      'tsconfig.json': JSON.stringify({compilerOptions: {allowImportingTsExtensions: true}}),
     },
   });
 
@@ -266,9 +264,7 @@ test('explicit generatedImportExtension overrides tsconfig detection', async () 
     `,
     files: {
       'sql/list-posts.sql': `select id, slug from posts;`,
-      'tsconfig.json': JSON.stringify(
-        { compilerOptions: { allowImportingTsExtensions: true } },
-      ),
+      'tsconfig.json': JSON.stringify({compilerOptions: {allowImportingTsExtensions: true}}),
     },
     config: {
       generatedImportExtension: '.js',
@@ -867,10 +863,7 @@ async function createGenerateFixture(input: {
     async readJson(relativePath: string) {
       return JSON.parse(await fs.readFile(path.join(root, relativePath), 'utf8'));
     },
-    async dumpFs(input?: {
-      includeGlobs?: readonly string[];
-      excludeGlobs?: readonly string[];
-    }) {
+    async dumpFs(input?: {includeGlobs?: readonly string[]; excludeGlobs?: readonly string[]}) {
       return dumpFixtureFs(root, {ignoredNames: ['app.db', '.sqlfu'], ...input});
     },
     async importTranspiledModule<TModule>(relativePath: string): Promise<TModule> {

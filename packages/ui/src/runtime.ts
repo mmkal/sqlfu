@@ -16,9 +16,10 @@ function readApiOrigin() {
     return searchValue;
   }
 
-  const globalValue = globalThis.window && 'SQLFU_API_ORIGIN' in globalThis.window
-    ? String((globalThis.window as Window & {SQLFU_API_ORIGIN?: string}).SQLFU_API_ORIGIN || '')
-    : '';
+  const globalValue =
+    globalThis.window && 'SQLFU_API_ORIGIN' in globalThis.window
+      ? String((globalThis.window as Window & {SQLFU_API_ORIGIN?: string}).SQLFU_API_ORIGIN || '')
+      : '';
   if (globalValue) {
     return globalValue;
   }

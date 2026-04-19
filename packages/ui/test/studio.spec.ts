@@ -28,22 +28,21 @@ test('schema page shows mismatch cards and can run the recommended sqlfu draft c
   await expect(page.getByRole('heading', {name: 'Schema Drift'})).toBeVisible();
   await expect(page.getByText('Live Schema exists, but Migration History is empty.')).toBeVisible();
   await expect(page.getByText('No Sync Drift')).toBeVisible();
-  await expect.poll(() => page.locator('.authority-card > summary').allTextContents()).toEqual([
-    'Desired Schema▾',
-    'Migrations▾',
-    'Migration History▾',
-    'Live Schema▾',
-  ]);
+  await expect
+    .poll(() => page.locator('.authority-card > summary').allTextContents())
+    .toEqual(['Desired Schema▾', 'Migrations▾', 'Migration History▾', 'Live Schema▾']);
 
   await confirmAndRunSchemaCommand(page, page.getByRole('button', {name: 'sqlfu draft'}));
 
-  await expect.poll(async () => {
-    try {
-      return (await fs.readdir(migrationsDir)).filter((name) => name.endsWith('.sql')).length;
-    } catch {
-      return 0;
-    }
-  }).toBe(1);
+  await expect
+    .poll(async () => {
+      try {
+        return (await fs.readdir(migrationsDir)).filter((name) => name.endsWith('.sql')).length;
+      } catch {
+        return 0;
+      }
+    })
+    .toBe(1);
 
   await expect(page.getByRole('button', {name: 'Desired Schema'})).toBeVisible();
   await expect(await readCodeMirrorText(page, 'Desired Schema editor')).toContain('create table posts');
@@ -53,9 +52,14 @@ test('schema page shows mismatch cards and can run the recommended sqlfu draft c
   await expect(migrationToggle).toBeVisible();
   await expect(migrationToggle).toContainText('Pending');
   await migrationToggle.click();
-  const firstMigrationDetail = page.locator('.authority-migrations .migration-item').first().locator('.migration-detail');
+  const firstMigrationDetail = page
+    .locator('.authority-migrations .migration-item')
+    .first()
+    .locator('.migration-detail');
   await expect(firstMigrationDetail.getByRole('tab', {name: 'Content'})).toHaveAttribute('aria-selected', 'true');
-  await expect(await readCodeMirrorText(firstMigrationDetail, 'Migration content')).toContain('create view post_cards as');
+  await expect(await readCodeMirrorText(firstMigrationDetail, 'Migration content')).toContain(
+    'create view post_cards as',
+  );
 
   await expect(page.getByRole('button', {name: 'Migration History'})).toBeVisible();
   await expect(page.getByText('No applied migrations.')).toBeVisible();
@@ -93,7 +97,9 @@ test('migration details lazily load the resultant schema tab', async ({page}) =>
   await page.locator('.authority-migrations .migration-item').first().getByRole('button').first().click();
 
   const [resultantSchemaResponse] = await Promise.all([
-    page.waitForResponse((response) => response.url().includes('/api/rpc/schema/authorities/resultantSchema') && response.ok()),
+    page.waitForResponse(
+      (response) => response.url().includes('/api/rpc/schema/authorities/resultantSchema') && response.ok(),
+    ),
     migrationDetail.getByRole('tab', {name: 'Resultant Schema'}).click(),
   ]);
   expect(resultantSchemaResponse.ok()).toBe(true);
@@ -133,16 +139,21 @@ test('schema commands use server-provided confirmation text', async ({page, proj
     'Create migration file?',
   );
 
-  await expect.poll(async () => {
-    const [migrationFileName] = (await fs.readdir(migrationsDir)).filter((name) => name.endsWith('.sql'));
-    if (!migrationFileName) {
-      return '';
-    }
-    return await fs.readFile(path.join(migrationsDir, migrationFileName), 'utf8');
-  }).toContain('create table manual_posts');
+  await expect
+    .poll(async () => {
+      const [migrationFileName] = (await fs.readdir(migrationsDir)).filter((name) => name.endsWith('.sql'));
+      if (!migrationFileName) {
+        return '';
+      }
+      return await fs.readFile(path.join(migrationsDir, migrationFileName), 'utf8');
+    })
+    .toContain('create table manual_posts');
 });
 
-test('migration history shows an integrity warning when applied content no longer matches the repo', async ({page, projectDir}) => {
+test('migration history shows an integrity warning when applied content no longer matches the repo', async ({
+  page,
+  projectDir,
+}) => {
   const migrationsDir = path.join(projectDir, 'migrations');
 
   await page.goto('/#schema');
@@ -161,7 +172,9 @@ test('migration history shows an integrity warning when applied content no longe
 
   const migrationDetail = historyItem.locator('.migration-detail');
   await migrationDetail.getByRole('tab', {name: 'Metadata'}).click();
-  await expect(await readCodeMirrorText(migrationDetail, 'Migration metadata')).toContain('integrity: checksum mismatch');
+  await expect(await readCodeMirrorText(migrationDetail, 'Migration metadata')).toContain(
+    'integrity: checksum mismatch',
+  );
 });
 
 test('desired schema can be edited and saved, and sync is disabled while it is dirty', async ({page, projectDir}) => {
@@ -175,7 +188,10 @@ test('desired schema can be edited and saved, and sync is disabled while it is d
 
   await expect(page.getByRole('button', {name: 'Save Desired Schema'})).toHaveCount(0);
 
-  await replaceCodeMirrorText(page, 'Desired Schema editor', `
+  await replaceCodeMirrorText(
+    page,
+    'Desired Schema editor',
+    `
     create table posts (
       id integer primary key,
       slug text not null unique,
@@ -192,10 +208,13 @@ test('desired schema can be edited and saved, and sync is disabled while it is d
     select id, slug, title
     from posts
     where published = 1;
-  `);
+  `,
+  );
 
   await expect(page.getByRole('button', {name: 'Save Desired Schema'})).toBeVisible();
-  await expect.poll(() => readCodeMirrorText(page, 'Desired Schema editor')).toContain('create view published_posts as');
+  await expect
+    .poll(() => readCodeMirrorText(page, 'Desired Schema editor'))
+    .toContain('create view published_posts as');
 
   await page.getByRole('button', {name: 'Save Desired Schema'}).click();
   await expect.poll(() => fs.readFile(definitionsPath, 'utf8')).toContain('create view published_posts as');
@@ -204,7 +223,9 @@ test('desired schema can be edited and saved, and sync is disabled while it is d
 
 test('invalid desired schema shows a check error without breaking the schema page', async ({page, projectDir}) => {
   const definitionsPath = path.join(projectDir, 'definitions.sql');
-  await fs.writeFile(definitionsPath, `
+  await fs.writeFile(
+    definitionsPath,
+    `
     create table posts (
       id integer primary key
     );
@@ -212,7 +233,8 @@ test('invalid desired schema shows a check error without breaking the schema pag
     create tabl nope (
       id integer primary key
     );
-  `);
+  `,
+  );
 
   await page.goto('/#schema');
 
@@ -245,18 +267,24 @@ test('history to live flow shows a goto action when check recommends it', async 
   await confirmAndRunSchemaCommand(page, page.getByRole('button', {name: /sqlfu baseline /}).first());
 
   const [migrationFileName] = (await fs.readdir(migrationsDir)).filter((name) => name.endsWith('.sql'));
-  await fs.appendFile(path.join(migrationsDir, migrationFileName!), `
+  await fs.appendFile(
+    path.join(migrationsDir, migrationFileName!),
+    `
 
 create view post_titles as
 select title
 from posts;
-`);
-  await fs.appendFile(definitionsPath, `
+`,
+  );
+  await fs.appendFile(
+    definitionsPath,
+    `
 
 create view post_titles as
 select title
 from posts;
-`);
+`,
+  );
 
   await page.reload();
 
@@ -274,7 +302,10 @@ test('schema command failures stay visible next to the failing command button', 
   await confirmAndRunSchemaCommand(page, page.getByRole('button', {name: 'sqlfu draft'}));
   await confirmAndRunSchemaCommand(page, page.getByRole('button', {name: /sqlfu baseline /}).first());
 
-  await replaceCodeMirrorText(page, 'Desired Schema editor', `
+  await replaceCodeMirrorText(
+    page,
+    'Desired Schema editor',
+    `
     create table posts (
       id integer primary key,
       slug text not null unique,
@@ -287,7 +318,8 @@ test('schema command failures stay visible next to the failing command button', 
     create view post_cards as
     select id, slug, title, published
     from posts;
-  `);
+  `,
+  );
   await expect.poll(() => readCodeMirrorText(page, 'Desired Schema editor')).toContain('birthdate text not null');
   await page.getByRole('button', {name: 'Save Desired Schema'}).click();
 
@@ -297,8 +329,12 @@ test('schema command failures stay visible next to the failing command button', 
   await expect(migrateButton).toBeVisible();
   await confirmAndRunSchemaCommand(page, migrateButton);
 
-  await expect(page.locator('.schema-command-error').filter({hasText: 'Cannot add a NOT NULL column with default value NULL'})).toBeVisible();
-  await expect(page.getByRole('status').filter({hasText: 'Cannot add a NOT NULL column with default value NULL'})).toBeVisible();
+  await expect(
+    page.locator('.schema-command-error').filter({hasText: 'Cannot add a NOT NULL column with default value NULL'}),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('status').filter({hasText: 'Cannot add a NOT NULL column with default value NULL'}),
+  ).toBeVisible();
 });
 
 test('table browser, sql runner, and generated query form work against a live fixture project', async ({page}) => {
@@ -351,12 +387,16 @@ test('clicking a relation cell shows the full cell content below the table', asy
 test('clicking a sql runner result cell shows the full cell content below the table', async ({page}) => {
   await page.goto('/#sql');
 
-  await replaceCodeMirrorText(page, 'SQL editor', `
+  await replaceCodeMirrorText(
+    page,
+    'SQL editor',
+    `
     select body
     from posts
     where slug = 'hello-world'
     limit 1;
-  `);
+  `,
+  );
   await page.getByRole('button', {name: 'Run SQL'}).click();
 
   await page.locator('.reactgrid [data-cell-rowidx="1"][data-cell-colidx="1"]').click();
@@ -368,11 +408,15 @@ test('clicking a sql runner result cell shows the full cell content below the ta
 test('views created from the sql runner can be browsed without crashing the app', async ({page}) => {
   await page.goto('/#sql');
 
-  await replaceCodeMirrorText(page, 'SQL editor', `
+  await replaceCodeMirrorText(
+    page,
+    'SQL editor',
+    `
     create view recent_migrations as
     select *
     from sqlfu_migrations;
-  `);
+  `,
+  );
   await page.getByRole('button', {name: 'Run SQL'}).click();
 
   await page.getByRole('link', {name: 'recent_migrations view'}).click();
@@ -408,9 +452,8 @@ test('relation rows can be edited and saved from the grid', async ({page}) => {
 
   await expect(page.getByRole('button', {name: 'Save changes'})).toBeVisible();
   const [saveResponse] = await Promise.all([
-    page.waitForResponse((response) =>
-      response.request().method() === 'POST'
-      && response.url().includes('/api/rpc/table/save'),
+    page.waitForResponse(
+      (response) => response.request().method() === 'POST' && response.url().includes('/api/rpc/table/save'),
     ),
     page.getByRole('button', {name: 'Save changes'}).click(),
   ]);
@@ -418,7 +461,9 @@ test('relation rows can be edited and saved from the grid', async ({page}) => {
   expect(saveResponse.ok(), saveResponseText).toBe(true);
 
   await page.reload();
-  await expect(page.locator('.reactgrid [data-cell-rowidx="1"][data-cell-colidx="3"]')).toContainText('Hello World Revised');
+  await expect(page.locator('.reactgrid [data-cell-rowidx="1"][data-cell-colidx="3"]')).toContainText(
+    'Hello World Revised',
+  );
 });
 
 test('relation rows can be appended from the grid', async ({page}) => {
@@ -454,9 +499,8 @@ test('relation rows can be appended from the grid', async ({page}) => {
 
   await expect(page.getByRole('button', {name: 'Save changes'})).toBeVisible();
   const [saveResponse] = await Promise.all([
-    page.waitForResponse((response) =>
-      response.request().method() === 'POST'
-      && response.url().includes('/api/rpc/table/save'),
+    page.waitForResponse(
+      (response) => response.request().method() === 'POST' && response.url().includes('/api/rpc/table/save'),
     ),
     page.getByRole('button', {name: 'Save changes'}).click(),
   ]);
@@ -482,9 +526,8 @@ test('relation rows can be selected and deleted from the grid', async ({page}) =
     dialog.accept();
   });
   const [deleteResponse] = await Promise.all([
-    page.waitForResponse((response) =>
-      response.request().method() === 'POST'
-      && response.url().includes('/api/rpc/table/delete'),
+    page.waitForResponse(
+      (response) => response.request().method() === 'POST' && response.url().includes('/api/rpc/table/delete'),
     ),
     firstRowHeader.getByRole('button', {name: 'Delete row 1'}).click(),
   ]);
@@ -505,7 +548,9 @@ test('appended rows focus the clicked cell and allow editing primary key columns
 
   await fillGridTextCell(page, 2, 1, 'manual_migration');
 
-  await expect(page.locator('.reactgrid [data-cell-rowidx="2"][data-cell-colidx="1"]')).toContainText('manual_migration');
+  await expect(page.locator('.reactgrid [data-cell-rowidx="2"][data-cell-colidx="1"]')).toContainText(
+    'manual_migration',
+  );
 });
 
 test('relation rows can discard dirty cell changes', async ({page}) => {
@@ -634,16 +679,30 @@ test('saved queries can be renamed, edited, and deleted from the query view', as
 
   await expect(page).toHaveURL(/#query\/list-post-cards-renamed$/);
   await expect(page.getByRole('heading', {name: 'list-post-cards-renamed'})).toBeVisible();
-  await expect(fs.access(renamedPath).then(() => true, () => false)).resolves.toBe(true);
-  await expect(fs.access(originalPath).then(() => true, () => false)).resolves.toBe(false);
+  await expect(
+    fs.access(renamedPath).then(
+      () => true,
+      () => false,
+    ),
+  ).resolves.toBe(true);
+  await expect(
+    fs.access(originalPath).then(
+      () => true,
+      () => false,
+    ),
+  ).resolves.toBe(false);
 
   await page.getByRole('button', {name: 'Edit query SQL'}).click();
-  await replaceCodeMirrorText(page, 'Query SQL editor', `
+  await replaceCodeMirrorText(
+    page,
+    'Query SQL editor',
+    `
     select id, slug, title
     from posts
     where slug = :slug
     limit 1;
-  `);
+  `,
+  );
   await page.getByRole('button', {name: 'Confirm query SQL edit'}).click();
 
   await expect(page.getByLabel('slug')).toBeVisible();
@@ -657,18 +716,26 @@ test('saved queries can be renamed, edited, and deleted from the query view', as
 
   await expect(page).toHaveURL(/#query\/find-post-by-slug$/);
   await expect(page.getByRole('link', {name: /list-post-cards-renamed/i})).toHaveCount(0);
-  await expect(fs.access(renamedPath).then(() => true, () => false)).resolves.toBe(false);
+  await expect(
+    fs.access(renamedPath).then(
+      () => true,
+      () => false,
+    ),
+  ).resolves.toBe(false);
 });
 
 test('invalid saved queries still show editable sql', async ({page, projectDir}) => {
   const queryPath = path.join(projectDir, 'sql', 'find-post-by-slug.sql');
 
-  await fs.writeFile(queryPath, `
+  await fs.writeFile(
+    queryPath,
+    `
     select id, slug, title
     from posts_broken
     where slug = :slug
     limit 1;
-  `);
+  `,
+  );
 
   await page.goto('/#query/find-post-by-slug');
 
@@ -678,12 +745,16 @@ test('invalid saved queries still show editable sql', async ({page, projectDir})
   await expect(page.getByRole('button', {name: 'Edit query SQL'})).toBeVisible();
 
   await page.getByRole('button', {name: 'Edit query SQL'}).click();
-  await replaceCodeMirrorText(page, 'Query SQL editor', `
+  await replaceCodeMirrorText(
+    page,
+    'Query SQL editor',
+    `
     select id, slug, title
     from posts
     where slug = :slug
     limit 1;
-  `);
+  `,
+  );
   await page.getByRole('button', {name: 'Confirm query SQL edit'}).click();
 
   await expect(page.getByLabel('slug')).toBeVisible();
@@ -697,12 +768,16 @@ test('sql runner executes a named-parameter query and saves it to disk', async (
   await fs.rm(savedQueryPath, {force: true});
 
   await page.goto('/#sql');
-  await replaceCodeMirrorText(page, 'SQL editor', `
+  await replaceCodeMirrorText(
+    page,
+    'SQL editor',
+    `
     select id, slug, title
     from posts
     where slug = :slug
     limit 1;
-  `);
+  `,
+  );
 
   await expect(page.getByLabel('slug')).toBeVisible();
   await page.getByLabel('slug').fill('hello-world');
@@ -726,11 +801,15 @@ test('sql runner understands sqlfu_migrations and suggests a non-noisy saved nam
   await confirmAndRunSchemaCommand(page, page.getByRole('button', {name: /sqlfu baseline /}).first());
 
   await page.goto('/#sql');
-  await replaceCodeMirrorText(page, 'SQL editor', `
+  await replaceCodeMirrorText(
+    page,
+    'SQL editor',
+    `
     select *
     from sqlfu_migrations
     order by name;
-  `);
+  `,
+  );
 
   await expect(page.locator('.cm-lintRange-error')).toHaveCount(0);
   await page.getByRole('button', {name: 'Run SQL'}).click();
@@ -757,11 +836,15 @@ test('schema queries are invalidated after sql runs, saved query runs, and relat
   await expect(page.getByRole('heading', {name: 'Schema', exact: true})).toBeVisible();
 
   await page.goto('/#sql');
-  await replaceCodeMirrorText(page, 'SQL editor', `
+  await replaceCodeMirrorText(
+    page,
+    'SQL editor',
+    `
     select id, slug
     from posts
     limit 1;
-  `);
+  `,
+  );
   await Promise.all([
     page.waitForResponse((response) => response.url().includes('/api/rpc/schema/') && response.ok()),
     page.getByRole('button', {name: 'Run SQL'}).click(),
@@ -794,12 +877,16 @@ test('schema queries are invalidated after sql runs, saved query runs, and relat
 test('sql runner draft survives a reload via local storage', async ({page}) => {
   await page.goto('/#sql');
 
-  await replaceCodeMirrorText(page, 'SQL editor', `
+  await replaceCodeMirrorText(
+    page,
+    'SQL editor',
+    `
     select id, slug
     from posts
     where slug = :slug
     limit 1;
-  `);
+  `,
+  );
   await expect(page.getByLabel('slug')).toBeVisible();
   await page.getByLabel('slug').fill('draft-notes');
 
@@ -813,21 +900,29 @@ test('sql runner drops stale parameter values when the SQL parameter names chang
   await page.addInitScript(() => window.localStorage.clear());
   await page.goto('/#sql');
 
-  await replaceCodeMirrorText(page, 'SQL editor', `
+  await replaceCodeMirrorText(
+    page,
+    'SQL editor',
+    `
     select id, slug
     from posts
     where slug = :slug
     limit 1;
-  `);
+  `,
+  );
   await expect(page.getByLabel('slug')).toBeVisible();
   await page.getByLabel('slug').fill('hello-world');
 
-  await replaceCodeMirrorText(page, 'SQL editor', `
+  await replaceCodeMirrorText(
+    page,
+    'SQL editor',
+    `
     select id, slug
     from posts
     where slug = :sluggggg
     limit 1;
-  `);
+  `,
+  );
   await expect(page.getByText("'sqlRunner params' must NOT have additional properties")).toHaveCount(0);
   await expect(page.getByLabel('sluggggg')).toBeVisible();
 });
@@ -881,10 +976,7 @@ test('sql runner keeps line numbers aligned with editor lines', async ({page}) =
   const firstLine = page.locator('.cm-line').first();
   await expect.poll(() => page.locator('.cm-lineNumbers .cm-gutterElement').count()).toBeGreaterThan(0);
   await expect.poll(async () => Boolean(await lineNumberOne.boundingBox())).toBe(true);
-  const [lineNumberOneBox, firstLineBox] = await Promise.all([
-    lineNumberOne.boundingBox(),
-    firstLine.boundingBox(),
-  ]);
+  const [lineNumberOneBox, firstLineBox] = await Promise.all([lineNumberOne.boundingBox(), firstLine.boundingBox()]);
 
   expect({
     lineNumberOneBox,
@@ -900,12 +992,16 @@ test('sql runner executes from the editor with cmd-or-ctrl-enter', async ({page}
   await page.addInitScript(() => window.localStorage.clear());
   await page.goto('/#sql');
 
-  await replaceCodeMirrorText(page, 'SQL editor', `
+  await replaceCodeMirrorText(
+    page,
+    'SQL editor',
+    `
     select id, slug, title
     from posts
     where slug = :slug
     limit 1;
-  `);
+  `,
+  );
 
   await page.getByLabel('slug').fill('hello-world');
   await page.locator('[aria-label="SQL editor"] .cm-content').click();
@@ -916,12 +1012,16 @@ test('sql runner executes from the editor with cmd-or-ctrl-enter', async ({page}
 test('sql runner infers numeric parameter types from SQL analysis', async ({page}) => {
   await page.goto('/#sql');
 
-  await replaceCodeMirrorText(page, 'SQL editor', `
+  await replaceCodeMirrorText(
+    page,
+    'SQL editor',
+    `
     select id, slug, title
     from posts
     where id = :id
     limit 1;
-  `);
+  `,
+  );
 
   await expect(page.getByRole('spinbutton', {name: 'id'})).toBeVisible();
   await page.getByRole('spinbutton', {name: 'id'}).fill('1');
@@ -938,9 +1038,7 @@ test('sql runner surfaces clean errors without blowing out page width', async ({
 
   const error = page.locator('.code-block.error');
   await expect(error).toHaveCount(0);
-  await expect
-    .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
-    .toBeLessThan(1600);
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThan(1600);
 });
 
 test('sql runner surfaces duplicate ddl errors instead of a generic internal error', async ({page}) => {
@@ -954,16 +1052,23 @@ test('sql runner surfaces duplicate ddl errors instead of a generic internal err
   await expect(page.locator('.code-block.error')).not.toContainText('Internal server error');
 });
 
-test('sql runner suggests a generated name in the save prompt and does not save on cancel', async ({page, projectDir}) => {
+test('sql runner suggests a generated name in the save prompt and does not save on cancel', async ({
+  page,
+  projectDir,
+}) => {
   const cancelledSavePath = path.join(projectDir, 'sql', 'from-posts.sql');
   await fs.rm(cancelledSavePath, {force: true});
 
   await page.goto('/#sql');
-  await replaceCodeMirrorText(page, 'SQL editor', `
+  await replaceCodeMirrorText(
+    page,
+    'SQL editor',
+    `
     select *
     from posts
     limit 1;
-  `);
+  `,
+  );
 
   let promptMessage = '';
   let promptDefaultValue: string | undefined;
@@ -974,7 +1079,14 @@ test('sql runner suggests a generated name in the save prompt and does not save 
   });
   await page.getByRole('button', {name: 'Save query'}).click();
 
-  await expect.poll(async () => fs.access(cancelledSavePath).then(() => true, () => false)).toBe(false);
+  await expect
+    .poll(async () =>
+      fs.access(cancelledSavePath).then(
+        () => true,
+        () => false,
+      ),
+    )
+    .toBe(false);
   expect({message: promptMessage, defaultValue: promptDefaultValue}).toMatchObject({
     message: 'Save query as',
     defaultValue: 'from-posts',
@@ -982,12 +1094,7 @@ test('sql runner suggests a generated name in the save prompt and does not save 
   await expect(page).toHaveURL(/#sql$/);
 });
 
-async function confirmAndRunSchemaCommand(
-  page: Page,
-  button: Locator,
-  confirmation?: string,
-  title?: string,
-) {
+async function confirmAndRunSchemaCommand(page: Page, button: Locator, confirmation?: string, title?: string) {
   await button.click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
@@ -1016,7 +1123,9 @@ async function readCodeMirrorText(page: any, ariaLabel: string) {
 
 async function fillGridTextCell(page: any, rowIndex: number, columnIndex: number, value: string) {
   const cell = page.locator(`.reactgrid [data-cell-rowidx="${rowIndex}"][data-cell-colidx="${columnIndex}"]`);
-  const columnName = (await page.locator(`.reactgrid [data-cell-rowidx="0"][data-cell-colidx="${columnIndex}"]`).textContent())?.trim();
+  const columnName = (
+    await page.locator(`.reactgrid [data-cell-rowidx="0"][data-cell-colidx="${columnIndex}"]`).textContent()
+  )?.trim();
   await cell.click({position: {x: 8, y: 8}});
   if (columnName) {
     await expect(page.locator('.selected-cell-panel')).toContainText(`Cell: ${columnName}, row ${rowIndex}`);

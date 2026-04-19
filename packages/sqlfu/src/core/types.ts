@@ -50,10 +50,7 @@ export interface SyncSqlTag {
     strings: TemplateStringsArray,
     ...values: readonly SqlValue[]
   ): SqlRowsPromise<TRow>;
-  all<TRow extends ResultRow = ResultRow>(
-    strings: TemplateStringsArray,
-    ...values: readonly SqlValue[]
-  ): TRow[];
+  all<TRow extends ResultRow = ResultRow>(strings: TemplateStringsArray, ...values: readonly SqlValue[]): TRow[];
   run(strings: TemplateStringsArray, ...values: readonly SqlValue[]): RunResult;
 }
 

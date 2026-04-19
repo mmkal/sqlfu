@@ -143,7 +143,7 @@ export function sqlIdentifierTokens(sql: string): ReadonlySet<string> {
     const char = sql[index]!;
     const next = sql[index + 1];
 
-    if (char === "'" ) {
+    if (char === "'") {
       index = skipSingleQuotedString(sql, index);
       continue;
     }
@@ -211,7 +211,11 @@ function skipSingleQuotedString(sql: string, startIndex: number): number {
   return sql.length - 1;
 }
 
-function readDelimitedIdentifier(sql: string, startIndex: number, delimiter: '"' | '`'): {value: string; endIndex: number} {
+function readDelimitedIdentifier(
+  sql: string,
+  startIndex: number,
+  delimiter: '"' | '`',
+): {value: string; endIndex: number} {
   let value = '';
 
   for (let index = startIndex + 1; index < sql.length; index += 1) {

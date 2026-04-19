@@ -1,7 +1,6 @@
 {
   "name": "sqlfu-workspace",
   "private": true,
-  "packageManager": "pnpm@10.30.1",
   "scripts": {
     "dev": "pnpm --filter sqlfu-ui dev",
     "demo": "pnpm --filter sqlfu-ui demo",
@@ -20,14 +19,21 @@
     "test": "pnpm --filter sqlfu test && pnpm --filter sqlfu-ui test",
     "typecheck": "pnpm --filter sqlfu typecheck && pnpm --filter sqlfu-ui typecheck",
     "generate": "pnpm --filter sqlfu generate",
-    "cli": "pnpm --filter sqlfu cli"
+    "cli": "pnpm --filter sqlfu cli",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "format": "oxfmt .",
+    "format:check": "oxfmt --check ."
+  },
+  "devDependencies": {
+    "alchemy": "^0.91.2",
+    "oxfmt": "^0.45.0",
+    "oxlint": "^1.60.0",
+    "simple-git-hooks": "^2.13.1",
+    "tsx": "^4.21.0"
   },
   "simple-git-hooks": {
     "pre-commit": "pnpm sync:root-readme:pre-commit"
   },
-  "devDependencies": {
-    "alchemy": "^0.91.2",
-    "simple-git-hooks": "^2.13.1",
-    "tsx": "^4.21.0"
-  }
+  "packageManager": "pnpm@10.30.1"
 }

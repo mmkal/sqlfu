@@ -14,9 +14,7 @@ export function isDemoMode() {
   return new URLSearchParams(window.location.search).get('demo') === '1';
 }
 
-export function createDemoClient(input: {
-  onSchemaChange: () => void;
-}): RouterClient<UiRouter> {
+export function createDemoClient(input: {onSchemaChange: () => void}): RouterClient<UiRouter> {
   const clientPromise = createBrowserHost({onSchemaChange: input.onSchemaChange}).then(({host, config}) =>
     createRouterClient(uiRouter, {
       context: {

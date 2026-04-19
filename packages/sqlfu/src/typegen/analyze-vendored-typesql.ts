@@ -37,18 +37,18 @@ export type VendoredQueryInput = {
 
 export type VendoredQueryAnalysis =
   | {
-    readonly sqlPath: string;
-    readonly ok: true;
-    readonly descriptor: GeneratedQueryDescriptor;
-  }
+      readonly sqlPath: string;
+      readonly ok: true;
+      readonly descriptor: GeneratedQueryDescriptor;
+    }
   | {
-    readonly sqlPath: string;
-    readonly ok: false;
-    readonly error: {
-      readonly name: string;
-      readonly description: string;
+      readonly sqlPath: string;
+      readonly ok: false;
+      readonly error: {
+        readonly name: string;
+        readonly description: string;
+      };
     };
-  };
 
 type VendoredTypesqlModule = {
   analyzeSqliteQueries(
@@ -58,9 +58,7 @@ type VendoredTypesqlModule = {
 };
 
 async function loadVendoredTypesql(): Promise<VendoredTypesqlModule> {
-  const modulePath = import.meta.url.endsWith('.ts')
-    ? '../vendor/typesql/sqlfu.ts'
-    : '../vendor/typesql/sqlfu.js';
+  const modulePath = import.meta.url.endsWith('.ts') ? '../vendor/typesql/sqlfu.ts' : '../vendor/typesql/sqlfu.js';
 
   return import(modulePath) as Promise<VendoredTypesqlModule>;
 }

@@ -48,9 +48,7 @@ export async function createBrowserRpcFixture<TInstance extends object>(
     throw new Error(`Failed to extract class name from class definition: ${classDefString}`);
   }
 
-  const methodNames = Object.getOwnPropertyNames(options.classDef.prototype).filter(
-    (name) => name !== 'constructor',
-  );
+  const methodNames = Object.getOwnPropertyNames(options.classDef.prototype).filter((name) => name !== 'constructor');
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'sqlfu-browser-rpc-'));
   const port = await getAvailablePort();
   const url = `http://127.0.0.1:${port}`;
@@ -115,7 +113,9 @@ function createBrowserRpcStub<TInstance extends object>(
           await page.waitForFunction(
             ({requestId}) => {
               const browserGlobal = globalThis as typeof globalThis & {document?: any};
-              const renderedRequestId = browserGlobal.document?.querySelector('[data-testid="rpc-request-id"]')?.textContent;
+              const renderedRequestId = browserGlobal.document?.querySelector(
+                '[data-testid="rpc-request-id"]',
+              )?.textContent;
               const renderedStatus = browserGlobal.document?.querySelector('[data-testid="rpc-status"]')?.textContent;
               return renderedRequestId === String(requestId) && renderedStatus !== 'running';
             },
@@ -128,11 +128,11 @@ function createBrowserRpcStub<TInstance extends object>(
           const errorText = await page.getByTestId('rpc-error').textContent();
 
           if (status === 'error') {
-            const payload = errorText ? JSON.parse(errorText) as {requestId: number; message: string} : undefined;
+            const payload = errorText ? (JSON.parse(errorText) as {requestId: number; message: string}) : undefined;
             throw new Error(payload?.message ?? 'Fixture RPC failed');
           }
 
-          const payload = resultText ? JSON.parse(resultText) as {requestId: number; value: unknown} : undefined;
+          const payload = resultText ? (JSON.parse(resultText) as {requestId: number; value: unknown}) : undefined;
           if (!payload || payload.requestId !== requestId) {
             throw new Error(`Fixture returned an unexpected RPC result for ${propertyKey}`);
           }
@@ -155,11 +155,15 @@ async function waitForFixtureBoot(
   timeoutMs: number,
 ): Promise<void> {
   try {
-    await page.waitForFunction(() => {
-      const browserGlobal = globalThis as typeof globalThis & {document?: any};
-      const status = browserGlobal.document?.querySelector('[data-testid="boot-status"]')?.textContent;
-      return status === 'ready' || status === 'error';
-    }, undefined, {timeout: timeoutMs});
+    await page.waitForFunction(
+      () => {
+        const browserGlobal = globalThis as typeof globalThis & {document?: any};
+        const status = browserGlobal.document?.querySelector('[data-testid="boot-status"]')?.textContent;
+        return status === 'ready' || status === 'error';
+      },
+      undefined,
+      {timeout: timeoutMs},
+    );
 
     const bootStatus = await page.getByTestId('boot-status').textContent();
     if (bootStatus === 'error') {
@@ -167,7 +171,9 @@ async function waitForFixtureBoot(
       throw new Error(bootError || 'Fixture boot failed');
     }
   } catch (error) {
-    throw new Error(formatFixtureFailure(error instanceof Error ? error.message : String(error), serverLogs(), browserLogs()));
+    throw new Error(
+      formatFixtureFailure(error instanceof Error ? error.message : String(error), serverLogs(), browserLogs()),
+    );
   }
 }
 
@@ -273,7 +279,13 @@ export async function stopProcess(child: ExecaProcess): Promise<void> {
   }
 
   child.kill('SIGINT');
-  const exited = await Promise.race([child.then(() => true, () => true), delay(5_000).then(() => false)]);
+  const exited = await Promise.race([
+    child.then(
+      () => true,
+      () => true,
+    ),
+    delay(5_000).then(() => false),
+  ]);
 
   if (!exited && child.exitCode === null && !child.killed) {
     child.kill('SIGKILL');

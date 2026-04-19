@@ -65,13 +65,11 @@ function parseFormatterFixture(contents: string): FormatterFixtureCase[] {
     const inlineErrorMatch = groups.body.match(/^-- ?error:\s*(?<json>"(?:\\.|[^"])*")\s*$/m);
     const errorMarker = groups.body.match(/^-- ?error:$/m);
     if (
-      inputMarker?.index === undefined
-      || (
-        !unchangedOutputMarker
-        && outputMarker?.index === undefined
-        && errorMarker?.index === undefined
-        && !inlineErrorMatch?.groups?.json
-      )
+      inputMarker?.index === undefined ||
+      (!unchangedOutputMarker &&
+        outputMarker?.index === undefined &&
+        errorMarker?.index === undefined &&
+        !inlineErrorMatch?.groups?.json)
     ) {
       throw new Error(`Invalid formatter fixture region "${groups.name}"`);
     }
@@ -86,15 +84,15 @@ function parseFormatterFixture(contents: string): FormatterFixtureCase[] {
         ? trimFixtureBlock(groups.body.slice(outputMarker.index! + outputMarker[0].length + 1))
         : undefined;
     const error = inlineErrorMatch?.groups?.json
-      ? JSON.parse(inlineErrorMatch.groups.json) as string
+      ? (JSON.parse(inlineErrorMatch.groups.json) as string)
       : errorMarker
-      ? parseErrorBlock(groups.body.slice(errorMarker.index! + errorMarker[0].length + 1))
-      : undefined;
+        ? parseErrorBlock(groups.body.slice(errorMarker.index! + errorMarker[0].length + 1))
+        : undefined;
     cases.push({
       name: groups.name,
       config: {
         ...defaultConfig,
-        ...(configMatch?.groups?.json ? JSON.parse(configMatch.groups.json) as Record<string, unknown> : {}),
+        ...(configMatch?.groups?.json ? (JSON.parse(configMatch.groups.json) as Record<string, unknown>) : {}),
       },
       input,
       output,
@@ -111,7 +109,9 @@ function trimFixtureBlock(value: string): string {
 
 function parseDefaultConfig(contents: string): Record<string, unknown> {
   const defaultConfigMatch = contents.match(/^-- default config: (?<json>.+)$/m);
-  return defaultConfigMatch?.groups?.json ? JSON.parse(defaultConfigMatch.groups.json) as Record<string, unknown> : {};
+  return defaultConfigMatch?.groups?.json
+    ? (JSON.parse(defaultConfigMatch.groups.json) as Record<string, unknown>)
+    : {};
 }
 
 function parseErrorBlock(value: string): string {
@@ -174,7 +174,7 @@ function rewriteRegion(name: string, body: string, defaultConfig: Record<string,
 
   const inputStart = inputMarker.index + inputMarker[0].length + 1;
   const input = trimFixtureBlock(body.slice(inputStart, resultMarker.index));
-  const localConfig = configMatch?.groups?.json ? JSON.parse(configMatch.groups.json) as Record<string, unknown> : {};
+  const localConfig = configMatch?.groups?.json ? (JSON.parse(configMatch.groups.json) as Record<string, unknown>) : {};
   const config = {...defaultConfig, ...localConfig};
 
   let resultLines: string[];
@@ -182,7 +182,9 @@ function rewriteRegion(name: string, body: string, defaultConfig: Record<string,
     const output = formatSql(input, config);
     resultLines = output === input ? ['-- output: <unchanged>'] : ['-- output:', output];
   } catch (error) {
-    resultLines = [`-- error: ${JSON.stringify(normalizeErrorMessage(error instanceof Error ? String(error) : String(error)))}`];
+    resultLines = [
+      `-- error: ${JSON.stringify(normalizeErrorMessage(error instanceof Error ? String(error) : String(error)))}`,
+    ];
   }
 
   return [

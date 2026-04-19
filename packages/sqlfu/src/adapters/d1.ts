@@ -21,7 +21,10 @@ export interface D1DatabaseLike {
 
 export function createD1Client(database: D1DatabaseLike): AsyncClient<D1DatabaseLike> {
   const all: AsyncClient<D1DatabaseLike>['all'] = async <TRow extends ResultRow = ResultRow>(sqlQuery: SqlQuery) => {
-    const result = await database.prepare(sqlQuery.sql).bind(...sqlQuery.args).all<TRow>();
+    const result = await database
+      .prepare(sqlQuery.sql)
+      .bind(...sqlQuery.args)
+      .all<TRow>();
     return result.results;
   };
   const run: AsyncClient<D1DatabaseLike>['run'] = async (sqlQuery: SqlQuery) => {
@@ -42,7 +45,9 @@ export function createD1Client(database: D1DatabaseLike): AsyncClient<D1Database
       };
     }, sql);
   };
-  const iterate: AsyncClient<D1DatabaseLike>['iterate'] = async function* <TRow extends ResultRow = ResultRow>(sqlQuery: SqlQuery) {
+  const iterate: AsyncClient<D1DatabaseLike>['iterate'] = async function* <TRow extends ResultRow = ResultRow>(
+    sqlQuery: SqlQuery,
+  ) {
     for (const row of await all<TRow>(sqlQuery)) {
       yield row;
     }

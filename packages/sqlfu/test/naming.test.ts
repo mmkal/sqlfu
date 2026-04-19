@@ -11,7 +11,7 @@ test.for<{label: string; sql: string; expected: string}>([
   {label: 'insert', sql: 'insert into orders (id, total) values (?, ?)', expected: 'insert-orders'},
   {label: 'update', sql: 'update users set name = ? where id = ?', expected: 'update-users'},
   {label: 'delete from', sql: 'delete from sessions where expires_at < ?', expected: 'delete-sessions'},
-  {label: 'leading comment', sql: "-- comment\nselect * from profiles", expected: 'list-profiles'},
+  {label: 'leading comment', sql: '-- comment\nselect * from profiles', expected: 'list-profiles'},
   {label: 'block comment', sql: '/* comment */ select * from profiles', expected: 'list-profiles'},
   {label: 'double-quoted identifier', sql: 'select * from "Profiles"', expected: 'list-profiles'},
   {label: 'empty sql', sql: '', expected: 'query'},
@@ -22,11 +22,19 @@ test.for<{label: string; sql: string; expected: string}>([
 
 test.for<{label: string; sql: string; expected: string}>([
   {label: 'create table', sql: 'create table users (id integer primary key)', expected: 'create_table_users'},
-  {label: 'create index', sql: 'create index idx_users_email on users(email)', expected: 'create_index_idx_users_email'},
+  {
+    label: 'create index',
+    sql: 'create index idx_users_email on users(email)',
+    expected: 'create_index_idx_users_email',
+  },
   {label: 'drop table', sql: 'drop table users', expected: 'drop_table_users'},
-  {label: 'alter add column', sql: 'alter table users add column bio text', expected: 'alter_table_users_add_column_bio'},
+  {
+    label: 'alter add column',
+    sql: 'alter table users add column bio text',
+    expected: 'alter_table_users_add_column_bio',
+  },
   {label: 'rename to', sql: 'alter table users rename to people', expected: 'alter_table_users_rename_to_people'},
-  {label: 'insert into', sql: "insert into users (id) values (1)", expected: 'into_users'},
+  {label: 'insert into', sql: 'insert into users (id) values (1)', expected: 'into_users'},
   {label: 'fallback', sql: '', expected: 'migration'},
 ])('migrationNickname $label', ({sql, expected}) => {
   expect(migrationNickname(sql)).toBe(expected);

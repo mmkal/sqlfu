@@ -72,9 +72,7 @@ describe('draft', () => {
 
     await fixture.api.draft({name: 'add people'});
 
-    expect(await fixture.listMigrationFiles()).toEqual([
-      'migrations/2026-04-10T00.00.00.000Z_add_people.sql',
-    ]);
+    expect(await fixture.listMigrationFiles()).toEqual(['migrations/2026-04-10T00.00.00.000Z_add_people.sql']);
   });
 });
 
@@ -88,10 +86,13 @@ describe('migrate', () => {
 
     await fixture.api.migrate();
 
-    await fixture.writeFile('definitions.sql', dedent`
+    await fixture.writeFile(
+      'definitions.sql',
+      dedent`
       create table person(name text);
       create table pet(name text, species text);
-    `);
+    `,
+    );
     await fixture.writeMigration('add_pet', `create table pet(name text, species text)`);
 
     await fixture.api.migrate();
@@ -122,14 +123,15 @@ describe('migrate', () => {
       desiredSchema: `create table person(name text)`,
     });
 
-    await fixture.writeFile('migrations/2026-04-10T01.00.00.000Z_insert_person.sql', `insert into person(name) values ('alice')`);
+    await fixture.writeFile(
+      'migrations/2026-04-10T01.00.00.000Z_insert_person.sql',
+      `insert into person(name) values ('alice')`,
+    );
     await fixture.writeFile('migrations/2026-04-10T00.00.00.000Z_create_person.sql', `create table person(name text)`);
 
     await fixture.api.migrate();
 
-    expect(await fixture.db.sql`select name from person order by name`).toMatchObject([
-      {name: 'alice'},
-    ]);
+    expect(await fixture.db.sql`select name from person order by name`).toMatchObject([{name: 'alice'}]);
   });
 
   test('refuses to run from an unhealthy baseline even when pending migrations exist', async () => {
@@ -187,10 +189,13 @@ describe('migrate', () => {
     });
 
     await fixture.api.migrate();
-    await fixture.writeMigration('add_pet_and_fail', dedent`
+    await fixture.writeMigration(
+      'add_pet_and_fail',
+      dedent`
       create table pet(name text);
       this is not valid sql;
-    `);
+    `,
+    );
 
     await expect(fixture.api.migrate()).rejects.toMatchInlineSnapshot(`
       [Error: Migration 2026-04-10T02.00.00.000Z_add_pet_and_fail failed: near "this": syntax error
@@ -213,11 +218,14 @@ describe('migrate', () => {
     await fixture.api.migrate();
     // a real-world user typo: `commit;` ends the migration transaction early, so the
     // `create table pet` is persisted and the subsequent syntax error cannot be rolled back
-    await fixture.writeMigration('commit_then_fail', dedent`
+    await fixture.writeMigration(
+      'commit_then_fail',
+      dedent`
       create table pet(name text);
       commit;
       this is not valid sql;
-    `);
+    `,
+    );
 
     await expect(fixture.api.migrate()).rejects.toMatchInlineSnapshot(`
       [Error: Migration 2026-04-10T02.00.00.000Z_commit_then_fail failed: near "this": syntax error
@@ -524,9 +532,7 @@ describe('baseline', () => {
     expect(await extractSchema(fixture.db, 'main', {excludedTables: ['sqlfu_migrations']})).toMatchInlineSnapshot(`
       "create table person(name text);"
     `);
-    expect(await fixture.migrationNames()).toEqual([
-      'create_person',
-    ]);
+    expect(await fixture.migrationNames()).toEqual(['create_person']);
   });
 
   test('truncates migration history to the requested earlier target', async () => {
@@ -541,9 +547,7 @@ describe('baseline', () => {
 
     await fixture.api.baseline({target: '2026-04-10T00.00.00.000Z_create_person'});
 
-    expect(await fixture.migrationNames()).toEqual([
-      'create_person',
-    ]);
+    expect(await fixture.migrationNames()).toEqual(['create_person']);
   });
 });
 
@@ -570,12 +574,8 @@ describe('goto', () => {
     expect(await extractSchema(fixture.db, 'main', {excludedTables: ['sqlfu_migrations']})).toMatchInlineSnapshot(`
       "create table person(name text);"
     `);
-    expect(await fixture.migrationNames()).toEqual([
-      'create_person',
-    ]);
-    expect(await fixture.db.sql`select name from person order by name`).toMatchObject([
-      {name: 'alice'},
-    ]);
+    expect(await fixture.migrationNames()).toEqual(['create_person']);
+    expect(await fixture.db.sql`select name from person order by name`).toMatchObject([{name: 'alice'}]);
 
     await fixture.api.goto({target: path.parse(await fixture.globOne('*/*create_pet*')).name});
 
@@ -583,13 +583,8 @@ describe('goto', () => {
       "create table person(name text);
       create table pet(name text);"
     `);
-    expect(await fixture.migrationNames()).toEqual([
-      'create_person',
-      'create_pet',
-    ]);
-    expect(await fixture.db.sql`select name from person order by name`).toMatchObject([
-      {name: 'alice'},
-    ]);
+    expect(await fixture.migrationNames()).toEqual(['create_person', 'create_pet']);
+    expect(await fixture.db.sql`select name from person order by name`).toMatchObject([{name: 'alice'}]);
     expect(await fixture.db.sql`select name from pet order by name`).toMatchObject([]);
   });
 
@@ -614,9 +609,7 @@ describe('goto', () => {
       "create index person_name_idx on person(name);
       create table person(name text);"
     `);
-    expect(await fixture.db.sql`select name from person order by name`).toMatchObject([
-      {name: 'alice'},
-    ]);
+    expect(await fixture.db.sql`select name from person order by name`).toMatchObject([{name: 'alice'}]);
   });
 });
 
@@ -656,9 +649,7 @@ describe('sync', () => {
     expect(await extractSchema(fixture.db)).toMatchInlineSnapshot(`
       "create table person(name text not null unique);"
     `);
-    await expect(fixture.db.sql`select name from person order by name`).resolves.toMatchObject([
-      {name: 'ada'},
-    ]);
+    await expect(fixture.db.sql`select name from person order by name`).resolves.toMatchObject([{name: 'ada'}]);
   });
 
   test('fails for an unsafe semantic change and recommends draft plus migrate', async () => {

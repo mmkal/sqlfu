@@ -75,11 +75,7 @@ test('column width algorithm snapshot', async () => {
   expect(output).toMatchSnapshot('column-widths.txt');
 });
 
-function formatScenarioSnapshot(input: {
-  title: string;
-  availableWidth: number;
-  columns: readonly ColumnWidthInput[];
-}) {
+function formatScenarioSnapshot(input: {title: string; availableWidth: number; columns: readonly ColumnWidthInput[]}) {
   const widths = columnWidthAlgorithm({
     availableWidth: input.availableWidth,
     columns: input.columns,
@@ -94,7 +90,10 @@ function formatScenarioSnapshot(input: {
     input.title,
     `availableWidth=${input.availableWidth} totalWidth=${widths.reduce((total, column) => total + column.width, 0)}`,
     `widths=${markdownWidths.map((column) => `${column.key}:${column.width}`).join(', ')}`,
-    ...formatMarkdownTable(rows, markdownWidths.map((column) => column.markdownWidth)),
+    ...formatMarkdownTable(
+      rows,
+      markdownWidths.map((column) => column.markdownWidth),
+    ),
   ].join('\n');
 }
 

@@ -6,7 +6,7 @@ import {execFileSync} from 'node:child_process'
 import {fileURLToPath} from 'node:url'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const sourcePath = path.join(repoRoot, 'packages/ui/README.md')
+const sourcePath = path.join(repoRoot, 'packages/sqlfu/README.md')
 const targetPath = path.join(repoRoot, 'README.md')
 
 const mode = process.argv[2] || 'sync'
@@ -30,14 +30,14 @@ async function main() {
 
 async function runPreCommit() {
   const stagedFiles = getStagedFiles()
-  const sourceChanged = stagedFiles.includes('packages/ui/README.md')
+  const sourceChanged = stagedFiles.includes('packages/sqlfu/README.md')
   const targetChanged = stagedFiles.includes('README.md')
 
   if (targetChanged && !sourceChanged) {
     const nextContent = await renderRootReadme()
     const currentContent = await readFileIfExists(targetPath)
     if (currentContent !== nextContent) {
-      fail('README.md is generated from packages/ui/README.md. Edit packages/ui/README.md instead.')
+      fail('README.md is generated from packages/sqlfu/README.md. Edit packages/sqlfu/README.md instead.')
     }
   }
 
@@ -53,7 +53,7 @@ async function runCheck() {
   const nextContent = await renderRootReadme()
   const currentContent = await readFileIfExists(targetPath)
   if (currentContent !== nextContent) {
-    fail('README.md is out of sync with packages/ui/README.md. Run `pnpm sync:root-readme`.')
+    fail('README.md is out of sync with packages/sqlfu/README.md. Run `pnpm sync:root-readme`.')
   }
 }
 

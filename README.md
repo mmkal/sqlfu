@@ -4,7 +4,7 @@
 
 It is built around a simple idea: SQL should be the source language for schema, migrations, queries, formatting, and diffing. TypeScript comes second. You should still get good generated types and wrappers, but without having to push the whole project through an ORM-shaped API.
 
-![i know sqlfu](./packages/sqlfu/docs/i-know-sqlfu.gif)
+![i know sqlfu](packages/sqlfu/docs/i-know-sqlfu.gif)
 
 - [What Is sqlfu?](#what-is-sqlfu)
 - [Philosophy](#philosophy)
@@ -110,7 +110,7 @@ The production path is replayed migrations, not direct declarative apply.
 
 That diff engine powers commands like `draft`, `goto`, and `sync`.
 
-For the engine model itself, see [docs/schema-diff-model.md](./docs/schema-diff-model.md).
+For the engine model itself, see [docs/schema-diff-model.md](packages/sqlfu/docs/schema-diff-model.md).
 
 ### Type Generator
 
@@ -126,10 +126,10 @@ It started from a vendored copy of [`sql-formatter`](https://github.com/sql-form
 
 If you want to see or change that behavior, start here:
 
-- [src/formatter.ts](./packages/sqlfu/src/formatter.ts)
-- [src/vendor/sql-formatter/AGENTS.md](./packages/sqlfu/src/vendor/sql-formatter/AGENTS.md)
-- [test/formatter/sqlite.fixture.sql](./packages/sqlfu/test/formatter/sqlite.fixture.sql)
-- [test/formatter.test.ts](./packages/sqlfu/test/formatter.test.ts)
+- [src/formatter.ts](packages/sqlfu/src/formatter.ts)
+- [src/vendor/sql-formatter/CLAUDE.md](packages/sqlfu/src/vendor/sql-formatter/CLAUDE.md)
+- [test/formatter/sqlite.fixture.sql](packages/sqlfu/test/formatter/sqlite.fixture.sql)
+- [test/formatter.test.ts](packages/sqlfu/test/formatter.test.ts)
 
 ### Observability
 
@@ -146,7 +146,7 @@ const client = instrument(baseClient,
 );
 ```
 
-No peer dependencies on OpenTelemetry or Sentry — `TracerLike` is structural, hook consumers bring their own SDK. Copy-pasteable recipes for OpenTelemetry, Sentry, PostHog, and Datadog (DogStatsD metrics) live in [docs/observability.md](./docs/observability.md).
+No peer dependencies on OpenTelemetry or Sentry — `TracerLike` is structural, hook consumers bring their own SDK. Copy-pasteable recipes for OpenTelemetry, Sentry, PostHog, and Datadog (DogStatsD metrics) live in [docs/observability.md](packages/sqlfu/docs/observability.md).
 
 ### UI
 
@@ -250,7 +250,7 @@ You should still review and edit the generated migration, especially for renames
 
 There is no committed `snapshot.sql` file. If you want the guarantee a snapshot would normally provide, run `sqlfu check`, which verifies that replayed migrations still reproduce `definitions.sql`.
 
-For the migration model in more detail, see [docs/migration-model.md](./docs/migration-model.md).
+For the migration model in more detail, see [docs/migration-model.md](packages/sqlfu/docs/migration-model.md).
 
 ### Launch the UI
 
@@ -350,4 +350,3 @@ Current limits also matter:
 - SQLite view typing is still imperfect in TypeSQL
 - some expressions still need the sqlfu post-pass to get better generated result types
 - the formatter is opinionated and still evolving
-

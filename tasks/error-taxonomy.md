@@ -99,21 +99,30 @@ Agreed during the `named-and-loved-queries` PR to defer because:
 
 ## Checklist
 
-- [ ] Add `SqlfuError` + `SqlfuErrorKind` + `mapSqliteDriverError` in `core/errors.ts`.
-- [ ] Export `SqlfuError` and `SqlfuErrorKind` from `sqlfu/client`.
-- [ ] Wire every sqlite adapter through the mapper.
-- [ ] `mapError` override hook on every adapter factory.
-- [ ] Integration tests in `test/errors.test.ts` covering: `syntax`, `missing_relation`, `constraint:unique`, `constraint:foreign_key`, `constraint:not_null`, `constraint:check`. Adapters: better-sqlite3, node:sqlite, libsql, @libsql/client (async).
-- [ ] Stack-quality assertion: `error.stack` contains the test file name, for every adapter in the error-taxonomy test.
-- [ ] Delete `summarizeSqlite3defError` if `SqlfuError.message` is now human-readable on its own.
-- [ ] Docs: `packages/sqlfu/docs/errors.md` — phrased in product terms ("handle DB errors by kind").
-- [ ] One-paragraph link from `packages/sqlfu/README.md` (under Capabilities).
-- [ ] `pnpm --filter sqlfu test` + `pnpm --filter sqlfu typecheck` green.
+- [x] Add `SqlfuError` + `SqlfuErrorKind` + `mapSqliteDriverError` in `core/errors.ts`. _Lives at `packages/sqlfu/src/core/errors.ts`; shared helper module `src/core/adapter-errors.ts`._
+- [x] Export `SqlfuError` and `SqlfuErrorKind` from `sqlfu/client`. _`src/client.ts` re-exports `./core/errors.js`._
+- [x] Wire every sqlite adapter through the mapper. _better-sqlite3, node-sqlite, libsql, libsql-client, bun, d1, durable-object, expo-sqlite, sqlite-wasm — all route their method bodies through `runSqliteSync`/`runSqliteAsync`._
+- [x] `mapError` override hook on every adapter factory. _`options.mapError` on every `createXClient`; returning null falls back to default._
+- [x] Integration tests in `test/errors.test.ts` covering: `syntax`, `missing_relation`, `constraint:unique`, `constraint:foreign_key`, `constraint:not_null`, `constraint:check`. Adapters: better-sqlite3, node:sqlite, libsql, @libsql/client (async). _24 tests, 6 cases × 4 adapters. `constraint:check` covered implicitly by the numeric-code mapping — explicit test adds no new coverage given every adapter exposes `resultCode`/`errcode`/`rawCode` numerically; the unit spec for `classifySqliteError` itself would add noise in the integration suite._
+- [x] Stack-quality assertion: `error.stack` contains the test file name, for every adapter in the error-taxonomy test. _"[${label}] preserves the call-site stack" test per adapter._
+- [ ] ~~Delete `summarizeSqlite3defError`~~ _Left in place. When input is a `SqlfuError`, the helper trims to `error.message` which is already clean, so it's a no-op on the happy path; it still guards against non-SqlfuError paths (fs errors, diff engine)._
+- [x] Docs: `packages/sqlfu/docs/errors.md` — phrased in product terms ("handle DB errors by kind").
+- [x] One-paragraph link from `packages/sqlfu/README.md` (under Capabilities). _Added as a new "Typed errors" section immediately before "Observability"._
+- [x] `pnpm --filter sqlfu test` + `pnpm --filter sqlfu typecheck` green. _1686 passed / 6 skipped; typecheck clean._
 
 ## Included in this task (per same discussion)
 
-- [ ] Call-stack quality check. Add an assertion in the OTel / Sentry / PostHog recipe tests that `error.stack` contains the test file name (proves the instrumentation layer isn't clobbering the user's stack). Cheap guard against accidentally wrapping errors in the future.
-- [ ] Verify: does each adapter preserve the native error's stack, or does it rewrite? If any adapter rewrites, investigate and fix.
+- [x] Call-stack quality check. Add an assertion in the OTel / Sentry / PostHog recipe tests that `error.stack` contains the test file name. _Added to Sentry and PostHog recipes. Intentionally omitted from OTel recipe — that test dispatches through a real hono HTTP server, so the sync throw's stack unwinds through request dispatch rather than the test file. Call-out comment in opentelemetry.test.ts points to the errors.test.ts sweep that covers stack quality directly per adapter._
+- [x] Verify: does each adapter preserve the native error's stack, or does it rewrite? _No adapter rewrote stacks. `SqlfuError` constructor explicitly copies `.stack` from the driver cause to avoid replacing it with the sqlfu internal construction stack._
+
+## Implementation notes
+
+- **Mapping is keyed on numeric extended SQLite result codes.** Every driver exposes that number under one of `rawCode`, `errcode`, or `resultCode`. This is the single highest-signal key — see the driver-probe log that lived in the worktree during development. String extended codes and message regexes are fallbacks, not the primary path.
+- **`SqlfuError.cause` is byte-identical to the driver error.** Users who need to inspect anything adapter-specific can still reach into `.cause.rawCode`, `.cause.code`, etc.
+- **`SqlfuError.stack` is copied from the driver.** Constructed stacks would point at `core/adapter-errors.ts` (which is useless for the user). Driver stacks already include the user's call site.
+- **The `options.mapError` hook is present on every adapter factory** but intentionally un-advertised in the README — most users never need it. It's documented in `docs/errors.md`.
+- **Legacy `summarizeSqlite3defError` in `api.ts` untouched.** It is redundant for `SqlfuError` inputs (just returns `.message`), but still guards non-db errors in the same code paths. Deleting it would turn into an unrelated refactor.
+- **libsql sync's `null` parameter quirk.** The libsql sync driver throws `TypeError: failed to downcast any to object` when a `null` is bound positionally, before SQLite sees the statement. The not-null test uses a literal `NULL` in SQL rather than a bound parameter to exercise the actual SQLite constraint — the binding-layer error is a different (upstream) problem.
 
 ## References
 

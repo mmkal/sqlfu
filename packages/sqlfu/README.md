@@ -263,6 +263,17 @@ You should still review and edit the generated migration, especially for renames
 
 There is no committed `snapshot.sql` file. If you want the guarantee a snapshot would normally provide, run `sqlfu check`, which verifies that replayed migrations still reproduce `definitions.sql`.
 
+#### When a migration fails
+
+`sqlfu migrate` starts from a trusted migration-history prefix. Before applying anything, it checks that the database's live schema still matches what the recorded migration history implies. If it does not, `sqlfu migrate` refuses to proceed and points at the reconciliation it would take to move forward.
+
+If a migration fails partway through, `sqlfu migrate` reruns that same check against the post-failure database state. There are two possible outcomes:
+
+- The failed migration rolled back cleanly. The error explicitly says the database is still healthy for `migrate`. Fix the migration and run `sqlfu migrate` again.
+- The failed migration left the live schema out of sync with recorded history. The error says reconciliation is required and lists the same recommendation-style diagnostics `sqlfu check` would produce. Use `sqlfu goto <target>` or `sqlfu baseline <target>` to reconcile before retrying.
+
+No row is ever written to `sqlfu_migrations` for a failed migration. That table only ever contains migrations `sqlfu` trusts to have fully applied.
+
 For the migration model in more detail, see [docs/migration-model.md](./docs/migration-model.md).
 
 ### Launch the UI

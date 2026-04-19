@@ -1,4 +1,4 @@
-import type {SqlfuProjectConfig} from './core/types.js';
+import type {Client, SqlfuProjectConfig} from './core/types.js';
 import type {SqlfuHost} from './core/host.js';
 import {basename, joinPath} from './core/paths.js';
 import {createDefaultInitPreview} from './core/init-preview.js';
@@ -305,6 +305,14 @@ export async function applyMigrateSql(
   confirm: SqlfuCommandConfirm,
 ) {
   const migrations = await readMigrationsFromContext(context);
+
+  // preflight: the database must be healthy enough to apply migrations from a trusted prefix.
+  // we check this once before doing anything, even when there are zero pending migrations.
+  const preflight = await analyzeMigrateHealth(context);
+  if (preflight.blockers.length > 0) {
+    throw new Error(formatMigratePreflightFailure(preflight));
+  }
+
   await using database = await context.host.openDb(context.config);
   const applied = await readMigrationHistory(database.client);
   const appliedNames = new Set(applied.map((migration) => migration.name));
@@ -322,9 +330,190 @@ export async function applyMigrateSql(
       return;
     }
   }
-  // apply migrations even if there are zero pending, because this will validate migration history
-  await applyMigrations(context.host, database.client, {migrations});
+
+  try {
+    // apply migrations even if there are zero pending, because this will validate migration history
+    await applyMigrations(context.host, database.client, {migrations});
+  } catch (error) {
+    // figure out which migration was the first one to not make it into history
+    const appliedAfter = await readMigrationHistory(database.client);
+    const appliedAfterNames = new Set(appliedAfter.map((migration) => migration.name));
+    const failed = pendingMigrations.find((migration) => !appliedAfterNames.has(migrationName(migration)));
+    const failedName = failed ? migrationName(failed) : 'migration';
+
+    // rerun the migrate-health check against whatever state the database is in now.
+    // if nothing drifted, retrying is honest. if something did drift, reconciliation is required.
+    // reuse the already-open client so we do not race a second connection against a database
+    // that is still recovering from the failed migration.
+    const postFailure = await analyzeMigrateHealth(context, database.client);
+    throw new Error(formatMigrateFailure({
+      failedName,
+      cause: summarizeSqlite3defError(error),
+      postFailure,
+    }));
+  }
 }
+
+async function analyzeMigrateHealth(
+  context: SqlfuContext,
+  existingClient?: Client,
+): Promise<MigrateHealthAnalysis> {
+  // this is narrower than analyzeDatabase on purpose. it only checks the things that would make
+  // it unsafe to apply more migrations:
+  //   - history drift: the database claims migrations that no longer match the repo
+  //   - schema drift: the live schema no longer matches the schema the applied history implies
+  // pending migrations are the whole point of migrate, so they are never blockers. sync drift
+  // is about desired vs live, which is downstream of applying migrations.
+  // unlike analyzeDatabase, this deliberately does not replay pending migrations, so broken
+  // pending migrations still reach the real apply path where their errors can be reported.
+  const migrations = await readMigrationsFromContext(context);
+  if (existingClient) {
+    return analyzeMigrateHealthWithClient(context, migrations, existingClient);
+  }
+  await using database = await context.host.openDb(context.config);
+  return await analyzeMigrateHealthWithClient(context, migrations, database.client);
+}
+
+async function analyzeMigrateHealthWithClient(
+  context: SqlfuContext,
+  migrations: readonly Migration[],
+  client: Client,
+): Promise<MigrateHealthAnalysis> {
+  const applied = await readMigrationHistory(client);
+  const liveSchema = await extractSchema(client, 'main', {
+    excludedTables: schemaDriftExcludedTables,
+  });
+  const migrationByName = new Map(migrations.map((migration) => [migrationName(migration), migration]));
+  const historyMismatch = await findHistoryMismatch(context.host, applied, migrations, migrationByName);
+
+  const blockers: CheckMismatch[] = [];
+  const recommendations: CheckRecommendation[] = [];
+
+  if (historyMismatch) {
+    const problemLine = historyMismatch.kind === 'deleted'
+      ? `Deleted applied migration: ${historyMismatch.name}`
+      : historyMismatch.kind === 'checksumMismatch'
+      ? `Applied migration checksum mismatch: ${historyMismatch.name}`
+      : `New migration sorts before applied migration: ${historyMismatch.name}`;
+    blockers.push({
+      kind: 'historyDrift',
+      title: 'History Drift',
+      summary: 'Migration History does not match Migrations.',
+      details: [problemLine],
+    });
+    if (historyMismatch.kind === 'deleted') {
+      addRecommendation(recommendations, {
+        kind: 'restoreMissingMigration',
+        label: 'Restore the missing migration from version control.',
+      });
+    } else if (historyMismatch.kind === 'outOfOrder') {
+      const latestApplied = applied.at(-1)?.name;
+      if (latestApplied) {
+        addRecommendation(recommendations, {
+          kind: 'goto',
+          command: ['goto', latestApplied],
+          label: 'Move the database to the selected migration target.',
+        });
+      }
+    } else {
+      addRecommendation(recommendations, {
+        kind: 'restoreOriginalMigration',
+        label: 'Restore the original migration from version control.',
+      });
+    }
+    return {blockers, recommendations};
+  }
+
+  // safe to replay the applied prefix now that we know the applied migrations line up with the
+  // repo. only replay migrations that we are claiming have already been applied - do not replay
+  // pending ones, because those might be broken (and that's migrate's job to surface).
+  const historicalMigrations = applied
+    .map((historical) => migrationByName.get(historical.name))
+    .filter((migration): migration is Migration => Boolean(migration));
+  const historicalSchema = await materializeMigrationsSchemaForContext(context.host, historicalMigrations);
+  const schemaDrift = await compareSchemasForContext(context.host, historicalSchema, liveSchema);
+
+  if (schemaDrift.isDifferent) {
+    const recommendedBaselineTarget = await findRecommendedTarget(context.host, migrations, liveSchema);
+    // prefer the latest applied migration as the goto target. its replay is known to work, and
+    // it resets the database to a trusted recorded state. falling back to the latest migration
+    // in the repo could recommend a broken pending migration.
+    const recommendedGotoTarget = applied.at(-1)?.name
+      || (migrations.length > 0 ? migrationName(migrations.at(-1)!) : null);
+    blockers.push({
+      kind: 'schemaDrift',
+      title: 'Schema Drift',
+      summary: applied.length === 0
+        ? 'Live Schema exists, but Migration History is empty.'
+        : 'Live Schema does not match Migration History.',
+      details: [],
+    });
+    if (recommendedBaselineTarget) {
+      addRecommendation(recommendations, {
+        kind: 'baseline',
+        command: ['baseline', recommendedBaselineTarget],
+        label: 'Record the current schema as already applied.',
+      });
+    } else if (recommendedGotoTarget) {
+      addRecommendation(recommendations, {
+        kind: 'goto',
+        command: ['goto', recommendedGotoTarget],
+        label: 'Move the database to the selected migration target.',
+      });
+    }
+  }
+
+  return {blockers, recommendations};
+}
+
+function formatMigratePreflightFailure(analysis: MigrateHealthAnalysis) {
+  const sections: string[] = ['Cannot migrate from current database state.'];
+  for (const blocker of analysis.blockers) {
+    sections.push([blocker.title, blocker.summary, ...blocker.details].join('\n'));
+  }
+  if (analysis.recommendations.length > 0) {
+    sections.push([
+      'Recommended next actions',
+      ...analysis.recommendations.map((recommendation) => `- ${formatRecommendationText(recommendation)}`),
+    ].join('\n'));
+  }
+  return sections.join('\n\n');
+}
+
+function formatMigrateFailure(params: {
+  failedName: string;
+  cause: string;
+  postFailure: MigrateHealthAnalysis;
+}) {
+  const header = `Migration ${params.failedName} failed: ${params.cause}`;
+
+  if (params.postFailure.blockers.length === 0) {
+    return [
+      header,
+      'The database is still healthy for migrate. Fix the migration and retry.',
+    ].join('\n\n');
+  }
+
+  const sections: string[] = [
+    header,
+    'The database is no longer healthy for migrate. Reconcile before retrying.',
+  ];
+  for (const blocker of params.postFailure.blockers) {
+    sections.push([blocker.title, blocker.summary, ...blocker.details].join('\n'));
+  }
+  if (params.postFailure.recommendations.length > 0) {
+    sections.push([
+      'Recommended next actions',
+      ...params.postFailure.recommendations.map((recommendation) => `- ${formatRecommendationText(recommendation)}`),
+    ].join('\n'));
+  }
+  return sections.join('\n\n');
+}
+
+type MigrateHealthAnalysis = {
+  readonly blockers: readonly CheckMismatch[];
+  readonly recommendations: readonly CheckRecommendation[];
+};
 
 export async function applyBaselineSql(
   context: SqlfuContext,
@@ -441,7 +630,7 @@ export async function analyzeDatabase(context: SqlfuContext) {
   const migrationByName = new Map(migrations.map((migration) => [migrationName(migration), migration]));
 
   const repoDrift = await compareSchemasForContext(host, desiredSchema, migrationsSchema);
-  const historyMismatch = await findHistoryMismatch(host, applied, migrationByName);
+  const historyMismatch = await findHistoryMismatch(host, applied, migrations, migrationByName);
   const hasPendingMigrations = !historyMismatch && migrations.some((migration) => !appliedNames.has(migrationName(migration)));
 
   const historicalMigrations = applied
@@ -460,7 +649,9 @@ export async function analyzeDatabase(context: SqlfuContext) {
   if (historyMismatch) {
     const problemLine = historyMismatch.kind === 'deleted'
       ? `Deleted applied migration: ${historyMismatch.name}`
-      : `Applied migration checksum mismatch: ${historyMismatch.name}`;
+      : historyMismatch.kind === 'checksumMismatch'
+      ? `Applied migration checksum mismatch: ${historyMismatch.name}`
+      : `New migration sorts before applied migration: ${historyMismatch.name}`;
     mismatches.push({
       kind: 'historyDrift',
       title: 'History Drift',
@@ -473,6 +664,15 @@ export async function analyzeDatabase(context: SqlfuContext) {
         kind: 'restoreMissingMigration',
         label: 'Restore the missing migration from version control.',
       });
+    } else if (historyMismatch.kind === 'outOfOrder') {
+      const latestApplied = applied.at(-1)?.name;
+      if (latestApplied) {
+        addRecommendation(recommendations, {
+          kind: 'goto',
+          command: ['goto', latestApplied],
+          label: 'Move the database to the selected migration target.',
+        });
+      }
     } else if (recommendedBaselineTarget) {
       addRecommendation(recommendations, {
         kind: 'restoreOriginalMigration',
@@ -600,6 +800,7 @@ export async function analyzeDatabase(context: SqlfuContext) {
 async function findHistoryMismatch(
   host: SqlfuHost,
   applied: readonly {name: string; checksum: string}[],
+  migrations: readonly Migration[],
   migrationByName: ReadonlyMap<string, Migration>,
 ) {
   for (const historical of applied) {
@@ -611,13 +812,30 @@ async function findHistoryMismatch(
       return {kind: 'checksumMismatch' as const, name: historical.name};
     }
   }
+  // applied migrations must also match the leading prefix of migrations by sort order.
+  // if a new migration file sorts before an already-applied one, the repository no longer
+  // describes a history that the database could honestly claim to have applied.
+  for (let index = 0; index < applied.length; index += 1) {
+    const historical = applied[index]!;
+    const expected = migrations[index];
+    if (!expected || migrationName(expected) !== historical.name) {
+      return {kind: 'outOfOrder' as const, name: historical.name};
+    }
+  }
   return null;
 }
 
 async function findRecommendedTarget(host: SqlfuHost, migrations: readonly Migration[], liveSchema: string) {
   for (let index = 0; index < migrations.length; index += 1) {
     const candidate = migrations.slice(0, index + 1);
-    const candidateSchema = await materializeMigrationsSchemaForContext(host, candidate);
+    let candidateSchema: string;
+    try {
+      candidateSchema = await materializeMigrationsSchemaForContext(host, candidate);
+    } catch {
+      // a migration in this prefix is broken. it cannot be a trusted target, and any later
+      // prefix containing the same migration is also untrustworthy. stop searching.
+      return null;
+    }
     if (!(await compareSchemasForContext(host, candidateSchema, liveSchema)).isDifferent) {
       return migrationName(candidate.at(-1)!);
     }

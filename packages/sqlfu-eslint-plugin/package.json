@@ -1,0 +1,41 @@
+{
+  "name": "@sqlfu/eslint-plugin",
+  "version": "0.0.1-0",
+  "description": "eslint plugin for sqlfu projects. rules that nudge you toward named .sql files and lowercase SQL. compatible with oxlint's JS plugin loader.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mmkal/sqlfu.git",
+    "directory": "packages/sqlfu-eslint-plugin"
+  },
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest"
+  },
+  "peerDependencies": {
+    "eslint": ">=8"
+  },
+  "devDependencies": {
+    "@types/eslint": "^9.6.1",
+    "@types/estree": "^1.0.8",
+    "@types/node": "^24.5.2",
+    "eslint": "^9.36.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.1"
+  }
+}

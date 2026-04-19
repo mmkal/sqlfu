@@ -123,5 +123,31 @@ Will log in the implementation notes below if any turn up while wiring this in.
 
 ## Implementation notes
 
-_(Filled in as the work proceeds. Implementation log at the bottom.)_
+### What shipped
+
+- **`packages/sqlfu-eslint-plugin/`** — one rule (`sqlfu/no-unnamed-inline-sql`). 7 vitest cases covering: positive match, ad-hoc negative, parameterized-template negative, whitespace/case normalization, `client.sql\`...\`` tag, nested query dirs, missing `sqlfu.config` no-op. Uses `Linter.verify` with a flat config, with `cwd` set to the fixture tmp dir so the `files` glob actually matches the absolute fixture paths (otherwise ESLint silently reports "No matching configuration found"). Plugin is ESLint-compat so oxlint's `jsPlugins` (alpha) can load the same package.
+- **`packages/sqlfu-vscode/`** — scaffold with one command (`sqlfu.openUi`). Resolves the `sqlfu` CLI from the workspace's `node_modules/.bin`, falls back to `node_modules/sqlfu/dist/cli.js`, falls back to global PATH. Spawns `sqlfu serve --port <freePort>`, waits for the port to respond, opens a webview. The webview itself is a splash linking out to the URL — embedding the local http UI inside VS Code requires CSP work that isn't MVP-worthy (the task file predicted this and approved the downscope).
+
+### oxlint plugin status (confirmed)
+
+oxlint 1.x **does** support JS plugins via `jsPlugins` in `.oxlintrc.json`, using an ESLint-compatible API. It's documented as **alpha**. We ship one plugin package that works with ESLint today and is loadable by oxlint when/if the user opts in; the README documents both invocations.
+
+### Things intentionally not done
+
+- No oxlint `jsPlugins` wiring in this repo's `.oxlintrc.json` — the repo's own rules aren't the point of the package, and adding them while oxlint's plugin loader is alpha risks churn. Downstream users enable it in their own configs.
+- No autofix on the rule. The correct replacement depends on the file location (relative import path) and the generated wrapper's function name, which the rule does compute — an autofix is a reasonable follow-up once the message-only version has been tried.
+- No `.vscode/launch.json` in `packages/sqlfu-vscode/` — the write attempt hit a permission block in the working environment. README documents the JSON to paste in instead.
+- No marketplace publish. Out of scope.
+
+### Pre-existing flaws noticed
+
+- The `devtools` worktree's pnpm install didn't build `better-sqlite3` (its build script is in the workspace's `ignoredBuiltDependencies` list, apparently — or simply not yet approved in this worktree). Had to manually run the install script. Not fixing globally because the root workspace has `simple-git-hooks` in `onlyBuiltDependencies` but leaves `better-sqlite3` off; likely intentional for determinism. Documented here as a worktree-setup gotcha.
+- Running `pnpm lint` on `main` produces 20 errors, all pre-existing. Our new packages contribute zero new errors. The pre-existing errors overlap with the ones called out in `tasks/complete/2026-04-18-ox.md` and are unrelated to this task.
+
+### Implementation log
+
+| commit | summary |
+|---|---|
+| e28de61 | task: flesh out devtools plan |
+| (next) | eslint-plugin MVP + vscode extension scaffold |
 

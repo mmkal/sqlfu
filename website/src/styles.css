@@ -209,6 +209,45 @@ a {
   color: var(--muted);
 }
 
+.value-media {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  margin: 0 0 0.9rem;
+  border-radius: 1rem;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: #20140f;
+}
+
+.value-media .value-video,
+.value-media .value-video-fallback {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.value-media .value-video-fallback {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+
+/* Prefers-reduced-motion: hide the autoplaying video and show the poster frame
+ * in its place. The video remains in the DOM (so the audio/video element
+ * count stays consistent) but is visually replaced by the still fallback. */
+@media (prefers-reduced-motion: reduce) {
+  .value-media .value-video {
+    visibility: hidden;
+  }
+  .value-media .value-video-fallback {
+    opacity: 1;
+  }
+}
+
 .showreel {
   margin: 2.4rem auto 0.4rem;
   max-width: 44rem;

@@ -64,6 +64,11 @@ for (const assetPath of assetPaths) {
   await fs.copyFile(assetPath, destinationPath);
 }
 
+// Landing-page <video> panels. Rendered outputs live in website/src/assets/animations
+// (see website/animations for the Remotion project that produces them). We copy
+// any *.mp4 / *.webm / *.poster.jpg we find there into dist/assets/animations/.
+await copyAnimationAssets();
+
 await writeHtmlPage(path.join(distRoot, 'index.html'), renderLandingPage(renderedDocs));
 await writeHtmlPage(path.join(distRoot, 'docs', 'index.html'), renderDocPage(mainDoc, renderedDocs));
 
@@ -81,7 +86,7 @@ for (const doc of renderedDocs) {
 async function writeHtmlPage(filePath, html) {
   const depth = path.relative(distRoot, path.dirname(filePath)).split(path.sep).filter(Boolean).length;
   const prefix = depth === 0 ? './' : '../'.repeat(depth);
-  const rewritten = html.replaceAll(/((?:href|src)=")\/([^"]*)"/g, (_match, attr, rest) => `${attr}${prefix}${rest}"`);
+  const rewritten = html.replaceAll(/((?:href|src|poster)=")\/([^"]*)"/g, (_match, attr, rest) => `${attr}${prefix}${rest}"`);
   await fs.writeFile(filePath, rewritten);
 }
 
@@ -166,6 +171,27 @@ function createMarkdownRenderer(currentDoc) {
 }
 
 function renderLandingPage(renderedDocs) {
+  const panels = [
+    {
+      eyebrow: 'source of truth',
+      heading: 'Schema lives in SQL.',
+      body: `Your schema is a single <code>definitions.sql</code> file. Edit it like code &mdash; no DSL, no runtime builder to fight.`,
+      animationKey: 'schema',
+    },
+    {
+      eyebrow: 'types, generated',
+      heading: 'Types follow SQL.',
+      body: `<code>sqlfu generate</code> reads your <code>.sql</code> files and emits typed wrappers next to them. Call sites get typed params, typed rows, and autocomplete &mdash; you still wrote plain SQL. Query names travel to <a href="/docs/observability/">OpenTelemetry, Sentry, Datadog, PostHog</a>.`,
+      animationKey: 'generate',
+    },
+    {
+      eyebrow: 'diff-driven migrations',
+      heading: 'Migrations draft themselves.',
+      body: `The native SQLite diff engine compares replayed migration history against <code>definitions.sql</code> and writes the next migration for you. You review, edit for renames or backfills, and commit.`,
+      animationKey: 'draft',
+    },
+  ];
+  const panelsHtml = panels.map(renderValuePanel).join('\n');
   return renderPage({
     title: 'sqlfu',
     body: `
@@ -189,24 +215,83 @@ function renderLandingPage(renderedDocs) {
 
       <h2 class="section-title">SQL first. TypeScript second.</h2>
       <section class="section-grid">
-        <article class="panel value-panel">
-          <div class="eyebrow">source of truth</div>
-          <h3>Schema, migrations, queries. All <code>.sql</code>.</h3>
-          <p>Your schema lives in <code>definitions.sql</code>. Migrations are ordered SQL files. Queries are <code>.sql</code> files checked in next to the code that calls them. No DSL, no runtime builder to fight.</p>
-        </article>
-        <article class="panel value-panel">
-          <div class="eyebrow">types, generated</div>
-          <h3>TypeScript wrappers <i>from</i> your SQL</h3>
-          <p><code>sqlfu generate</code> reads your <code>.sql</code> files and emits typed wrappers next to them: typed params, typed rows, and a client you can call from application code. Your query names travel with them &mdash; to <a href="/docs/observability/">OpenTelemetry, Sentry, Datadog, PostHog</a>, whatever.</p>
-        </article>
-        <article class="panel value-panel">
-          <div class="eyebrow">diff-driven migrations</div>
-          <h3>Drafts your next migration</h3>
-          <p>The native SQLite diff engine compares replayed migration history against <code>definitions.sql</code> and writes the next migration for you. You review, edit for renames or backfills, and commit.</p>
-        </article>
+        ${panelsHtml}
       </section>
+      ${renderAnimationAlternativesScript(panels)}
     `,
   });
+}
+
+function renderValuePanel(panel) {
+  const baseSlug = animationSlugFor('main', panel.animationKey);
+  // Default source: main animation 1-3. data-animation-key is read client-side
+  // to swap to /assets/animations/alt-<letter>-<key> when ?animation_alternative is present.
+  return `
+        <article class="panel value-panel">
+          <div class="eyebrow">${panel.eyebrow}</div>
+          <div class="value-media" data-animation-key="${panel.animationKey}">
+            <video
+              class="value-video"
+              autoplay
+              loop
+              muted
+              playsinline
+              preload="metadata"
+              poster="/assets/animations/${baseSlug}.poster.jpg"
+            >
+              <source src="/assets/animations/${baseSlug}.webm" type="video/webm" />
+              <source src="/assets/animations/${baseSlug}.mp4" type="video/mp4" />
+            </video>
+            <img
+              class="value-video-fallback"
+              src="/assets/animations/${baseSlug}.poster.jpg"
+              alt="${escapeHtml(panel.heading)}"
+              loading="lazy"
+            />
+          </div>
+          <h3>${panel.heading}</h3>
+          <p>${panel.body}</p>
+        </article>`;
+}
+
+function animationSlugFor(which, animationKey) {
+  // schema → anim-1-schema, generate → anim-2-generate, draft → anim-3-draft
+  const mainSlugs = {
+    schema: 'anim-1-schema',
+    generate: 'anim-2-generate',
+    draft: 'anim-3-draft',
+  };
+  if (which === 'main') return mainSlugs[animationKey];
+  return `alt-${which}-${animationKey}`;
+}
+
+function renderAnimationAlternativesScript(panels) {
+  // Tiny inline script: if ?animation_alternative=a|b|c|d is present, swap each
+  // panel's video sources to the matching alt composition. Kept inline (no
+  // hydration, no bundle) because the only site JS is the docs nav toggle.
+  return `
+      <script>
+        (() => {
+          const params = new URLSearchParams(window.location.search);
+          const raw = params.get('animation_alternative');
+          if (!raw) return;
+          const letter = raw.trim().toLowerCase();
+          if (!['a', 'b', 'c', 'd'].includes(letter)) return;
+          const root = document.currentScript.previousElementSibling;
+          for (const media of root.querySelectorAll('.value-media')) {
+            const key = media.dataset.animationKey;
+            const slug = 'alt-' + letter + '-' + key;
+            const video = media.querySelector('video');
+            const img = media.querySelector('img');
+            const sources = video.querySelectorAll('source');
+            sources[0].src = '/assets/animations/' + slug + '.webm';
+            sources[1].src = '/assets/animations/' + slug + '.mp4';
+            video.poster = '/assets/animations/' + slug + '.poster.jpg';
+            img.src = video.poster;
+            video.load();
+          }
+        })();
+      </script>`;
 }
 
 function renderDocPage(currentDoc, renderedDocs) {
@@ -448,4 +533,28 @@ function slugify(value) {
 
 function escapeHtml(value) {
   return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+}
+
+async function copyAnimationAssets() {
+  const sourceDir = path.join(websiteRoot, 'src', 'assets', 'animations');
+  const destDir = path.join(distRoot, 'assets', 'animations');
+  let entries;
+  try {
+    entries = await fs.readdir(sourceDir);
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      // No rendered animations yet — the landing page will show a broken
+      // <video> poster slot. Noisy but not fatal; log it so it's obvious.
+      console.warn(`[website] no animations in ${sourceDir}; run \`pnpm -C website/animations render\` first.`);
+      return;
+    }
+    throw error;
+  }
+
+  await fs.mkdir(destDir, {recursive: true});
+  await Promise.all(
+    entries
+      .filter((name) => /\.(mp4|webm|jpg|png)$/.test(name))
+      .map((name) => fs.copyFile(path.join(sourceDir, name), path.join(destDir, name))),
+  );
 }

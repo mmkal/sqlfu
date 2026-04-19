@@ -35,13 +35,16 @@ test('query errors forward to Sentry with db.query.summary as a tag', async () =
     }),
   );
 
-  expect(() =>
-    sqlfuClient.all({
-      sql: 'select * from nonexistent_table',
-      args: [],
-      name: 'find-missing',
-    }),
-  ).toThrow(/no such table/);
+  let thrown: unknown;
+  try {
+    sqlfuClient.all({sql: 'select * from nonexistent_table', args: [], name: 'find-missing'});
+  } catch (error) {
+    thrown = error;
+  }
+  expect((thrown as Error | undefined)?.message).toMatch(/no such table/);
+  // Stack-quality: the instrumentation layer must not rewrite the driver's
+  // stack, or error reporters lose the user call site.
+  expect((thrown as Error | undefined)?.stack ?? '').toContain('sentry.test.ts');
 
   const events = await sentry.flush();
   expect(events).toHaveLength(1);

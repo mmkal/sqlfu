@@ -112,6 +112,12 @@ test('named and ad-hoc queries surface on OTel spans and error reporter fires on
   expect(errorReports).toHaveLength(1);
   expect(errorReports[0]!.queryName).toBe('broken-query');
   expect((errorReports[0]!.error as Error).message).toContain('no such table: nonexistent_table');
+  // (Stack-quality — "does the driver stack survive instrumentation?" — is
+  // asserted in `test/errors.test.ts`, `sentry.test.ts`, and `posthog.test.ts`,
+  // all of which call the client synchronously. This test issues queries
+  // through a hono HTTP dispatch, so the sync stack doesn't include the
+  // test file by the time the client throws — that's an HTTP-server
+  // artifact, not an instrumentation one.)
 });
 
 interface CollectedSpan {

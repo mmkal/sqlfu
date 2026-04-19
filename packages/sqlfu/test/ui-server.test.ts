@@ -6,12 +6,14 @@ import {DatabaseSync} from 'node:sqlite';
 
 import {createORPCClient} from '@orpc/client';
 import {RPCLink} from '@orpc/client/fetch';
+import {RPCLink as WebsocketRPCLink} from '@orpc/client/websocket';
 import type {RouterClient} from '@orpc/server';
 import {execa, execaNode} from 'execa';
 import {expect, test} from 'vitest';
+import {WebSocket as NodeWebSocket} from 'ws';
 
 import type {UiRouter} from '../src/ui/server.js';
-import {startSqlfuServer} from '../src/ui/server.js';
+import {startSqlfuServer, UI_WS_RPC_PATH} from '../src/ui/server.js';
 import {createDefaultInitPreview} from '../src/core/config.js';
 import {ensureBuilt, packageRoot} from './adapters/ensure-built.js';
 import {createTempFixtureRoot, dumpFixtureFs, writeFixtureFiles} from './fs-fixture.js';
@@ -153,10 +155,11 @@ test('sqlfu server can initialize a fresh directory through the ui rpc', async (
     projectRoot: root,
   });
 
-  const initEvents = await fixture.client.schema.command({command: 'sqlfu init'});
+  const wsClient = fixture.createWsClient();
+  const initEvents = await wsClient.schema.command({command: 'sqlfu init'});
   for await (const event of initEvents) {
     if (event.kind === 'needsConfirmation') {
-      await fixture.client.schema.submitConfirmation({
+      await wsClient.schema.submitConfirmation({
         id: event.id,
         body: createDefaultInitPreview(root).configContents,
       });
@@ -251,13 +254,26 @@ async function createUiServerFixture(input: {
   const client: RouterClient<UiRouter> = createORPCClient(new RPCLink({
     url: `${baseUrl}/api/rpc`,
   }));
+  const openSockets = new Set<NodeWebSocket>();
+  const createWsClient = (): RouterClient<UiRouter> => {
+    const socket = new NodeWebSocket(`ws://127.0.0.1:${server.port}${UI_WS_RPC_PATH}`);
+    openSockets.add(socket);
+    socket.addEventListener('close', () => openSockets.delete(socket), {once: true});
+    return createORPCClient(new WebsocketRPCLink({
+      websocket: socket as unknown as WebSocket,
+    }));
+  };
 
   return {
     root,
     port: server.port,
     baseUrl,
     client,
+    createWsClient,
     async [Symbol.asyncDispose]() {
+      for (const socket of openSockets) {
+        socket.close();
+      }
       await server.stop();
       await fs.rm(root, {recursive: true, force: true});
     },

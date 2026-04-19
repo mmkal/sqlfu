@@ -3,6 +3,7 @@ import type {ReactNode} from 'react';
 import {createRoot} from 'react-dom/client';
 import {createORPCClient} from '@orpc/client';
 import {RPCLink} from '@orpc/client/fetch';
+import {RPCLink as WebsocketRPCLink} from '@orpc/client/websocket';
 import type {RouterClient} from '@orpc/server';
 import {createTanstackQueryUtils} from '@orpc/tanstack-query';
 import * as reactGrid from '@silevis/reactgrid';
@@ -45,7 +46,7 @@ import {
   DialogTitle,
 } from './components/ui/dialog.js';
 import {AppToaster} from './components/ui/toaster.js';
-import {resolveApiOrigin, resolveApiRpcUrl} from './runtime.js';
+import {resolveApiOrigin, resolveApiRpcUrl, resolveApiWsUrl} from './runtime.js';
 import {classifyStartupError} from './startup-error.js';
 import {DEMO_URL, LOCAL_URL, createDemoClient, isDemoMode} from './demo/index.js';
 import './styles.css';
@@ -73,6 +74,12 @@ const orpcClient: RouterClient<UiRouter> = demoMode
       url: resolveApiRpcUrl(),
     }));
 const orpc = createTanstackQueryUtils(orpcClient);
+
+const commandOrpcClient: RouterClient<UiRouter> = demoMode
+  ? orpcClient
+  : createORPCClient(new WebsocketRPCLink({
+      websocket: new WebSocket(resolveApiWsUrl()),
+    }));
 
 type ConfirmationRequest = {
   title: string;
@@ -1989,11 +1996,11 @@ function ErrorView(input: {
 }
 
 async function runSchemaCommand(command: string) {
-  const events = await orpcClient.schema.command({command});
+  const events = await commandOrpcClient.schema.command({command});
   for await (const event of events) {
     if (event.kind === 'needsConfirmation') {
       const result = await confirmationDialogStore.confirm(event.params);
-      await orpcClient.schema.submitConfirmation({
+      await commandOrpcClient.schema.submitConfirmation({
         id: event.id,
         body: result.confirmed && result.body != null ? result.body : null,
       });

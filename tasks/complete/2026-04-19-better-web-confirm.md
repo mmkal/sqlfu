@@ -5,7 +5,10 @@ size: medium
 
 ## Status
 
-Done. `schema.command` is now a streaming procedure that yields `needsConfirmation` / `done` events; a new `schema.submitConfirmation` procedure carries the user's answer back. All of the plan below was implemented as specified; existing unit + Playwright tests still cover the flow.
+Done, with a follow-up pass to move the confirmation flow onto a real websocket instead of an HTTP-streaming hack.
+
+- v1: `schema.command` streams `needsConfirmation` / `done` over SSE and `schema.submitConfirmation` is a sibling HTTP mutation. Correlates via a module-scoped pending-confirmation map keyed by UUID.
+- v2 (current): same router shape, but those two procedures are served over `@orpc/server/ws` at `/api/rpc-ws`. Each upgrade creates a per-socket `PendingConfirmations` registry held in the router context, so the correlation map is scoped to the connection and disposed on `close`. No module-global state. The rest of the router still runs over fetch (`/api/rpc`) — all the stateless procedures use the same preflight/CORS path and the existing Playwright `waitForResponse` assertions keep working.
 
 ## Context
 

@@ -1,5 +1,5 @@
 export type * from './shared.js';
 export type {UiRouter} from './router.js';
 export type {StartSqlfuServerOptions} from './server.js';
-export {uiRouter} from './router.js';
-export type {ResolvedUiProject, UiRouterContext} from './router.js';
+export {createPendingConfirmations, uiRouter} from './router.js';
+export type {PendingConfirmationsHandle, ResolvedUiProject, UiRouterContext} from './router.js';

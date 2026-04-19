@@ -2,15 +2,21 @@ import fs from 'node:fs/promises';
 import http from 'node:http';
 import https from 'node:https';
 import path from 'node:path';
+import type {Duplex} from 'node:stream';
 import {fileURLToPath, pathToFileURL} from 'node:url';
-import {RPCHandler} from '@orpc/server/fetch';
+import {RPCHandler as FetchRPCHandler} from '@orpc/server/fetch';
+import {RPCHandler as WsRPCHandler} from '@orpc/server/ws';
 import type {ViteDevServer} from 'vite';
+import {WebSocketServer} from 'ws';
 import {loadProjectStateFrom, resolveProjectConfig} from '../core/config.js';
 import {PortInUseError, getListeningProcesses} from '../core/port-process.js';
 import {generateQueryTypesForConfig} from '../typegen/index.js';
 import type {SqlfuHost} from '../core/host.js';
 import {createNodeHost} from '../core/node-host.js';
-import {uiRouter, type ResolvedUiProject} from './router.js';
+import {uiRouter, createPendingConfirmations, type ResolvedUiProject} from './router.js';
+
+export const UI_WS_RPC_PATH = '/api/rpc-ws';
+export const UI_HTTP_RPC_PATH = '/api/rpc';
 
 const sourceDir = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.resolve(sourceDir, '..', '..');
@@ -54,7 +60,9 @@ export async function startSqlfuServer(input: StartSqlfuServerOptions = {}) {
         defaultProjectName: input.defaultProjectName ?? 'dev-project',
         allowUnknownHosts: input.allowUnknownHosts || false,
       });
-  const rpcHandler = new RPCHandler(uiRouter);
+  const fetchHandler = new FetchRPCHandler(uiRouter);
+  const wsHandler = new WsRPCHandler(uiRouter);
+  const wsServer = new WebSocketServer({noServer: true});
   const httpServer = input.tls
     ? https.createServer({
         key: input.tls.key,
@@ -83,9 +91,9 @@ export async function startSqlfuServer(input: StartSqlfuServerOptions = {}) {
 
       if (apiRequest) {
         const request = await toWebRequest(req, url);
-        const {matched, response} = await rpcHandler.handle(request, {
-          prefix: '/api/rpc',
-          context: {project, host},
+        const {matched, response} = await fetchHandler.handle(request, {
+          prefix: UI_HTTP_RPC_PATH,
+          context: {project, host, pending: createPendingConfirmations()},
         });
         await sendWebResponse(res, withApiCors(req, matched ? response : new Response('Not found', {status: 404})));
         return;
@@ -105,6 +113,18 @@ export async function startSqlfuServer(input: StartSqlfuServerOptions = {}) {
     } catch (error) {
       await sendWebResponse(res, requestErrorResponse(error, req.url ?? '/'));
     }
+  });
+
+  httpServer.on('upgrade', (req, socket, head) => {
+    void handleWsUpgrade({
+      req,
+      socket,
+      head,
+      wsServer,
+      wsHandler,
+      host,
+      resolveProject,
+    });
   });
 
   await new Promise<void>((resolve, reject) => {
@@ -128,6 +148,7 @@ export async function startSqlfuServer(input: StartSqlfuServerOptions = {}) {
     port: getServerPort(httpServer),
     stop: () =>
       new Promise<void>((resolve, reject) => {
+        wsServer.close();
         httpServer.close((error) => {
           if (error) {
             reject(error);
@@ -138,6 +159,49 @@ export async function startSqlfuServer(input: StartSqlfuServerOptions = {}) {
       }),
     server: httpServer,
   };
+}
+
+async function handleWsUpgrade(input: {
+  req: http.IncomingMessage;
+  socket: Duplex;
+  head: Buffer;
+  wsServer: WebSocketServer;
+  wsHandler: WsRPCHandler<{
+    project: ResolvedUiProject;
+    host: SqlfuHost;
+    pending: ReturnType<typeof createPendingConfirmations>;
+  }>;
+  host: SqlfuHost;
+  resolveProject: ProjectResolver;
+}) {
+  const {req, socket, head, wsServer, wsHandler, host, resolveProject} = input;
+  const url = new URL(req.url ?? '/', `http://${req.headers.host ?? '127.0.0.1'}`);
+  if (url.pathname !== UI_WS_RPC_PATH) {
+    // vite's hmr listener handles its own path; leave unmatched upgrades alone.
+    return;
+  }
+
+  let project: ResolvedUiProject;
+  try {
+    project = await resolveProject({
+      host: req.headers.host ?? url.host,
+      projectHeader: headerValue(req.headers['x-sqlfu-project']),
+    });
+  } catch (error) {
+    socket.write(`HTTP/1.1 400 Bad Request\r\n\r\n${error instanceof Error ? error.message : String(error)}`);
+    socket.destroy();
+    return;
+  }
+
+  wsServer.handleUpgrade(req, socket, head, (ws) => {
+    const pending = createPendingConfirmations();
+    ws.addEventListener('close', () => {
+      pending.dispose(new Error('Connection closed before confirmation'));
+    });
+    void wsHandler.upgrade(ws, {
+      context: {project, host, pending},
+    });
+  });
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {

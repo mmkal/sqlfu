@@ -5,6 +5,13 @@ export function resolveApiRpcUrl() {
   return new URL('/api/rpc', apiOrigin || window.location.origin).toString();
 }
 
+export function resolveApiWsUrl() {
+  const origin = new URL(readApiOrigin() || window.location.origin);
+  origin.protocol = origin.protocol === 'https:' ? 'wss:' : 'ws:';
+  origin.pathname = '/api/rpc-ws';
+  return origin.toString();
+}
+
 export function resolveApiOrigin() {
   return readApiOrigin() || window.location.origin;
 }

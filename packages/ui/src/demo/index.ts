@@ -1,6 +1,6 @@
 import {createRouterClient, type RouterClient} from '@orpc/server';
 import type {UiRouter} from 'sqlfu/ui/browser';
-import {uiRouter} from 'sqlfu/ui/browser';
+import {createPendingConfirmations, uiRouter} from 'sqlfu/ui/browser';
 
 import {buildDemoConfig, createBrowserHost, DEMO_PROJECT_ROOT} from './browser-host.js';
 
@@ -22,6 +22,7 @@ export function createDemoClient(input: {
       context: {
         host,
         project: {initialized: true as const, projectRoot: DEMO_PROJECT_ROOT, config},
+        pending: createPendingConfirmations(),
       },
     }),
   );

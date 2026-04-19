@@ -40,6 +40,7 @@ export type ResolvedUiProject =
 export type UiRouterContext = {
   project: ResolvedUiProject;
   host: SqlfuHost;
+  pending: PendingConfirmationsHandle;
 };
 
 const uiBase = os.$context<UiRouterContext>();
@@ -160,7 +161,7 @@ export const uiRouter = {
           throw new Error('Command is required');
         }
 
-        const queue = createCommandEventQueue();
+        const queue = createCommandEventQueue(context.pending);
         runSqlfuCommand(
           {
             projectRoot: context.project.projectRoot,
@@ -191,8 +192,8 @@ export const uiRouter = {
         id: z.string(),
         body: z.string().nullable(),
       }))
-      .handler(({input}) => {
-        resolvePendingConfirmation(input.id, input.body);
+      .handler(({context, input}) => {
+        context.pending.resolve(input.id, input.body);
         return {ok: true as const};
       }),
     definitions: uiBase
@@ -428,22 +429,47 @@ type PendingConfirmation = {
   readonly reject: (error: unknown) => void;
 };
 
-const pendingConfirmations = new Map<string, PendingConfirmation>();
+export type PendingConfirmationsHandle = {
+  readonly register: (id: string, entry: PendingConfirmation) => void;
+  readonly resolve: (id: string, body: string | null) => void;
+  readonly cancel: (id: string, error: unknown) => void;
+  readonly dispose: (error: unknown) => void;
+};
 
-function resolvePendingConfirmation(id: string, body: string | null) {
-  const pending = pendingConfirmations.get(id);
-  if (!pending) {
-    throw toClientError(new Error(`Unknown confirmation id: ${id}`));
-  }
-  pendingConfirmations.delete(id);
-  pending.resolve(body);
+export function createPendingConfirmations(): PendingConfirmationsHandle {
+  const entries = new Map<string, PendingConfirmation>();
+  return {
+    register(id, entry) {
+      entries.set(id, entry);
+    },
+    resolve(id, body) {
+      const entry = entries.get(id);
+      if (!entry) {
+        throw toClientError(new Error(`Unknown confirmation id: ${id}`));
+      }
+      entries.delete(id);
+      entry.resolve(body);
+    },
+    cancel(id, error) {
+      const entry = entries.get(id);
+      if (!entry) return;
+      entries.delete(id);
+      entry.reject(error);
+    },
+    dispose(error) {
+      for (const [id, entry] of entries) {
+        entries.delete(id);
+        entry.reject(error);
+      }
+    },
+  };
 }
 
 type QueueItem =
   | {readonly kind: 'event'; readonly event: CommandEvent}
   | {readonly kind: 'error'; readonly error: unknown};
 
-function createCommandEventQueue() {
+function createCommandEventQueue(pending: PendingConfirmationsHandle) {
   const pendingIds = new Set<string>();
   const buffer: QueueItem[] = [];
   let notify: (() => void) | null = null;
@@ -461,7 +487,7 @@ function createCommandEventQueue() {
       pendingIds.add(id);
       try {
         return await new Promise<string | null>((resolve, reject) => {
-          pendingConfirmations.set(id, {resolve, reject});
+          pending.register(id, {resolve, reject});
           buffer.push({kind: 'event', event: {kind: 'needsConfirmation', id, params}});
           poke();
         });
@@ -501,9 +527,7 @@ function createCommandEventQueue() {
     },
     dispose() {
       for (const id of pendingIds) {
-        const pending = pendingConfirmations.get(id);
-        pendingConfirmations.delete(id);
-        pending?.reject(new Error('Confirmation request cancelled'));
+        pending.cancel(id, new Error('Confirmation request cancelled'));
       }
       pendingIds.clear();
       buffer.length = 0;

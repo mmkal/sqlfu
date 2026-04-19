@@ -127,7 +127,7 @@ It started from a vendored copy of [`sql-formatter`](https://github.com/sql-form
 If you want to see or change that behavior, start here:
 
 - [src/formatter.ts](./src/formatter.ts)
-- [src/vendor/sql-formatter/AGENTS.md](./src/vendor/sql-formatter/AGENTS.md)
+- [src/vendor/sql-formatter/CLAUDE.md](./src/vendor/sql-formatter/CLAUDE.md)
 - [test/formatter/sqlite.fixture.sql](./test/formatter/sqlite.fixture.sql)
 - [test/formatter.test.ts](./test/formatter.test.ts)
 

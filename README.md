@@ -160,7 +160,7 @@ No peer dependencies on OpenTelemetry or Sentry — `TracerLike` is structural, 
 Install it into a project:
 
 ```sh
-npx skills@latest add mmkal/sqlfu -s using-sqlfu
+npx skills@latest add mmkal/sqlfu/skills/using-sqlfu
 ```
 
 The skill is self-contained — it does not depend on the `sqlfu` package itself, and the `SKILL.md` format is agent-agnostic.

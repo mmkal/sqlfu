@@ -4,8 +4,11 @@ import {DatabaseSync} from 'node:sqlite';
 
 import {createRouterClient} from '@orpc/server';
 
-import {getMigrationPrefix, router} from '../../src/api.js';
+import {getMigrationPrefix} from '../../src/api.js';
+import {router} from '../../src/cli-router.js';
 import {createNodeSqliteClient} from '../../src/client.js';
+import {createNodeHost} from '../../src/core/node-host.js';
+import {extractSchema} from '../../src/core/sqlite.js';
 import type {Client, SqlfuProjectConfig} from '../../src/core/types.js';
 import {createTempFixtureRoot, dumpFixtureFs, writeFixtureFiles} from '../fs-fixture.js';
 
@@ -38,6 +41,9 @@ export async function createMigrationsFixture(
     return new Date(new Date('2026-04-10T00:00:00.000Z').getTime() + addHours * 60 * 60_000);
   };
 
+  const baseHost = await createNodeHost();
+  const host = {...baseHost, now: fakeNow};
+
   const migrations = Object.fromEntries(
     Object.entries(input.migrations ?? {}).map(([name, content]) => [
       `migrations/${getMigrationPrefix(fakeNow())}_${name}.sql`,
@@ -45,8 +51,14 @@ export async function createMigrationsFixture(
     ]),
   );
 
+  // when the test does not specify desiredSchema, default to a schema that replays the
+  // migrations. this keeps the repo internally consistent by default, which matches what a real
+  // user would have. tests that want to exercise repo drift specifically still pass their own
+  // desiredSchema.
+  const definitionsSql = input.desiredSchema ?? await replayMigrationsSchema(Object.values(migrations));
+
   await writeFixtureFiles(root, {
-    'definitions.sql': input.desiredSchema || '',
+    'definitions.sql': definitionsSql,
     ...migrations,
   });
 
@@ -54,8 +66,8 @@ export async function createMigrationsFixture(
     context: {
       projectRoot: root,
       config: projectConfig,
-      now: fakeNow,
-      confirm: async ({body}) => body,
+      host,
+      confirm: async ({body}: {body: string}) => body,
     },
   });
   const db = createNodeSqliteClient(new DatabaseSync(dbPath));
@@ -100,6 +112,26 @@ export async function createMigrationsFixture(
       await fs.rm(root, {recursive: true, force: true});
     },
   };
+}
+
+async function replayMigrationsSchema(migrationContents: readonly string[]): Promise<string> {
+  if (migrationContents.length === 0) {
+    return '';
+  }
+  const database = new DatabaseSync(':memory:');
+  const client = createNodeSqliteClient(database);
+  try {
+    for (const content of migrationContents) {
+      await client.raw(content);
+    }
+    return await extractSchema(client, 'main', {excludedTables: ['sqlfu_migrations']});
+  } catch {
+    // if a fixture provides intentionally broken migration SQL to test failure paths, fall back
+    // to an empty desired schema. the test can still override this via input.desiredSchema.
+    return '';
+  } finally {
+    database.close();
+  }
 }
 
 async function createNodeSqliteDatabase(dbPath: string): Promise<DisposableClient> {

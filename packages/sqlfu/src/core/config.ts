@@ -3,9 +3,12 @@ import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 
 import type {SqlfuConfig, SqlfuProjectConfig} from './types.js';
+import {createDefaultInitPreview} from './init-preview.js';
 
 const defaultConfigFileNames = ['sqlfu.config.ts', 'sqlfu.config.mjs', 'sqlfu.config.js', 'sqlfu.config.cjs'] as const;
 const defaultSqlfuConfigFileName = 'sqlfu.config.ts';
+
+export {createDefaultInitPreview};
 
 export function defineConfig(config: SqlfuConfig): SqlfuConfig {
   return config;
@@ -44,23 +47,10 @@ export async function loadProjectStateFrom(projectRoot: string): Promise<LoadedS
   };
 }
 
-export function createDefaultInitPreview(projectRoot: string) {
-  return {
-    projectRoot,
-    configPath: path.join(projectRoot, defaultSqlfuConfigFileName),
-    configContents: [
-      'export default {',
-      `  db: './db/app.sqlite',`,
-      `  migrations: './migrations',`,
-      `  definitions: './definitions.sql',`,
-      `  queries: './sql',`,
-      '};',
-      '',
-    ].join('\n'),
-  };
-}
-
-export async function initializeProject(input: {projectRoot: string; configContents: string}) {
+export async function initializeProject(input: {
+  projectRoot: string;
+  configContents: string;
+}) {
   const preview = createDefaultInitPreview(input.projectRoot);
   const state = await loadProjectStateFrom(input.projectRoot);
   if (state.initialized) {
@@ -71,10 +61,7 @@ export async function initializeProject(input: {projectRoot: string; configConte
   await fs.mkdir(path.join(input.projectRoot, 'migrations'), {recursive: true});
   await fs.mkdir(path.join(input.projectRoot, 'sql'), {recursive: true});
   await fs.writeFile(preview.configPath, withTrailingNewline(input.configContents));
-  await fs.writeFile(
-    path.join(input.projectRoot, 'definitions.sql'),
-    '-- create table yourtable(id int, body text);\n',
-  );
+  await fs.writeFile(path.join(input.projectRoot, 'definitions.sql'), '-- create table yourtable(id int, body text);\n');
   await fs.writeFile(path.join(input.projectRoot, 'migrations', '.gitkeep'), '');
   await fs.writeFile(path.join(input.projectRoot, 'sql', '.gitkeep'), '');
 }
@@ -148,9 +135,7 @@ async function loadTsconfigPreferences(cwd: string): Promise<TsconfigPreferences
   }
 
   return {
-    prefersTsImportExtensions:
-      hasTrueFlag(compilerOptions, 'allowImportingTsExtensions') ||
-      hasTrueFlag(compilerOptions, 'rewriteRelativeImportExtensions'),
+    prefersTsImportExtensions: hasTrueFlag(compilerOptions, 'allowImportingTsExtensions') || hasTrueFlag(compilerOptions, 'rewriteRelativeImportExtensions'),
   };
 }
 
@@ -179,9 +164,7 @@ async function findTsconfigPath(startDir: string): Promise<string | undefined> {
 
 function parseTsconfigCompilerOptions(contents: string): Record<string, unknown> | undefined {
   try {
-    const parsed = JSON.parse(stripJsonComments(stripTrailingCommas(contents))) as {
-      compilerOptions?: Record<string, unknown>;
-    };
+    const parsed = JSON.parse(stripJsonComments(stripTrailingCommas(contents))) as {compilerOptions?: Record<string, unknown>};
     return parsed.compilerOptions;
   } catch {
     return undefined;
@@ -193,7 +176,9 @@ function hasTrueFlag(value: Record<string, unknown>, key: string): boolean {
 }
 
 function stripJsonComments(value: string): string {
-  return value.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  return value
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '');
 }
 
 function stripTrailingCommas(value: string): string {

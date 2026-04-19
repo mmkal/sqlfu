@@ -1,6 +1,17 @@
 size: medium
-status: grilled
+status: done
 ---
+
+## Status
+
+All checklist items complete. Implementation shape:
+
+- New `analyzeMigrateHealth` in `packages/sqlfu/src/api.ts` is narrower than `analyzeDatabase`: it only looks at applied history (+ prefix order) and live-vs-history schema drift. It deliberately does not replay pending migrations, so broken pending SQL still reaches the real migrate path.
+- `applyMigrateSql` preflights before applying anything (even with zero pending migrations), wraps `applyMigrations` in a try/catch, and reruns the same narrow health check from the post-failure state.
+- Error strings are operator-facing and reuse the existing recommendation-style diagnostics.
+- History drift now additionally flags "out-of-order": a new migration file sorting before an already-applied one.
+- `surroundWithBeginCommitRollbackSync` now swallows rollback errors so the original migration error survives (previously a migration containing its own `commit` would mask the real error with a `cannot rollback - no transaction is active`).
+- Tests cover the four required scenarios; the "reconciliation required" case is exercised with a real migration that includes `commit;` mid-way and then an intentional syntax error.
 
 Handle failed migrations properly.
 
@@ -125,17 +136,17 @@ Explain the reasoning in more detail:
 
 ## Checklist
 
-- [ ] identify the current mismatch-analysis code path and extract or factor a migrate-specific health check from it
-- [ ] make `sqlfu migrate` fail on unhealthy preflight, even with zero pending migrations
-- [ ] make `sqlfu migrate` rerun the health check after migration execution failure
-- [ ] produce clear operator-facing error text for:
-  - [ ] unhealthy preflight
-  - [ ] failed migration but safe-to-retry
-  - [ ] failed migration and reconciliation-needed
-- [ ] add migration tests covering the four required scenarios above
-- [ ] update `packages/sqlfu/README.md`
-- [ ] update `packages/sqlfu/docs/migration-model.md`
-- [ ] run the relevant test file(s)
+- [x] identify the current mismatch-analysis code path and extract or factor a migrate-specific health check from it _added `analyzeMigrateHealth` in `packages/sqlfu/src/api.ts`, a narrower variant that only inspects applied history and live schema (not pending/broken migrations)_
+- [x] make `sqlfu migrate` fail on unhealthy preflight, even with zero pending migrations _`applyMigrateSql` preflights before anything, and still preflights when zero pending migrations exist_
+- [x] make `sqlfu migrate` rerun the health check after migration execution failure _`applyMigrateSql` catches errors from `applyMigrations`, reruns `analyzeMigrateHealth` with the open client, and formats the failure accordingly_
+- [x] produce clear operator-facing error text for:
+  - [x] unhealthy preflight _`formatMigratePreflightFailure`_
+  - [x] failed migration but safe-to-retry _`formatMigrateFailure` with no blockers_
+  - [x] failed migration and reconciliation-needed _`formatMigrateFailure` with blockers + recommendations_
+- [x] add migration tests covering the four required scenarios above _4 new tests at the end of `describe('migrate', ...)` in `packages/sqlfu/test/migrations/migrations.test.ts`_
+- [x] update `packages/sqlfu/README.md` _added "When a migration fails" subsection under Draft and Apply Migrations_
+- [x] update `packages/sqlfu/docs/migration-model.md` _added "Failed Migrations" section with the four pieces of explanation the task asked for_
+- [x] run the relevant test file(s) _all 55 migration tests pass_
 
 ## Acceptance Criteria
 
@@ -154,6 +165,6 @@ This task is done when all of the following are true:
 - Prefer extending the existing authority/mismatch model over inventing a parallel ad hoc check.
 - Keep the implementation small and explicit.
 - Avoid legacy baggage. If an abstraction ends up half-dead after this refactor, delete it.
-- Follow the repo testing guidance in `AGENTS.md`.
+- Follow the repo testing guidance in `CLAUDE.md`.
 - Do not add mocks unless you hit a wall and can justify them very concretely.
 - Update this task file as you go, adding notes inline on every checklist item you check, and leave _italicized_ comments inline anywhere else appropriate.

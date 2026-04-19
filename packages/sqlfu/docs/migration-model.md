@@ -190,6 +190,8 @@ It should not mutate:
 - Desired Schema
 - Migrations
 
+See [Failed Migrations](#failed-migrations) below for how `sqlfu migrate` handles the unhappy path.
+
 ### `sqlfu baseline <target>`
 
 Mutates:
@@ -389,14 +391,73 @@ So after `sync`, there are only a few honest options:
 
 What `sqlfu` should not do is silently pretend that `sync` preserved the migration chain when it did not.
 
+## Failed Migrations
+
+Migrations fail. Production migrations fail in ways dev migrations do not. The important question is not "did a migration fail?", it is "is this database still honest about what it has applied?".
+
+### `sqlfu_migrations` records success only
+
+A row is written to `sqlfu_migrations` only after a migration's SQL has finished successfully. There is no "failed" row and no failure-status column.
+
+`sqlfu_migrations` means: migrations that succeeded and are part of the trusted migration-history prefix.
+
+This keeps the meaning of Migration History stable. Code that trusts it does not have to distinguish "applied" from "tried".
+
+### "A migration failed" vs "the database is unhealthy for `migrate`"
+
+These are two different questions.
+
+"A migration failed" is a statement about one execution attempt. It describes what happened during a single run of `sqlfu migrate`.
+
+"The database is unhealthy for `migrate`" is a statement about the current state of the database. It asks whether it is safe to apply more migrations from the trusted prefix.
+
+A failed migration does not automatically make the database unhealthy for `migrate`. If the migration fully rolled back, the database is still honest about what it has applied.
+
+A failed migration also does not automatically make the database healthy for `migrate` forever after. If the migration partially persisted state — for example because the migration SQL used its own `commit`, or because it touched something outside the transaction's control — the live schema can end up out of sync with recorded history.
+
+### The post-failure health check
+
+When a migration execution fails, `sqlfu migrate` reruns a narrow migrate-specific health check against the post-failure state.
+
+That check asks:
+
+- Is the recorded Migration History still a trusted prefix of Migrations?
+- Does the Live Schema still match the schema that the applied Migration History implies?
+
+If both answers are yes, the database is still healthy for `migrate`. The failure message explicitly says the database remains healthy and the operator can fix the migration and retry.
+
+If either answer is no, the database is no longer healthy for `migrate`. The failure message says reconciliation is required and then shows the same recommendation-style diagnostics `sqlfu check` would show — `sqlfu goto <target>`, `sqlfu baseline <target>`, or a repo-level fix, depending on what drifted.
+
+### Preflight
+
+`sqlfu migrate` runs that same migrate-specific health check once before applying anything.
+
+This is deliberately not the full `sqlfu check`. `Pending Migrations` and `Sync Drift` are not blockers for migrate — `Pending Migrations` is the whole point, and `Sync Drift` is downstream of applying them.
+
+The preflight blocks on the things that would make applying more migrations unsafe or dishonest:
+
+- History Drift
+- Schema Drift
+- (in the future, additional integrity checks specific to migrate)
+
+Preflight runs even when there are zero pending migrations, because a database with no pending work can still be unhealthy for `migrate`.
+
+### How this fits into the authority model
+
+This behavior is not a separate system. It is the same four-authority model the rest of this document describes.
+
+- Repo migrations and recorded migration history together define the trusted prefix.
+- Live schema has to match what that prefix implies, or the database is not safe to migrate further.
+- If that relationship holds, a migration failure is a retry. If it does not, the database has to be reconciled with the existing tools — `sqlfu goto`, `sqlfu baseline`, or a manual fix — before `sqlfu migrate` will run again.
+
+`sqlfu` does not invent a repair command for failed migrations. It reuses the tools the model already has.
+
 ## Non-Goals
 
 This document intentionally does not answer every implementation question yet.
 
 For example, it does not yet pin down:
 
-- the exact schema of `sqlfu_migrations`
-- whether migration content, checksums, or both should be recorded
 - what repair commands should exist
 - whether `migrate` should ever allow forcing past history drift
 

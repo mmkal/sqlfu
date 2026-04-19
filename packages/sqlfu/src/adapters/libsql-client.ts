@@ -42,6 +42,7 @@ export function createLibsqlClient(client: LibsqlClientLike): AsyncClient<Libsql
   };
   const queryClient: Omit<AsyncClient<LibsqlClientLike>, 'sql'> & {sql: AsyncClient<LibsqlClientLike>['sql']} = {
     driver: client,
+    system: 'sqlite',
     all,
     run,
     raw,

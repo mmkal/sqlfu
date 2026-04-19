@@ -18,7 +18,7 @@ It is built around a simple idea: SQL should be the source language for schema, 
   - [Type Generator](#type-generator)
   - [Formatter](#formatter)
   - [UI](#ui)
-  - [Claude Code skill](#claude-code-skill)
+  - [Agent skill](#agent-skill)
 - [Quick Start](#quick-start)
   - [Install](#install)
   - [Minimal Setup](#minimal-setup)
@@ -153,17 +153,17 @@ No peer dependencies on OpenTelemetry or Sentry — `TracerLike` is structural, 
 
 `sqlfu` also has a UI package for working with the project interactively. It sits on top of the same SQL-first model rather than inventing a separate one.
 
-### Claude Code skill
+### Agent skill
 
-`sqlfu` ships an agent skill at [`skills/using-sqlfu`](../../skills/using-sqlfu/SKILL.md). It teaches Claude Code (and compatible agents) the project's source-of-truth files, the schema-change workflow, the query workflow, and the command reference — so an agent dropped into a sqlfu repo does not mis-hand-author migrations or invent old config field names.
+`sqlfu` ships a [skill](https://github.com/mattpocock/skills) at [`skills/using-sqlfu`](../../skills/using-sqlfu/SKILL.md). It teaches an agent the project's source-of-truth files, the schema-change workflow, the query workflow, and the command reference — so an agent dropped into a sqlfu repo does not hand-author migrations or invent old config field names.
 
 Install it into a project:
 
 ```sh
-npx skills add mmkal/sqlfu -s using-sqlfu
+npx skills@latest add mmkal/sqlfu -s using-sqlfu
 ```
 
-The skill is self-contained — it does not depend on the `sqlfu` package itself.
+The skill is self-contained — it does not depend on the `sqlfu` package itself, and the format is agent-agnostic (any agent tool that understands the `SKILL.md` convention can use it).
 
 ## Quick Start
 

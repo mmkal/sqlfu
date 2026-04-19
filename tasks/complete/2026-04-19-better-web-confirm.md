@@ -84,3 +84,27 @@ Per `AGENTS.md` ("DELETE stuff that is no longer serving us"):
 - `pnpm -F sqlfu-ui test:node` passes.
 - Playwright Studio spec still passes (with updated `waitForResponse` matcher).
 - No remaining references to `confirmation_missing` in the repo.
+
+## Websocket follow-up (considered and rejected)
+
+A per-socket websocket variant was prototyped on this branch (commit
+`8713eb2`, then reverted in `ce71f2c`) to move the confirmation
+correlation state onto the connection instead of a module-scoped map.
+It worked (tests green), but the only viable path on Node requires
+either depending on `ws` or hand-rolling the WebSocket frame codec.
+
+- `ws` is small, widely used, and orpc pulls it in transitively
+  anyway, but adding it to `sqlfu`'s direct `dependencies` surfaces it
+  to every installer — and a db library advertising a WebSocket dep
+  is surprising for users who never touch the UI.
+- DIY frame codec is ~200 lines of protocol code (handshake + masked
+  frame parser + continuation/fragmentation + control frames) that
+  we'd own forever for one local-dev feature.
+- Neither buys us much in practice: the local UI backend is always a
+  single Node process, so the "cross-instance confirmation" scenario
+  the module-scoped map can't handle doesn't actually occur.
+
+So the module-scoped pending map stays. If sqlfu ever grows a
+multi-instance hosted backend that needs to survive a reload
+mid-confirmation, revisit — the ws refactor is small and the revert
+commit captures exactly what the code looked like.

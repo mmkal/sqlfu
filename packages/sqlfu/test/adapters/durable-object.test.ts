@@ -76,7 +76,6 @@ test('applyMigrations can run inside a durable object using a migrations bundle'
   await using fixture = await createDOFixture(
     class BundleMigrationsTest {
       client: ReturnType<typeof createDurableObjectClient>;
-      ready: Promise<void>;
 
       constructor(state: any) {
         this.client = createDurableObjectClient(state.storage.sql);
@@ -84,7 +83,10 @@ test('applyMigrations can run inside a durable object using a migrations bundle'
           'migrations/2026-04-10T00.00.00.000Z_create_posts.sql': 'create table posts (id integer primary key, slug text not null);',
           'migrations/2026-04-10T01.00.00.000Z_add_body.sql': 'alter table posts add column body text;',
         };
-        this.ready = state.blockConcurrencyWhile(() =>
+        // blockConcurrencyWhile gates incoming handlers until migrations finish,
+        // so getColumns / getApplied can use this.client directly — no per-handler
+        // await-ready dance.
+        state.blockConcurrencyWhile(() =>
           applyMigrations(defaultMigrationsHost, this.client, {
             migrations: migrationsFromBundle(bundle),
           }),
@@ -92,14 +94,12 @@ test('applyMigrations can run inside a durable object using a migrations bundle'
       }
 
       async getColumns() {
-        await this.ready;
         return this.client.all<{name: string}>(sql`
           select name from pragma_table_info('posts') order by cid
         `);
       }
 
       async getApplied() {
-        await this.ready;
         return this.client.all<{name: string}>(sql`
           select name from sqlfu_migrations order by name
         `);

@@ -31,6 +31,12 @@ const docs = [
     description: 'Migration history, drift checks, and the intended production path.',
   },
   {
+    slug: 'observability',
+    title: 'Observability',
+    sourcePath: path.join(repoRoot, 'packages', 'sqlfu', 'docs', 'observability.md'),
+    description: 'Named queries reach OpenTelemetry, Sentry, PostHog, Datadog via a single instrument() hook.',
+  },
+  {
     slug: 'ui',
     title: 'UI',
     sourcePath: path.join(repoRoot, 'packages', 'ui', 'README.md'),
@@ -58,13 +64,25 @@ for (const assetPath of assetPaths) {
   await fs.copyFile(assetPath, destinationPath);
 }
 
-await fs.writeFile(path.join(distRoot, 'index.html'), renderLandingPage(renderedDocs));
-await fs.writeFile(path.join(distRoot, 'docs', 'index.html'), renderDocPage(mainDoc, renderedDocs));
+await writeHtmlPage(path.join(distRoot, 'index.html'), renderLandingPage(renderedDocs));
+await writeHtmlPage(path.join(distRoot, 'docs', 'index.html'), renderDocPage(mainDoc, renderedDocs));
 
 for (const doc of renderedDocs) {
   const docDir = path.join(distRoot, 'docs', doc.slug);
   await fs.mkdir(docDir, {recursive: true});
-  await fs.writeFile(path.join(docDir, 'index.html'), renderDocPage(doc, renderedDocs));
+  await writeHtmlPage(path.join(docDir, 'index.html'), renderDocPage(doc, renderedDocs));
+}
+
+// The build emits HTML with absolute paths like `/styles.css` and `/docs/`,
+// which break whenever the site is served under a path prefix (e.g. the
+// artifact.ci preview URL `/artifact/view/.../run/.../website/`). Rewrite
+// them to paths relative to each file's own depth so the built `dist/` is
+// portable to any base path.
+async function writeHtmlPage(filePath, html) {
+  const depth = path.relative(distRoot, path.dirname(filePath)).split(path.sep).filter(Boolean).length;
+  const prefix = depth === 0 ? './' : '../'.repeat(depth);
+  const rewritten = html.replaceAll(/((?:href|src)=")\/([^"]*)"/g, (_match, attr, rest) => `${attr}${prefix}${rest}"`);
+  await fs.writeFile(filePath, rewritten);
 }
 
 async function renderDoc(doc) {
@@ -160,6 +178,7 @@ function renderLandingPage(renderedDocs) {
           </p>
           <div class="cta-row">
             <a class="button primary" href="/docs/">Read the docs</a>
+            <a class="button" href="https://local.sqlfu.dev/?demo=1">Try the demo</a>
           </div>
         </article>
       </section>
@@ -178,7 +197,7 @@ function renderLandingPage(renderedDocs) {
         <article class="panel value-panel">
           <div class="eyebrow">types, generated</div>
           <h3>TypeScript wrappers <i>from</i> your SQL</h3>
-          <p><code>sqlfu generate</code> reads your <code>.sql</code> files and emits typed wrappers next to them: typed params, typed rows, and a client you can call from application code.</p>
+          <p><code>sqlfu generate</code> reads your <code>.sql</code> files and emits typed wrappers next to them: typed params, typed rows, and a client you can call from application code. Your query names travel with them &mdash; to <a href="/docs/observability/">OpenTelemetry, Sentry, Datadog, PostHog</a>, whatever.</p>
         </article>
         <article class="panel value-panel">
           <div class="eyebrow">diff-driven migrations</div>
@@ -256,6 +275,7 @@ function renderPage({title, body}) {
     '      <a class="brand" href="/">sqlfu</a>',
     '      <nav class="nav">',
     '        <a href="/docs/">Docs</a>',
+    '        <a href="https://local.sqlfu.dev/?demo=1">Demo</a>',
     `        <a href="${repositoryBaseUrl}" target="_blank" rel="noreferrer">GitHub</a>`,
     '      </nav>',
     '    </header>',

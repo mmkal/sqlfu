@@ -1,4 +1,4 @@
-needs grilling!
+status: ready for bedtime
 
 add dev tools:
 - oxlint/eslint plugin

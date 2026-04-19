@@ -106,6 +106,11 @@ export function getTables(db: DatabaseType, schema: string): TableAndType[] {
 		.prepare(`SELECT name, rootpage FROM ${schema}.sqlite_schema`)
 		.all()
 		.map((res: any) => ({ name: res.name, type: getTableType(res.rootpage) }));
+	// sqlfu: sqlite's system tables aren't listed in sqlite_schema itself; add them
+	// explicitly so the existing PRAGMA table_xinfo path populates their columns.
+	if (schema === 'main') {
+		tables.push({ name: 'sqlite_schema', type: 'T' }, { name: 'sqlite_master', type: 'T' });
+	}
 	return tables;
 }
 

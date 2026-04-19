@@ -18,6 +18,7 @@ It is built around a simple idea: SQL should be the source language for schema, 
   - [Type Generator](#type-generator)
   - [Formatter](#formatter)
   - [UI](#ui)
+  - [Agent skill](#agent-skill)
 - [Quick Start](#quick-start)
   - [Install](#install)
   - [Minimal Setup](#minimal-setup)
@@ -127,13 +128,42 @@ It started from a vendored copy of [`sql-formatter`](https://github.com/sql-form
 If you want to see or change that behavior, start here:
 
 - [src/formatter.ts](./src/formatter.ts)
-- [src/vendor/sql-formatter/AGENTS.md](./src/vendor/sql-formatter/AGENTS.md)
+- [src/vendor/sql-formatter/CLAUDE.md](./src/vendor/sql-formatter/CLAUDE.md)
 - [test/formatter/sqlite.fixture.sql](./test/formatter/sqlite.fixture.sql)
 - [test/formatter.test.ts](./test/formatter.test.ts)
+
+### Observability
+
+Generated queries carry their filename to runtime as a `name` field on the emitted `SqlQuery`. That name reaches OpenTelemetry spans, Sentry errors, PostHog events, and Datadog metrics through a single `instrument()` call:
+
+```ts
+import {instrument} from 'sqlfu';
+
+const client = instrument(baseClient,
+  instrument.otel({tracer}),
+  instrument.onError(({context, error}) => Sentry.captureException(error, {
+    tags: {'db.query.summary': context.query.name ?? 'sql'},
+  })),
+);
+```
+
+No peer dependencies on OpenTelemetry or Sentry — `TracerLike` is structural, hook consumers bring their own SDK. Copy-pasteable recipes for OpenTelemetry, Sentry, PostHog, and Datadog (DogStatsD metrics) live in [docs/observability.md](./docs/observability.md).
 
 ### UI
 
 `sqlfu` also has a UI package for working with the project interactively. It sits on top of the same SQL-first model rather than inventing a separate one.
+
+### Agent skill
+
+`sqlfu` ships an agent skill at [`skills/using-sqlfu`](../../skills/using-sqlfu/SKILL.md). It teaches an agent the project's source-of-truth files, the schema-change workflow, the query workflow, and the command reference — so an agent dropped into a sqlfu repo does not hand-author migrations or invent old config field names.
+
+Install it into a project:
+
+```sh
+npx skills@latest add mmkal/sqlfu/skills/using-sqlfu
+```
+
+The skill is self-contained — it does not depend on the `sqlfu` package itself, and the `SKILL.md` format is agent-agnostic.
 
 ## Quick Start
 
@@ -232,6 +262,17 @@ When you draft a migration, `sqlfu` will:
 You should still review and edit the generated migration, especially for renames, data backfills, and destructive changes.
 
 There is no committed `snapshot.sql` file. If you want the guarantee a snapshot would normally provide, run `sqlfu check`, which verifies that replayed migrations still reproduce `definitions.sql`.
+
+#### When a migration fails
+
+`sqlfu migrate` starts from a trusted migration-history prefix. Before applying anything, it checks that the database's live schema still matches what the recorded migration history implies. If it does not, `sqlfu migrate` refuses to proceed and points at the reconciliation it would take to move forward.
+
+If a migration fails partway through, `sqlfu migrate` reruns that same check against the post-failure database state. There are two possible outcomes:
+
+- The failed migration rolled back cleanly. The error explicitly says the database is still healthy for `migrate`. Fix the migration and run `sqlfu migrate` again.
+- The failed migration left the live schema out of sync with recorded history. The error says reconciliation is required and lists the same recommendation-style diagnostics `sqlfu check` would produce. Use `sqlfu goto <target>` or `sqlfu baseline <target>` to reconcile before retrying.
+
+No row is ever written to `sqlfu_migrations` for a failed migration. That table only ever contains migrations `sqlfu` trusts to have fully applied.
 
 For the migration model in more detail, see [docs/migration-model.md](./docs/migration-model.md).
 

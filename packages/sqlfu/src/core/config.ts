@@ -3,9 +3,12 @@ import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 
 import type {SqlfuConfig, SqlfuProjectConfig} from './types.js';
+import {createDefaultInitPreview} from './init-preview.js';
 
 const defaultConfigFileNames = ['sqlfu.config.ts', 'sqlfu.config.mjs', 'sqlfu.config.js', 'sqlfu.config.cjs'] as const;
 const defaultSqlfuConfigFileName = 'sqlfu.config.ts';
+
+export {createDefaultInitPreview};
 
 export function defineConfig(config: SqlfuConfig): SqlfuConfig {
   return config;
@@ -41,22 +44,6 @@ export async function loadProjectStateFrom(projectRoot: string): Promise<LoadedS
     projectRoot,
     configPath,
     config: resolveProjectConfig(fileConfig, configPath, tsconfigPreferences),
-  };
-}
-
-export function createDefaultInitPreview(projectRoot: string) {
-  return {
-    projectRoot,
-    configPath: path.join(projectRoot, defaultSqlfuConfigFileName),
-    configContents: [
-      'export default {',
-      `  db: './db/app.sqlite',`,
-      `  migrations: './migrations',`,
-      `  definitions: './definitions.sql',`,
-      `  queries: './sql',`,
-      '};',
-      '',
-    ].join('\n'),
   };
 }
 

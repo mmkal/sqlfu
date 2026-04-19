@@ -47,7 +47,49 @@ table {
 .app-shell {
   display: grid;
   grid-template-columns: 20rem minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
   min-height: 100vh;
+}
+
+.mode-banner {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.85rem 1.25rem;
+  font-size: 1rem;
+  background: rgba(178, 76, 43, 0.12);
+  border-bottom: 1px solid var(--line);
+}
+
+.mode-banner strong {
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.mode-banner.demo {
+  font-size: 0.9rem;
+  padding: 0.55rem 1rem;
+  background: rgba(178, 76, 43, 0.16);
+}
+
+.mode-banner-link {
+  margin-left: auto;
+  color: var(--accent-strong);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+  font-weight: 500;
+}
+
+.mode-banner-link:hover {
+  color: var(--accent);
+}
+
+.startup-shell .mode-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
 }
 
 .startup-shell {

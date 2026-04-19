@@ -1,5 +1,5 @@
 import {bindSyncSql} from '../core/sql.js';
-import {rawSqlWithSqlSplittingSync, surroundWithBeginCommitRollbackSync} from '../core/sqlite.js';
+import {rawSqlWithSqlSplittingSync} from '../core/sqlite.js';
 import type {ResultRow, SqlQuery, SyncClient} from '../core/types.js';
 
 export interface DurableObjectSqlStorageLike {
@@ -15,6 +15,7 @@ export interface DurableObjectSqlStorageLike {
 export function createDurableObjectClient(storage: DurableObjectSqlStorageLike): SyncClient<DurableObjectSqlStorageLike> {
   const client: Omit<SyncClient<DurableObjectSqlStorageLike>, 'sql'> & {sql: SyncClient<DurableObjectSqlStorageLike>['sql']} = {
     driver: storage,
+    system: 'sqlite',
     all<TRow extends ResultRow = ResultRow>(query: SqlQuery) {
       return storage.exec<TRow>(query.sql, ...query.args).toArray();
     },
@@ -37,7 +38,15 @@ export function createDurableObjectClient(storage: DurableObjectSqlStorageLike):
       yield* rows;
     },
     transaction<TResult>(fn: (tx: SyncClient<DurableObjectSqlStorageLike>) => TResult | Promise<TResult>) {
-      return surroundWithBeginCommitRollbackSync(client, fn);
+      // Durable Objects reject `begin transaction` / `savepoint` in raw SQL and
+      // rely on the request-level output gate for atomicity: writes buffered
+      // within one invocation either all commit or all roll back if the handler
+      // throws. Fine-grained nested transactions are available via
+      // `state.storage.transactionSync`, but that requires a synchronous
+      // callback and would not compose with the async callbacks sqlfu's
+      // migrate/baseline paths use. So we just invoke the callback directly
+      // and trust the enclosing request/blockConcurrencyWhile boundary.
+      return fn(client);
     },
     sql: undefined as unknown as SyncClient<DurableObjectSqlStorageLike>['sql'],
   } satisfies SyncClient<DurableObjectSqlStorageLike>;

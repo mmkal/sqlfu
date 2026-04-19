@@ -374,7 +374,7 @@ export function surroundWithBeginCommitRollbackSync<TDriver, TResult>(
           return value;
         },
         (error) => {
-          client.run({sql: 'rollback', args: []});
+          tryRollbackSync(client);
           throw error;
         },
       );
@@ -382,7 +382,7 @@ export function surroundWithBeginCommitRollbackSync<TDriver, TResult>(
     client.run({sql: 'commit', args: []});
     return result;
   } catch (error) {
-    client.run({sql: 'rollback', args: []});
+    tryRollbackSync(client);
     throw error;
   }
 }
@@ -397,8 +397,26 @@ export async function surroundWithBeginCommitRollbackAsync<TDriver, TResult>(
     await client.run({sql: 'commit', args: []});
     return result;
   } catch (error) {
-    await client.run({sql: 'rollback', args: []});
+    await tryRollbackAsync(client);
     throw error;
+  }
+}
+
+// if a rollback fails (e.g. because the inner sql included its own commit), preserve the
+// original error. the caller only cares about what actually went wrong in their code.
+function tryRollbackSync<TDriver>(client: SyncClient<TDriver>) {
+  try {
+    client.run({sql: 'rollback', args: []});
+  } catch {
+    // ignore
+  }
+}
+
+async function tryRollbackAsync<TDriver>(client: AsyncClient<TDriver>) {
+  try {
+    await client.run({sql: 'rollback', args: []});
+  } catch {
+    // ignore
   }
 }
 

@@ -1,0 +1,71 @@
+name: preview
+
+on:
+  push:
+    branches:
+      - main
+      - demo
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  ui:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - run: corepack enable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build sqlfu
+        run: pnpm --filter sqlfu build
+
+      - name: Build UI
+        run: pnpm --filter sqlfu-ui build
+
+      # artifact.ci watches this repo and serves any artifact uploaded here
+      # as a previewable static site. This workflow doesn't deploy anywhere
+      # itself — uploading the artifact *is* the preview hand-off.
+      - name: Upload UI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui
+          path: packages/ui/dist
+
+  website:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - run: corepack enable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install website dependencies
+        working-directory: website
+        run: pnpm install --ignore-workspace --no-frozen-lockfile
+
+      - name: Build website
+        working-directory: website
+        run: node build.mjs
+
+      # See note on the `ui` job above — artifact.ci is what turns this
+      # upload into a viewable preview URL.
+      - name: Upload website artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: website
+          path: website/dist

@@ -1,12 +1,34 @@
-import path from 'node:path';
-import {createHash} from 'node:crypto';
-
 import type {Client} from '../core/types.js';
+import type {SqlfuHost} from '../core/host.js';
+import {basename} from '../core/paths.js';
 
 export type Migration = {
   path: string;
   content: string;
 };
+
+/**
+ * A migrations bundle as emitted by `sqlfu generate` into
+ * `<migrations>/.generated/migrations.ts`. Keys are the project-root-relative
+ * path of each migration file (e.g. `"migrations/2020-…_create_posts.sql"`);
+ * values are the file contents.
+ *
+ * The bundle lets runtimes without filesystem access (durable objects, edge
+ * workers, browsers) import migrations as a plain typescript module and apply
+ * them without ever touching `fs`.
+ */
+export type MigrationBundle = Record<string, string>;
+
+/**
+ * Convert a `MigrationBundle` (as emitted by `sqlfu generate`) into the
+ * `Migration[]` shape `applyMigrations` consumes. Migrations are returned
+ * sorted by bundle key, which is the same order the CLI applies them in.
+ */
+export function migrationsFromBundle(bundle: MigrationBundle): Migration[] {
+  return Object.entries(bundle)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([path, content]) => ({path, content}));
+}
 
 export type AppliedMigration = {
   name: string;
@@ -40,7 +62,7 @@ export async function ensureMigrationTable(client: Client) {
 }
 
 export function migrationName(migration: {path: string}) {
-  return path.basename(migration.path, '.sql');
+  return basename(migration.path, '.sql');
 }
 
 export async function readMigrationHistory(client: Client): Promise<AppliedMigration[]> {
@@ -55,7 +77,7 @@ export async function readMigrationHistory(client: Client): Promise<AppliedMigra
   });
 }
 
-export async function baselineMigrationHistory(client: Client, params: {
+export async function baselineMigrationHistory(host: SqlfuHost, client: Client, params: {
   migrations: readonly Migration[];
   target: string;
 }) {
@@ -66,11 +88,11 @@ export async function baselineMigrationHistory(client: Client, params: {
 
   const applied = params.migrations.slice(0, targetIndex + 1);
   await client.transaction(async (tx) => {
-    await replaceMigrationHistory(tx, applied);
+    await replaceMigrationHistory(host, tx, applied);
   });
 }
 
-export async function replaceMigrationHistory(client: Client, migrations: readonly Migration[]) {
+export async function replaceMigrationHistory(host: SqlfuHost, client: Client, migrations: readonly Migration[]) {
   await ensureMigrationTable(client);
   await client.run({sql: 'delete from sqlfu_migrations', args: []});
   for (const migration of migrations) {
@@ -79,12 +101,12 @@ export async function replaceMigrationHistory(client: Client, migrations: readon
         insert into sqlfu_migrations(name, checksum, applied_at)
         values (?, ?, ?)
       `,
-      args: [migrationName(migration), migrationChecksum(migration.content), new Date().toISOString()],
+      args: [migrationName(migration), await host.digest(migration.content), host.now().toISOString()],
     });
   }
 }
 
-export async function applyMigrations(client: Client, params: {
+export async function applyMigrations(host: SqlfuHost, client: Client, params: {
   migrations: readonly Migration[];
 }): Promise<void> {
   await ensureMigrationTable(client);
@@ -96,7 +118,7 @@ export async function applyMigrations(client: Client, params: {
     if (!current) {
       throw new Error(`deleted applied migration: ${historical.name}`);
     }
-    if (migrationChecksum(current.content) !== historical.checksum) {
+    if (await host.digest(current.content) !== historical.checksum) {
       throw new Error(`applied migration checksum mismatch: ${historical.name}`);
     }
   }
@@ -115,6 +137,8 @@ export async function applyMigrations(client: Client, params: {
       continue;
     }
 
+    const checksum = await host.digest(migration.content);
+    const appliedAt = host.now().toISOString();
     await client.transaction(async (tx) => {
       await tx.raw(migration.content);
       await tx.run({
@@ -122,12 +146,8 @@ export async function applyMigrations(client: Client, params: {
           insert into sqlfu_migrations(name, checksum, applied_at)
           values (?, ?, ?)
         `,
-        args: [name, migrationChecksum(migration.content), new Date().toISOString()],
+        args: [name, checksum, appliedAt],
       });
     });
   }
-}
-
-export function migrationChecksum(content: string) {
-  return createHash('sha256').update(content).digest('hex');
 }

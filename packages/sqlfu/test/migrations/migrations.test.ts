@@ -44,7 +44,7 @@ describe('draft', () => {
       migrations/
         2026-04-10T00.00.00.000Z_create_person.sql
           create table person(name text)
-        2026-04-10T01.00.00.000Z_create_table_pet.sql
+        2026-04-10T02.00.00.000Z_create_table_pet.sql
           create table pet(name text);
       "
     `);
@@ -80,12 +80,18 @@ describe('draft', () => {
 
 describe('migrate', () => {
   test('applies only newly added migrations on the second run', async () => {
-    await using fixture = await createMigrationsFixture('migrate-replays-without-migrations-table');
+    await using fixture = await createMigrationsFixture('migrate-replays-without-migrations-table', {
+      desiredSchema: `create table person(name text)`,
+    });
 
     await fixture.writeMigration('add_person', `create table person(name text)`);
 
     await fixture.api.migrate();
 
+    await fixture.writeFile('definitions.sql', dedent`
+      create table person(name text);
+      create table pet(name text, species text);
+    `);
     await fixture.writeMigration('add_pet', `create table pet(name text, species text)`);
 
     await fixture.api.migrate();
@@ -112,7 +118,9 @@ describe('migrate', () => {
   });
 
   test('applies migrations in filename order', async () => {
-    await using fixture = await createMigrationsFixture('migrate-filename-order');
+    await using fixture = await createMigrationsFixture('migrate-filename-order', {
+      desiredSchema: `create table person(name text)`,
+    });
 
     await fixture.writeFile('migrations/2026-04-10T01.00.00.000Z_insert_person.sql', `insert into person(name) values ('alice')`);
     await fixture.writeFile('migrations/2026-04-10T00.00.00.000Z_create_person.sql', `create table person(name text)`);
@@ -122,6 +130,108 @@ describe('migrate', () => {
     expect(await fixture.db.sql`select name from person order by name`).toMatchObject([
       {name: 'alice'},
     ]);
+  });
+
+  test('refuses to run from an unhealthy baseline even when pending migrations exist', async () => {
+    await using fixture = await createMigrationsFixture('migrate-preflight-blocks-when-pending', {
+      migrations: {
+        create_person: `create table person(name text)`,
+        create_pet: `create table pet(name text)`,
+      },
+    });
+
+    await fixture.api.migrate();
+    await fixture.api.baseline({target: '2026-04-10T00.00.00.000Z_create_person'});
+    // forcibly drift live schema so it no longer matches history
+    await fixture.db.raw(`drop table person`);
+    await fixture.db.raw(`create table person(name text, extra text)`);
+
+    await expect(fixture.api.migrate()).rejects.toMatchInlineSnapshot(`
+      [Error: Cannot migrate from current database state.
+
+      Schema Drift
+      Live Schema does not match Migration History.
+
+      Recommended next actions
+      - \`sqlfu goto 2026-04-10T00.00.00.000Z_create_person\` Move the database to the selected migration target.]
+    `);
+  });
+
+  test('refuses to run from an unhealthy baseline even when there are zero pending migrations', async () => {
+    await using fixture = await createMigrationsFixture('migrate-preflight-blocks-no-pending', {
+      migrations: {
+        create_person: `create table person(name text)`,
+      },
+    });
+
+    await fixture.api.migrate();
+    // forcibly drift the live schema after all migrations have already been applied
+    await fixture.db.raw(`drop table person`);
+
+    await expect(fixture.api.migrate()).rejects.toMatchInlineSnapshot(`
+      [Error: Cannot migrate from current database state.
+
+      Schema Drift
+      Live Schema does not match Migration History.
+
+      Recommended next actions
+      - \`sqlfu goto 2026-04-10T00.00.00.000Z_create_person\` Move the database to the selected migration target.]
+    `);
+  });
+
+  test('reports safe-to-retry when a failed migration rolls back cleanly', async () => {
+    await using fixture = await createMigrationsFixture('migrate-failure-clean-rollback', {
+      migrations: {
+        create_person: `create table person(name text)`,
+      },
+    });
+
+    await fixture.api.migrate();
+    await fixture.writeMigration('add_pet_and_fail', dedent`
+      create table pet(name text);
+      this is not valid sql;
+    `);
+
+    await expect(fixture.api.migrate()).rejects.toMatchInlineSnapshot(`
+      [Error: Migration 2026-04-10T02.00.00.000Z_add_pet_and_fail failed: near "this": syntax error
+
+      The database is still healthy for migrate. Fix the migration and retry.]
+    `);
+    // the failed migration must not be in history
+    expect(await fixture.migrationNames()).toEqual(['create_person']);
+    // and its partial schema must not be present
+    await expect(fixture.db.sql`select name from sqlite_schema where name = 'pet'`).resolves.toMatchObject([]);
+  });
+
+  test('reports reconciliation required when a failed migration leaves the database unhealthy', async () => {
+    await using fixture = await createMigrationsFixture('migrate-failure-unhealthy-state', {
+      migrations: {
+        create_person: `create table person(name text)`,
+      },
+    });
+
+    await fixture.api.migrate();
+    // a real-world user typo: `commit;` ends the migration transaction early, so the
+    // `create table pet` is persisted and the subsequent syntax error cannot be rolled back
+    await fixture.writeMigration('commit_then_fail', dedent`
+      create table pet(name text);
+      commit;
+      this is not valid sql;
+    `);
+
+    await expect(fixture.api.migrate()).rejects.toMatchInlineSnapshot(`
+      [Error: Migration 2026-04-10T02.00.00.000Z_commit_then_fail failed: near "this": syntax error
+
+      The database is no longer healthy for migrate. Reconcile before retrying.
+
+      Schema Drift
+      Live Schema does not match Migration History.
+
+      Recommended next actions
+      - \`sqlfu goto 2026-04-10T00.00.00.000Z_create_person\` Move the database to the selected migration target.]
+    `);
+    // the failed migration must not be recorded as applied
+    expect(await fixture.migrationNames()).toEqual(['create_person']);
   });
 });
 

@@ -18,6 +18,7 @@ export interface NodeSqliteDatabaseLike {
 export function createNodeSqliteClient(database: NodeSqliteDatabaseLike): SyncClient<NodeSqliteDatabaseLike> {
   const client: Omit<SyncClient<NodeSqliteDatabaseLike>, 'sql'> & {sql: SyncClient<NodeSqliteDatabaseLike>['sql']} = {
     driver: database,
+    system: 'sqlite',
     all<TRow extends ResultRow = ResultRow>(query: SqlQuery) {
       return materializeRows(database.prepare(query.sql).all(...query.args)) as TRow[];
     },

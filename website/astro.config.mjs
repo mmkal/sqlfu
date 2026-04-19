@@ -26,9 +26,7 @@ export default defineConfig({
         {label: 'Observability', slug: 'docs/observability'},
         {label: 'UI', slug: 'docs/ui'},
       ],
-      social: [
-        {icon: 'github', label: 'GitHub', href: 'https://github.com/mmkal/sqlfu'},
-      ],
+      social: [{icon: 'github', label: 'GitHub', href: 'https://github.com/mmkal/sqlfu'}],
     }),
   ],
 });

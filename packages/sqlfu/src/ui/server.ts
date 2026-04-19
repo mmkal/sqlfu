@@ -363,8 +363,23 @@ async function sendWebResponse(res: http.ServerResponse, response: Response) {
   response.headers.forEach((value, name) => {
     res.setHeader(name, value);
   });
-  const body = response.body ? Buffer.from(await response.arrayBuffer()) : undefined;
-  res.end(body);
+  if (!response.body) {
+    res.end();
+    return;
+  }
+  const reader = response.body.getReader();
+  try {
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) {
+        break;
+      }
+      res.write(Buffer.from(value));
+    }
+  } finally {
+    reader.releaseLock();
+    res.end();
+  }
 }
 
 async function serveViteRequest(

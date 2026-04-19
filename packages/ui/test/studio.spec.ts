@@ -998,12 +998,10 @@ async function confirmAndRunSchemaCommand(
     await replaceCodeMirrorText(dialog, 'Confirmation body editor', confirmation);
   }
   await Promise.all([
-    page.waitForResponse((response) => {
-      return response.url().includes('/api/rpc/schema/command')
-        && (response.request().postData() ?? '').includes('"confirmation"');
-    }),
+    page.waitForResponse((response) => response.url().includes('/api/rpc/schema/submitConfirmation')),
     dialog.getByRole('button', {name: 'Confirm'}).click(),
   ]);
+  await expect(dialog).not.toBeVisible();
 }
 
 async function replaceCodeMirrorText(page: any, ariaLabel: string, value: string) {

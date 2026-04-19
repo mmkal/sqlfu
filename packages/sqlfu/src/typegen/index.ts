@@ -53,10 +53,11 @@ export async function generateQueryTypesForConfig(config: SqlfuProjectConfig): P
         throw new Error(`Missing vendored TypeSQL analysis for ${queryFile.sqlPath}`);
       }
 
-      const wrapperPath = path.join(generatedDir, `${path.basename(queryFile.sqlPath)}.ts`);
+      const wrapperPath = path.join(generatedDir, `${queryFile.relativePath}.sql.ts`);
+      await fs.mkdir(path.dirname(wrapperPath), {recursive: true});
       const contents = analysis.ok
         ? renderQueryWrapper({
-          sqlPath: queryFile.sqlPath,
+          relativePath: queryFile.relativePath,
           descriptor: refineDescriptor(analysis.descriptor, queryFile.sqlContent, schema),
         })
         : `//Invalid SQL\nexport {};\n`;
@@ -135,7 +136,10 @@ type GeneratedQueryDescriptor = {
 };
 
 type QueryFile = {
+  /** absolute path to the .sql source file. */
   readonly sqlPath: string;
+  /** path without `.sql`, relative to `config.queries`, forward slashes. E.g. `"users/list-profiles"`. */
+  readonly relativePath: string;
   readonly sqlContent: string;
 };
 
@@ -182,20 +186,36 @@ async function openMainDevDatabase(dbPath: string): Promise<DisposableClient> {
 }
 
 async function loadQueryFiles(queriesDir: string): Promise<readonly QueryFile[]> {
-  const entries = await fs.readdir(queriesDir, {withFileTypes: true});
-  const sqlEntries = entries
-    .filter((entry) => entry.isFile() && entry.name.endsWith('.sql'))
-    .sort((left, right) => left.name.localeCompare(right.name));
+  const files: QueryFile[] = [];
 
-  return Promise.all(
-    sqlEntries.map(async (entry) => {
-      const sqlPath = path.join(queriesDir, entry.name);
-      return {
-        sqlPath,
-        sqlContent: await fs.readFile(sqlPath, 'utf8'),
-      };
-    }),
-  );
+  async function walk(currentDir: string, relativePrefix: string): Promise<void> {
+    const entries = await fs.readdir(currentDir, {withFileTypes: true});
+    entries.sort((left, right) => left.name.localeCompare(right.name));
+
+    for (const entry of entries) {
+      // `.generated` is where typegen writes its output; don't recurse into it.
+      if (entry.name === '.generated') continue;
+
+      const childPath = path.join(currentDir, entry.name);
+      const childRelative = relativePrefix ? `${relativePrefix}/${entry.name}` : entry.name;
+
+      if (entry.isDirectory()) {
+        await walk(childPath, childRelative);
+        continue;
+      }
+
+      if (entry.isFile() && entry.name.endsWith('.sql')) {
+        files.push({
+          sqlPath: childPath,
+          relativePath: childRelative.slice(0, -'.sql'.length),
+          sqlContent: await fs.readFile(childPath, 'utf8'),
+        });
+      }
+    }
+  }
+
+  await walk(queriesDir, '');
+  return files;
 }
 
 async function writeGeneratedBarrel(
@@ -204,9 +224,9 @@ async function writeGeneratedBarrel(
   generatedImportExtension: '.js' | '.ts',
 ): Promise<void> {
   const lines = queryFiles
-    .map((queryFile) => path.basename(queryFile.sqlPath, '.sql'))
+    .map((queryFile) => queryFile.relativePath)
     .sort((left, right) => left.localeCompare(right))
-    .map((baseName) => `export * from "./${baseName}.sql${generatedImportExtension}";`);
+    .map((relativePath) => `export * from "./${relativePath}.sql${generatedImportExtension}";`);
   await fs.writeFile(path.join(generatedDir, 'index.ts'), lines.join('\n') + (lines.length > 0 ? '\n' : ''));
 }
 
@@ -222,8 +242,8 @@ async function writeQueryCatalog(
       throw new Error(`Missing vendored TypeSQL analysis for ${queryFile.sqlPath}`);
     }
 
-    const functionName = toCamelCase(path.basename(queryFile.sqlPath, '.sql'));
-    const id = path.basename(queryFile.sqlPath, '.sql');
+    const functionName = toCamelCase(queryFile.relativePath);
+    const id = queryFile.relativePath;
 
     if (!analysis.ok) {
       return {
@@ -291,10 +311,11 @@ function toAdHocQueryAnalysis(descriptor: GeneratedQueryDescriptor): AdHocQueryA
 }
 
 function renderQueryWrapper(input: {
-  sqlPath: string;
+  relativePath: string;
   descriptor: GeneratedQueryDescriptor;
 }): string {
-  const functionName = toCamelCase(path.basename(input.sqlPath, '.sql'));
+  const queryName = input.relativePath;
+  const functionName = toCamelCase(queryName);
   const capitalizedName = functionName[0]!.toUpperCase() + functionName.slice(1);
   const dataTypeName = `${capitalizedName}Data`;
   const paramsTypeName = `${capitalizedName}Params`;
@@ -322,7 +343,7 @@ function renderQueryWrapper(input: {
     `\``,
     ``,
     `export async function ${functionName}(client: Client${restParameters ? `, ${restParameters}` : ''}): Promise<${returnType}> {`,
-    `\tconst query: SqlQuery = { sql: ${sqlConstantName}, args: ${queryArgs} };`,
+    `\tconst query: SqlQuery = { sql: ${sqlConstantName}, args: ${queryArgs}, name: ${JSON.stringify(queryName)} };`,
     ...buildGeneratedImplementation({
       resultMode: getResultMode(input.descriptor),
       resultType: resultTypeName,

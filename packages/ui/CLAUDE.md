@@ -102,3 +102,12 @@ If you are working on:
 - normal UI behavior, use the integrated harness and normal UI tests
 - hosted-frontend-to-localhost behavior, think in terms of the `local.sqlfu.dev` simulation and the separate ngrok spec
 - localhost certs / CORS / private-network issues, those belong in `packages/sqlfu`, not in the UI package
+
+## Demo mode (`?demo=1`)
+
+The same `packages/ui` bundle runs in demo mode when `?demo=1` is in the URL. In demo mode the UI runs fully in the browser against an in-memory SQLite database via `@sqlite.org/sqlite-wasm` — there is no backend at all.
+
+- Mode detection: URL search param `?demo=1`.
+- See `src/demo/` for the wasm client, the in-browser router implementation, and the mode helpers. The in-browser router is typed as `RouterClient<UiRouter>` so `client.tsx` can consume it interchangeably with the normal fetch-based oRPC client.
+- Only the subset of `UiRouter` that makes sense without a filesystem is implemented: `project.status`, `schema.get`, `table.*`, `sql.run`, `sql.analyze` (no-op), `catalog` (empty). Other procedures throw a "not available in demo mode" error.
+- Because demo mode is pure static assets with no backend, the built `dist/` can be hosted anywhere — the `deploy-ui` workflow uploads it as a GitHub Actions artifact so `artifact.ci` can serve PR previews. `vite.config.ts` sets `base: './'` to keep asset paths relative for that case.

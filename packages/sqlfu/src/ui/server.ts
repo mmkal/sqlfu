@@ -3,51 +3,17 @@ import http from 'node:http';
 import https from 'node:https';
 import path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
-import {ORPCError, os} from '@orpc/server';
 import {RPCHandler} from '@orpc/server/fetch';
 import type {ViteDevServer} from 'vite';
-import {z} from 'zod';
 import {loadProjectStateFrom, resolveProjectConfig} from '../core/config.js';
 import {PortInUseError, getListeningProcesses} from '../core/port-process.js';
-
-import {
-  analyzeAdHocSqlForConfig,
-  generateQueryTypesForConfig,
-} from '../typegen/index.js';
-import type {QueryCatalog, QueryCatalogEntry} from '../typegen/query-catalog.js';
-import type {CheckAnalysis} from '../api.js';
-import {
-  getCheckAnalysis,
-  getMigrationResultantSchema,
-  getSchemaAuthorities,
-  runSqlfuCommand,
-  writeDefinitionsSql,
-} from '../api.js';
-import {createNodeSqliteClient} from '../client.js';
-import {splitSqlStatements} from '../core/sqlite.js';
-import type {QueryArg, SqlfuProjectConfig} from '../core/types.js';
-import type {QueryExecutionResponse, SchemaCheckCard, SchemaCheckRecommendation, SqlAnalysisResponse, SqlEditorDiagnostic, StudioColumn, TableRowKey, TableRowsResponse} from './shared.js';
-import type {DatabaseSync as DatabaseSyncType} from 'node:sqlite';
+import {generateQueryTypesForConfig} from '../typegen/index.js';
+import type {SqlfuHost} from '../core/host.js';
+import {createNodeHost} from '../core/node-host.js';
+import {uiRouter, type ResolvedUiProject} from './router.js';
 
 const sourceDir = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.resolve(sourceDir, '..', '..');
-const {DatabaseSync} = await loadNodeSqliteModule();
-
-type ResolvedUiProject =
-  | {
-      initialized: true;
-      projectRoot: string;
-      config: SqlfuProjectConfig;
-    }
-  | {
-      initialized: false;
-      projectRoot: string;
-      configPath: string;
-    };
-
-type UiRouterContext = {
-  project: ResolvedUiProject;
-};
 
 type ProjectResolver = (request: {
   readonly host: string;
@@ -75,387 +41,14 @@ export type StartSqlfuServerOptions = {
   };
 };
 
-const uiBase = os.$context<UiRouterContext>();
-const rowRecordSchema = z.record(z.string(), z.unknown());
-const tableRowKeySchema = z.discriminatedUnion('kind', [
-  z.object({
-    kind: z.literal('primaryKey'),
-    values: z.record(z.string(), z.unknown()),
-  }),
-  z.object({
-    kind: z.literal('new'),
-    value: z.string(),
-  }),
-  z.object({
-    kind: z.literal('rowid'),
-    value: z.number(),
-  }),
-]) satisfies z.ZodType<TableRowKey>;
-
-const uiRouter = {
-  project: {
-    status: uiBase.handler(({context}) => ({
-      initialized: context.project.initialized,
-      projectRoot: context.project.projectRoot,
-    })),
-  },
-  schema: {
-    get: uiBase.handler(async ({context}) => {
-      const config = requireProjectConfig(context.project);
-      const projectRoot = path.dirname(config.db);
-      const database = new DatabaseSync(config.db);
-      const client = createNodeSqliteClient(database);
-
-      try {
-        const relations = client.all<{name: string; type: 'table' | 'view'; sql: string | null}>({
-          sql: `
-            select name, type, sql
-            from sqlite_master
-            where type in ('table', 'view')
-              and name not like 'sqlite_%'
-            order by type, name
-          `,
-          args: [],
-        });
-
-        return {
-          projectName: path.basename(projectRoot),
-          projectRoot,
-          relations: relations.map((relation) => ({
-            name: relation.name,
-            kind: relation.type,
-            rowCount: relation.type === 'table' ? getRelationCount(client, relation.name) : undefined,
-            columns: getRelationColumns(client, relation.name),
-            sql: relation.sql ?? undefined,
-          })),
-        };
-      } finally {
-        database.close();
-      }
-    }),
-    check: uiBase.handler(async ({context}) => {
-      const config = requireProjectConfig(context.project);
-      try {
-        const analysis = await getCheckAnalysis({config});
-        return {
-          cards: buildSchemaCheckCards(analysis),
-          recommendations: buildSchemaCheckRecommendations(analysis),
-        };
-      } catch (error) {
-        return {
-          cards: [],
-          recommendations: [],
-          error: String(error),
-        };
-      }
-    }),
-    authorities: {
-      get: uiBase.handler(async ({context}) => {
-        const authorities = await getSchemaAuthorities({config: requireProjectConfig(context.project)});
-        return {
-          desiredSchemaSql: authorities.desiredSchemaSql,
-          migrations: authorities.migrations.map((migration) => ({
-            ...parseMigrationId(migration.id),
-            id: migration.id,
-            fileName: migration.fileName,
-            content: migration.content,
-            applied: migration.applied,
-            appliedAt: migration.appliedAt,
-            integrity: migration.integrity,
-          })),
-          migrationHistory: authorities.migrationHistory.map((migration) => ({
-            ...parseMigrationId(migration.id),
-            id: migration.id,
-            fileName: migration.fileName,
-            content: migration.content,
-            applied: migration.applied,
-            appliedAt: migration.appliedAt,
-            integrity: migration.integrity,
-          })),
-          liveSchemaSql: authorities.liveSchemaSql,
-        };
-      }),
-      resultantSchema: uiBase
-        .input(z.object({
-          source: z.enum(['migrations', 'history']),
-          id: z.string(),
-        }))
-        .handler(async ({context, input}) => {
-          if (!input.id.trim()) {
-            throw new Error('Migration id is required');
-          }
-
-          return {
-            sql: await getMigrationResultantSchema({config: requireProjectConfig(context.project)}, input),
-          };
-        }),
-    },
-    command: uiBase
-      .input(z.object({
-        command: z.string(),
-        confirmation: z.string().optional(),
-      }))
-      .handler(async ({context, input}) => {
-        if (!input.command.trim()) {
-          throw new Error('Command is required');
-        }
-
-        try {
-          await runSqlfuCommand(
-            {
-              projectRoot: context.project.projectRoot,
-              config: context.project.initialized ? context.project.config : undefined,
-            },
-            input.command,
-            async (params) => {
-              const body = params.body.trim();
-              if (!body) {
-                return null;
-              }
-
-              const confirmation = input.confirmation?.trim();
-              if (!confirmation) {
-                throw toClientError(new Error(`confirmation_missing:${JSON.stringify({...params, body})}`));
-              }
-
-              return confirmation;
-            },
-          );
-        } catch (error) {
-          if (error instanceof ORPCError) {
-            throw error;
-          }
-          throw toClientError(error);
-        }
-        return {ok: true} as const;
-      }),
-    definitions: uiBase
-      .input(z.object({
-        sql: z.string(),
-      }))
-      .handler(async ({context, input}) => {
-        if (!input.sql.trim()) {
-          throw new Error('Desired Schema is required');
-        }
-
-        await writeDefinitionsSql({config: requireProjectConfig(context.project)}, input.sql);
-        return {ok: true} as const;
-      }),
-  },
-  catalog: uiBase.handler(({context}) => loadCatalog(requireProjectConfig(context.project))),
-  table: {
-    list: uiBase
-      .input(z.object({
-        relationName: z.string(),
-        page: z.number().int(),
-      }))
-      .handler(({context, input}) => getTableRows(requireProjectConfig(context.project).db, input.relationName, input.page)),
-    save: uiBase
-      .input(z.object({
-        relationName: z.string(),
-        page: z.number().int(),
-        originalRows: z.array(rowRecordSchema),
-        rows: z.array(rowRecordSchema),
-        rowKeys: z.array(tableRowKeySchema),
-      }))
-      .handler(({context, input}) => saveTableRows(requireProjectConfig(context.project).db, input.relationName, input)),
-    delete: uiBase
-      .input(z.object({
-        relationName: z.string(),
-        page: z.number().int(),
-        originalRow: rowRecordSchema,
-        rowKey: tableRowKeySchema,
-      }))
-      .handler(({context, input}) => deleteTableRow(requireProjectConfig(context.project).db, input.relationName, input)),
-  },
-  sql: {
-    run: uiBase
-      .input(z.object({
-        sql: z.string(),
-        params: z.unknown().optional(),
-      }))
-      .handler(({context, input}) => {
-        const config = requireProjectConfig(context.project);
-        const trimmedSql = input.sql.trim();
-        if (!trimmedSql) {
-          throw new Error('SQL is required');
-        }
-
-        const statements = splitSqlStatements(trimmedSql);
-        const params = normalizeSqlRunnerParams(input.params);
-        const database = new DatabaseSync(config.db);
-
-        try {
-          try {
-            if (statements.length === 1) {
-              try {
-                const rows = executePreparedAll<Record<string, unknown>>(database.prepare(statements[0]!), params);
-                return {
-                  sql: trimmedSql,
-                  mode: 'rows' as const,
-                  rows: rows.map(materializeRow),
-                };
-              } catch {}
-            }
-
-            return {
-              sql: trimmedSql,
-              mode: 'metadata' as const,
-              metadata: runSqlStatement(database, trimmedSql, params),
-            };
-          } catch (error) {
-            throw toClientError(error);
-          }
-        } finally {
-          database.close();
-        }
-      }),
-    analyze: uiBase
-      .input(z.object({
-        sql: z.string(),
-      }))
-      .handler(({context, input}) => analyzeSql(requireProjectConfig(context.project), input)),
-    save: uiBase
-      .input(z.object({
-        sql: z.string(),
-        name: z.string(),
-      }))
-      .handler(async ({context, input}) => {
-        const config = requireProjectConfig(context.project);
-        const sql = input.sql.trim();
-        if (!sql) {
-          throw new Error('SQL is required');
-        }
-
-        const baseName = slugifyQueryName(input.name);
-        if (!baseName) {
-          throw new Error('Query name is required');
-        }
-
-        const relativePath = `sql/${baseName}.sql`;
-        const targetPath = path.join(config.projectRoot, relativePath);
-        await fs.mkdir(path.dirname(targetPath), {recursive: true});
-        await fs.writeFile(targetPath, `${sql}\n`);
-        await generateCatalogForProject(config.projectRoot);
-        return {savedPath: relativePath};
-      }),
-  },
-  query: {
-    execute: uiBase
-      .input(z.object({
-        queryId: z.string(),
-        data: z.record(z.string(), z.unknown()).optional(),
-        params: z.record(z.string(), z.unknown()).optional(),
-      }))
-      .handler(async ({context, input}): Promise<QueryExecutionResponse> => {
-        const config = requireProjectConfig(context.project);
-        const catalog = await loadCatalog(config);
-        const query = catalog.queries.find((entry) => entry.id === input.queryId);
-        if (!query || query.kind !== 'query') {
-          throw new Error(`Unknown query: ${input.queryId}`);
-        }
-
-        const args = query.args.flatMap((arg) => {
-          const source = arg.scope === 'data' ? input.data : input.params;
-          return encodeArgument(arg, source?.[arg.name]);
-        }) as readonly QueryArg[];
-
-        const database = new DatabaseSync(config.db);
-        const client = createNodeSqliteClient(database);
-
-        try {
-          if (query.resultMode === 'metadata') {
-            return {
-              mode: 'metadata',
-              metadata: client.run({sql: query.sql, args}),
-            };
-          }
-
-          return {
-            mode: 'rows',
-            rows: client.all({sql: query.sql, args}).map(materializeRow),
-          };
-        } finally {
-          database.close();
-        }
-      }),
-    update: uiBase
-      .input(z.object({
-        queryId: z.string(),
-        sql: z.string(),
-      }))
-      .handler(async ({context, input}) => {
-        const config = requireProjectConfig(context.project);
-        const catalog = await loadCatalog(config);
-        const query = catalog.queries.find((entry) => entry.id === input.queryId);
-        if (!query) {
-          throw new Error(`Unknown query: ${input.queryId}`);
-        }
-        const sql = input.sql.trim();
-        if (!sql) {
-          throw new Error('SQL is required');
-        }
-
-        await fs.writeFile(path.join(config.projectRoot, query.sqlFile), `${sql}\n`);
-        await generateCatalogForProject(config.projectRoot);
-        return {
-          id: query.id,
-          sqlFile: query.sqlFile,
-        };
-      }),
-    rename: uiBase
-      .input(z.object({
-        queryId: z.string(),
-        name: z.string(),
-      }))
-      .handler(async ({context, input}) => {
-        const config = requireProjectConfig(context.project);
-        const catalog = await loadCatalog(config);
-        const query = catalog.queries.find((entry) => entry.id === input.queryId);
-        if (!query) {
-          throw new Error(`Unknown query: ${input.queryId}`);
-        }
-        const nextId = slugifyQueryName(input.name);
-        if (!nextId) {
-          throw new Error('Query name is required');
-        }
-
-        const nextRelativePath = `sql/${nextId}.sql`;
-        const nextPath = path.join(config.projectRoot, nextRelativePath);
-        await fs.rename(path.join(config.projectRoot, query.sqlFile), nextPath);
-        await generateCatalogForProject(config.projectRoot);
-        return {
-          id: nextId,
-          sqlFile: nextRelativePath,
-        };
-      }),
-    delete: uiBase
-      .input(z.object({
-        queryId: z.string(),
-      }))
-      .handler(async ({context, input}) => {
-        const config = requireProjectConfig(context.project);
-        const catalog = await loadCatalog(config);
-        const query = catalog.queries.find((entry) => entry.id === input.queryId);
-        if (!query) {
-          throw new Error(`Unknown query: ${input.queryId}`);
-        }
-        await fs.rm(path.join(config.projectRoot, query.sqlFile), {force: true});
-        await generateCatalogForProject(config.projectRoot);
-        return {
-          id: query.id,
-          sqlFile: query.sqlFile,
-        };
-      }),
-  },
-};
-
-export type UiRouter = typeof uiRouter;
+export type {UiRouter} from './router.js';
 
 export async function startSqlfuServer(input: StartSqlfuServerOptions = {}) {
+  const host = await createNodeHost();
   const resolveProject = input.projectRoot
     ? createFixedProjectResolver(path.resolve(input.projectRoot))
     : createSubdomainProjectResolver({
+        host,
         projectsRoot: path.resolve(input.projectsRoot ?? path.join(packageRoot, 'test', 'projects')),
         templateRoot: path.resolve(input.templateRoot ?? path.join(packageRoot, 'test', 'template-project')),
         defaultProjectName: input.defaultProjectName ?? 'dev-project',
@@ -492,7 +85,7 @@ export async function startSqlfuServer(input: StartSqlfuServerOptions = {}) {
         const request = await toWebRequest(req, url);
         const {matched, response} = await rpcHandler.handle(request, {
           prefix: '/api/rpc',
-          context: {project},
+          context: {project, host},
         });
         await sendWebResponse(res, withApiCors(req, matched ? response : new Response('Not found', {status: 404})));
         return;
@@ -587,768 +180,6 @@ function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error;
 }
 
-async function loadNodeSqliteModule() {
-  const originalEmitWarning = process.emitWarning.bind(process);
-  process.emitWarning = ((warning: string | Error, ...args: unknown[]) => {
-    if (isNodeSqliteExperimentalWarning(warning, args)) {
-      return;
-    }
-
-    return Reflect.apply(originalEmitWarning, process, [warning, ...args]);
-  }) as typeof process.emitWarning;
-
-  try {
-    return await import('node:sqlite');
-  } finally {
-    process.emitWarning = originalEmitWarning;
-  }
-}
-
-function isNodeSqliteExperimentalWarning(warning: string | Error, args: unknown[]) {
-  const message = typeof warning === 'string' ? warning : warning.message;
-  const type = typeof warning === 'string'
-    ? (typeof args[0] === 'string' ? args[0] : '')
-    : warning.name;
-
-  return type === 'ExperimentalWarning' && message.includes('SQLite is an experimental feature');
-}
-
-async function loadCatalog(config: SqlfuProjectConfig): Promise<QueryCatalog> {
-  await generateCatalogForProject(config.projectRoot);
-  const catalogPath = path.join(config.projectRoot, '.sqlfu', 'query-catalog.json');
-  return JSON.parse(await fs.readFile(catalogPath, 'utf8')) as QueryCatalog;
-}
-
-async function analyzeSql(
-  config: SqlfuProjectConfig,
-  input: {
-    sql: string;
-  },
-): Promise<SqlAnalysisResponse> {
-  if (!input.sql.trim()) {
-    return {};
-  }
-
-  try {
-    const analysis = await analyzeAdHocSqlForConfig(config, input.sql);
-    return {
-      paramsSchema: analysis.paramsSchema,
-      diagnostics: [],
-    };
-  } catch (error) {
-    if (isInternalUnsupportedSqlAnalysisError(error)) {
-      return {};
-    }
-
-    return {
-      diagnostics: [toSqlEditorDiagnostic(input.sql, error)],
-    };
-  }
-}
-
-function isInternalUnsupportedSqlAnalysisError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  return [
-    'traverse_Sql_stmtContext',
-    'Not supported!',
-  ].includes(message);
-}
-
-function buildSchemaCheckCards(
-  analysis: CheckAnalysis,
-): readonly SchemaCheckCard[] {
-  const mismatchByKind = new Map(analysis.mismatches.map((mismatch) => [mismatch.kind, mismatch]));
-  const recommendationKinds = new Set(analysis.recommendations.map((recommendation) => recommendation.kind));
-
-  return [
-    toSchemaCheckCard(
-      'repoDrift',
-      'Repo Drift',
-      '✅ No Repo Drift',
-      'Desired Schema matches Migrations.',
-      mismatchByKind.get('repoDrift'),
-    ),
-    toSchemaCheckCard(
-      'pendingMigrations',
-      'Pending Migrations',
-      '✅ No Pending Migrations',
-      'Migration History matches Migrations.',
-      mismatchByKind.get('pendingMigrations'),
-    ),
-    toSchemaCheckCard(
-      'historyDrift',
-      'History Drift',
-      '✅ No History Drift',
-      'Applied migrations still match the repo versions.',
-      mismatchByKind.get('historyDrift'),
-    ),
-    toSchemaCheckCard(
-      'schemaDrift',
-      'Schema Drift',
-      '✅ No Schema Drift',
-      'Live Schema matches Migration History.',
-      mismatchByKind.get('schemaDrift'),
-    ),
-    toSchemaCheckCard(
-      'syncDrift',
-      'Sync Drift',
-      '✅ No Sync Drift',
-      'Desired Schema matches Live Schema.',
-      mismatchByKind.get('syncDrift'),
-      recommendationKinds,
-      mismatchByKind,
-    ),
-  ];
-}
-
-function buildSchemaCheckRecommendations(analysis: CheckAnalysis): readonly SchemaCheckRecommendation[] {
-  return analysis.recommendations.map((recommendation) => ({
-    kind: recommendation.kind,
-    command: recommendation.command,
-    label: recommendation.label,
-    rationale: recommendation.rationale,
-  }));
-}
-
-function toSchemaCheckCard(
-  key: SchemaCheckCard['key'],
-  title: string,
-  okTitle: string,
-  explainer: string,
-  mismatch: {
-    readonly kind: SchemaCheckCard['key'];
-    readonly summary: string;
-    readonly details: readonly string[];
-  } | undefined,
-  recommendationKinds?: ReadonlySet<string>,
-  mismatchByKind?: ReadonlyMap<string, {
-    readonly kind: SchemaCheckCard['key'];
-    readonly summary: string;
-    readonly details: readonly string[];
-  }>,
-): SchemaCheckCard {
-  const variant = getSchemaCheckCardVariant(key, mismatch, recommendationKinds, mismatchByKind);
-  return {
-    key,
-    variant,
-    title,
-    okTitle,
-    explainer,
-    ok: !mismatch,
-    summary: mismatch?.summary ?? '',
-    details: mismatch?.details ?? [],
-  };
-}
-
-function getSchemaCheckCardVariant(
-  key: SchemaCheckCard['key'],
-  mismatch: {
-    readonly kind: SchemaCheckCard['key'];
-    readonly summary: string;
-    readonly details: readonly string[];
-  } | undefined,
-  recommendationKinds: ReadonlySet<string> = new Set(),
-  mismatchByKind: ReadonlyMap<string, {
-    readonly kind: SchemaCheckCard['key'];
-    readonly summary: string;
-    readonly details: readonly string[];
-  }> = new Map(),
-): SchemaCheckCard['variant'] {
-  if (!mismatch) {
-    return 'ok';
-  }
-
-  if (
-    key === 'syncDrift'
-    && mismatchByKind.has('pendingMigrations')
-    && !recommendationKinds.has('sync')
-  ) {
-    return 'info';
-  }
-
-  return 'warn';
-}
-
-function parseMigrationId(id: string) {
-  const separatorIndex = id.indexOf('_');
-  if (separatorIndex === -1) {
-    return {
-      timestamp: undefined,
-      name: id,
-    };
-  }
-
-  return {
-    timestamp: id.slice(0, separatorIndex),
-    name: id.slice(separatorIndex + 1),
-  };
-}
-
-function toSqlEditorDiagnostic(sql: string, error: unknown): SqlEditorDiagnostic {
-  const message = error instanceof Error ? error.message : String(error);
-  const explicitLocation = locateExplicitPosition(sql, message);
-  if (explicitLocation) {
-    return {
-      ...explicitLocation,
-      message,
-    };
-  }
-
-  const nearToken = message.match(/near ['"`]([^'"`]+)['"`]/i)?.[1]
-    ?? message.match(/no such (?:table|column):\s*([A-Za-z0-9_."]+)/i)?.[1]
-    ?? message.match(/Must select the join column:\s*([A-Za-z0-9_."]+)/i)?.[1];
-  const tokenLocation = nearToken ? locateToken(sql, nearToken) : null;
-  if (tokenLocation) {
-    return {
-      ...tokenLocation,
-      message,
-    };
-  }
-
-  return {
-    ...fallbackDiagnosticRange(sql),
-    message,
-  };
-}
-
-function locateExplicitPosition(sql: string, message: string) {
-  const lineColumnMatch = message.match(/line\s+(\d+)\D+column\s+(\d+)/i);
-  if (!lineColumnMatch) {
-    return null;
-  }
-
-  const lineNumber = Number(lineColumnMatch[1]);
-  const columnNumber = Number(lineColumnMatch[2]);
-  if (!Number.isFinite(lineNumber) || !Number.isFinite(columnNumber) || lineNumber < 1 || columnNumber < 1) {
-    return null;
-  }
-
-  const lines = sql.split('\n');
-  const targetLine = lines[lineNumber - 1];
-  if (targetLine == null) {
-    return null;
-  }
-
-  const from = lines
-    .slice(0, lineNumber - 1)
-    .reduce((total, line) => total + line.length + 1, 0) + (columnNumber - 1);
-
-  return {
-    from,
-    to: Math.min(sql.length, from + Math.max(1, targetLine.trim().length ? 1 : targetLine.length || 1)),
-  };
-}
-
-function locateToken(sql: string, rawToken: string) {
-  const token = rawToken.replace(/^["'`]+|["'`]+$/g, '');
-  if (!token) {
-    return null;
-  }
-
-  for (const candidate of [token, token.split('.').at(-1) ?? '']) {
-    if (!candidate) {
-      continue;
-    }
-    const index = sql.toLowerCase().indexOf(candidate.toLowerCase());
-    if (index !== -1) {
-      return {
-        from: index,
-        to: index + candidate.length,
-      };
-    }
-  }
-
-  return null;
-}
-
-function fallbackDiagnosticRange(sql: string) {
-  const firstNonWhitespace = sql.search(/\S/);
-  const from = firstNonWhitespace === -1 ? 0 : firstNonWhitespace;
-  return {
-    from,
-    to: Math.max(from + 1, sql.length),
-  };
-}
-
-function encodeArgument(
-  arg: Extract<QueryCatalogEntry, {kind: 'query'}>['args'][number],
-  value: unknown,
-): readonly QueryArg[] {
-  if (arg.isArray) {
-    if (!Array.isArray(value)) {
-      return [];
-    }
-    return value.map((item) => encodeScalar(arg.driverEncoding, item));
-  }
-
-  return [encodeScalar(arg.driverEncoding, value)];
-}
-
-function encodeScalar(
-  encoding: Extract<QueryCatalogEntry, {kind: 'query'}>['args'][number]['driverEncoding'],
-  value: unknown,
-): QueryArg {
-  if (value == null) {
-    return null;
-  }
-  if (encoding === 'boolean-number') {
-    return Number(Boolean(value));
-  }
-  if (encoding === 'date') {
-    return typeof value === 'string' ? value.split('T')[0] : String(value);
-  }
-  if (encoding === 'datetime') {
-    if (typeof value !== 'string') {
-      return String(value);
-    }
-    return value.replace('T', ' ').replace(/\.\d+Z?$/, '');
-  }
-  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'bigint' || typeof value === 'boolean' || value instanceof Uint8Array) {
-    return value;
-  }
-  return JSON.stringify(value);
-}
-
-function getRelationColumns(client: ReturnType<typeof createNodeSqliteClient>, relationName: string): readonly StudioColumn[] {
-  return client
-    .all<Record<string, unknown>>({
-      sql: `PRAGMA table_xinfo("${escapeIdentifier(relationName)}")`,
-      args: [],
-    })
-    .filter((row) => Number(row.hidden ?? 0) === 0)
-    .map((row) => ({
-      name: String(row.name),
-      type: typeof row.type === 'string' ? row.type : '',
-      notNull: Number(row.notnull ?? 0) === 1,
-      primaryKey: Number(row.pk ?? 0) >= 1,
-    }));
-}
-
-function getRelationCount(client: ReturnType<typeof createNodeSqliteClient>, relationName: string) {
-  const rows = client.all<{count: number}>({
-    sql: `select count(*) as count from "${escapeIdentifier(relationName)}"`,
-    args: [],
-  });
-  return rows[0]?.count ?? 0;
-}
-
-async function getTableRows(dbPath: string, relationName: string, page: number): Promise<TableRowsResponse> {
-  const safePage = Math.max(0, page);
-  const pageSize = 25;
-  const database = new DatabaseSync(dbPath);
-  const client = createNodeSqliteClient(database);
-
-  try {
-    const relation = getRelationInfo(client, relationName);
-    const relationColumns = getRelationColumns(client, relationName);
-    const columns = relationColumns.map((column) => column.name);
-    const primaryKeyColumns = relationColumns.filter((column) => column.primaryKey).map((column) => column.name);
-    const includeRowid = relation.type === 'table' && primaryKeyColumns.length === 0;
-    const rows = client.all<Record<string, unknown>>({
-      sql: `select ${includeRowid ? 'rowid as "__sqlfu_rowid__", ' : ''}* from "${escapeIdentifier(relationName)}" limit ? offset ?`,
-      args: [pageSize, safePage * pageSize],
-    });
-    const materializedRows = rows.map(materializeRow);
-
-    return {
-      relation: relationName,
-      page: safePage,
-      pageSize,
-      editable: relation.type === 'table',
-      rowKeys: relation.type === 'table'
-        ? materializedRows.map((row) => buildTableRowKey(row, primaryKeyColumns))
-        : [],
-      columns,
-      rows: materializedRows.map(stripInternalRowValues),
-    };
-  } finally {
-    database.close();
-  }
-}
-
-async function saveTableRows(
-  dbPath: string,
-  relationName: string,
-  input: {
-    page: number;
-    originalRows: unknown[];
-    rows: unknown[];
-    rowKeys: TableRowKey[];
-  },
-): Promise<TableRowsResponse> {
-  const database = new DatabaseSync(dbPath);
-  const client = createNodeSqliteClient(database);
-
-  try {
-    const relation = getRelationInfo(client, relationName);
-    if (relation.type !== 'table') {
-      throw new Error(`Relation "${relationName}" is not editable`);
-    }
-
-    if (input.originalRows.length !== input.rows.length || input.rows.length !== input.rowKeys.length) {
-      throw new Error('Edited rows payload is malformed');
-    }
-
-    const changedRows = input.rows.flatMap((row, index) => {
-      const nextRow = asRecord(row);
-      const originalRow = asRecord(input.originalRows[index]);
-      if (!nextRow || !originalRow) {
-        return [];
-      }
-      const normalizedNextRow = normalizeEditedRow(nextRow, originalRow);
-
-      const changedColumns = Object.keys(normalizedNextRow).filter((column) => !isSameValue(normalizedNextRow[column], originalRow[column]));
-      if (changedColumns.length === 0) {
-        return [];
-      }
-
-      return [{
-        rowKey: input.rowKeys[index]!,
-        originalRow,
-        nextRow: normalizedNextRow,
-        changedColumns,
-      }];
-    });
-
-    for (const row of changedRows) {
-      const sql = row.rowKey.kind === 'new'
-        ? buildInsertRowStatement(relationName, row.nextRow, row.changedColumns)
-        : buildUpdateRowStatement(relationName, row.rowKey, row.originalRow, row.nextRow, row.changedColumns);
-      try {
-        executePreparedRun(database.prepare(sql.sql), sql.args);
-      } catch (error) {
-        throw new Error(`${error instanceof Error ? error.message : String(error)}\nSQL: ${sql.sql}\nArgs: ${JSON.stringify(sql.args)}`);
-      }
-    }
-
-    return await getTableRows(dbPath, relationName, input.page);
-  } finally {
-    database.close();
-  }
-}
-
-async function deleteTableRow(
-  dbPath: string,
-  relationName: string,
-  input: {
-    page: number;
-    originalRow: unknown;
-    rowKey: TableRowKey | undefined;
-  },
-): Promise<TableRowsResponse> {
-  const database = new DatabaseSync(dbPath);
-  const client = createNodeSqliteClient(database);
-
-  try {
-    const relation = getRelationInfo(client, relationName);
-    if (relation.type !== 'table') {
-      throw new Error(`Relation "${relationName}" is not editable`);
-    }
-
-    const originalRow = asRecord(input.originalRow);
-    if (!originalRow || !input.rowKey || input.rowKey.kind === 'new') {
-      throw new Error('Delete row payload is malformed');
-    }
-
-    const sql = buildDeleteRowStatement(relationName, input.rowKey, originalRow);
-    const result = executePreparedRun(database.prepare(sql.sql), sql.args) as {changes?: number};
-    if (result.changes !== 1) {
-      throw new Error(`Delete affected ${result.changes ?? 0} rows`);
-    }
-
-    return await getTableRows(dbPath, relationName, input.page);
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('\nSQL: ')) {
-      throw error;
-    }
-    throw new Error(`${error instanceof Error ? error.message : String(error)}`);
-  } finally {
-    database.close();
-  }
-}
-
-function slugifyQueryName(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-}
-
-function normalizeSqlRunnerParams(value: unknown): Record<string, unknown> | readonly unknown[] | undefined {
-  if (value == null || value === '') {
-    return undefined;
-  }
-  if (Array.isArray(value)) {
-    return value;
-  }
-  if (typeof value === 'object') {
-    return value as Record<string, unknown>;
-  }
-  throw new Error('SQL runner params must be an object or array');
-}
-
-function runSqlStatement(
-  database: DatabaseSyncType,
-  sql: string,
-  params: Record<string, unknown> | readonly unknown[] | undefined,
-) {
-  const result = executePreparedRun(database.prepare(sql), params);
-  return {
-    rowsAffected: result.changes == null ? undefined : Number(result.changes),
-    lastInsertRowid: result.lastInsertRowid,
-  };
-}
-
-function executePreparedAll<TRow extends Record<string, unknown>>(
-  statement: ReturnType<DatabaseSyncType['prepare']>,
-  params: Record<string, unknown> | readonly unknown[] | undefined,
-) {
-  if (params == null) {
-    return statement.all() as TRow[];
-  }
-  return Array.isArray(params)
-    ? statement.all(...params) as TRow[]
-    : statement.all(params as never) as TRow[];
-}
-
-function executePreparedRun(
-  statement: ReturnType<DatabaseSyncType['prepare']>,
-  params: Record<string, unknown> | readonly unknown[] | undefined,
-) {
-  if (params == null) {
-    return statement.run();
-  }
-  return Array.isArray(params)
-    ? statement.run(...params)
-    : statement.run(params as never);
-}
-
-function materializeRow(row: Record<string, unknown>) {
-  return Object.fromEntries(
-    Object.entries(row).map(([key, value]) => {
-      if (typeof value === 'bigint') {
-        return [key, Number(value)];
-      }
-      if (value instanceof ArrayBuffer) {
-        return [key, `[ArrayBuffer ${value.byteLength}]`];
-      }
-      if (value instanceof Uint8Array) {
-        return [key, `[Uint8Array ${value.byteLength}]`];
-      }
-      return [key, value];
-    }),
-  );
-}
-
-function escapeIdentifier(value: string) {
-  return value.replaceAll('"', '""');
-}
-
-function getRelationInfo(client: ReturnType<typeof createNodeSqliteClient>, relationName: string) {
-  const row = client.all<{name: string; type: 'table' | 'view'; sql: string | null}>({
-    sql: `select name, type, sql from sqlite_schema where name = ?`,
-    args: [relationName],
-  })[0];
-  if (!row || (row.type !== 'table' && row.type !== 'view')) {
-    throw new Error(`Unknown relation "${relationName}"`);
-  }
-  return row;
-}
-
-function buildTableRowKey(row: Record<string, unknown>, primaryKeyColumns: readonly string[]): TableRowKey {
-  if (primaryKeyColumns.length > 0) {
-    return {
-      kind: 'primaryKey',
-      values: Object.fromEntries(primaryKeyColumns.map((column) => [column, row[column]])),
-    };
-  }
-
-  const rowid = row.__sqlfu_rowid__;
-  if (typeof rowid !== 'number') {
-    throw new Error('Editable table row is missing rowid');
-  }
-
-  return {
-    kind: 'rowid',
-    value: rowid,
-  };
-}
-
-function stripInternalRowValues(row: Record<string, unknown>) {
-  const nextRow = {...row};
-  delete nextRow.__sqlfu_rowid__;
-  return nextRow;
-}
-
-function buildRowWhereClause(rowKey: TableRowKey, originalRow: Record<string, unknown>) {
-  if (rowKey.kind === 'new') {
-    throw new Error('New rows do not have a where clause');
-  }
-  if (rowKey.kind === 'rowid') {
-    return {
-      sql: 'rowid = ?',
-      args: [rowKey.value],
-    };
-  }
-
-  const entries = Object.entries(rowKey.values);
-  return {
-    sql: entries.map(([column, value]) => (value == null ? `"${escapeIdentifier(column)}" is null` : `"${escapeIdentifier(column)}" = ?`)).join(' and '),
-    args: entries.flatMap(([, value]) => (value == null ? [] : [normalizeDbValue(value)])),
-  };
-}
-
-function buildExactRowMatchClause(row: Record<string, unknown>) {
-  const entries = Object.entries(row);
-  return {
-    sql: entries.map(([column, value]) => (value == null ? `"${escapeIdentifier(column)}" is null` : `"${escapeIdentifier(column)}" = ?`)).join(' and '),
-    args: entries.flatMap(([, value]) => (value == null ? [] : [normalizeDbValue(value)])),
-  };
-}
-
-function buildInsertRowStatement(
-  relationName: string,
-  nextRow: Record<string, unknown>,
-  changedColumns: readonly string[],
-) {
-  const columns = changedColumns.map((column) => `"${escapeIdentifier(column)}"`).join(', ');
-  const placeholders = changedColumns.map(() => '?').join(', ');
-  return {
-    sql: `insert into "${escapeIdentifier(relationName)}" (${columns}) values (${placeholders})`,
-    args: changedColumns.map((column) => normalizeDbValue(nextRow[column])),
-  };
-}
-
-function buildUpdateRowStatement(
-  relationName: string,
-  rowKey: TableRowKey,
-  originalRow: Record<string, unknown>,
-  nextRow: Record<string, unknown>,
-  changedColumns: readonly string[],
-) {
-  const setSql = changedColumns.map((column) => `"${escapeIdentifier(column)}" = ?`).join(', ');
-  const setArgs = changedColumns.map((column) => normalizeDbValue(nextRow[column]));
-  const whereClause = buildRowWhereClause(rowKey, originalRow);
-  return {
-    sql: `update "${escapeIdentifier(relationName)}" set ${setSql} where ${whereClause.sql}`,
-    args: [...setArgs, ...whereClause.args],
-  };
-}
-
-function buildDeleteRowStatement(
-  relationName: string,
-  rowKey: Exclude<TableRowKey, {kind: 'new'}>,
-  originalRow: Record<string, unknown>,
-) {
-  const rowKeyWhereClause = buildRowWhereClause(rowKey, originalRow);
-  const originalRowWhereClause = buildExactRowMatchClause(originalRow);
-  return {
-    sql: `delete from "${escapeIdentifier(relationName)}" where (${rowKeyWhereClause.sql}) and (${originalRowWhereClause.sql})`,
-    args: [...rowKeyWhereClause.args, ...originalRowWhereClause.args],
-  };
-}
-
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
-}
-
-function isTableRowKey(value: unknown): value is TableRowKey {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-  const rowKey = value as Record<string, unknown>;
-  if (rowKey.kind === 'new') {
-    return typeof rowKey.value === 'string';
-  }
-  if (rowKey.kind === 'rowid') {
-    return typeof rowKey.value === 'number';
-  }
-  if (rowKey.kind === 'primaryKey') {
-    return !!rowKey.values && typeof rowKey.values === 'object' && !Array.isArray(rowKey.values);
-  }
-  return false;
-}
-
-function isSameValue(left: unknown, right: unknown) {
-  return JSON.stringify(left) === JSON.stringify(right);
-}
-
-function normalizeDbValue(value: unknown) {
-  if (typeof value === 'boolean') {
-    return Number(value);
-  }
-  return value;
-}
-
-function normalizeEditedRow(nextRow: Record<string, unknown>, originalRow: Record<string, unknown>) {
-  return Object.fromEntries(
-    Object.entries(nextRow).map(([column, value]) => [column, coerceEditedValue(value, originalRow[column])]),
-  );
-}
-
-function coerceEditedValue(value: unknown, originalValue: unknown) {
-  if (typeof originalValue === 'number' && typeof value === 'string' && value.trim() !== '') {
-    const parsed = Number(value);
-    return Number.isNaN(parsed) ? value : parsed;
-  }
-
-  return value;
-}
-
-function apiError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  return new Response(message, {
-    status: 400,
-    headers: {
-      'content-type': 'text/plain; charset=utf-8',
-    },
-  });
-}
-
-function apiPreflightResponse(req: http.IncomingMessage) {
-  return withApiCors(req, new Response(null, {status: 204}));
-}
-
-function withApiCors(req: http.IncomingMessage, response: Response) {
-  const headers = new Headers(response.headers);
-  const origin = headerValue(req.headers.origin);
-  const requestedHeaders = headerValue(req.headers['access-control-request-headers']);
-  const privateNetwork = headerValue(req.headers['access-control-request-private-network']);
-
-  if (origin) {
-    headers.set('access-control-allow-origin', origin);
-    headers.set('vary', 'origin');
-  }
-
-  headers.set('access-control-allow-methods', 'GET,POST,OPTIONS');
-  headers.set('access-control-allow-headers', requestedHeaders || 'content-type,x-sqlfu-project');
-
-  if (privateNetwork === 'true') {
-    headers.set('access-control-allow-private-network', 'true');
-  }
-
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
-  });
-}
-
-function toClientError(error: unknown) {
-  return new ORPCError('BAD_REQUEST', {
-    message: error instanceof Error ? error.message : String(error),
-  });
-}
-
-function readOption(name: string) {
-  const index = process.argv.indexOf(name);
-  if (index === -1) {
-    return undefined;
-  }
-  return process.argv[index + 1];
-}
-
 export async function generateCatalogForProject(projectRoot: string) {
   const config = await loadProjectConfigFrom(projectRoot);
   await generateQueryTypesForConfig(config);
@@ -1359,19 +190,21 @@ function createFixedProjectResolver(projectRoot: string): ProjectResolver {
 }
 
 function createSubdomainProjectResolver(input: {
+  host: SqlfuHost;
   projectsRoot: string;
   templateRoot: string;
   defaultProjectName: string;
   allowUnknownHosts: boolean;
 }): ProjectResolver {
-  return async ({host, projectHeader}) => {
+  return async ({host: requestHost, projectHeader}) => {
     const projectName = projectNameFromRequest({
-      host,
+      host: requestHost,
       projectHeader,
       defaultProjectName: input.defaultProjectName,
       allowUnknownHosts: input.allowUnknownHosts,
     });
     return await ensureProjectConfig({
+      host: input.host,
       projectName,
       projectsRoot: input.projectsRoot,
       templateRoot: input.templateRoot,
@@ -1380,6 +213,7 @@ function createSubdomainProjectResolver(input: {
 }
 
 async function ensureProjectConfig(input: {
+  host: SqlfuHost;
   projectName: string;
   projectsRoot: string;
   templateRoot: string;
@@ -1390,7 +224,7 @@ async function ensureProjectConfig(input: {
     projectsRoot: input.projectsRoot,
     templateRoot: input.templateRoot,
   });
-  await ensureDatabase(projectRoot);
+  await ensureDatabase(input.host, projectRoot);
   return await loadProjectStateFrom(projectRoot);
 }
 
@@ -1407,30 +241,33 @@ async function ensureProjectFiles(input: {
   await fs.cp(input.templateRoot, input.projectRoot, {recursive: true});
 }
 
-async function ensureDatabase(projectRoot: string) {
+async function ensureDatabase(host: SqlfuHost, projectRoot: string) {
   const dbPath = path.join(projectRoot, 'app.db');
   try {
     await fs.access(dbPath);
     return;
   } catch {}
 
-  const database = new DatabaseSync(dbPath);
+  await using database = await host.openDb({
+    projectRoot,
+    db: dbPath,
+    definitions: path.join(projectRoot, 'definitions.sql'),
+    migrations: path.join(projectRoot, 'migrations'),
+    queries: path.join(projectRoot, 'sql'),
+    generatedImportExtension: '.js',
+  });
   try {
     const definitionsSql = await fs.readFile(path.join(projectRoot, 'definitions.sql'), 'utf8');
-    try {
-      database.exec(definitionsSql);
-      database.exec(`
-        insert into posts (slug, title, body, published) values
-          ('hello-world', 'Hello World', 'First post body', 1),
-          ('draft-notes', 'Draft Notes', 'Unpublished notes', 0);
-      `);
-    } catch (error) {
-      console.warn(
-        `sqlfu/ui could not initialize ${path.basename(projectRoot)} from definitions.sql: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  } finally {
-    database.close();
+    await database.client.raw(definitionsSql);
+    await database.client.raw(`
+      insert into posts (slug, title, body, published) values
+        ('hello-world', 'Hello World', 'First post body', 1),
+        ('draft-notes', 'Draft Notes', 'Unpublished notes', 0);
+    `);
+  } catch (error) {
+    console.warn(
+      `sqlfu/ui could not initialize ${path.basename(projectRoot)} from definitions.sql: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 }
 
@@ -1438,14 +275,6 @@ async function loadProjectConfigFrom(projectRoot: string) {
   const configPath = path.join(projectRoot, 'sqlfu.config.ts');
   const configModule = await importConfigFile(configPath);
   return resolveProjectConfig(configModule, configPath);
-}
-
-function requireProjectConfig(project: ResolvedUiProject) {
-  if (!project.initialized) {
-    throw toClientError(new Error(`No sqlfu config found in ${project.projectRoot}. Run 'sqlfu init' first.`));
-  }
-
-  return project.config;
 }
 
 async function importConfigFile(configPath: string) {
@@ -1534,8 +363,23 @@ async function sendWebResponse(res: http.ServerResponse, response: Response) {
   response.headers.forEach((value, name) => {
     res.setHeader(name, value);
   });
-  const body = response.body ? Buffer.from(await response.arrayBuffer()) : undefined;
-  res.end(body);
+  if (!response.body) {
+    res.end();
+    return;
+  }
+  const reader = response.body.getReader();
+  try {
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) {
+        break;
+      }
+      res.write(Buffer.from(value));
+    }
+  } finally {
+    reader.releaseLock();
+    res.end();
+  }
 }
 
 async function serveViteRequest(
@@ -1774,4 +618,51 @@ function headerValue(value: string | string[] | undefined) {
     return value[0];
   }
   return value;
+}
+
+function apiError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return new Response(message, {
+    status: 400,
+    headers: {
+      'content-type': 'text/plain; charset=utf-8',
+    },
+  });
+}
+
+function apiPreflightResponse(req: http.IncomingMessage) {
+  return withApiCors(req, new Response(null, {status: 204}));
+}
+
+function withApiCors(req: http.IncomingMessage, response: Response) {
+  const headers = new Headers(response.headers);
+  const origin = headerValue(req.headers.origin);
+  const requestedHeaders = headerValue(req.headers['access-control-request-headers']);
+  const privateNetwork = headerValue(req.headers['access-control-request-private-network']);
+
+  if (origin) {
+    headers.set('access-control-allow-origin', origin);
+    headers.set('vary', 'origin');
+  }
+
+  headers.set('access-control-allow-methods', 'GET,POST,OPTIONS');
+  headers.set('access-control-allow-headers', requestedHeaders || 'content-type,x-sqlfu-project');
+
+  if (privateNetwork === 'true') {
+    headers.set('access-control-allow-private-network', 'true');
+  }
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
+function readOption(name: string) {
+  const index = process.argv.indexOf(name);
+  if (index === -1) {
+    return undefined;
+  }
+  return process.argv[index + 1];
 }

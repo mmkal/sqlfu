@@ -2,19 +2,15 @@
  * SQLite-specific schemadiff entrypoint.
  * This file wires together SQLite inspection, planning, and scratch-database execution, and is the main seam for future dialect entrypoints.
  */
-import fs from 'node:fs/promises';
-import path from 'node:path';
-import {randomUUID} from 'node:crypto';
-
-import {createBunClient, createNodeSqliteClient} from '../../client.js';
+import type {SqlfuHost} from '../../core/host.js';
 import {splitSqlStatements} from '../../core/sqlite.js';
-import type {Client} from '../../core/types.js';
+import type {AsyncClient} from '../../core/types.js';
 import {inspectSqliteSchema} from './inspect.js';
 import {planSchemaDiff} from './plan.js';
-import type {DisposableClient, SqliteInspectedDatabase} from './types.js';
+import type {SqliteInspectedDatabase} from './types.js';
 
-export async function diffBaselineSqlToDesiredSqlNative(
-  config: {projectRoot: string; tempDir?: string},
+export async function diffBaselineSqlToDesiredSql(
+  host: SqlfuHost,
   input: {
     baselineSql: string;
     desiredSql: string;
@@ -24,8 +20,8 @@ export async function diffBaselineSqlToDesiredSqlNative(
   assertNoUnsupportedSqlText(input.baselineSql, 'baselineSql');
   assertNoUnsupportedSqlText(input.desiredSql, 'desiredSql');
 
-  await using baseline = await createScratchDatabase(config, 'baseline');
-  await using desired = await createScratchDatabase(config, 'desired');
+  await using baseline = await host.openScratchDb('baseline');
+  await using desired = await host.openScratchDb('desired');
 
   if (input.baselineSql.trim()) {
     await applySchemaSql(baseline.client, input.baselineSql);
@@ -48,10 +44,10 @@ export async function diffBaselineSqlToDesiredSqlNative(
 }
 
 export async function inspectSqliteSchemaSql(
-  config: {projectRoot: string; tempDir?: string},
+  host: SqlfuHost,
   sql: string,
 ): Promise<SqliteInspectedDatabase> {
-  await using database = await createScratchDatabase(config, 'inspect');
+  await using database = await host.openScratchDb('inspect');
   if (sql.trim()) {
     await applySchemaSql(database.client, sql);
   }
@@ -64,45 +60,6 @@ export function schemasEqual(left: SqliteInspectedDatabase, right: SqliteInspect
   return stableStringify(toComparableSchema(left)) === stableStringify(toComparableSchema(right));
 }
 
-async function createScratchDatabase(
-  config: {projectRoot: string; tempDir?: string},
-  slug: string,
-): Promise<DisposableClient> {
-  const tempRoot = config.tempDir || path.join(config.projectRoot, '.sqlfu', 'schemadiff-native');
-  await fs.mkdir(tempRoot, {recursive: true});
-  const dbPath = path.join(tempRoot, `${slug}-${randomUUID()}.db`);
-
-  if ('Bun' in globalThis) {
-    const {Database} = await import('bun:sqlite' as never);
-    const database = new Database(dbPath);
-    return {
-      client: createBunClient(database as Parameters<typeof createBunClient>[0]),
-      async [Symbol.asyncDispose]() {
-        database.close();
-        await cleanupDbFiles(dbPath);
-      },
-    };
-  }
-
-  const {DatabaseSync} = await import('node:sqlite');
-  const database = new DatabaseSync(dbPath);
-  return {
-    client: createNodeSqliteClient(database as Parameters<typeof createNodeSqliteClient>[0]),
-    async [Symbol.asyncDispose]() {
-      database.close();
-      await cleanupDbFiles(dbPath);
-    },
-  };
-}
-
-async function cleanupDbFiles(dbPath: string) {
-  await Promise.allSettled([
-    fs.rm(dbPath, {force: true}),
-    fs.rm(`${dbPath}-shm`, {force: true}),
-    fs.rm(`${dbPath}-wal`, {force: true}),
-  ]);
-}
-
 function assertNoUnsupportedSqlText(sql: string, source: 'baselineSql' | 'desiredSql'): void {
   const normalizedSql = sql.toLowerCase();
   if (/\bcreate\s+virtual\s+table\b/u.test(normalizedSql)) {
@@ -110,7 +67,7 @@ function assertNoUnsupportedSqlText(sql: string, source: 'baselineSql' | 'desire
   }
 }
 
-async function applySchemaSql(client: Client, sql: string): Promise<void> {
+async function applySchemaSql(client: AsyncClient, sql: string): Promise<void> {
   const statements = splitSqlStatements(sql);
   const orderedStatements = [
     ...statements.filter((statement) => isCreateTableStatement(statement)),

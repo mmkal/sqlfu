@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
+import {createNodeHost} from '../../src/core/node-host.js';
 import {diffSchemaSql} from '../../src/schemadiff/index.js';
 
 export type SchemadiffFixtureCase = {
@@ -12,14 +13,16 @@ export type SchemadiffFixtureCase = {
   readonly error?: string;
 };
 
+let sharedHostPromise: ReturnType<typeof createNodeHost> | undefined;
+
 export async function runFixtureCase(fixtureCase: SchemadiffFixtureCase): Promise<string> {
-  const diff = await diffSchemaSql({
-    projectRoot: process.cwd(),
+  sharedHostPromise ??= createNodeHost();
+  const host = await sharedHostPromise;
+  const diff = await diffSchemaSql(host, {
     baselineSql: fixtureCase.baselineSql,
     desiredSql: fixtureCase.desiredSql,
-    allowDestructive: false,
-    ...fixtureCase.config,
-  } as Parameters<typeof diffSchemaSql>[0]);
+    allowDestructive: (fixtureCase.config as {allowDestructive?: boolean}).allowDestructive ?? false,
+  });
 
   return diff.join('\n');
 }

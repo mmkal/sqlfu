@@ -165,6 +165,6 @@ This task is done when all of the following are true:
 - Prefer extending the existing authority/mismatch model over inventing a parallel ad hoc check.
 - Keep the implementation small and explicit.
 - Avoid legacy baggage. If an abstraction ends up half-dead after this refactor, delete it.
-- Follow the repo testing guidance in `AGENTS.md`.
+- Follow the repo testing guidance in `CLAUDE.md`.
 - Do not add mocks unless you hit a wall and can justify them very concretely.
 - Update this task file as you go, adding notes inline on every checklist item you check, and leave _italicized_ comments inline anywhere else appropriate.

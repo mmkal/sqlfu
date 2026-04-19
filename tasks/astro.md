@@ -100,6 +100,19 @@ Starlight only renders under `/docs/*`.
 - `/docs/` redirects to `/docs/sqlfu/` via astro's `redirects` config.
 - The README's top-of-page manual anchor TOC renders under the Starlight TOC. Mildly redundant but harmless; fixing it would require a sync-docs pass that strips the top bullet block from the sqlfu README specifically, which is more surgery than bedtime warrants.
 
+### Dark mode (follow-up)
+
+Shipping a real dark mode across landing + docs. Previously `custom.css` had a `:root[data-theme='light'], :root[data-theme='dark']` block that forced the same light palette on both, making Starlight's toggle a no-op. That override is deleted.
+
+Design decisions:
+
+- **Shared mechanism.** Both surfaces key off `:root[data-theme='dark']`. Starlight already owns the "read localStorage + apply `data-theme` to `<html>`" script; the landing page reuses it verbatim (inlined `<script is:inline>` in `<head>`) so clicking Starlight's toggle on a docs page and navigating back to `/` shows the chosen theme with no flash.
+- **Default = auto.** `prefers-color-scheme` wins when no `starlight-theme` key is set. Matches Starlight's default behaviour; no UA sniffing.
+- **Landing toggle.** Sun/moon unicode glyph button in the landing header, cycling light → dark → auto. Writes the same localStorage key Starlight writes. No framework, no deps, no icon library.
+- **Dark palette.** Warm-sepia night mode, not generic "inverted". Base `#1a1410`, surface `#211912`, text `#f0e6d6`, muted `#b5a58f`, accent `#e89b66` (lighter than the light-mode deep brown-orange so it has enough contrast on the dark base). Targets 4.5:1+ for body text.
+- **Showreel image.** WebP of a text UI; full-on invert would look wrong. Apply a subtle `filter: brightness(0.88) contrast(0.95)` in dark mode to take the glare off, no hue shift.
+- **Code block.** Already a dark `#20140f` in light mode (intentional, part of the aesthetic); in dark mode lift it slightly to `#15100c` so it still reads as "deeper than the page" without being black-on-black.
+
 ## Non-goals (this PR)
 
 - client-side search: Starlight ships pagefind; leave default on.

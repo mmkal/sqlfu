@@ -61,7 +61,7 @@
   "scripts": {
     "build": "pnpm run build:runtime && pnpm run build:vendor-typesql",
     "build:runtime": "tsc -p tsconfig.build.json",
-    "build:vendor-typesql": "rm -rf dist/vendor && tsc -p src/vendor/typesql/tsconfig.json",
+    "build:vendor-typesql": "rm -rf dist/vendor/antlr4 dist/vendor/code-block-writer dist/vendor/typesql dist/vendor/typesql-parser && tsc -p src/vendor/typesql/tsconfig.json",
     "typecheck": "tsc -p tsconfig.typecheck.json && pnpm run typecheck:vendor-typesql",
     "typecheck:vendor-typesql": "tsc -p src/vendor/typesql/tsconfig.json --noEmit",
     "test": "pnpm run test:node",
@@ -72,7 +72,6 @@
   "dependencies": {
     "@clack/prompts": "^1.2.0",
     "@orpc/server": "^1.13.13",
-    "nearley": "^2.20.1",
     "trpc-cli": "^0.14.0",
     "zod": "^4.3.6"
   },

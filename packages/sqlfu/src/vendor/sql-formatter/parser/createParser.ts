@@ -1,5 +1,5 @@
 // @ts-nocheck
-import nearley from 'nearley';
+import nearley from './nearley-runtime.js';
 
 import Tokenizer from '../lexer/Tokenizer.js';
 import { disambiguateTokens } from '../lexer/disambiguateTokens.js';

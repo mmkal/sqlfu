@@ -413,7 +413,7 @@ These are two different questions.
 
 A failed migration does not automatically make the database unhealthy for `migrate`. If the migration fully rolled back, the database is still honest about what it has applied.
 
-A failed migration also does not automatically make the database healthy for `migrate` forever after. If the migration partially persisted state — for example because the migration SQL used its own `commit`, or because it touched something outside the transaction's control — the live schema can end up out of sync with recorded history.
+A failed migration also does not automatically make the database healthy for `migrate` forever after. If the migration partially persisted state (for example because the migration SQL used its own `commit`, or because it touched something outside the transaction's control), the live schema can end up out of sync with recorded history.
 
 ### The post-failure health check
 
@@ -426,13 +426,13 @@ That check asks:
 
 If both answers are yes, the database is still healthy for `migrate`. The failure message explicitly says the database remains healthy and the operator can fix the migration and retry.
 
-If either answer is no, the database is no longer healthy for `migrate`. The failure message says reconciliation is required and then shows the same recommendation-style diagnostics `sqlfu check` would show — `sqlfu goto <target>`, `sqlfu baseline <target>`, or a repo-level fix, depending on what drifted.
+If either answer is no, the database is no longer healthy for `migrate`. The failure message says reconciliation is required and then shows the same recommendation-style diagnostics `sqlfu check` would show: `sqlfu goto <target>`, `sqlfu baseline <target>`, or a repo-level fix, depending on what drifted.
 
 ### Preflight
 
 `sqlfu migrate` runs that same migrate-specific health check once before applying anything.
 
-This is deliberately not the full `sqlfu check`. `Pending Migrations` and `Sync Drift` are not blockers for migrate — `Pending Migrations` is the whole point, and `Sync Drift` is downstream of applying them.
+This is deliberately not the full `sqlfu check`. `Pending Migrations` and `Sync Drift` are not blockers for migrate: `Pending Migrations` is the whole point, and `Sync Drift` is downstream of applying them.
 
 The preflight blocks on the things that would make applying more migrations unsafe or dishonest:
 
@@ -448,7 +448,7 @@ This behavior is not a separate system. It is the same four-authority model the 
 
 - Repo migrations and recorded migration history together define the trusted prefix.
 - Live schema has to match what that prefix implies, or the database is not safe to migrate further.
-- If that relationship holds, a migration failure is a retry. If it does not, the database has to be reconciled with the existing tools — `sqlfu goto`, `sqlfu baseline`, or a manual fix — before `sqlfu migrate` will run again.
+- If that relationship holds, a migration failure is a retry. If it does not, the database has to be reconciled with the existing tools (`sqlfu goto`, `sqlfu baseline`, or a manual fix) before `sqlfu migrate` will run again.
 
 `sqlfu` does not invent a repair command for failed migrations. It reuses the tools the model already has.
 

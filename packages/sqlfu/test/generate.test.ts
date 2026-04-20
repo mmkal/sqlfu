@@ -1305,11 +1305,12 @@ test('generate with validator: zod emits zod wrappers for insert metadata querie
   await project.generate();
   await expect(project.getCompileDiagnostics()).resolves.toEqual([]);
   const generated = await project.readFile('sql/.generated/insert-post.sql.ts');
+  // Params are still validated by zod (user-supplied rawParams → validated params).
   expect(generated).toContain('const Params = z.object({');
-  expect(generated).toContain('const Result = z.object({');
-  expect(generated).toContain('rowsAffected: z.number()');
-  expect(generated).toContain('lastInsertRowid: z.number()');
   expect(generated).toContain('export namespace insertPost');
+  // Metadata-mode results pass through client.run directly — no zod schema on the result side.
+  expect(generated).not.toContain('const Result = z.object({');
+  expect(generated).toContain('return client.run(query);');
 });
 
 test('generate with validator: zod validates params and rows at runtime', async () => {

@@ -680,6 +680,10 @@ function renderValidatorQueryWrapper(input: {
   const resultFields = getResultFields(descriptor);
   const hasData = (descriptor.data?.length ?? 0) > 0;
   const hasParams = descriptor.parameters.length > 0;
+  // Same logic as plain-TS: only SELECT-like queries declare a Result schema and get their rows
+  // run through `.parse()`. Non-SELECT without RETURNING (metadata mode) passes client.run's
+  // return type through — no schema, no guards, no reshape, caller sees QueryMetadata directly.
+  const emitResultSchema = resultMode !== 'metadata';
 
   // Local schemas declared as module-scoped consts, so the function signature
   // can reference the inferred type without a circular dependency on the
@@ -692,15 +696,15 @@ function renderValidatorQueryWrapper(input: {
   if (hasParams) {
     schemaDeclarations.push(...renderObjectSchemaDeclaration(emitter, 'Params', descriptor.parameters, 'parameter'));
   }
-  schemaDeclarations.push(...renderObjectSchemaDeclaration(emitter, 'Result', resultFields, 'result'));
+  if (emitResultSchema) {
+    schemaDeclarations.push(...renderObjectSchemaDeclaration(emitter, 'Result', resultFields, 'result'));
+  }
 
   const sqlLines = [`const sql = \``, normalizeSqlForTemplate(descriptor.sql).join('\n').trim(), `\`;`];
 
   const functionSignatureArgs: string[] = [`client: ${clientType}`];
   if (hasData) functionSignatureArgs.push(`rawData: ${emitter.inferExpression('Data')}`);
   if (hasParams) functionSignatureArgs.push(`rawParams: ${emitter.inferExpression('Params')}`);
-
-  const returnType = getReturnType(descriptor, emitter.inferExpression('Result'));
 
   const validationLines: string[] = [];
   if (hasData) {
@@ -715,18 +719,21 @@ function renderValidatorQueryWrapper(input: {
     paramsVariable: hasParams ? 'params' : null,
   });
 
-  const implementationLines = buildValidatorImplementation({
-    resultMode,
-    resultFields,
-    emitter,
-    prettyErrors,
-    sync,
-  });
+  const implementationLines = emitResultSchema
+    ? buildValidatorImplementation({
+        resultMode,
+        resultFields,
+        emitter,
+        prettyErrors,
+        sync,
+      })
+    : [`\t\treturn client.run(query);`];
 
   const attachedProperties: string[] = [];
   if (hasData) attachedProperties.push('Data');
   if (hasParams) attachedProperties.push('Params');
-  attachedProperties.push('Result', 'sql');
+  if (emitResultSchema) attachedProperties.push('Result');
+  attachedProperties.push('sql');
 
   const namespaceLines: string[] = [];
   if (hasData) {
@@ -735,13 +742,20 @@ function renderValidatorQueryWrapper(input: {
   if (hasParams) {
     namespaceLines.push(`\texport type Params = ${emitter.inferExpression(`${functionName}.Params`)};`);
   }
-  namespaceLines.push(`\texport type Result = ${emitter.inferExpression(`${functionName}.Result`)};`);
+  if (emitResultSchema) {
+    namespaceLines.push(`\texport type Result = ${emitter.inferExpression(`${functionName}.Result`)};`);
+  }
 
   const runtimeImports = buildRuntimeImports(emitter, prettyErrors, clientType);
 
+  const signatureReturnAnnotation = emitResultSchema
+    ? sync
+      ? `: ${getReturnType(descriptor, emitter.inferExpression('Result'))}`
+      : `: Promise<${getReturnType(descriptor, emitter.inferExpression('Result'))}>`
+    : '';
   const functionDeclaration = sync
-    ? `\tfunction ${functionName}(${functionSignatureArgs.join(', ')}): ${returnType} {`
-    : `\tasync function ${functionName}(${functionSignatureArgs.join(', ')}): Promise<${returnType}> {`;
+    ? `\tfunction ${functionName}(${functionSignatureArgs.join(', ')})${signatureReturnAnnotation} {`
+    : `\tasync function ${functionName}(${functionSignatureArgs.join(', ')})${signatureReturnAnnotation} {`;
 
   return [
     emitter.importLine,
@@ -759,10 +773,9 @@ function renderValidatorQueryWrapper(input: {
     `\t{ ${attachedProperties.join(', ')} },`,
     `);`,
     ``,
-    `export namespace ${functionName} {`,
-    ...namespaceLines,
-    `}`,
-    ``,
+    ...(namespaceLines.length === 0
+      ? []
+      : [`export namespace ${functionName} {`, ...namespaceLines, `}`, ``]),
   ].join('\n');
 }
 

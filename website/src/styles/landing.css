@@ -1,0 +1,329 @@
+:root {
+  --bg: #f6efe2;
+  --bg-strong: #efe1c6;
+  --surface: rgba(255, 252, 246, 0.84);
+  --surface-strong: #fffaf1;
+  --text: #201710;
+  --muted: #6f5947;
+  --line: rgba(85, 52, 24, 0.16);
+  --accent: #9d4d12;
+  --accent-strong: #6f2d00;
+  --shadow: 0 24px 70px rgba(74, 43, 15, 0.12);
+
+  --bg-gradient-top: rgba(255, 214, 153, 0.38);
+  --bg-gradient-start: #efe1c6;
+  --bg-gradient-mid: #f6efe2;
+  --bg-gradient-end: #fffdf9;
+
+  --button-bg: rgba(255, 255, 255, 0.7);
+  --button-text-primary: #fff9f2;
+  --code-bg: rgba(121, 73, 24, 0.08);
+  --showreel-filter: none;
+}
+
+:root[data-theme='dark'] {
+  --bg: #1a1410;
+  --bg-strong: #1a1410;
+  --surface: rgba(33, 25, 18, 0.78);
+  --surface-strong: #2a2017;
+  --text: #f0e6d6;
+  --muted: #b5a58f;
+  --line: rgba(240, 230, 214, 0.14);
+  --accent: #e89b66;
+  --accent-strong: #f2b07f;
+  --shadow: 0 24px 70px rgba(0, 0, 0, 0.5);
+
+  --bg-gradient-top: rgba(232, 155, 102, 0.08);
+  --bg-gradient-start: #15100c;
+  --bg-gradient-mid: #1a1410;
+  --bg-gradient-end: #1f1812;
+
+  --button-bg: rgba(240, 230, 214, 0.06);
+  --button-text-primary: #1a1410;
+  --code-bg: rgba(232, 155, 102, 0.14);
+  --showreel-filter: brightness(0.88) contrast(0.95);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-height: 100%;
+  background:
+    radial-gradient(circle at top, var(--bg-gradient-top), transparent 32rem),
+    linear-gradient(180deg, var(--bg-gradient-start) 0%, var(--bg-gradient-mid) 22%, var(--bg-gradient-end) 100%);
+  background-attachment: fixed;
+}
+
+body {
+  margin: 0;
+  color: var(--text);
+  font-family: 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Georgia, serif;
+}
+
+a {
+  color: var(--accent-strong);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.15em;
+}
+
+.site-shell {
+  max-width: 76rem;
+  margin: 0 auto;
+  padding: 1.25rem 1.1rem 4rem;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 0 2rem;
+}
+
+.brand {
+  font-family: ui-monospace, 'SFMono-Regular', monospace;
+  font-size: 0.84rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.95rem;
+}
+
+.nav a {
+  text-decoration: none;
+}
+
+.theme-toggle {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--button-bg);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease;
+}
+
+.theme-toggle:hover {
+  border-color: var(--accent);
+}
+
+.theme-toggle[data-theme-mode='auto'] .toggle-glyph::before {
+  content: '\25D1'; /* half-filled circle */
+}
+
+.theme-toggle[data-theme-mode='light'] .toggle-glyph::before {
+  content: '\2600'; /* sun */
+}
+
+.theme-toggle[data-theme-mode='dark'] .toggle-glyph::before {
+  content: '\263D'; /* first-quarter moon */
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(18rem, 0.8fr);
+  gap: 1.5rem;
+  align-items: stretch;
+}
+
+.hero-main,
+.panel {
+  border: 1px solid var(--line);
+  border-radius: 1.6rem;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(12px);
+}
+
+.hero-main {
+  padding: 2.5rem;
+}
+
+.eyebrow {
+  font-family: ui-monospace, 'SFMono-Regular', monospace;
+  font-size: 0.75rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.eyebrow.lowercase {
+  text-transform: lowercase;
+}
+
+.hero h1 {
+  font-size: clamp(3.5rem, 12vw, 7.2rem);
+  line-height: 0.9;
+  margin: 0.55rem 0 1rem;
+  letter-spacing: -0.05em;
+}
+
+.hero p,
+.panel p {
+  font-size: 1.05rem;
+  line-height: 1.75;
+  color: var(--text);
+}
+
+.lede {
+  max-width: 35rem;
+  color: var(--muted);
+}
+
+.cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  margin-top: 1.5rem;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.8rem;
+  padding: 0.7rem 1rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  text-decoration: none;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--button-bg);
+}
+
+.button.primary {
+  color: var(--button-text-primary);
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%);
+  border-color: transparent;
+}
+
+.panel {
+  padding: 1.4rem;
+}
+
+.panel code,
+.hero-main code,
+.footer code {
+  font-family: ui-monospace, 'SFMono-Regular', monospace;
+  font-size: 0.92em;
+  background: var(--code-bg);
+  padding: 0.12rem 0.32rem;
+  border-radius: 0.35rem;
+}
+
+.section-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.section-title {
+  margin-top: 2.4rem;
+  margin-bottom: 0.8rem;
+  font-size: 1.7rem;
+  letter-spacing: -0.02em;
+}
+
+.value-panel h3 {
+  margin: 0.45rem 0 0.55rem;
+  font-size: 1.18rem;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+.value-panel p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.showreel {
+  margin: 2.4rem auto 0.4rem;
+  max-width: 44rem;
+  padding: 0;
+  text-align: center;
+}
+
+.showreel img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 1.4rem;
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  filter: var(--showreel-filter);
+}
+
+.hero-solo {
+  display: block;
+  text-align: center;
+  padding-top: 1.5rem;
+}
+
+.hero-solo .hero-main {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 1.75rem 1.5rem 2.25rem;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.hero-solo h1 {
+  font-size: clamp(3.2rem, 10vw, 6rem);
+}
+
+.hero-solo .lede {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.hero-solo .cta-row {
+  justify-content: center;
+}
+
+.footer {
+  margin-top: 2rem;
+  color: var(--muted);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.95rem;
+}
+
+@media (max-width: 900px) {
+  .hero,
+  .section-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-main,
+  .panel {
+    padding: 1.4rem;
+  }
+
+  .site-shell {
+    padding-inline: 0.85rem;
+  }
+}

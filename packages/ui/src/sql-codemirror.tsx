@@ -10,6 +10,7 @@ import CodeMirror from '@uiw/react-codemirror';
 import CodeMirrorMerge from 'react-codemirror-merge';
 
 import type {SqlEditorDiagnostic, StudioRelation} from './shared.js';
+import {useResolvedTheme} from './theme.js';
 
 const Original = CodeMirrorMerge.Original;
 const Modified = CodeMirrorMerge.Modified;
@@ -23,6 +24,7 @@ export function SqlCodeMirror(input: {
   onExecute?: (sql: string) => void;
   readOnly?: boolean;
 }) {
+  const theme = useResolvedTheme();
   const schema = buildSqlSchema(input.relations);
   const executeKeymapHandler = (view: EditorView) => {
     input.onExecute?.(view.state.doc.toString());
@@ -71,7 +73,7 @@ export function SqlCodeMirror(input: {
       value={input.value}
       height="16rem"
       aria-label={input.ariaLabel}
-      theme="dark"
+      theme={theme}
       extensions={extensions}
       basicSetup={{
         foldGutter: false,
@@ -89,12 +91,13 @@ export function TextCodeMirror(input: {
   language?: 'plain' | 'yaml' | 'markdown' | 'typescript';
   onChange?: (value: string) => void;
 }) {
+  const theme = useResolvedTheme();
   return (
     <CodeMirror
       value={input.value}
       height={input.height ?? '16rem'}
       aria-label={input.ariaLabel}
-      theme="dark"
+      theme={theme}
       extensions={buildTextExtensions(Boolean(input.readOnly), input.language ?? 'plain')}
       basicSetup={{
         foldGutter: false,
@@ -105,11 +108,12 @@ export function TextCodeMirror(input: {
 }
 
 export function TextDiffCodeMirror(input: {original: string; draft: string; ariaLabel: string}) {
+  const theme = useResolvedTheme();
   return (
     <div aria-label={input.ariaLabel}>
       <CodeMirrorMerge
         orientation="a-b"
-        theme="dark"
+        theme={theme}
         className="text-diff-editor"
         collapseUnchanged={{
           margin: 1,

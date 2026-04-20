@@ -3,9 +3,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "node build.mjs"
+    "prebuild": "node scripts/sync-docs.mjs",
+    "build": "astro build && node scripts/make-portable.mjs",
+    "dev": "node scripts/sync-docs.mjs && astro dev",
+    "preview": "astro preview",
+    "astro": "astro"
   },
   "dependencies": {
-    "markdown-it": "^14.1.1"
+    "@astrojs/starlight": "^0.37.0",
+    "astro": "^5.5.0",
+    "sharp": "^0.33.5"
   }
 }

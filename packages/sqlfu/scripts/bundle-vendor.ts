@@ -155,22 +155,37 @@ await esbuild.build({
 const sqlFormatterToDelete = [
 	'sql-formatter/allDialects.js',
 	'sql-formatter/allDialects.js.map',
+	'sql-formatter/allDialects.d.ts',
 	'sql-formatter/dialect.js',
 	'sql-formatter/dialect.js.map',
+	'sql-formatter/dialect.d.ts',
 	'sql-formatter/expandPhrases.js',
 	'sql-formatter/expandPhrases.js.map',
+	'sql-formatter/expandPhrases.d.ts',
 	'sql-formatter/FormatOptions.js',
 	'sql-formatter/FormatOptions.js.map',
+	'sql-formatter/FormatOptions.d.ts',
 	'sql-formatter/index.js',
 	'sql-formatter/index.js.map',
+	'sql-formatter/index.d.ts',
 	'sql-formatter/sqlFormatter.js.map',
+	'sql-formatter/sqlFormatter.d.ts',
 	'sql-formatter/utils.js',
 	'sql-formatter/utils.js.map',
+	'sql-formatter/utils.d.ts',
 	'sql-formatter/validateConfig.js',
 	'sql-formatter/validateConfig.js.map',
+	'sql-formatter/validateConfig.d.ts',
 	'sql-formatter/formatter',
 	'sql-formatter/lexer',
 	'sql-formatter/parser',
+	// The standard-schema vendored tree produces .d.ts that nothing consumes
+	// once types are rolled up by api-extractor; keep the .js for runtime.
+	'standard-schema/index.d.ts',
+	'standard-schema/contract.d.ts',
+	'standard-schema/errors.d.ts',
+	'standard-schema/utils.d.ts',
+	'sha256.d.ts',
 ];
 
 for (const p of sqlFormatterToDelete) {

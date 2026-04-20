@@ -137,17 +137,17 @@ If it turns out a public entry transitively hits a vendor type, fix it at the so
 
 ## Checklist
 
-- [ ] Install `@microsoft/api-extractor` as a devDep on `packages/sqlfu`.
-- [ ] Create `packages/sqlfu/etc/api-extractor/base.json` and 6 per-entry configs.
-- [ ] Create `packages/sqlfu/scripts/bundle-types.ts` (runs api-extractor across all entries, promotes rollups to `dist/<entry>.d.ts`, deletes orphaned per-file `.d.ts`).
-- [ ] Add `build:bundle-types` script and wire into `build`.
-- [ ] Run `pnpm build` and commit the initial `etc/api-reports/*.api.md` files.
-- [ ] Drop `types` from `publishConfig.exports['./cli']`.
-- [ ] Verify `pnpm typecheck` clean.
-- [ ] Verify all tests pass.
-- [ ] Verify `packages/ui/` typechecks against the rolled-up types.
-- [ ] Measure tarball delta with `pnpm pack` before/after.
-- [ ] Update `packages/sqlfu/CLAUDE.md` with an `etc/` note.
+- [x] Install `@microsoft/api-extractor` as a devDep on `packages/sqlfu`. _devDep added, v7.58.6_
+- [x] Create `packages/sqlfu/etc/api-extractor/base.json` and 6 per-entry configs. _plus a dedicated `etc/api-extractor/tsconfig.json` with a `paths` remap of `sqlfu`/`sqlfu/*` to `dist/*.d.ts` — without this, generated query files' `import from 'sqlfu'` drags src/.ts into the api-extractor program_
+- [x] Create `packages/sqlfu/scripts/bundle-types.ts` (runs api-extractor across all entries, promotes rollups to `dist/<entry>.d.ts`, deletes orphaned per-file `.d.ts`). _also copies the checked-in browser-safe typesql sidecar into `dist/typegen/` — tsgo doesn't copy non-`.ts` sources_
+- [x] Add `build:bundle-types` script and wire into `build`. _inserted between `build:runtime` and `build:vendor-typesql`_
+- [x] Run `pnpm build` and commit the initial `etc/api-reports/*.api.md` files. _6 reports committed_
+- [x] Drop `types` from `publishConfig.exports['./cli']`. _no consumer imports types from `sqlfu/cli`_
+- [x] Verify `pnpm typecheck` clean. _packages/sqlfu and packages/ui both pass_
+- [x] Verify all tests pass. _1071 sqlfu tests green; packages/ui has 2-3 pre-existing flaky playwright tests that pass individually — not introduced by this change_
+- [x] Verify `packages/ui/` typechecks against the rolled-up types. _manual consumer smoke test in `/tmp/consumer-test` using `npm install file:...` against a fresh `pnpm pack` tarball resolves `Client`, `SqlQuery`, `SqlfuProjectConfig`, `queryNickname`, `UiRouter`, etc., cleanly from the rollups_
+- [x] Measure tarball delta with `pnpm pack` before/after. _1364 kB → 1196 kB unpacked (-168 kB, ≥100 kB target met); 73 → 6 `.d.ts` files; tarball itself 221 kB → 220 kB_
+- [x] Update `packages/sqlfu/CLAUDE.md` with an `etc/` note. _new "api-extractor" section documents the three gotchas (dedicated tsconfig + paths map, sidecar copy, CLI entry omission)_
 
 ## Success criteria (unchanged)
 
@@ -159,4 +159,23 @@ If it turns out a public entry transitively hits a vendor type, fix it at the so
 
 ## Implementation notes
 
-_This section will be filled in as the work progresses._
+### Size numbers (measured 2026-04-20)
+
+- Before: 1364 kB unpacked, 73 `.d.ts` totalling 316 kB, 221 kB tarball.
+- After: 1196 kB unpacked, 6 `.d.ts` totalling ~130 kB, 220 kB tarball.
+
+The tarball itself barely changed (gzip compresses the per-file duplication away anyway); the unpacked delta is what matters for `node_modules` bloat and cold-start IDE indexing.
+
+### Self-import resolution quirk
+
+The biggest surprise was that `api-extractor` couldn't just point at `dist/**/*.d.ts` and go. The generated internal query files (`src/migrations/queries/.generated/*.sql.ts`) — and their corresponding `dist/*.d.ts` — contain `import type {Client} from 'sqlfu'`. Under `moduleResolution: NodeNext`, that package-name import goes through `package.json#exports`, which points back at `src/*.ts`. TypeScript then pulls those `.ts` sources into the api-extractor program, and api-extractor bails because it expects `.d.ts`-only input.
+
+Fix: `etc/api-extractor/tsconfig.json` has its own `paths` map that redirects `sqlfu` / `sqlfu/browser` / etc. to `./dist/*.d.ts`. This is a pure api-extractor-time concern; the main `tsconfig.build.json` still resolves `sqlfu` however it needs to.
+
+(If we ever move away from `package.json#exports` pointing at source `.ts` files — e.g. if `tsgo` grows first-class watch-mode support for dist consumers — this hack goes away.)
+
+### Latent runtime bug fixed as a side-effect
+
+`src/typegen/analyze-vendored-typesql-with-client.{js,d.ts}` are checked-in sidecar files (not tsgo outputs). `tsconfig.build.json`'s `include` pattern is `src/**/*.ts`, which didn't match them, so they were never copied into `dist/`. The shipped tarball on main references `./typegen/analyze-vendored-typesql-with-client.js` from `dist/browser.{js,d.ts}` but doesn't actually contain the file — so any consumer using `sqlfu/browser` would hit a module-not-found at import time.
+
+`scripts/bundle-types.ts` copies the sidecar before api-extractor runs (api-extractor needs the `.d.ts` to follow the re-export from `browser.d.ts`). That copy also fixes the runtime hole in passing.

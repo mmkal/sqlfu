@@ -5,13 +5,14 @@
 `package.json` has:
 
 ```jsonc
-"build": "pnpm run build:internal-queries && pnpm run build:runtime && pnpm run build:vendor-typesql && pnpm run build:bundle-vendor",
+"build": "pnpm run build:internal-queries && pnpm run build:runtime && pnpm run build:bundle-types && pnpm run build:vendor-typesql && pnpm run build:bundle-vendor",
 "build:runtime": "tsgo -p tsconfig.build.json",
+"build:bundle-types": "tsx scripts/bundle-types.ts",
 "build:vendor-typesql": "rm -rf dist/vendor/antlr4 dist/vendor/code-block-writer dist/vendor/typesql dist/vendor/typesql-parser && tsgo -p src/vendor/typesql/tsconfig.json",
 "build:bundle-vendor": "tsx scripts/bundle-vendor.ts",
 ```
 
-(`build:internal-queries` is a codegen step, not part of this discussion.) The three compile/bundle steps **look** like ceremony worth collapsing. They aren't. The split protects real constraints, and every "obvious" simplification we've tried breaks one of them.
+(`build:internal-queries` is a codegen step, not part of this discussion.) The four compile/bundle steps **look** like ceremony worth collapsing. They aren't. The split protects real constraints, and every "obvious" simplification we've tried breaks one of them. (`build:bundle-types` is new-ish — see the "api-extractor" section below — it must run *after* `build:runtime` so the per-file `.d.ts` from tsgo are available for api-extractor to roll up, and *before* `build:vendor-typesql` which rewrites the vendor tree.)
 
 ### Why two configs
 
@@ -72,7 +73,21 @@ diff -q \
 
 If any of the public `.d.ts` shape shifts (especially: nullable fields dropping `| null`), you've rediscovered the `noCheck: true` bug. Stop and use the two-step build.
 
+## api-extractor — what `build:bundle-types` does
+
+After `build:runtime`, tsgo has emitted ~60 per-file `.d.ts` declarations across `dist/`. `scripts/bundle-types.ts` runs api-extractor over each public entry (`etc/api-extractor/<entry>.json`) to:
+
+1. Emit a single rolled-up `dist/<entry>.bundled.d.ts` that inlines every type transitively reachable from that entry.
+2. Refresh the committed `etc/api-reports/<entry>.api.md` — these are the human-reviewable summaries that turn accidental public-surface changes into visible PR diffs. **If you're touching a public entry, expect a report file to change in your PR.** The reports are the point; the rollup `.d.ts` is a nice side-effect.
+3. Promote each rolled-up file to `dist/<entry>.d.ts` and delete every other `.d.ts` / `.d.ts.map` under `dist/` (except vendor, which `build:bundle-vendor` owns). `publishConfig.exports[].types` stays pointed at `dist/<entry>.d.ts` — only the content changes.
+
+Three gotchas before changing this:
+
+1. **api-extractor uses `etc/api-extractor/tsconfig.json`, not `tsconfig.build.json`.** The dedicated config sets `paths` mapping `sqlfu` / `sqlfu/*` to `./dist/*.d.ts`. Without this, the generated internal query files (e.g. `dist/migrations/queries/.generated/insert-migration.sql.d.ts`) do `import type {Client} from 'sqlfu'`, which TypeScript resolves via `package.json#exports` back to `src/*.ts`. That drags `.ts` sources into the program and api-extractor fails with `(ae-wrong-input-file-type)`. If you add a new public entry, remember to extend the `paths` map.
+2. **`src/typegen/analyze-vendored-typesql-with-client.{js,d.ts}` is a checked-in sidecar, not tsgo output.** tsgo's `include` is `src/**/*.ts`, so it doesn't copy `.js` / `.d.ts` files sitting in `src/`. `bundle-types.ts` copies them into `dist/typegen/` as a precondition for the `browser` rollup (and, incidentally, so the runtime `browser.js` can actually resolve its own import).
+3. **The CLI has no api-extractor config on purpose.** `dist/cli.js` is a shebang'd executable — nobody imports types from `sqlfu/cli`. `publishConfig.exports['./cli'].types` is therefore absent; `build:bundle-types` deletes `dist/cli.d.ts` along with all the other orphans. If a future use case genuinely needs typed `import {something} from 'sqlfu/cli'`, add a config and wire it back in.
+
 ## Other notes
 
 - `tsgo` is an alias for `@typescript/native-preview`'s `tsc`. Still supports `-b`, project references, etc.
-- Public entry points are `index`, `browser`, `client`, `api`, `cli`, `ui/index`, `ui/browser` — see `publishConfig.exports` in `package.json`. Any build change must preserve these exact `dist/{entry}.{js,d.ts}` paths.
+- Public entry points are `index`, `browser`, `client`, `api`, `cli`, `ui/index`, `ui/browser` — see `publishConfig.exports` in `package.json`. Any build change must preserve these exact `dist/{entry}.{js,d.ts}` paths (except `cli.d.ts`, which intentionally doesn't ship — see above).

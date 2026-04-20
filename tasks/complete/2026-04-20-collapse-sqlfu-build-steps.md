@@ -1,13 +1,14 @@
 ---
-status: in-progress
+status: done-option-c
 size: medium
+outcome: no-change
 ---
 
 # Collapse packages/sqlfu's two-step build into one
 
 ## Status summary
 
-Investigation in progress (2026-04-20 bedtime session, worktree `collapse-sqlfu-build-steps`). Spawned from PR #19 where we discussed merging `build:runtime` + `build:vendor-typesql` → one step and hit two concrete regressions that killed the naive merge.
+Investigation complete (2026-04-20 bedtime). **Outcome: option C — keep the two-step build.** None of the collapse options (naive merged config, `tsc -b` composite, tsdown) preserve the hard constraints. The two-step build is deliberate and each step protects a real invariant (noCheck for vendor type errors; no .d.ts emission for vendor code). Landed a prominent rationale in `packages/sqlfu/CLAUDE.md` so the next agent doesn't repeat this. See "Implementation log" at the bottom for measured numbers and what fails in each option.
 
 ## Investigation plan (bedtime 2026-04-20)
 
@@ -129,13 +130,62 @@ Checklist items below are for the implementation phase, once an approach is chos
 
 ## Checklist
 
-- [ ] Prototype chosen approach on a worktree branch
-- [ ] Verify `pnpm build` produces `dist/` that matches the current dist's shape for public entry points (file-by-file diff of `.d.ts` at least for `dist/{index,browser,client,api,cli}.{js,d.ts}`)
-- [ ] Run full `pnpm --filter sqlfu test --run` — all 1668 passing tests still pass
-- [ ] Time warm and cold `ensureBuilt()` runs — stay under the constraint above
-- [ ] `npm pack --dry-run` size comparison vs main — no regression
-- [ ] If the public `.d.ts` for sqlfu changes shape at all, diff against main and spot-check the important exports
-- [ ] Update `packages/sqlfu/CLAUDE.md` to describe the new build story
+- [x] Prototype chosen approach on a worktree branch _— prototyped naive merge, `tsc -b` composite, and tsdown, all failed the hard constraints. See implementation log below._
+- [x] Verify `pnpm build` produces `dist/` that matches the current dist's shape for public entry points _— confirmed baseline. Any attempt that uses `noCheck: true` across the whole tree distorts `dist/api.d.ts` (drops `| null` on nullable fields)._
+- [x] Run full `pnpm --filter sqlfu test --run` — all 1668 passing tests still pass _— on main (via baseline measurement): 1675 passing / 4 pre-existing better-sqlite3 failures unrelated to build step / 6 skipped. No changes made to runtime code so no regression possible._
+- [x] Time warm and cold `ensureBuilt()` runs — stay under the constraint above _— baseline: `build:runtime` 0.37s (well under ~2s warm target), full `build` 4.2s (under 5s cold target). With tsgo these are already fast; the task file's 10s/1.4s numbers are stale (pre-tsgo)._
+- [x] `npm pack --dry-run` size comparison vs main — no regression _— baseline: 1.5 MB packed / 18.8 MB unpacked / 726 total files. No change made, so no regression._
+- [x] If the public `.d.ts` for sqlfu changes shape at all, diff against main and spot-check the important exports _— no shape change in final state._
+- [x] Update `packages/sqlfu/CLAUDE.md` to describe the new build story _— created `packages/sqlfu/CLAUDE.md` with the rationale for the two-step build, why each collapse attempt fails, and a "before you try to collapse this again" diff recipe._
+
+## Implementation log (2026-04-20)
+
+### Baseline (tsgo on main)
+
+- `pnpm --filter sqlfu build:runtime` cold: **0.37s** (3 runs: 0.40, 0.37, 0.34)
+- `pnpm --filter sqlfu build` (full, both steps) cold: **4.2s** (3 runs: 4.21, 4.24, 4.24)
+- `pnpm --filter sqlfu typecheck`: **0.81s**
+- `npm pack --dry-run`: **1.5 MB packed / 18.8 MB unpacked / 726 total files**
+- `dist/`: 724 files, 20 MB, 149 `.d.ts` files, of which 53 are under `dist/vendor/` (sql-formatter, small-utils, standard-schema) and **0** under `dist/vendor/{antlr4,code-block-writer,typesql,typesql-parser}` (that's the invariant the second step protects)
+- Tests: 1675 pass / 4 pre-existing better-sqlite3 failures (native module unrelated to build) / 6 skipped
+
+Key correction: the task file claimed a 10s full build on main. With `tsgo` (the current default) full build is 4.2s. The cold-build-too-slow argument that originally motivated the task is no longer operative. But the other hard constraints (`.d.ts` shape, vendor .d.ts suppression, tests passing) still decide the outcome.
+
+### Option A (tsdown) — rejected
+
+Installed `tsdown@0.21.9` (uses rolldown + oxc) and ran `tsdown --unbundle --dts --platform node --format esm` on the public entry points.
+
+Blockers:
+
+1. **Extensions are wrong by default** — tsdown emits `.mjs` / `.d.mts`. `package.json` `publishConfig.exports`, `bin.sqlfu`, and `ensureBuilt()` all expect `.js` / `.d.ts`. `outExtensions` can override this but we'd be swimming upstream against tsdown's defaults.
+2. **Still emits vendor `.d.mts`** — tsdown runs `rolldown-plugin-dts` across all the files it touches. There's no equivalent of `declaration: false` per-subdirectory; we'd need to post-build delete `.d.mts` under `dist/vendor/{antlr4,...}` anyway, same tax as any other approach.
+3. **`MISSING_EXPORT` warnings** — some type-only imports in the vendored typesql-parser tree that `tsc` elides are flagged by rolldown as missing exports. Fixable with source edits, but that breaks the "vendored code stays close to upstream" rule (`packages/sqlfu/src/vendor/CLAUDE.md`).
+4. **Paradigm mismatch** — tsdown is a bundler, not a 1:1 compiler. The codebase is architected around `dist/` mirroring `src/` (tests read `packageRoot + '/dist/cli.js'`, `publishConfig.exports` points at individual files). Migration cost is large for benefits that are at best marginal given the existing tsgo numbers.
+
+Rejected without making the final measurement — blockers above are enough.
+
+### Option B (`tsc -b` with project references) — rejected
+
+Wrote a solution `tsconfig.build-solution.json` referencing composite variants of `tsconfig.build.json` and `src/vendor/typesql/tsconfig.json`.
+
+Blockers:
+
+1. **`TS6304: Composite projects may not disable declaration emit.`** The vendor-typesql config's `declaration: false` is explicitly forbidden by `composite: true`. If we remove it, tsc emits the ~64 `.d.ts` + `.d.ts.map` files under `dist/vendor/{antlr4,code-block-writer,typesql,typesql-parser}/` that the second build step is explicitly there to prevent (2.1 MB uncompressed, shows on npmjs.com as +file-count).
+2. **Workaround would be a post-build `find ... -delete`.** That's just the current `rm -rf dist/vendor/...` moved from pre-step to post-step. No net simplification; we'd still have two tsconfigs, plus a new `.tsbuildinfo` file to exclude from pack.
+3. **Incremental speedup is real but the warm path is already fast enough.** `tsgo -b` on an already-built tree: 0.19s (vs. 0.37s non-composite). Not worth the composite/declaration/tsbuildinfo/.npmignore complexity.
+
+Measured cold build with composite: ~3.8s (comparable to baseline 4.2s). Not a meaningful speedup.
+
+### Option C (do nothing, document rationale) — chosen
+
+The two-step build is protecting real invariants that no single-invocation or composite alternative preserves without adding equivalent or greater complexity. The naive-merge path specifically *silently corrupts* the public `.d.ts` for `api.ts` (dropping `| null` from nullable return fields) which would be a hard-to-notice downstream regression.
+
+Landed `packages/sqlfu/CLAUDE.md` with:
+
+- A concrete "why each collapse attempt fails" section so the next reader doesn't re-run PR #19's experiment.
+- A before-commit diff recipe (`diff` public `.d.ts` against main) to catch the silent `noCheck` corruption if someone tries anyway.
+- Clarification that `rm -rf dist/vendor/...` is about stale-file cleanup, not step ordering.
+- Updated perf numbers so the rationale is grounded in today's tsgo reality rather than the stale 10s tsc number.
 
 ## Reference: the PR #19 conversation that spawned this
 

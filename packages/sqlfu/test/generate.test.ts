@@ -851,8 +851,8 @@ test('generate with validator: zod emits zod schemas as the source of truth with
     "sql/
       .generated/
         find-post-by-slug.sql.ts
-          import {z} from 'zod';
           import type {Client, SqlQuery} from 'sqlfu';
+          import {z} from 'zod';
           
           const Params = z.object({
           	slug: z.string(),
@@ -986,8 +986,8 @@ test('generate with validator: valibot emits valibot schemas and validates at ru
     "sql/
       .generated/
         find-post-by-slug.sql.ts
-          import * as v from 'valibot';
           import {prettifyStandardSchemaError, type Client, type SqlQuery} from 'sqlfu';
+          import * as v from 'valibot';
           
           const Params = v.object({
           	slug: v.string(),
@@ -1067,8 +1067,8 @@ test('generate with validator: zod-mini emits zod/mini schemas and validates at 
     "sql/
       .generated/
         find-post-by-slug.sql.ts
-          import * as z from 'zod/mini';
           import {prettifyStandardSchemaError, type Client, type SqlQuery} from 'sqlfu';
+          import * as z from 'zod/mini';
           
           const Params = z.object({
           	slug: z.string(),
@@ -1151,8 +1151,8 @@ test('generate with validator: arktype emits arktype schemas and validates at ru
     "sql/
       .generated/
         find-post-by-slug.sql.ts
-          import {type} from 'arktype';
           import {prettifyStandardSchemaError, type Client, type SqlQuery} from 'sqlfu';
+          import {type} from 'arktype';
           
           const Params = type({
           	slug: "string",

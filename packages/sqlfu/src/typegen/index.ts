@@ -662,8 +662,8 @@ function renderValidatorQueryWrapper(input: {
   const runtimeImports = buildRuntimeImports(emitter, prettyErrors);
 
   return [
-    emitter.importLine,
     runtimeImports,
+    emitter.importLine,
     ``,
     ...schemaDeclarations,
     ...sqlLines,

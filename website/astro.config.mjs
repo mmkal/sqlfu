@@ -3,13 +3,16 @@ import starlight from '@astrojs/starlight';
 
 export default defineConfig({
   site: 'https://www.sqlfu.dev',
-  trailingSlash: 'always',
+  // build.format: 'file' emits `docs/runtime-validation.html` (not
+  // `docs/runtime-validation/index.html`) so artifact.ci's "strip trailing slash"
+  // 308 redirect doesn't change how the browser resolves relative asset URLs —
+  // the last path segment is always treated as a filename either way.
+  trailingSlash: 'ignore',
   build: {
-    format: 'directory',
+    format: 'file',
   },
   redirects: {
-    '/docs': '/docs/sqlfu/',
-    '/docs/': '/docs/sqlfu/',
+    '/docs': '/docs/sqlfu',
   },
   integrations: [
     starlight({

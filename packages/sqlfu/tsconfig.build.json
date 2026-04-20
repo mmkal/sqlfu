@@ -4,7 +4,8 @@
     "noEmit": false,
     "rootDir": "src",
     "outDir": "dist",
-    "verbatimModuleSyntax": false
+    "verbatimModuleSyntax": false,
+    "declarationMap": false
   },
   "include": ["src/**/*.ts"],
   "exclude": ["src/vendor/code-block-writer/**/*", "src/vendor/typesql/**/*", "src/vendor/typesql-parser/**/*"]

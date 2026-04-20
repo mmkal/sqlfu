@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 
-import type {SqlfuConfig, SqlfuProjectConfig} from './types.js';
+import type {SqlfuConfig, SqlfuProjectConfig, SqlfuValidator} from './types.js';
 import {createDefaultInitPreview} from './init-preview.js';
 
 const defaultConfigFileNames = ['sqlfu.config.ts', 'sqlfu.config.mjs', 'sqlfu.config.js', 'sqlfu.config.cjs'] as const;
@@ -80,8 +80,14 @@ export function resolveProjectConfig(
     definitions: resolveConfigPathValue(configDir, fileConfig.definitions),
     queries: resolveConfigPathValue(configDir, fileConfig.queries),
     generatedImportExtension: fileConfig.generatedImportExtension ?? inferGeneratedImportExtension(tsconfigPreferences),
+    generate: {
+      validator: fileConfig.generate?.validator ?? null,
+      prettyErrors: fileConfig.generate?.prettyErrors !== false,
+    },
   };
 }
+
+const validValidators: readonly SqlfuValidator[] = ['zod', 'valibot', 'zod-mini'];
 
 type TsconfigPreferences = {
   readonly prefersTsImportExtensions?: boolean;
@@ -191,6 +197,33 @@ function assertConfigShape(configPath: string, config: object): asserts config i
   for (const field of ['db', 'migrations', 'definitions', 'queries'] as const) {
     if (!(field in config) || typeof (config as Record<string, unknown>)[field] !== 'string') {
       throw new Error(`Invalid sqlfu config at ${configPath}: missing required string field "${field}".`);
+    }
+  }
+  const generate = (config as Record<string, unknown>).generate;
+  if (generate !== undefined) {
+    if (typeof generate !== 'object' || generate === null || Array.isArray(generate)) {
+      throw new Error(`Invalid sqlfu config at ${configPath}: "generate" must be an object.`);
+    }
+    const generateRecord = generate as Record<string, unknown>;
+
+    if ('zod' in generateRecord) {
+      throw new Error(
+        `Invalid sqlfu config at ${configPath}: "generate.zod" is no longer supported. ` +
+          `Use "generate.validator: 'zod' | 'valibot' | 'zod-mini' | null" instead.`,
+      );
+    }
+
+    const validator = generateRecord.validator;
+    if (validator !== undefined && validator !== null && !validValidators.includes(validator as SqlfuValidator)) {
+      throw new Error(
+        `Invalid sqlfu config at ${configPath}: "generate.validator" must be one of ` +
+          `${validValidators.map((v) => `'${v}'`).join(', ')}, null, or undefined. Got ${JSON.stringify(validator)}.`,
+      );
+    }
+
+    const prettyErrors = generateRecord.prettyErrors;
+    if (prettyErrors !== undefined && typeof prettyErrors !== 'boolean') {
+      throw new Error(`Invalid sqlfu config at ${configPath}: "generate.prettyErrors" must be a boolean.`);
     }
   }
 }

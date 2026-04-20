@@ -37,7 +37,10 @@ importers:
         version: 1.13.13(@opentelemetry/api@1.9.1)(crossws@0.3.5)(ws@8.20.0)
       trpc-cli:
         specifier: ^0.14.0
-        version: 0.14.0(@orpc/server@1.13.13(@opentelemetry/api@1.9.1)(crossws@0.3.5)(ws@8.20.0))(zod@4.3.6)
+        version: 0.14.0(@orpc/server@1.13.13(@opentelemetry/api@1.9.1)(crossws@0.3.5)(ws@8.20.0))(valibot@1.3.1(typescript@5.9.3))(zod@4.3.6)
+      valibot:
+        specifier: ^1.3.1
+        version: 1.3.1(typescript@5.9.3)
       zod:
         specifier: ^4.3.6
         version: 4.3.6
@@ -5454,6 +5457,14 @@ packages:
 
   util-deprecate@1.0.2:
     resolution: {integrity: sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw==}
+
+  valibot@1.3.1:
+    resolution: {integrity: sha512-sfdRir/QFM0JaF22hqTroPc5xy4DimuGQVKFrzF1YfGwaS1nJot3Y8VqMdLO2Lg27fMzat2yD3pY5PbAYO39Gg==}
+    peerDependencies:
+      typescript: '>=5'
+    peerDependenciesMeta:
+      typescript:
+        optional: true
 
   vfile-location@5.0.3:
     resolution: {integrity: sha512-5yXvWDEgqeiYiBe1lbxYF7UMAIm/IcopxMHrMQDq3nvKcjPKIhZklUKL+AE7J7uApI4kwe2snsK+eI6UTj9EHg==}
@@ -11400,11 +11411,12 @@ snapshots:
 
   trough@2.2.0: {}
 
-  trpc-cli@0.14.0(@orpc/server@1.13.13(@opentelemetry/api@1.9.1)(crossws@0.3.5)(ws@8.20.0))(zod@4.3.6):
+  trpc-cli@0.14.0(@orpc/server@1.13.13(@opentelemetry/api@1.9.1)(crossws@0.3.5)(ws@8.20.0))(valibot@1.3.1(typescript@5.9.3))(zod@4.3.6):
     dependencies:
       commander: 14.0.3
     optionalDependencies:
       '@orpc/server': 1.13.13(@opentelemetry/api@1.9.1)(crossws@0.3.5)(ws@8.20.0)
+      valibot: 1.3.1(typescript@5.9.3)
       zod: 4.3.6
 
   ts-morph@27.0.2:
@@ -11575,6 +11587,10 @@ snapshots:
       '@types/react': 19.2.14
 
   util-deprecate@1.0.2: {}
+
+  valibot@1.3.1(typescript@5.9.3):
+    optionalDependencies:
+      typescript: 5.9.3
 
   vfile-location@5.0.3:
     dependencies:

@@ -36,6 +36,12 @@ const docs = [
     description: 'Named queries reach OpenTelemetry, Sentry, PostHog, Datadog via a single instrument() hook.',
   },
   {
+    slug: 'runtime-validation',
+    title: 'Runtime validation with zod',
+    sourcePath: path.join(repoRoot, 'packages', 'sqlfu', 'docs', 'runtime-validation.md'),
+    description: 'Generate zod schemas as the source of truth. Validate params and rows at the wrapper boundary.',
+  },
+  {
     slug: 'ui',
     title: 'UI',
     sourcePath: path.join(repoRoot, 'packages', 'ui', 'README.md'),

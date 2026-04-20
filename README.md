@@ -308,7 +308,7 @@ If the default port is already occupied, `sqlfu kill` stops the existing listene
 While developing the UI itself inside this repo, the client bundle still lives in `packages/ui`:
 
 ```sh
-pnpm --filter sqlfu-ui dev
+pnpm --filter @sqlfu/ui dev
 ```
 
 ## Command Reference

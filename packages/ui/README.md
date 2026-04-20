@@ -13,7 +13,7 @@ Current scope:
 Development:
 
 ```sh
-pnpm --filter sqlfu-ui dev
+pnpm --filter @sqlfu/ui dev
 ```
 
 That starts the client against a sqlfu backend server with Vite HMR, using `packages/ui/test/projects/dev-project`. If the project does not exist yet, it is seeded from the template project.

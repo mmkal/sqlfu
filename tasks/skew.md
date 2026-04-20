@@ -86,7 +86,7 @@ Use the `semver` npm package with a range (`>=0.0.2-3`) rather than an exact flo
 - [x] Perform the version check right after `project.status` resolves in `Studio`. Throw a typed error that the boundary catches.
 - [x] Render an upgrade panel in `StartupFailureScreen` for the new kind. _two arms: sub-floor and pre-version unknown_
 - [x] Spot-check the upgrade screen in Chrome via `claude-in-chrome` MCP by temporarily serving an old version string.
-- [x] `pnpm --filter sqlfu typecheck` + `pnpm --filter sqlfu-ui typecheck` + `pnpm --filter sqlfu test --run` + `pnpm --filter sqlfu-ui run test:node`.
+- [x] `pnpm --filter sqlfu typecheck` + `pnpm --filter @sqlfu/ui typecheck` + `pnpm --filter sqlfu test --run` + `pnpm --filter @sqlfu/ui run test:node`.
 - [x] Add playwright coverage of the upgrade screen via `page.route` stub. _packages/ui/test/studio.spec.ts_
 
 ## Implementation log
@@ -96,6 +96,7 @@ Use the `semver` npm package with a range (`>=0.0.2-3`) rather than an exact flo
 - The check runs inside `Studio` right after `useSuspenseQuery(orpc.project.status.queryOptions())` resolves. If the range is not satisfied, it throws a `ServerVersionMismatchError`; the existing `StartupErrorBoundary` already catches anything thrown from render.
 - `classifyStartupError` gains a `version-mismatch` arm with `serverVersion` and `supportedRange` fields so the screen can render both values without poking at the raw error.
 - Two playwright specs stub `project.status` via `page.route` — one with an old version string, one omitting the field entirely — and assert the upgrade copy + retry button. The pre-existing `table browser, sql runner...` and `sql runner keeps line numbers...` failures on `main` are unrelated and not caused by this branch.
+- Package rename: `packages/ui` went from private `sqlfu-ui@0.0.0` to publishable `@sqlfu/ui@0.0.2-3` (matches `sqlfu`). This sets up the future `npx sqlfu --ui` flag — when that lands, the flag will dynamic-import `@sqlfu/ui` and serve the version-matched bundle. The mismatch screen now points users at `npx sqlfu --ui` as an alternative to upgrading. The local publish script bumps and publishes both packages in lockstep.
 
 ## Open questions / decisions made-up-on-user's-behalf (bedtime task)
 

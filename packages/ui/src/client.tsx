@@ -295,6 +295,11 @@ function StartupFailureScreen(input: {error: unknown}) {
                   </li>
                   <li>Reload this page.</li>
                 </ol>
+                <p>
+                  Don&apos;t want to upgrade right now? Run <code>npx sqlfu --ui</code> instead of{' '}
+                  <code>npx sqlfu</code> to serve a version-matched UI locally — that avoids this mismatch screen
+                  entirely and lets you stay on your current sqlfu version.
+                </p>
               </>
             ) : null}
             <div className="startup-actions">

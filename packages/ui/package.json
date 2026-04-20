@@ -10,7 +10,8 @@
     "build": "vite build",
     "test:node": "vitest run src/runtime.test.ts src/startup-error.test.ts",
     "typecheck": "tsgo -p tsconfig.json --noEmit",
-    "test": "playwright test"
+    "test": "playwright test",
+    "test:website-e2e": "playwright test --config=playwright.website-e2e.config.ts"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.1",

@@ -5,9 +5,9 @@ size: large
 
 ## Status Summary
 
-- Roughly 90% done: the backend move, local-server entrypoint, website scaffold, Cloudflare IaC, and the website -> studio end-to-end spec design are in place.
-- Main completed pieces: the UI API now lives in `packages/sqlfu`, `npx sqlfu` starts the local backend, `packages/ui` is client-only, `website/` renders existing markdown into a static docs site, the local launcher simulates a hosted frontend talking to a separate local backend, and `alchemy.run.mts` now defines the Cloudflare zone plus the two hosted sites.
-- Main missing pieces: validate the localhost HTTPS path on a machine with `mkcert` installed, and add a fuller end-to-end path that exercises the deployed hosted UI talking back to a real local backend (design captured below; implementation in progress on `website-e2e`).
+- Roughly 95% done: the backend move, local-server entrypoint, website scaffold, Cloudflare IaC, and the website -> studio end-to-end spec are all in place.
+- Main completed pieces: the UI API now lives in `packages/sqlfu`, `npx sqlfu` starts the local backend, `packages/ui` is client-only, `website/` renders existing markdown into a static docs site, the local launcher simulates a hosted frontend talking to a separate local backend, `alchemy.run.mts` now defines the Cloudflare zone plus the two hosted sites, and a Playwright spec simulates the `www.sqlfu.dev` -> `local.sqlfu.dev` -> `npx sqlfu` journey end-to-end on localhost.
+- Main missing piece: validate the localhost HTTPS path on a machine with `mkcert` installed.
 
 ## Goal
 
@@ -61,7 +61,7 @@ Current working idea:
   - no shipping the website bundle inside `packages/sqlfu`
   - no coupling the CLI install path to browser assets
   *The backend now serves API plus a small HTML status page by default; frontend assets remain outside the runtime package.*
-- [ ] Add an end-to-end spec for the first shipped user journey.
+- [x] Add an end-to-end spec for the first shipped user journey. *Added `packages/ui/test/website-landing-to-studio.spec.ts` plus a dedicated `playwright.website-e2e.config.ts`. The spec builds `website/` and `packages/ui/`, starts three local static/backend servers, clicks the landing-page "Try the demo" CTA (which reads `PUBLIC_LOCAL_STUDIO_URL` at Astro build time so it can point at the local UI port), and asserts the studio rendered schema data fetched from a live `npx sqlfu`-equivalent backend.*
   Good first candidate:
   - open website
   - reach docs
@@ -138,3 +138,4 @@ That gives us the intended local product model without taking on remote executio
 - 2026-04-16: added a root `pnpm local.sqlfu.dev` launcher that now delegates to the UI package script, runs the UI and backend on separate ports, points `ngrok` only at the UI server, and configures the browser client to talk to the standalone backend origin.
 - 2026-04-17: kept the default Playwright `webServer` on `packages/ui/test/start-server.ts`, switched that harness to import the sqlfu UI server from source, and added `packages/ui/test/local-sqlfu-dev.spec.ts` so the ngrok path is tested as an extra layer instead of replacing the normal UI+API test server.
 - 2026-04-17: added `alchemy.run.mts` plus root `infra`/`deploy`/`destroy` scripts so `www.sqlfu.dev` and `local.sqlfu.dev` can be managed as Cloudflare Websites from this repo.
+- 2026-04-20: added the first-journey end-to-end spec. `packages/ui/test/website-landing-to-studio.spec.ts` builds `website/` and `packages/ui/`, then spawns three local servers (Astro-built website, Vite-built UI, and `sqlfu/src/cli.ts` as the backend) and drives Playwright through the landing page -> "Try the demo" CTA -> studio schema data flow. To keep the landing-page CTAs hermetic without a big UI change, added a tiny `PUBLIC_LOCAL_STUDIO_URL` env-var override (defaults to `https://local.sqlfu.dev/?demo=1`). Ran via a new dedicated `playwright.website-e2e.config.ts` (+ `test:website-e2e` script); the default Playwright config excludes the file via `testIgnore` so the existing fast harness stays on a single port.

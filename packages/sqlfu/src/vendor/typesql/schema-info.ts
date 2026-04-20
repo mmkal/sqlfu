@@ -1,4 +1,4 @@
-import { ColumnSchema, Table } from './mysql-query-analyzer/types.js';
+import { ColumnSchema, Table } from './shared-analyzer/types.js';
 import { createSqliteClient, ForeignKeyInfo, loadDbSchema, selectSqliteTablesFromSchema } from './sqlite-query-analyzer/query-executor.js';
 import { DatabaseClient, SQLiteClient, TypeSqlDialect, TypeSqlError } from './types.js';
 import {Either, Result, err, ok, right} from '../small-utils.js';

@@ -1,6 +1,6 @@
 {
   "name": "sqlfu",
-  "version": "0.0.2-3",
+  "version": "0.0.2",
   "description": "sql-first client, migrator, diff engine, typescript generator, formatter, and ui.",
   "repository": {
     "type": "git",
@@ -59,10 +59,11 @@
     }
   },
   "scripts": {
-    "build": "pnpm run build:internal-queries && pnpm run build:runtime && pnpm run build:vendor-typesql",
+    "build": "pnpm run build:internal-queries && pnpm run build:runtime && pnpm run build:vendor-typesql && pnpm run build:bundle-vendor",
     "build:internal-queries": "tsx scripts/generate-internal-queries.ts",
     "build:runtime": "tsgo -p tsconfig.build.json",
     "build:vendor-typesql": "rm -rf dist/vendor/antlr4 dist/vendor/code-block-writer dist/vendor/typesql dist/vendor/typesql-parser && tsgo -p src/vendor/typesql/tsconfig.json",
+    "build:bundle-vendor": "tsx scripts/bundle-vendor.ts",
     "typecheck": "tsgo -p tsconfig.typecheck.json && pnpm run typecheck:vendor-typesql",
     "typecheck:vendor-typesql": "tsgo -p src/vendor/typesql/tsconfig.json --noEmit",
     "test": "pnpm run test:node",

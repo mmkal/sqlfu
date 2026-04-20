@@ -9,14 +9,14 @@ import {
 	type TraverseContext,
 	type TypeAndNullInfer,
 	TypeAndNullInferParam
-} from '../mysql-query-analyzer/types.js';
-import { getVarType } from '../mysql-query-analyzer/collect-constraints.js';
-import { unify } from '../mysql-query-analyzer/unify.js';
+} from '../shared-analyzer/types.js';
+import { getVarType } from '../shared-analyzer/collect-constraints.js';
+import { unify } from '../shared-analyzer/unify.js';
 import { hasAnnotation, preprocessSql, verifyNotInferred } from '../describe-query.js';
 import { describeNestedQuery } from './sqlite-describe-nested-query.js';
 import { indexGroupBy } from '../util.js';
 import { replaceListParams } from './replace-list-params.js';
-import type { TraverseResult2 } from '../mysql-query-analyzer/traverse.js';
+import type { TraverseResult2 } from '../shared-analyzer/traverse.js';
 import { describeDynamicQuery2 } from '../describe-dynamic-query.js';
 
 type ParseAndTraverseResult = {

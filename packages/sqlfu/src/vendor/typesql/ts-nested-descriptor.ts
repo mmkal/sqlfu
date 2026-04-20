@@ -1,6 +1,6 @@
 import type { Field, RelationInfo, NestedResultInfo, RelationField } from './describe-nested-query.js';
 import { mapper, type MySqlType, type TsType } from './mysql-mapping.js';
-import type { ColumnInfo } from './mysql-query-analyzer/types.js';
+import type { ColumnInfo } from './shared-analyzer/types.js';
 import type { RelationField2 } from './sqlite-query-analyzer/sqlite-describe-nested-query.js';
 
 export type TsField = {

@@ -14,9 +14,9 @@ import {
 	type Returning_clauseContext,
 	type Select_coreContext
 } from '../../typesql-parser/sqlite/index.js';
-import type { ColumnDef, ColumnSchema, ExtensionFunctionCatalog, FieldName, TraverseContext, TypeAndNullInfer, TypeAndNullInferParam } from '../mysql-query-analyzer/types.js';
-import { filterColumns, findColumn, getExpressions, includeColumn, splitName } from '../mysql-query-analyzer/select-columns.js';
-import { freshVar } from '../mysql-query-analyzer/collect-constraints.js';
+import type { ColumnDef, ColumnSchema, ExtensionFunctionCatalog, FieldName, TraverseContext, TypeAndNullInfer, TypeAndNullInferParam } from '../shared-analyzer/types.js';
+import { filterColumns, findColumn, getExpressions, includeColumn, splitName } from '../shared-analyzer/select-columns.js';
+import { freshVar } from '../shared-analyzer/collect-constraints.js';
 import {
 	type DeleteResult,
 	type InsertResult,
@@ -25,7 +25,7 @@ import {
 	type TraverseResult2,
 	type UpdateResult,
 	getOrderByColumns
-} from '../mysql-query-analyzer/traverse.js';
+} from '../shared-analyzer/traverse.js';
 import type { Relation2 } from './sqlite-describe-nested-query.js';
 import { type Either, left, right } from '../../small-utils.js';
 import type { TypeSqlError } from '../types.js';

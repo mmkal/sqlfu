@@ -1,6 +1,7 @@
 import {ORPCError, os} from '@orpc/server';
 import {z} from 'zod';
 
+import packageJson from '../../package.json' with {type: 'json'};
 import {
   getCheckAnalysis,
   getMigrationResultantSchema,
@@ -64,6 +65,7 @@ export const uiRouter = {
     status: uiBase.handler(({context}) => ({
       initialized: context.project.initialized,
       projectRoot: context.project.projectRoot,
+      serverVersion: packageJson.version,
     })),
   },
   schema: {

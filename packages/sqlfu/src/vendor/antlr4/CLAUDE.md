@@ -26,4 +26,4 @@ The published `dist/antlr4.node.mjs` has a top-level `import {createRequire} fro
    - with: `FileStream is not supported in sqlfu's vendored antlr4 (web build); read the file yourself and pass its contents to CharStreams.fromString.`
 5. Append the three type-only alias exports (see **Local modifications** above) to the end of the file. If upstream starts exporting any of these names for real, drop the corresponding alias — but keep the others.
 6. Remove the trailing `//# sourceMappingURL=antlr4.web.mjs.map` comment (the `.map` file isn't vendored).
-7. Verify with `pnpm --filter sqlfu test --run test/generate.test.ts`, `pnpm --filter sqlfu typecheck`, `pnpm --filter sqlfu build`, and `pnpm --filter sqlfu-ui build`.
+7. Verify with `pnpm --filter sqlfu test --run test/generate.test.ts`, `pnpm --filter sqlfu typecheck`, `pnpm --filter sqlfu build`, and `pnpm --filter @sqlfu/ui build`.

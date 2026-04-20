@@ -7,14 +7,23 @@ size: large
 
 ## Status (high-level, human-skim)
 
-Multi-night task. Currently on **night 1**.
+Multi-night task. **Night 1 complete.** Next pick-up is phase 3 (consumer swap), starting with the leaves under `sqlite-query-analyzer/`.
 
-- [x] Phase 0: plan refinement + per-phase acceptance criteria (this commit)
-- [ ] Phase 1: surface-area analysis (`types.ts` listing consumed AST shape) — in progress this session
-- [ ] Phase 2: tokenizer + minimal `select_stmt` recursive-descent parser — likely started this session, not finished
-- [ ] Phase 3: per-file analyzer swap (future session)
+- [x] Phase 0: plan refinement + per-phase acceptance criteria
+- [x] Phase 1: surface-area analysis — `types.ts` enumerates every ANTLR node shape the analyzer reads (24 node types, one file).
+- [x] Phase 2: tokenizer + minimal `select_stmt` recursive-descent parser — `tokenizer.ts` + `select_stmt.ts` ship with tests, all additive, zero analyzer changes.
+- [ ] Phase 3: per-file analyzer swap (next session) — details under "Next steps" below.
 - [ ] Phase 4: fixture tail (future session)
 - [ ] Phase 5: delete ANTLR + `typesql-parser/sqlite/` + `antlr4/` (future session)
+
+### Next steps for phase 3 (resumption guide)
+
+1. Add an ANTLR-compatible shim over the plain-data AST. The shim should make a `ParsedSelectStmt` look like a `Select_stmtContext` from `types.ts` (it needs `.getText()`, `.start.start`, `.stop?.stop`, plus the accessor methods). Aim for a thin wrapper class, not a deep copy.
+2. Start swapping `sqlite-query-analyzer/` consumers. Topological order (leaves first):
+   - `enum-parser.ts` — smallest surface, only reads Create_table/Column_def/Column_constraint/Expr. Good first swap.
+   - `traverse.ts` — the big one. Break it into logical chunks if needed.
+   - `parser.ts` — replace `parseSqlite` call with the new parser entry.
+3. Each swap commits in isolation with tests still green.
 
 All of the ANTLR code stays in place the whole time until phase 5. New parser lands alongside it under a new directory, then consumers migrate one at a time. Tests must pass on every push.
 
@@ -138,3 +147,7 @@ Depends on the `slim-package` branch landing first (PR #29). That branch sets up
 - Task file fleshed out with concrete per-phase acceptance criteria so future sessions (or other agents) can pick up without re-deriving "what's done-enough for phase N".
 - Landed on directory name `packages/sqlfu/src/vendor/sqlfu-sqlite-parser/` (matches the hint in the original phase 3 bullet and puts it under `vendor/` alongside the ANTLR tree it's ultimately replacing; still "vendored" in the sense that `typesql` is the consumer — keeps future pure-typesql resync mechanics clean).
 - Ground rule for this session: no deletion of anything, no consumer swaps. Everything is additive.
+- Phase 1 shipped: `types.ts` documents 24 consumed node shapes. Turns out ~16 of them are `getText()`-only identifier leaves — the real structural work is concentrated in `ExprContext` (~40 accessors), `Select_stmtContext`, `Select_coreContext`, `Table_or_subqueryContext`, and the parallel-list shapes of `Update_stmt`/`Upsert_clause`. Good news: that's ~5 nodes to implement carefully, not 24.
+- Phase 2 shipped: tokenizer covers the full lexical surface, 16 tests. `select_stmt.ts` parser covers the simplest shapes with 14 tests; crucially it emits plain-data AST, not ANTLR-shaped nodes — that's a deliberate deferral to phase 3, which I added a shim layer to.
+- Where I stopped: the parser's grammar surface is intentionally tiny (no JOIN, no GROUP BY, no CASE, no IN/BETWEEN/LIKE, no function calls, no CTEs/UNION). That's phase 4 per fixture.
+- Test count over the session: 1071 → 1101 on the sqlfu filter. The 30 new tests are purely additive; no pre-existing behavior changed.

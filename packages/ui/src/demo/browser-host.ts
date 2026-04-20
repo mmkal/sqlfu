@@ -1,5 +1,9 @@
 import {createSqliteWasmClient} from 'sqlfu/client';
-import {toSqlEditorDiagnostic} from 'sqlfu/browser';
+import {
+  analyzeVendoredTypesqlQueriesWithClient,
+  isInternalUnsupportedSqlAnalysisError,
+  toSqlEditorDiagnostic,
+} from 'sqlfu/browser';
 import type {
   AdHocSqlParams,
   AdHocSqlResult,
@@ -111,6 +115,7 @@ function statementReturnsRows(db: Database, sqlText: string): boolean {
 }
 
 function createBrowserCatalog(vfs: DemoVfs, database: Database): HostCatalog {
+  const typesqlDb = wasmDatabaseAsTypesqlClient(database);
   return {
     async load(): Promise<QueryCatalog> {
       return buildQueryCatalog(vfs);
@@ -118,19 +123,43 @@ function createBrowserCatalog(vfs: DemoVfs, database: Database): HostCatalog {
     async refresh() {},
     async analyzeSql(_config, sql): Promise<SqlAnalysisResponse> {
       if (!sql.trim()) return {};
-      // sqlite-wasm's prepare() throws the same error messages the node backend
-      // surfaces (syntax errors, "no such table/column"), which toSqlEditorDiagnostic
-      // already knows how to turn into an editor range. The full typesql pipeline
-      // would add type-level diagnostics too, but it depends on a node-only antlr4
-      // bundle that can't ship to the browser without a dedicated web build.
       try {
-        database.prepare(sql).finalize();
-        return {diagnostics: []};
+        const [analysis] = await analyzeVendoredTypesqlQueriesWithClient(typesqlDb, [
+          {sqlPath: 'demo-sql-runner.sql', sqlContent: sql},
+        ]);
+        if (!analysis) return {};
+        if (analysis.ok) return {diagnostics: []};
+        throw new Error(analysis.error.description);
       } catch (error) {
+        if (isInternalUnsupportedSqlAnalysisError(error)) return {};
         return {diagnostics: [toSqlEditorDiagnostic(sql, error)]};
       }
     },
   };
+}
+
+function wasmDatabaseAsTypesqlClient(database: Database) {
+  const shim = {
+    prepare(sql: string) {
+      database.prepare(sql).finalize();
+      return {
+        all(...args: unknown[]): unknown[] {
+          const bind = args.length > 0 ? (args as never) : undefined;
+          return database.exec({
+            sql,
+            bind,
+            rowMode: 'object',
+            returnValue: 'resultRows',
+          }) as unknown[];
+        },
+      };
+    },
+    exec(sql: string) {
+      database.exec(sql);
+    },
+    close() {},
+  };
+  return {type: 'sqlite', client: shim} as never;
 }
 
 function createVfsFs(vfs: DemoVfs, config: SqlfuProjectConfig, notify: () => void): HostFs {

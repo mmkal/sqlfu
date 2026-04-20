@@ -1,9 +1,14 @@
 import CodeBlockWriter from '../../../code-block-writer/index.js';
 import { CamelCaseName, QueryType, TsFieldDescriptor, TsParameterDescriptor } from '../../types.js';
 import { DynamicSqlInfoResult, DynamicSqlInfoResult2, SelectFragmentResult } from '../../mysql-query-analyzer/types.js';
-import { EOL } from 'os';
 import { NestedTsDescriptor, RelationType2 } from '../../ts-nested-descriptor.js';
 import {camelCase} from '../../../small-utils.js';
+
+// sqlfu: replaces a static `import { EOL } from 'os'`; computed here so this
+// module can be bundled for browsers (demo mode). The code-gen functions that
+// use EOL only run in the node CLI path.
+const EOL: '\n' | '\r\n' =
+	(globalThis as {process?: {platform?: string}}).process?.platform === 'win32' ? '\r\n' : '\n';
 
 export type TsDescriptor = {
 	sql: string;

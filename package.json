@@ -20,8 +20,8 @@
     "typecheck": "pnpm --filter sqlfu typecheck && pnpm --filter @sqlfu/ui typecheck",
     "generate": "pnpm --filter sqlfu generate",
     "cli": "pnpm --filter sqlfu cli",
-    "lint": "oxlint",
-    "lint:fix": "oxlint --fix",
+    "lint": "pnpm --filter sqlfu build:runtime && oxlint",
+    "lint:fix": "pnpm --filter sqlfu build:runtime && oxlint --fix",
     "format": "oxfmt .",
     "format:check": "oxfmt --check ."
   },

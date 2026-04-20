@@ -5,7 +5,7 @@ import path from 'node:path';
 import {Linter} from 'eslint';
 import {expect, test} from 'vitest';
 
-import plugin, {resetQueryCache} from '../src/eslint.js';
+import plugin, {resetQueryCache} from '../src/lint-plugin.js';
 
 test('flags an inline SQL template that duplicates a named .sql file', async () => {
   await using project = await setupProject({
@@ -122,6 +122,124 @@ test('is a no-op when there is no sqlfu.config', async () => {
   expect(messages).toHaveLength(0);
 });
 
+test('format-sql: flags an inline SQL template that is not formatted', async () => {
+  await using project = await setupProject({});
+
+  const messages = lintSource({
+    project,
+    filename: 'src/handler.js',
+    source: `const rows = client.all(\`SELECT * FROM users WHERE id=1\`)`,
+    rules: {'sqlfu/format-sql': 'error'},
+  });
+
+  expect(messages).toHaveLength(1);
+  expect(messages[0]).toMatchObject({
+    ruleId: 'sqlfu/format-sql',
+    message: expect.stringContaining('not formatted'),
+  });
+});
+
+test('format-sql: does not flag SQL that already matches formatter output', async () => {
+  await using project = await setupProject({});
+
+  const alreadyFormatted = 'select *\n  from users\n  where id = 1';
+  const messages = lintSource({
+    project,
+    filename: 'src/handler.js',
+    source: `const rows = client.all(\`\n  ${alreadyFormatted}\n\`)`,
+    rules: {'sqlfu/format-sql': 'error'},
+  });
+
+  expect(messages).toHaveLength(0);
+});
+
+test('format-sql: autofix replaces template body with formatted SQL', async () => {
+  await using project = await setupProject({});
+
+  const {output, fixed} = lintAndFix({
+    project,
+    filename: 'src/handler.js',
+    source: `const rows = client.all(\`SELECT * FROM users WHERE id=1\`)`,
+    rules: {'sqlfu/format-sql': 'error'},
+  });
+
+  expect(fixed).toBe(true);
+  expect(output).toMatch(/select \*/);
+  expect(output).toMatch(/from users/);
+  expect(output).toMatch(/where id = 1/);
+  expect(output).not.toMatch(/SELECT|FROM|WHERE/);
+});
+
+test('format-sql: does not flag parameterized (interpolated) templates', async () => {
+  await using project = await setupProject({});
+
+  const messages = lintSource({
+    project,
+    filename: 'src/handler.js',
+    source: `
+      const id = 1
+      const rows = client.all(\`SELECT * FROM users WHERE id=\${id}\`)
+    `,
+    rules: {'sqlfu/format-sql': 'error'},
+  });
+
+  expect(messages).toHaveLength(0);
+});
+
+test('format-sql: flags client.sql tagged template literals too', async () => {
+  await using project = await setupProject({});
+
+  const messages = lintSource({
+    project,
+    filename: 'src/handler.js',
+    source: `const rows = await client.sql\`SELECT id FROM users\``,
+    rules: {'sqlfu/format-sql': 'error'},
+  });
+
+  expect(messages).toHaveLength(1);
+  expect(messages[0].ruleId).toBe('sqlfu/format-sql');
+});
+
+test('format-sql: autofix preserves template indentation on multi-line SQL', async () => {
+  await using project = await setupProject({});
+
+  const {output, fixed} = lintAndFix({
+    project,
+    filename: 'src/handler.js',
+    source: [
+      'function load() {',
+      '  return client.all(`',
+      '    SELECT id, name FROM users WHERE id = 1',
+      '  `)',
+      '}',
+    ].join('\n'),
+    rules: {'sqlfu/format-sql': 'error'},
+  });
+
+  expect(fixed).toBe(true);
+  // Body of the template stays indented one level deeper than the call
+  expect(output).toMatch(/    select id, name/);
+  // And the closing backtick stays on its own line at the call's indent
+  expect(output).toMatch(/\n  `\)/);
+  expect(output).not.toMatch(/SELECT|FROM|WHERE/);
+});
+
+test('format-sql: skips unparseable SQL silently', async () => {
+  await using project = await setupProject({});
+
+  const messages = lintSource({
+    project,
+    filename: 'src/handler.js',
+    source: `const rows = client.all(\`this is not sql at all\`)`,
+    rules: {'sqlfu/format-sql': 'error'},
+  });
+
+  // The formatter is lenient and will emit something for arbitrary text,
+  // so we expect at most 1 message (formatter disagreed with the input) —
+  // no crash, no unhandled throw.
+  expect(messages.length).toBeLessThanOrEqual(1);
+});
+
 // ---
 
 interface Project {
@@ -145,7 +263,12 @@ async function setupProject(files: Record<string, string>): Promise<Project> {
   };
 }
 
-function lintSource(args: {project: Project; filename: string; source: string}) {
+function lintSource(args: {
+  project: Project;
+  filename: string;
+  source: string;
+  rules?: Record<string, 'error' | 'off'>;
+}) {
   const linter = new Linter({configType: 'flat', cwd: args.project.root});
   const messages = linter.verify(
     args.source,
@@ -153,11 +276,28 @@ function lintSource(args: {project: Project; filename: string; source: string}) 
       {
         files: ['**/*.{js,cjs,mjs,ts,tsx,jsx}'],
         plugins: {sqlfu: plugin as any},
-        rules: {'sqlfu/no-unnamed-inline-sql': 'error'},
+        rules: args.rules || {'sqlfu/no-unnamed-inline-sql': 'error'},
         languageOptions: {ecmaVersion: 2022, sourceType: 'module'},
       },
     ],
     path.join(args.project.root, args.filename),
   );
   return messages;
+}
+
+function lintAndFix(args: {project: Project; filename: string; source: string; rules: Record<string, 'error' | 'off'>}) {
+  const linter = new Linter({configType: 'flat', cwd: args.project.root});
+  const result = linter.verifyAndFix(
+    args.source,
+    [
+      {
+        files: ['**/*.{js,cjs,mjs,ts,tsx,jsx}'],
+        plugins: {sqlfu: plugin as any},
+        rules: args.rules,
+        languageOptions: {ecmaVersion: 2022, sourceType: 'module'},
+      },
+    ],
+    {filename: path.join(args.project.root, args.filename)},
+  );
+  return result;
 }

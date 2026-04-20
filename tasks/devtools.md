@@ -135,11 +135,16 @@ If the scaffolding turns into an afternoon of tsconfig wrangling or CSP headache
 
 ### Round 2 (2026-04-20)
 
-- [ ] rename export `sqlfu/eslint` → `sqlfu/lint-plugin`. Rename `src/eslint.ts` → `src/lint-plugin.ts`; rename test. Update `packages/sqlfu/package.json` exports + `publishConfig.exports`. README updates.
-- [ ] add `sqlfu/format-sql` rule: flag inline SQL template literals that don't match `formatSql(text, {style: 'sqlfu'})`. Provide autofix. Targets `client.{all,run,iterate}` call arguments and `client.sql\`…\`` tagged templates. Skip templates with interpolations (consistent with `no-unnamed-inline-sql`).
-- [ ] dogfood: add `jsPlugins: ["./packages/sqlfu/src/lint-plugin.ts"]` to `.oxlintrc.json`. Enable both rules. Fix any hits.
-- [ ] update docs: the lint-rule section in `packages/sqlfu/README.md` grows a second rule + the new import path.
-- [ ] reserve rule name `sqlfu/valid-sql` in the task file as explicit future work; link to `tasks/drop-antlr.md` for the blocking item.
+- [x] rename export `sqlfu/eslint` → `sqlfu/lint-plugin`. _`git mv` for both files; `packages/sqlfu/package.json` and `publishConfig.exports` updated; README updated; consolidated duplicate `peerDependencies` blocks (pre-existing merge artifact) into one._
+- [x] add `sqlfu/format-sql` rule: flag inline SQL template literals that don't match `formatSql(text, {style: 'sqlfu'})`. _Implemented in `packages/sqlfu/src/lint-plugin.ts` with autofix via `fixer.replaceTextRange`. 7 new vitest cases. Shared `createClientTemplateVisitor` between the two rules so call-site detection stays consistent._
+- [x] dogfood: `.oxlintrc.json` loads `./packages/sqlfu/dist/lint-plugin.js` via `jsPlugins`. Both rules on at error. Test override disables `format-sql` (test files often keep inline SQL compact for readability). Workspace `lint` script now runs `pnpm --filter sqlfu build:runtime` first so the dist/ plugin exists. Repo is clean under the new rules (17 pre-existing lint errors unaffected).
+- [x] update docs: `packages/sqlfu/README.md` now documents both rules + ESLint and oxlint configs.
+- [x] reserve rule name `sqlfu/valid-sql` as future work — documented in the Round 2 header above; blocked on drop-antlr landing a cheap sync `parse(sql) → diagnostic[]` surface.
+
+### Round 2 gotchas (recorded for future-agents)
+
+- **`.ts` imports via oxlint jsPlugins don't work in Node today.** Node's native type stripping strips types but does NOT rewrite `.js` imports to `.ts`. Our source uses NodeNext's `.js` convention (`import './formatter.js'`), so `import` of `lint-plugin.ts` fails at resolution time. Vitest's bundler handles this fine; Node + oxlint do not. Fix: point `jsPlugins` at the built `dist/lint-plugin.js`, and ensure `pnpm lint` runs `build:runtime` first so the dist plugin is up-to-date.
+- **Formatter is assertive.** `formatSql('select b from a', {style: 'sqlfu'})` returns `select b\nfrom a`, because the sqlfu default splits by clause. Short one-liners in tests (`await client.sql\`select b from a\``) will trip the rule. For now, the rule is off in test files via the `overrides` block. If the formatter later gains a "keep short queries on one line" mode, revisit that override.
 
 ## Pre-existing flaws noticed (fix in-branch if trivial)
 

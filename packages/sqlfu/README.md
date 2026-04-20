@@ -157,25 +157,41 @@ No peer dependencies on OpenTelemetry or Sentry. `TracerLike` is structural; hoo
 
 `sqlfu` also has a UI package for working with the project interactively. It sits on top of the same SQL-first model rather than inventing a separate one.
 
-### ESLint rule
+### Lint plugin
 
-`sqlfu` ships one ESLint rule, `sqlfu/no-unnamed-inline-sql`. It flags inline SQL passed to `client.all` / `client.run` / `client.iterate` / `` client.sql`...` `` when the normalized text matches a checked-in `.sql` file under your project's `queries` directory. The point is sqlfu's `SQL First` model: your filename is your query's identity, so an inline string that duplicates a named file loses its name, its generated types, and its observability metadata.
+`sqlfu` ships a lint plugin as a sub-export (`sqlfu/lint-plugin`). It targets both ESLint and oxlint (via oxlint's alpha `jsPlugins` loader) and currently ships two rules:
 
-Wire it into your ESLint flat config:
+- **`sqlfu/no-unnamed-inline-sql`** — flags inline SQL passed to `client.all` / `client.run` / `client.iterate` / `` client.sql`...` `` when the normalized text matches a checked-in `.sql` file under your project's `queries` directory. sqlfu's model is `SQL First`: your filename is your query's identity, so an inline duplicate loses the name, generated types, and observability metadata.
+- **`sqlfu/format-sql`** — flags inline SQL template literals whose text does not match sqlfu's formatter output. Offers an autofix that rewrites the template body to the formatted SQL.
+
+Wire it into ESLint flat config:
 
 ```js
 // eslint.config.js
-import sqlfu from 'sqlfu/eslint';
+import sqlfu from 'sqlfu/lint-plugin';
 
 export default [
   {
     plugins: {sqlfu},
-    rules: {'sqlfu/no-unnamed-inline-sql': 'error'},
+    rules: {
+      'sqlfu/no-unnamed-inline-sql': 'error',
+      'sqlfu/format-sql': 'error',
+    },
   },
 ];
 ```
 
-The plugin is published as a sub-export of `sqlfu` itself with zero runtime dependencies, so adding it to a lint config does not grow your install graph.
+Or in `.oxlintrc.json` (oxlint 1.60+):
+
+```json
+{
+  "jsPlugins": ["sqlfu/lint-plugin"],
+  "rules": {
+    "sqlfu/no-unnamed-inline-sql": "error",
+    "sqlfu/format-sql": "error"
+  }
+}
+```
 
 ### Agent skill
 

@@ -19,7 +19,7 @@
     "./client": "./src/client.ts",
     "./api": "./src/api.ts",
     "./cli": "./src/cli.ts",
-    "./eslint": "./src/eslint.ts",
+    "./lint-plugin": "./src/lint-plugin.ts",
     "./ui": {
       "browser": "./src/ui/browser.ts",
       "default": "./src/ui/index.ts"
@@ -48,9 +48,9 @@
         "types": "./dist/cli.d.ts",
         "default": "./dist/cli.js"
       },
-      "./eslint": {
-        "types": "./dist/eslint.d.ts",
-        "default": "./dist/eslint.js"
+      "./lint-plugin": {
+        "types": "./dist/lint-plugin.d.ts",
+        "default": "./dist/lint-plugin.js"
       },
       "./ui": {
         "types": "./dist/ui/index.d.ts",
@@ -83,10 +83,14 @@
     "zod": "^4.3.6"
   },
   "peerDependencies": {
-    "@sqlfu/ui": "workspace:*"
+    "@sqlfu/ui": "workspace:*",
+    "eslint": ">=8"
   },
   "peerDependenciesMeta": {
     "@sqlfu/ui": {
+      "optional": true
+    },
+    "eslint": {
       "optional": true
     }
   },
@@ -121,13 +125,5 @@
     "valibot": "^1.3.1",
     "vite": "^7.1.12",
     "vitest": "^4.1.1"
-  },
-  "peerDependencies": {
-    "eslint": ">=8"
-  },
-  "peerDependenciesMeta": {
-    "eslint": {
-      "optional": true
-    }
   }
 }

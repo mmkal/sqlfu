@@ -35,6 +35,83 @@ insert into a(b) select b from __sqlfu_old_a;
 drop table __sqlfu_old_a;
 -- #endregion
 
+-- #region: unchanged view depending on rebuilt table is dropped and recreated
+-- baseline:
+create table a(a1 int);
+
+create view av as
+select * from a;
+-- desired:
+create table a(a1 int not null);
+
+create view av as
+select * from a;
+-- output:
+drop view av;
+alter table a rename to __sqlfu_old_a;
+create table a(a1 int not null);
+insert into a(a1) select a1 from __sqlfu_old_a;
+drop table __sqlfu_old_a;
+create view av as
+select * from a;
+-- #endregion
+
+-- #region: unchanged trigger depending on rebuilt table is dropped and recreated
+-- baseline:
+create table a(a1 int);
+create table audit_log(message text);
+
+create trigger a_insert_log after insert on a begin
+  insert into audit_log(message) values ('row');
+end;
+-- desired:
+create table a(a1 int not null);
+create table audit_log(message text);
+
+create trigger a_insert_log after insert on a begin
+  insert into audit_log(message) values ('row');
+end;
+-- output:
+drop trigger a_insert_log;
+alter table a rename to __sqlfu_old_a;
+create table a(a1 int not null);
+insert into a(a1) select a1 from __sqlfu_old_a;
+drop table __sqlfu_old_a;
+create trigger a_insert_log after insert on a begin
+insert into audit_log(message) values ('row');
+end;
+-- #endregion
+
+-- #region: nested unchanged view chain is recreated when underlying rebuilt table renames
+-- baseline:
+create table a(a1 int);
+
+create view av as
+select * from a;
+
+create view av2 as
+select * from av;
+-- desired:
+create table a(a1 int not null);
+
+create view av as
+select * from a;
+
+create view av2 as
+select * from av;
+-- output:
+drop view av;
+drop view av2;
+alter table a rename to __sqlfu_old_a;
+create table a(a1 int not null);
+insert into a(a1) select a1 from __sqlfu_old_a;
+drop table __sqlfu_old_a;
+create view av as
+select * from a;
+create view av2 as
+select * from av;
+-- #endregion
+
 -- #region: sqlite-migra dependencies
 -- baseline:
 

@@ -1,1 +1,5 @@
 dist/
+.astro/
+node_modules/
+src/content/docs/docs/
+public/docs/

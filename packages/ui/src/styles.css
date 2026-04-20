@@ -1,4 +1,6 @@
 :root {
+  /* light palette (default) */
+  color-scheme: light;
   --bg: #f5efe4;
   --bg-strong: #efe2cb;
   --panel: rgba(255, 250, 242, 0.92);
@@ -9,11 +11,172 @@
   --accent: #b24c2b;
   --accent-strong: #8b2d18;
   --shadow: 0 18px 40px rgba(111, 78, 28, 0.12);
-  font-family: 'Avenir Next', 'Segoe UI', 'Helvetica Neue', sans-serif;
-  color: var(--text);
-  background:
+  --bg-gradient:
     radial-gradient(circle at top left, rgba(255, 255, 255, 0.72), transparent 30rem),
     linear-gradient(135deg, #f6f0e7, #e9d4b0 45%, #e7c18b);
+
+  /* panel tints used on nav links, table cells etc. In light mode, "white-ish";
+     these get inverted in dark mode so we don't have to hunt for every
+     rgba(255,255,255,...) occurrence individually. */
+  --panel-tint-soft: rgba(255, 255, 255, 0.55);
+  --panel-tint-mid: rgba(255, 255, 255, 0.58);
+  --panel-tint-strong: rgba(255, 255, 255, 0.72);
+  --panel-tint-faint: rgba(255, 255, 255, 0.34);
+  --panel-tint-veryfaint: rgba(255, 255, 255, 0.45);
+
+  --accent-bg-soft: rgba(178, 76, 43, 0.08);
+  --accent-bg-mid: rgba(178, 76, 43, 0.12);
+  --accent-bg-strong: rgba(178, 76, 43, 0.16);
+  --accent-border-soft: rgba(178, 76, 43, 0.15);
+  --accent-border-mid: rgba(178, 76, 43, 0.22);
+  --accent-border-strong: rgba(178, 76, 43, 0.24);
+
+  --overlay: rgba(47, 36, 22, 0.45);
+
+  --semantic-ok-bg: rgba(242, 255, 245, 0.92);
+  --semantic-ok-border: rgba(45, 126, 68, 0.25);
+  --semantic-info-bg: rgba(238, 248, 255, 0.94);
+  --semantic-info-border: rgba(45, 111, 148, 0.22);
+  --semantic-info-text: #2d6f94;
+  --semantic-recommendations-bg: rgba(255, 247, 222, 0.94);
+  --semantic-recommendations-border: rgba(138, 104, 24, 0.22);
+  --semantic-recommendations-text: #8a6818;
+  --semantic-error-bg: rgba(255, 240, 231, 0.92);
+  --semantic-error-border: rgba(178, 76, 43, 0.28);
+  --semantic-error-text: #7a1d0d;
+
+  --rg-header-bg: rgba(239, 226, 203, 0.8);
+  --rg-append-bg: rgba(239, 226, 203, 0.18);
+  --rg-append-fg: rgba(117, 97, 71, 0.6);
+  --rg-shadow: rgba(65, 47, 18, 0.08);
+  --rg-cell-editor-shadow: 0 8px 20px rgba(65, 47, 18, 0.12);
+
+  --sidebar-gradient: linear-gradient(180deg, rgba(255, 251, 245, 0.9), rgba(247, 233, 207, 0.86));
+  --button-primary-text: #ffffff;
+
+  font-family: 'Avenir Next', 'Segoe UI', 'Helvetica Neue', sans-serif;
+  color: var(--text);
+  background: var(--bg-gradient);
+}
+
+/*
+  Dark palette. Applies when:
+  - user has explicitly chosen dark via the toggle (data-theme='dark' on <html>), OR
+  - user's OS prefers dark AND they haven't overridden to light
+    (no data-theme attribute, or data-theme='system').
+
+  Expressed as a single declaration list using @media inside a :where() — no
+  duplication needed.
+*/
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #1a1410;
+  --bg-strong: #211912;
+  --panel: rgba(42, 31, 22, 0.92);
+  --panel-strong: #2a1f16;
+  --line: rgba(240, 224, 196, 0.12);
+  --text: #f0e6d6;
+  --muted: #b8a484;
+  --accent: #e89b66;
+  --accent-strong: #f4b382;
+  --shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+  --bg-gradient:
+    radial-gradient(circle at top left, rgba(232, 155, 102, 0.08), transparent 30rem),
+    linear-gradient(135deg, #1a1410, #221810 45%, #2b1f15);
+
+  --panel-tint-soft: rgba(240, 224, 196, 0.05);
+  --panel-tint-mid: rgba(240, 224, 196, 0.06);
+  --panel-tint-strong: rgba(240, 224, 196, 0.08);
+  --panel-tint-faint: rgba(240, 224, 196, 0.03);
+  --panel-tint-veryfaint: rgba(240, 224, 196, 0.04);
+
+  --accent-bg-soft: rgba(232, 155, 102, 0.1);
+  --accent-bg-mid: rgba(232, 155, 102, 0.16);
+  --accent-bg-strong: rgba(232, 155, 102, 0.22);
+  --accent-border-soft: rgba(232, 155, 102, 0.2);
+  --accent-border-mid: rgba(232, 155, 102, 0.3);
+  --accent-border-strong: rgba(232, 155, 102, 0.38);
+
+  --overlay: rgba(0, 0, 0, 0.65);
+
+  --semantic-ok-bg: rgba(40, 78, 52, 0.28);
+  --semantic-ok-border: rgba(120, 190, 140, 0.35);
+  --semantic-info-bg: rgba(40, 68, 90, 0.32);
+  --semantic-info-border: rgba(120, 170, 210, 0.32);
+  --semantic-info-text: #8cb8d8;
+  --semantic-recommendations-bg: rgba(90, 70, 28, 0.32);
+  --semantic-recommendations-border: rgba(210, 175, 90, 0.35);
+  --semantic-recommendations-text: #e5c478;
+  --semantic-error-bg: rgba(95, 40, 28, 0.38);
+  --semantic-error-border: rgba(232, 120, 90, 0.4);
+  --semantic-error-text: #f7b9a2;
+
+  --rg-header-bg: rgba(52, 38, 26, 0.9);
+  --rg-append-bg: rgba(52, 38, 26, 0.5);
+  --rg-append-fg: rgba(184, 164, 132, 0.55);
+  --rg-shadow: rgba(0, 0, 0, 0.5);
+  --rg-cell-editor-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
+
+  --sidebar-gradient: linear-gradient(180deg, rgba(42, 31, 22, 0.9), rgba(28, 20, 14, 0.86));
+  --button-primary-text: #2a1810;
+}
+
+@media (prefers-color-scheme: dark) {
+  /* When the user hasn't explicitly picked light, inherit the dark palette.
+     This block is intentionally a reference to the explicit selector's
+     declarations — we list the selector twice rather than the declarations. */
+  :root:not([data-theme='light']):not([data-theme='dark']) {
+    color-scheme: dark;
+    --bg: #1a1410;
+    --bg-strong: #211912;
+    --panel: rgba(42, 31, 22, 0.92);
+    --panel-strong: #2a1f16;
+    --line: rgba(240, 224, 196, 0.12);
+    --text: #f0e6d6;
+    --muted: #b8a484;
+    --accent: #e89b66;
+    --accent-strong: #f4b382;
+    --shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+    --bg-gradient:
+      radial-gradient(circle at top left, rgba(232, 155, 102, 0.08), transparent 30rem),
+      linear-gradient(135deg, #1a1410, #221810 45%, #2b1f15);
+
+    --panel-tint-soft: rgba(240, 224, 196, 0.05);
+    --panel-tint-mid: rgba(240, 224, 196, 0.06);
+    --panel-tint-strong: rgba(240, 224, 196, 0.08);
+    --panel-tint-faint: rgba(240, 224, 196, 0.03);
+    --panel-tint-veryfaint: rgba(240, 224, 196, 0.04);
+
+    --accent-bg-soft: rgba(232, 155, 102, 0.1);
+    --accent-bg-mid: rgba(232, 155, 102, 0.16);
+    --accent-bg-strong: rgba(232, 155, 102, 0.22);
+    --accent-border-soft: rgba(232, 155, 102, 0.2);
+    --accent-border-mid: rgba(232, 155, 102, 0.3);
+    --accent-border-strong: rgba(232, 155, 102, 0.38);
+
+    --overlay: rgba(0, 0, 0, 0.65);
+
+    --semantic-ok-bg: rgba(40, 78, 52, 0.28);
+    --semantic-ok-border: rgba(120, 190, 140, 0.35);
+    --semantic-info-bg: rgba(40, 68, 90, 0.32);
+    --semantic-info-border: rgba(120, 170, 210, 0.32);
+    --semantic-info-text: #8cb8d8;
+    --semantic-recommendations-bg: rgba(90, 70, 28, 0.32);
+    --semantic-recommendations-border: rgba(210, 175, 90, 0.35);
+    --semantic-recommendations-text: #e5c478;
+    --semantic-error-bg: rgba(95, 40, 28, 0.38);
+    --semantic-error-border: rgba(232, 120, 90, 0.4);
+    --semantic-error-text: #f7b9a2;
+
+    --rg-header-bg: rgba(52, 38, 26, 0.9);
+    --rg-append-bg: rgba(52, 38, 26, 0.5);
+    --rg-append-fg: rgba(184, 164, 132, 0.55);
+    --rg-shadow: rgba(0, 0, 0, 0.5);
+    --rg-cell-editor-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
+
+    --sidebar-gradient: linear-gradient(180deg, rgba(42, 31, 22, 0.9), rgba(28, 20, 14, 0.86));
+    --button-primary-text: #2a1810;
+  }
 }
 
 * {
@@ -58,7 +221,7 @@ table {
   gap: 0.85rem;
   padding: 0.85rem 1.25rem;
   font-size: 1rem;
-  background: rgba(178, 76, 43, 0.12);
+  background: var(--accent-bg-mid);
   border-bottom: 1px solid var(--line);
 }
 
@@ -70,7 +233,7 @@ table {
 .mode-banner.demo {
   font-size: 0.9rem;
   padding: 0.55rem 1rem;
-  background: rgba(178, 76, 43, 0.16);
+  background: var(--accent-bg-strong);
 }
 
 .mode-banner-link {
@@ -106,7 +269,7 @@ table {
   padding: 2rem;
   border: 1px solid var(--line);
   border-radius: 1.5rem;
-  background: rgba(255, 250, 242, 0.94);
+  background: var(--panel);
   box-shadow: var(--shadow);
 }
 
@@ -126,7 +289,7 @@ table {
   padding: 1rem 1.1rem;
   border: 1px solid var(--line);
   border-radius: 1rem;
-  background: rgba(255, 255, 255, 0.55);
+  background: var(--panel-tint-soft);
 }
 
 .startup-link {
@@ -154,7 +317,7 @@ table {
   padding: 0.8rem 0.9rem;
   border: 1px solid var(--line);
   border-radius: 0.85rem;
-  background: rgba(255, 255, 255, 0.45);
+  background: var(--panel-tint-veryfaint);
 }
 
 .startup-path-label {
@@ -174,7 +337,7 @@ table {
 .startup-error-details {
   border: 1px solid var(--line);
   border-radius: 1rem;
-  background: rgba(255, 255, 255, 0.48);
+  background: var(--panel-tint-veryfaint);
   padding: 1rem 1.1rem;
 }
 
@@ -213,7 +376,7 @@ table {
   position: fixed;
   inset: 0;
   z-index: 100;
-  background: rgba(47, 36, 22, 0.45);
+  background: var(--overlay);
   backdrop-filter: blur(6px);
 }
 
@@ -224,7 +387,7 @@ table {
   z-index: 101;
   width: min(54rem, calc(100vw - 2rem));
   transform: translate(-50%, -50%);
-  border: 1px solid rgba(86, 65, 36, 0.18);
+  border: 1px solid var(--line);
   border-radius: 1.4rem;
   background: var(--panel-strong);
   box-shadow: var(--shadow);
@@ -258,7 +421,7 @@ table {
 }
 
 .app-toast {
-  border: 1px solid rgba(86, 65, 36, 0.18);
+  border: 1px solid var(--line);
   border-radius: 1rem;
   background: var(--panel-strong);
   color: var(--text);
@@ -266,17 +429,17 @@ table {
 }
 
 .app-toast-error {
-  border-color: rgba(139, 45, 24, 0.25);
+  border-color: var(--semantic-error-border);
 }
 
 .app-toast-success {
-  border-color: rgba(65, 120, 72, 0.25);
+  border-color: var(--semantic-ok-border);
 }
 
 .sidebar {
   padding: 2rem 1.25rem;
   border-right: 1px solid var(--line);
-  background: linear-gradient(180deg, rgba(255, 251, 245, 0.9), rgba(247, 233, 207, 0.86));
+  background: var(--sidebar-gradient);
   backdrop-filter: blur(12px);
 }
 
@@ -292,6 +455,24 @@ table {
 
 .sidebar-block + .sidebar-block {
   margin-top: 1.5rem;
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.sidebar-title {
+  min-width: 0;
+}
+
+.theme-toggle {
+  width: 2.25rem;
+  height: 2.25rem;
+  font-size: 1.1rem;
+  flex-shrink: 0;
 }
 
 .eyebrow,
@@ -343,7 +524,7 @@ h3 {
 
 .nav-link.active,
 .nav-link:hover {
-  background: rgba(255, 255, 255, 0.55);
+  background: var(--panel-tint-soft);
   border-color: var(--line);
 }
 
@@ -378,7 +559,7 @@ h3 {
 
 .card {
   background: var(--panel);
-  border: 1px solid rgba(86, 65, 36, 0.12);
+  border: 1px solid var(--line);
   border-radius: 1.4rem;
   box-shadow: var(--shadow);
   padding: 1rem 1.1rem;
@@ -419,13 +600,13 @@ h3 {
   justify-content: center;
   padding: 0.35rem 0.7rem;
   border-radius: 999px;
-  background: rgba(178, 76, 43, 0.08);
-  border: 1px solid rgba(178, 76, 43, 0.15);
+  background: var(--accent-bg-soft);
+  border: 1px solid var(--accent-border-soft);
 }
 
 .pill.pill-warn {
-  background: rgba(178, 76, 43, 0.12);
-  border-color: rgba(178, 76, 43, 0.24);
+  background: var(--accent-bg-mid);
+  border-color: var(--accent-border-strong);
   color: var(--accent-strong);
 }
 
@@ -461,14 +642,14 @@ h3 {
   padding: 0.45rem 0.8rem;
   border-radius: 999px;
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.58);
+  background: var(--panel-tint-mid);
   color: var(--muted);
   cursor: pointer;
 }
 
 .migration-detail-tab.active {
-  background: rgba(178, 76, 43, 0.12);
-  border-color: rgba(178, 76, 43, 0.24);
+  background: var(--accent-bg-mid);
+  border-color: var(--accent-border-strong);
   color: var(--text);
 }
 
@@ -506,7 +687,7 @@ h3 {
   background: var(--panel-strong);
   color: var(--text);
   border: 2px solid var(--accent);
-  box-shadow: 0 8px 20px rgba(65, 47, 18, 0.12);
+  box-shadow: var(--rg-cell-editor-shadow);
 }
 
 .reactgrid {
@@ -557,15 +738,15 @@ h3 {
   padding: 0 0.55rem;
   white-space: nowrap;
   color: var(--text);
-  background: rgba(255, 255, 255, 0.34);
-  border-color: rgba(65, 47, 18, 0.12) !important;
+  background: var(--panel-tint-faint);
+  border-color: var(--line) !important;
   outline: none;
   font-family: 'IBM Plex Mono', 'SFMono-Regular', 'Menlo', monospace;
 }
 
 .reactgrid-content .rg-pane .rg-cell.rg-header-cell {
   font-weight: 700;
-  background: rgba(239, 226, 203, 0.8) !important;
+  background: var(--rg-header-bg) !important;
   color: var(--muted);
   text-transform: none;
   letter-spacing: 0.04em;
@@ -577,17 +758,17 @@ h3 {
 }
 
 .reactgrid-content .rg-pane .rg-cell.dirty-cell {
-  background: rgba(178, 76, 43, 0.16) !important;
-  box-shadow: inset 0 0 0 1px rgba(178, 76, 43, 0.22);
+  background: var(--accent-bg-strong) !important;
+  box-shadow: inset 0 0 0 1px var(--accent-border-mid);
 }
 
 .reactgrid-content .rg-pane .rg-cell.selected-row {
-  background: rgba(178, 76, 43, 0.12) !important;
+  background: var(--accent-bg-mid) !important;
 }
 
 .reactgrid-content .rg-pane .rg-cell.append-row-cell {
-  color: rgba(117, 97, 71, 0.6);
-  background: rgba(239, 226, 203, 0.18) !important;
+  color: var(--rg-append-fg);
+  background: var(--rg-append-bg) !important;
 }
 
 .reactgrid-content .rg-pane .rg-cell.row-action-cell {
@@ -627,7 +808,7 @@ h3 {
 
 .reactgrid-content .rg-pane .rg-partial-area.rg-partial-area-selected-range {
   border: 1px solid var(--accent);
-  background: rgba(178, 76, 43, 0.16);
+  background: var(--accent-bg-strong);
 }
 
 .reactgrid-content .rg-pane-shadow {
@@ -637,13 +818,13 @@ h3 {
 .reactgrid-content .rg-pane-shadow.shadow-left {
   left: 0;
   pointer-events: none;
-  box-shadow: 5px 0 3px -2px rgba(65, 47, 18, 0.08);
+  box-shadow: 5px 0 3px -2px var(--rg-shadow);
 }
 
 .reactgrid-content .rg-pane-shadow.shadow-top {
   top: 0;
   pointer-events: none;
-  box-shadow: 2px 2px 3px 1px rgba(65, 47, 18, 0.08);
+  box-shadow: 2px 2px 3px 1px var(--rg-shadow);
 }
 
 .rg-hidden-element {
@@ -655,10 +836,10 @@ h3 {
 }
 
 .selected-cell-panel {
-  border: 1px solid rgba(86, 65, 36, 0.12);
+  border: 1px solid var(--line);
   border-radius: 1rem;
   padding: 0.9rem 1rem;
-  background: rgba(255, 250, 242, 0.72);
+  background: var(--panel);
 }
 
 .cell-panel-tabs {
@@ -674,14 +855,14 @@ h3 {
   padding: 0.45rem 0.8rem;
   border-radius: 999px;
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.58);
+  background: var(--panel-tint-mid);
   color: var(--muted);
   cursor: pointer;
 }
 
 .cell-panel-tab.active {
-  background: rgba(178, 76, 43, 0.12);
-  border-color: rgba(178, 76, 43, 0.24);
+  background: var(--accent-bg-mid);
+  border-color: var(--accent-border-strong);
   color: var(--text);
 }
 
@@ -741,7 +922,7 @@ h3 {
 }
 
 .schema-command-error {
-  color: #b24c2b;
+  color: var(--accent);
   font-size: 0.92rem;
   white-space: normal;
   overflow-wrap: anywhere;
@@ -782,7 +963,7 @@ h3 {
   padding: 0.7rem 1rem;
   border-radius: 999px;
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--panel-tint-strong);
   color: var(--text);
   cursor: pointer;
 }
@@ -807,7 +988,7 @@ h3 {
   height: 2.5rem;
   border-radius: 999px;
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--panel-tint-strong);
   color: var(--text);
   cursor: pointer;
 }
@@ -817,8 +998,11 @@ h3 {
 }
 
 .button.primary {
+  /* Dark-mode --accent is a light warm orange — white text fails contrast on it,
+     so the palette defines --button-primary-text (white in light mode, deep
+     brown in dark) instead of hardcoding `color: white`. */
   background: linear-gradient(135deg, var(--accent), var(--accent-strong));
-  color: white;
+  color: var(--button-primary-text);
   border-color: transparent;
 }
 
@@ -872,9 +1056,9 @@ h3 {
 }
 
 .code-block.error {
-  color: #7a1d0d;
-  background: rgba(255, 240, 231, 0.92);
-  border-color: rgba(178, 76, 43, 0.28);
+  color: var(--semantic-error-text);
+  background: var(--semantic-error-bg);
+  border-color: var(--semantic-error-border);
 }
 
 .stack,
@@ -884,8 +1068,8 @@ h3 {
 }
 
 .schema-card.ok {
-  border-color: rgba(45, 126, 68, 0.25);
-  background: rgba(242, 255, 245, 0.92);
+  border-color: var(--semantic-ok-border);
+  background: var(--semantic-ok-bg);
 }
 
 .stack.schema-cards {
@@ -911,17 +1095,17 @@ h3 {
 }
 
 .schema-card.warn {
-  border-color: rgba(178, 76, 43, 0.22);
+  border-color: var(--accent-border-mid);
 }
 
 .schema-card.info {
-  border-color: rgba(45, 111, 148, 0.22);
-  background: rgba(238, 248, 255, 0.94);
+  border-color: var(--semantic-info-border);
+  background: var(--semantic-info-bg);
 }
 
 .schema-card.recommendations {
-  border-color: rgba(138, 104, 24, 0.22);
-  background: rgba(255, 247, 222, 0.94);
+  border-color: var(--semantic-recommendations-border);
+  background: var(--semantic-recommendations-bg);
 }
 
 .schema-card-title-row {
@@ -959,11 +1143,11 @@ h3 {
 }
 
 .schema-card-status.info {
-  color: #2d6f94;
+  color: var(--semantic-info-text);
 }
 
 .schema-card-status.recommendations {
-  color: #8a6818;
+  color: var(--semantic-recommendations-text);
 }
 
 .schema-card.compact {
@@ -1078,8 +1262,8 @@ h3 {
 }
 
 .pill-ok {
-  background: rgba(45, 126, 68, 0.08);
-  border-color: rgba(45, 126, 68, 0.18);
+  background: var(--semantic-ok-bg);
+  border-color: var(--semantic-ok-border);
 }
 
 form fieldset {

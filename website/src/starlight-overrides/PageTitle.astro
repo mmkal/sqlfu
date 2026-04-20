@@ -1,0 +1,33 @@
+---
+// Matches @astrojs/starlight/constants; that module isn't in the package's exports map.
+const PAGE_TITLE_ID = '_top';
+
+const {entry} = Astro.locals.starlightRoute;
+const sourceUrl = entry.data.sourceUrl;
+const sourcePath = entry.data.sourcePath;
+---
+
+{
+  sourceUrl && sourcePath && (
+    <div class="doc-source-meta">
+      Source:{' '}
+      <a href={sourceUrl} target="_blank" rel="noreferrer">
+        {sourcePath}
+      </a>
+    </div>
+  )
+}
+
+<h1 id={PAGE_TITLE_ID}>{entry.data.title}</h1>
+
+<style>
+  @layer starlight.core {
+    h1 {
+      margin-top: 1rem;
+      font-size: var(--sl-text-h1);
+      line-height: var(--sl-line-height-headings);
+      font-weight: 600;
+      color: var(--sl-color-white);
+    }
+  }
+</style>

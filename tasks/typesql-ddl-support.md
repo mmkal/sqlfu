@@ -1,7 +1,14 @@
-status: ready
+status: in-progress
 size: medium
 
 # Add DDL support to vendored typesql, drop the regex shim in typegen
+
+## Executive summary (for humans skimming)
+
+In-progress as of 2026-04-20. Goal: teach the vendored typesql sqlite analyzer to recognize DDL/connection-control statements (`create`, `drop`, `alter`, `pragma`, `vacuum`, `begin`/`commit`, etc.) and return a new `queryType: 'Ddl'` descriptor, then wire that through every downstream consumer. Once the analyzer knows about DDL, we delete the `isDdlStatement` regex + `ddlFiles` partition in `typegen/index.ts` and branch on `descriptor.queryType === 'Ddl'` inside the normal analysis path.
+
+Main completed pieces: TBD (filled in as work lands).
+Main missing pieces: TBD.
 
 ## Context
 
@@ -15,55 +22,128 @@ Quoting the review:
 
 The companion null-deref bug (parameterless `delete from <t>;` crashing on `expr.function_name()`) was fixed in the same PR inside `traverse_delete_stmt`. That one was a 3-line null guard. DDL support is bigger, which is why it's its own task.
 
-## Why this wasn't done in PR #23
+## Concrete design
 
-Extending typesql to recognize DDL requires:
+### 1. New `DdlResult` variant in the shared traverse result union
 
-1. A new `queryType: 'Ddl'` variant (or similar) on the descriptor shape produced by `validateAndDescribeQuery`.
-2. Plumbing that variant through every downstream consumer — typesql's own codegen paths in `codegen/sqlite.ts`, the `TsDescriptor` type, the re-exported `GeneratedQueryDescriptor` in `typegen/index.ts`, and everywhere that switches on `queryType` (wrapper rendering, query catalog, ad-hoc analysis).
-3. A `traverse_ddl_stmt` (or equivalent branch in `traverse_Sql_stmtContext`) that introspects the ANTLR parse tree for DDL statements and returns a descriptor with empty `parameters`, empty `columns`, and the raw SQL text.
+`packages/sqlfu/src/vendor/typesql/shared-analyzer/traverse.ts` exports `TraverseResult2 = SelectResult | InsertResult | UpdateResult | DeleteResult`. Add a fifth member:
 
-Of these (3) is the only one we'd want to touch — the others are bookkeeping. But even (3) is non-trivial: the ANTLR grammar covers `create_table_stmt`, `create_index_stmt`, `create_view_stmt`, `drop_table_stmt`, `alter_table_stmt`, plus `pragma_stmt` and the transactional statements (`begin`, `commit`, etc.). Each has its own ANTLR rule context. We need to either handle each case or have a fallback that says "this is an unanalyzable side-effect-only statement, here's the SQL text, trust me."
+```ts
+export type DdlResult = {
+  queryType: 'Ddl';
+  constraints: Constraint[];
+  parameters: TypeAndNullInferParam[];
+  returningColumns: TypeAndNullInfer[];
+};
+```
 
-## Proposed shape
+`constraints`, `parameters`, `returningColumns` are always empty arrays. They're included so downstream code that does `queryResult.parameters.forEach(...)` on the union keeps type-checking without a narrowing branch.
 
-Minimum viable version:
+### 2. Recognize DDL in the sqlite dispatcher
 
-1. In `traverse_Sql_stmtContext`, after checking select/insert/update/delete, inspect `sql_stmt.getChildCount()` and pull the single child. If it's any of the DDL contexts, return a new descriptor:
+In `packages/sqlfu/src/vendor/typesql/sqlite-query-analyzer/traverse.ts::traverse_Sql_stmtContext`, after the select/insert/update/delete branches, check each DDL context returned by the `Sql_stmtContext` accessors (see `SQLiteParser.ts` lines 10671+):
 
-   ```ts
-   const ddlResult: DdlResult = {
-     queryType: 'Ddl',
-     constraints: [],
-     parameters: [],
-     returningColumns: [],
-   };
-   ```
+- `create_table_stmt`, `create_index_stmt`, `create_view_stmt`, `create_trigger_stmt`, `create_virtual_table_stmt`
+- `alter_table_stmt`, `drop_stmt`
+- `pragma_stmt`, `vacuum_stmt`, `reindex_stmt`, `analyze_stmt`, `attach_stmt`, `detach_stmt`
+- `begin_stmt`, `commit_stmt`, `rollback_stmt`, `savepoint_stmt`, `release_stmt`
 
-2. Add `'Ddl'` to the `queryType` union in the descriptor + TsDescriptor types.
+If any of these is non-null, return a `DdlResult` descriptor with empty arrays.
 
-3. In `typegen/index.ts`, branch on `descriptor.queryType === 'Ddl'` inside the main renderer and call `renderDdlWrapper`. Delete `isDdlStatement` and the `ddlFiles` partition.
+Implementation: collect the accessor calls and check with `.some(ctx => ctx != null)`; return early with the trivial result.
 
-4. Update the catalog writer to either skip DDL entries (current behavior — they aren't form-useful) or emit a `kind: 'ddl'` catalog variant.
+### 3. Handle `Ddl` in `createSchemaDefinition`
 
-Open question: do we want typesql to validate the DDL (e.g. "does the column type exist in SQLite") before emitting the descriptor? Probably yes for `create table`, not for `pragma`. For v1, skip validation — just recognize the statement type and emit the trivial descriptor.
+`packages/sqlfu/src/vendor/typesql/sqlite-query-analyzer/parser.ts::createSchemaDefinition` has a `if (queryResult.queryType === 'Select' | 'Insert' | 'Update' | 'Delete') { ... }` ladder. Add a `Ddl` branch that returns a minimal `SchemaDef`:
 
-## Why it's worth doing
+```ts
+if (queryResult.queryType === 'Ddl') {
+  return right({
+    sql,
+    queryType: 'Ddl',
+    multipleRowsResult: false,
+    columns: [],
+    parameters: [],
+  });
+}
+```
 
-- Removes a `\b(create|drop|...)\b` regex from sqlfu's own source. Less surface area to maintain.
-- Edge cases the regex won't catch today: leading comments before the DDL statement, multi-statement `.sql` files (`create table ...; create index ...;`), DDL with a `RETURNING` clause (PostgreSQL; not SQLite yet, but typesql aims to support other dialects). typesql's ANTLR grammar handles all these.
-- A future `queryType: 'Ddl'` also unlocks proper DDL handling in the UI query catalog and ad-hoc analysis flow — they currently don't understand DDL at all.
+Add `'Ddl'` to `QueryType` in `packages/sqlfu/src/vendor/typesql/types.ts`.
 
-## Vendor update hygiene
+### 4. Handle `Ddl` in `createTsDescriptor`
 
-`packages/sqlfu/src/vendor/typesql/CLAUDE.md` notes the null-deref divergence that landed in PR #23. Adding DDL support is another divergence worth documenting before landing. If upstream typesql later adds DDL support independently, the update workflow is: copy upstream `src/`, reapply the DDL branch on top (or pick upstream's shape if it's compatible).
+`packages/sqlfu/src/vendor/typesql/codegen/sqlite.ts::createTsDescriptor` builds a `TsDescriptor`. For DDL the output is trivially `{sql, queryType: 'Ddl', multipleRowsResult: false, columns: [], parameterNames: [], parameters: []}`. The existing code already handles the generic case; branch `mapColumns` explicitly: `if (queryType === 'Ddl') return [];` so it doesn't pretend there's an insert/update/delete-shaped metadata row.
+
+### 5. Explain/prepare DDL
+
+`validateAndDescribeQuery` calls `explainSql` which does `db.prepare(sql)`. For DDL this should succeed (sqlite prepares DDL fine). For multi-statement DDL files (`create table x(...); create index y on x(...);`), sqlite's `prepare` only compiles the first statement — we're using prepare as a syntax check, which still works.
+
+For statements sqlite would reject before execution (malformed `create table`), the existing prepare error flows through as-is. Good.
+
+### 6. Propagate `'Ddl'` through the generated descriptor type
+
+In `packages/sqlfu/src/typegen/analyze-vendored-typesql.ts`, add `'Ddl'` to the `queryType` union on `GeneratedQueryDescriptor`.
+
+In `packages/sqlfu/src/typegen/query-catalog.ts`, add `'Ddl'` where the queryType union appears (if we do emit DDL entries). For v1 we skip DDL from the catalog, matching today's behavior, so this is a no-op.
+
+### 7. Update `typegen/index.ts`
+
+Delete:
+- `isDdlStatement` function
+- `ddlFiles` / `nonDdlFiles` partition
+- `ddlFiles` parameter on `writeQueryCatalog`
+
+Keep `renderDdlWrapper` but call it based on `descriptor.queryType === 'Ddl'` inside the normal per-query loop. The analysis result (`analysis.ok === true` with a DDL descriptor) becomes the trigger.
+
+`getResultMode` / `getReturnType` / `getResultFields` don't need new branches because we short-circuit to `renderDdlWrapper` before any of them are reached. The catalog writer filters DDL out before building catalog entries (same as today).
+
+### 8. Document the divergence
+
+Add a line to `packages/sqlfu/src/vendor/typesql/CLAUDE.md`:
+
+> `sqlite-query-analyzer/traverse.ts::traverse_Sql_stmtContext` — recognizes DDL / connection-control statements (create/drop/alter/pragma/vacuum/begin/commit/etc.) and returns a `DdlResult` descriptor with empty arrays. Upstream throws for anything that isn't select/insert/update/delete.
+
+## Test cases
+
+Add / keep:
+
+- Existing: `create table if not exists sqlfu_migrations(...)` — trivial wrapper + no catalog entry.
+- New: `drop table foo` — trivial wrapper.
+- New: `pragma foreign_keys = on` — trivial wrapper.
+- New: multi-statement DDL file (`create table x (...); create index ix on x(...);`) — trivial wrapper, both statements preserved in the emitted SQL constant.
+- New: DDL file with leading SQL comments — trivial wrapper. (The deleted regex stripped comments before matching; the ANTLR parser natively ignores them, so this is a free improvement.)
+- New: `alter table posts add column title text` — trivial wrapper.
+
+## Checklist
+
+- [ ] Add `DdlResult` to shared-analyzer/traverse.ts `TraverseResult2` union
+- [ ] Recognize DDL contexts in sqlite-query-analyzer/traverse.ts `traverse_Sql_stmtContext`
+- [ ] Handle `Ddl` branch in sqlite-query-analyzer/parser.ts `createSchemaDefinition`
+- [ ] Add `'Ddl'` to `QueryType` in vendor/typesql/types.ts
+- [ ] Handle `Ddl` in codegen/sqlite.ts (`createTsDescriptor`, `mapColumns`)
+- [ ] Add `'Ddl'` to `GeneratedQueryDescriptor` in typegen/analyze-vendored-typesql.ts
+- [ ] Delete `isDdlStatement`, `ddlFiles` partition in typegen/index.ts; branch on `queryType === 'Ddl'` instead
+- [ ] Update `writeQueryCatalog` signature (drop `ddlFiles` param, skip Ddl descriptors inline)
+- [ ] Document divergence in vendor/typesql/CLAUDE.md
+- [ ] Red test: DDL file with leading SQL comments produces a valid wrapper
+- [ ] Red test: multi-statement DDL file (`create table ...; create index ...;`) produces a valid wrapper
+- [ ] Verify existing DDL test (`create table if not exists sqlfu_migrations...`) still passes
+- [ ] Add tests: `drop table`, `pragma foreign_keys = on`, `alter table`
+- [ ] `pnpm --filter sqlfu test --run` all green
+- [ ] `pnpm --filter sqlfu typecheck` clean
+- [ ] `pnpm --filter sqlfu build` succeeds
 
 ## Not in scope
 
-- MySQL / Postgres DDL support. typesql supports multiple dialects; the fix should target the sqlite path only. Bringing the other dialects along is a separate task.
-- DDL validation (checking that referenced columns exist, etc.).
+- MySQL / Postgres DDL support. typesql supports multiple dialects; this fix targets the sqlite path only.
+- DDL validation beyond what `db.prepare(sql)` already provides.
 - Runtime behavior changes. Wrappers still call `client.run(sql)` — no smarter handling of `if not exists` semantics or similar.
+- Emitting a `kind: 'ddl'` catalog entry variant. For v1 we skip DDL from the catalog (same as today), leaving that as a follow-up if/when the UI wants to render DDL cards.
 
 ## Breadcrumb
 
 Raised in review of PR #23 at comments [#3111996426](https://github.com/mmkal/sqlfu/pull/23#discussion_r3111996426) and [#3112007601](https://github.com/mmkal/sqlfu/pull/23#discussion_r3112007601). PR #23 shipped with the regex shim + documented it as a conscious stopgap; this task is the proper fix.
+
+## Implementation log
+
+(Added as work progresses.)

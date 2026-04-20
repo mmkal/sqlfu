@@ -49,11 +49,11 @@ async function main() {
     db: devDbPath,
     definitions: definitionsPath,
     queries: queriesDir,
-    generatedImportExtension: '.js',
     generate: {
       validator: null,
       prettyErrors: false,
       sync: false,
+      importExtension: '.js',
     },
   };
 

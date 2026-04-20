@@ -104,7 +104,7 @@ export async function generateQueryTypesForConfig(config: SqlfuProjectConfig): P
   );
 
   await writeTablesFile(generatedDir, schema);
-  await writeGeneratedBarrel(generatedDir, queryFiles, config.generatedImportExtension);
+  await writeGeneratedBarrel(generatedDir, queryFiles, config.generate.importExtension);
   await writeQueryCatalog(config, queryFiles, queryAnalyses, ddlFiles, schema);
   if (config.migrations) {
     await writeMigrationsBundle(config);
@@ -145,24 +145,42 @@ function renderDdlWrapper(input: {relativePath: string; sql: string; sync: boole
   const capitalizedName = functionName[0]!.toUpperCase() + functionName.slice(1);
   const sqlConstantName = `${capitalizedName}Sql`;
   const clientType = input.sync ? 'SyncClient' : 'Client';
-  const functionSignature = input.sync
-    ? `export function ${functionName}(client: ${clientType}): void`
-    : `export async function ${functionName}(client: ${clientType}): Promise<void>`;
-  const runCall = input.sync ? `\tclient.run(query);` : `\tawait client.run(query);`;
+  const maybeAsync = input.sync ? '' : 'async ';
+  const maybeAwait = input.sync ? '' : 'await ';
+  const returnType = input.sync ? 'void' : 'Promise<void>';
 
   return [
-    `import type {${clientType}, SqlQuery} from 'sqlfu';`,
+    `import type {${clientType}} from 'sqlfu';`,
     ``,
-    `export const ${sqlConstantName} = \``,
-    normalizeSqlForTemplate(input.sql).join('\n').trim(),
-    `\``,
+    ...renderSqlConstant(sqlConstantName, input.sql),
     ``,
-    `${functionSignature} {`,
-    `\tconst query: SqlQuery = { sql: ${sqlConstantName}, args: [], name: ${JSON.stringify(queryName)} };`,
-    runCall,
-    `}`,
+    `export const ${functionName} = Object.assign(`,
+    `\t${maybeAsync}function ${functionName}(client: ${clientType}): ${returnType} {`,
+    `\t\tconst query = { sql: ${sqlConstantName}, args: [], name: ${JSON.stringify(queryName)} };`,
+    `\t\t${maybeAwait}client.run(query);`,
+    `\t},`,
+    `\t{ sql: ${sqlConstantName} },`,
+    `);`,
     ``,
   ].join('\n');
+}
+
+/**
+ * One-liner when the whole `export const Foo = \`SQL\`` line fits under 80 characters; otherwise
+ * split across three lines with the SQL body on its own line. Short queries like
+ * `delete from sqlfu_migrations;` read much better as one line.
+ */
+function renderSqlConstant(constantName: string, sql: string): string[] {
+  const trimmed = normalizeSqlForTemplate(sql).join('\n').trim();
+  const oneLiner = `export const ${constantName} = \`${trimmed}\``;
+  if (!trimmed.includes('\n') && oneLiner.length <= 80) {
+    return [oneLiner];
+  }
+  return [
+    `export const ${constantName} = \``,
+    trimmed,
+    `\``,
+  ];
 }
 
 export async function analyzeAdHocSqlForConfig(config: SqlfuProjectConfig, sql: string): Promise<AdHocQueryAnalysis> {
@@ -320,14 +338,14 @@ async function loadQueryFiles(queriesDir: string): Promise<readonly QueryFile[]>
 async function writeGeneratedBarrel(
   generatedDir: string,
   queryFiles: readonly QueryFile[],
-  generatedImportExtension: '.js' | '.ts',
+  importExtension: '.js' | '.ts',
 ): Promise<void> {
   const lines = [
-    `export * from "./tables${generatedImportExtension}";`,
+    `export * from "./tables${importExtension}";`,
     ...queryFiles
       .map((queryFile) => queryFile.relativePath)
       .sort((left, right) => left.localeCompare(right))
-      .map((relativePath) => `export * from "./${relativePath}.sql${generatedImportExtension}";`),
+      .map((relativePath) => `export * from "./${relativePath}.sql${importExtension}";`),
   ];
   await fs.writeFile(path.join(generatedDir, 'index.ts'), lines.join('\n') + '\n');
 }
@@ -530,44 +548,57 @@ function renderQueryWrapper(input: {
   const queryName = input.relativePath;
   const functionName = toCamelCase(queryName);
   const capitalizedName = functionName[0]!.toUpperCase() + functionName.slice(1);
-  const dataTypeName = `${capitalizedName}Data`;
-  const paramsTypeName = `${capitalizedName}Params`;
-  const resultTypeName = `${capitalizedName}Result`;
   const sqlConstantName = `${capitalizedName}Sql`;
-  const returnType = getReturnType(input.descriptor, resultTypeName);
-  const typeBlocks = buildTypeBlocks(input.descriptor, {
-    dataTypeName,
-    paramsTypeName,
-    resultTypeName,
-  });
-  const queryArgs = buildQueryArgs(input.descriptor);
-  const restParameters = buildFunctionParameters(input.descriptor, {
-    dataTypeName,
-    paramsTypeName,
-  });
 
   const clientType = input.sync ? 'SyncClient' : 'Client';
-  const functionHeader = input.sync
-    ? `export function ${functionName}(client: ${clientType}${restParameters ? `, ${restParameters}` : ''}): ${returnType} {`
-    : `export async function ${functionName}(client: ${clientType}${restParameters ? `, ${restParameters}` : ''}): Promise<${returnType}> {`;
+  const maybeAsync = input.sync ? '' : 'async ';
+  const hasData = (input.descriptor.data?.length ?? 0) > 0;
+  const hasParams = input.descriptor.parameters.length > 0;
+  const dataTypeRef = `${functionName}.Data`;
+  const paramsTypeRef = `${functionName}.Params`;
+  const resultTypeRef = `${functionName}.Result`;
+
+  const returnType = getReturnType(input.descriptor, resultTypeRef);
+  const queryArgs = buildQueryArgs(input.descriptor);
+
+  const functionSignatureArgs: string[] = [`client: ${clientType}`];
+  if (hasData) functionSignatureArgs.push(`data: ${dataTypeRef}`);
+  if (hasParams) functionSignatureArgs.push(`params: ${paramsTypeRef}`);
+
+  const functionDeclaration = input.sync
+    ? `\tfunction ${functionName}(${functionSignatureArgs.join(', ')}): ${returnType} {`
+    : `\t${maybeAsync}function ${functionName}(${functionSignatureArgs.join(', ')}): Promise<${returnType}> {`;
+
+  const namespaceLines: string[] = [];
+  if (hasData) {
+    namespaceLines.push(`\texport type Data = ${renderObjectTypeBody(input.descriptor.data!, 'parameter')};`);
+  }
+  if (hasParams) {
+    namespaceLines.push(`\texport type Params = ${renderObjectTypeBody(input.descriptor.parameters, 'parameter')};`);
+  }
+  namespaceLines.push(`\texport type Result = ${renderObjectTypeBody(getResultFields(input.descriptor), 'result')};`);
 
   return [
-    `import type {${clientType}, SqlQuery} from 'sqlfu';`,
+    `import type {${clientType}} from 'sqlfu';`,
     ``,
-    ...typeBlocks,
+    ...renderSqlConstant(sqlConstantName, input.descriptor.sql),
     ``,
-    `export const ${sqlConstantName} = \``,
-    normalizeSqlForTemplate(input.descriptor.sql).join('\n').trim(),
-    `\``,
-    ``,
-    functionHeader,
-    `\tconst query: SqlQuery = { sql: ${sqlConstantName}, args: ${queryArgs}, name: ${JSON.stringify(queryName)} };`,
+    `export const ${functionName} = Object.assign(`,
+    functionDeclaration,
+    `\t\tconst query = { sql: ${sqlConstantName}, args: ${queryArgs}, name: ${JSON.stringify(queryName)} };`,
     ...buildGeneratedImplementation({
       resultMode: getResultMode(input.descriptor),
-      resultType: resultTypeName,
+      resultType: resultTypeRef,
       resultProperties: getResultProperties(input.descriptor),
       sync: input.sync,
+      indent: '\t\t',
     }),
+    `\t},`,
+    `\t{ sql: ${sqlConstantName} },`,
+    `);`,
+    ``,
+    `export namespace ${functionName} {`,
+    ...namespaceLines,
     `}`,
     ``,
   ].join('\n');
@@ -945,7 +976,7 @@ function buildValidatorImplementation(input: {
   sync: boolean;
 }): string[] {
   const {emitter, prettyErrors, sync} = input;
-  const await_ = sync ? '' : 'await ';
+  const maybeAwait = sync ? '' : 'await ';
   const rowExpr = (rowExpression: string) => rowParseExpressionOrNull(emitter, rowExpression, prettyErrors);
   const rowBlock = (rowExpression: string, indent: string) =>
     rowParseStatements(emitter, rowExpression, prettyErrors, indent);
@@ -954,12 +985,12 @@ function buildValidatorImplementation(input: {
     const expr = rowExpr('row');
     if (expr) {
       return [
-        `\t\tconst rows = ${await_}client.all(query);`,
+        `\t\tconst rows = ${maybeAwait}client.all(query);`,
         `\t\treturn rows.map((row) => ${expr});`,
       ];
     }
     return [
-      `\t\tconst rows = ${await_}client.all(query);`,
+      `\t\tconst rows = ${maybeAwait}client.all(query);`,
       `\t\treturn rows.map((row) => {`,
       ...rowBlock('row', '\t\t\t'),
       `\t\t});`,
@@ -970,12 +1001,12 @@ function buildValidatorImplementation(input: {
     const expr = rowExpr('rows[0]');
     if (expr) {
       return [
-        `\t\tconst rows = ${await_}client.all(query);`,
+        `\t\tconst rows = ${maybeAwait}client.all(query);`,
         `\t\treturn rows.length > 0 ? ${expr} : null;`,
       ];
     }
     return [
-      `\t\tconst rows = ${await_}client.all(query);`,
+      `\t\tconst rows = ${maybeAwait}client.all(query);`,
       `\t\tif (rows.length === 0) return null;`,
       ...rowBlock('rows[0]', '\t\t'),
     ];
@@ -985,12 +1016,12 @@ function buildValidatorImplementation(input: {
     const expr = rowExpr('rows[0]');
     if (expr) {
       return [
-        `\t\tconst rows = ${await_}client.all(query);`,
+        `\t\tconst rows = ${maybeAwait}client.all(query);`,
         `\t\treturn ${expr};`,
       ];
     }
     return [
-      `\t\tconst rows = ${await_}client.all(query);`,
+      `\t\tconst rows = ${maybeAwait}client.all(query);`,
       ...rowBlock('rows[0]', '\t\t'),
     ];
   }
@@ -1025,7 +1056,7 @@ function buildValidatorImplementation(input: {
   const resultReturnLines = metadataExpr ? [`\t\treturn ${metadataExpr};`] : rowBlock('rawResult', '\t\t');
 
   return [
-    `\t\tconst result = ${await_}client.run(query);`,
+    `\t\tconst result = ${maybeAwait}client.run(query);`,
     ...guards,
     ...rawResultLines,
     ...resultReturnLines,
@@ -1056,36 +1087,20 @@ function getResultMode(descriptor: GeneratedQueryDescriptor): 'many' | 'nullable
   return 'one';
 }
 
-function buildTypeBlocks(
-  descriptor: GeneratedQueryDescriptor,
-  names: {
-    dataTypeName: string;
-    paramsTypeName: string;
-    resultTypeName: string;
-  },
-): string[] {
-  const blocks: string[] = [];
-  if ((descriptor.data?.length ?? 0) > 0) {
-    blocks.push(renderObjectType(names.dataTypeName, descriptor.data!, 'parameter'));
-  }
-  if (descriptor.parameters.length > 0) {
-    blocks.push(renderObjectType(names.paramsTypeName, descriptor.parameters, 'parameter'));
-  }
-  blocks.push(renderObjectType(names.resultTypeName, getResultFields(descriptor), 'result'));
-  return blocks.flatMap((block, index) => (index === 0 ? [block] : ['', block]));
-}
-
-function renderObjectType(
-  typeName: string,
+/**
+ * Inline `{ foo: string; bar: number | null }` for use as the RHS of a namespace-scoped
+ * `export type Foo = …;`. Indentation is two tabs — one for the namespace, one for the fields.
+ */
+function renderObjectTypeBody(
   fields: readonly GeneratedField[],
   fieldKind: 'parameter' | 'result',
 ): string {
   const lines = fields.map((field) => {
     const optional = fieldKind === 'parameter' ? Boolean(field.optional) : !field.notNull;
     const orNull = fieldKind === 'parameter' && !field.notNull ? ' | null' : '';
-    return `\t${field.name}${optional ? '?' : ''}: ${field.tsType}${orNull};`;
+    return `\t\t${field.name}${optional ? '?' : ''}: ${field.tsType}${orNull};`;
   });
-  return [`export type ${typeName} = {`, ...lines, `}`].join('\n');
+  return [`{`, ...lines, `\t}`].join('\n');
 }
 
 function objectSchema(
@@ -1180,23 +1195,6 @@ function getResultFields(descriptor: GeneratedQueryDescriptor): readonly Generat
     ];
   }
   return [{name: 'rowsAffected', tsType: 'number', notNull: true}];
-}
-
-function buildFunctionParameters(
-  descriptor: GeneratedQueryDescriptor,
-  names: {
-    dataTypeName: string;
-    paramsTypeName: string;
-  },
-): string {
-  const parameters: string[] = [];
-  if ((descriptor.data?.length ?? 0) > 0) {
-    parameters.push(`data: ${names.dataTypeName}`);
-  }
-  if (descriptor.parameters.length > 0) {
-    parameters.push(`params: ${names.paramsTypeName}`);
-  }
-  return parameters.join(', ');
 }
 
 function buildQueryArgs(descriptor: GeneratedQueryDescriptor): string {
@@ -1334,24 +1332,27 @@ function buildGeneratedImplementation(input: {
     readonly optional: boolean;
   }>;
   sync: boolean;
+  indent: string;
 }): string[] {
-  const await_ = input.sync ? '' : 'await ';
+  const maybeAwait = input.sync ? '' : 'await ';
+  const i = input.indent;
+  const ii = `${i}\t`;
 
   if (input.resultMode === 'many') {
     // `many` returns the client's result directly — the outer function's Promise<T[]> / T[] return
     // type already matches client.all's return type, so there's no need to await and re-wrap.
-    return [`\treturn client.all<${input.resultType}>(query);`];
+    return [`${i}return client.all<${input.resultType}>(query);`];
   }
 
   if (input.resultMode === 'nullableOne') {
     return [
-      `\tconst rows = ${await_}client.all<${input.resultType}>(query);`,
-      `\treturn rows.length > 0 ? rows[0] : null;`,
+      `${i}const rows = ${maybeAwait}client.all<${input.resultType}>(query);`,
+      `${i}return rows.length > 0 ? rows[0] : null;`,
     ];
   }
 
   if (input.resultMode === 'one') {
-    return [`\tconst rows = ${await_}client.all<${input.resultType}>(query);`, `\treturn rows[0];`];
+    return [`${i}const rows = ${maybeAwait}client.all<${input.resultType}>(query);`, `${i}return rows[0];`];
   }
 
   const guards = input.resultProperties.flatMap((property) => {
@@ -1360,19 +1361,19 @@ function buildGeneratedImplementation(input: {
     }
 
     return [
-      `\tif (result.${property.name} === undefined${property.name === 'lastInsertRowid' ? ' || result.lastInsertRowid === null' : ''}) {`,
-      `\t\tthrow new Error('Expected ${property.name} to be present on query result');`,
-      `\t}`,
+      `${i}if (result.${property.name} === undefined${property.name === 'lastInsertRowid' ? ' || result.lastInsertRowid === null' : ''}) {`,
+      `${ii}throw new Error('Expected ${property.name} to be present on query result');`,
+      `${i}}`,
     ];
   });
   const resultAssignments = input.resultProperties.map((property) => {
     if (property.name === 'lastInsertRowid') {
-      return `\t\tlastInsertRowid: Number(result.lastInsertRowid),`;
+      return `${ii}lastInsertRowid: Number(result.lastInsertRowid),`;
     }
 
-    return `\t\t${property.name}: result.${property.name},`;
+    return `${ii}${property.name}: result.${property.name},`;
   });
-  return [`\tconst result = ${await_}client.run(query);`, ...guards, `\treturn {`, ...resultAssignments, `\t};`];
+  return [`${i}const result = ${maybeAwait}client.run(query);`, ...guards, `${i}return {`, ...resultAssignments, `${i}};`];
 }
 
 async function loadSchema(databasePath: string): Promise<ReadonlyMap<string, RelationInfo>> {

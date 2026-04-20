@@ -1,5 +1,7 @@
 Prefer lowercase SQL keywords.
 
+Prefer concise truthy/falsy checks. `foo && bar` over `foo !== undefined ? bar : undefined`; `!foo` over `foo === undefined` when the guarded branch short-circuits. Avoid verbose `=== undefined` / `!== undefined` chains unless the code genuinely needs to distinguish `undefined` from `null` / `0` / `''`.
+
 Note: this library is in pre-pre-pre-alpha. It is EXTREMELY HARMFUL to write or recommend changes that keep around legacy baggage. Instead, DELETE stuff that is no longer serving us if we update the design, implementation or API.
 
 The project is currently in two parts:

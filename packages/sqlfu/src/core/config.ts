@@ -76,15 +76,14 @@ export function resolveProjectConfig(
   return {
     projectRoot: configDir,
     db: resolveConfigPathValue(configDir, fileConfig.db),
-    migrations:
-      fileConfig.migrations === undefined ? undefined : resolveConfigPathValue(configDir, fileConfig.migrations),
+    migrations: fileConfig.migrations && resolveConfigPathValue(configDir, fileConfig.migrations),
     definitions: resolveConfigPathValue(configDir, fileConfig.definitions),
     queries: resolveConfigPathValue(configDir, fileConfig.queries),
-    generatedImportExtension: fileConfig.generatedImportExtension ?? inferGeneratedImportExtension(tsconfigPreferences),
     generate: {
       validator: fileConfig.generate?.validator ?? null,
       prettyErrors: fileConfig.generate?.prettyErrors !== false,
       sync: fileConfig.generate?.sync === true,
+      importExtension: fileConfig.generate?.importExtension ?? inferImportExtension(tsconfigPreferences),
     },
   };
 }
@@ -149,7 +148,7 @@ async function loadTsconfigPreferences(cwd: string): Promise<TsconfigPreferences
   };
 }
 
-function inferGeneratedImportExtension(tsconfigPreferences: TsconfigPreferences): '.js' | '.ts' {
+function inferImportExtension(tsconfigPreferences: TsconfigPreferences): '.js' | '.ts' {
   return tsconfigPreferences.prefersTsImportExtensions ? '.ts' : '.js';
 }
 
@@ -236,6 +235,18 @@ function assertConfigShape(configPath: string, config: object): asserts config i
     if (sync !== undefined && typeof sync !== 'boolean') {
       throw new Error(`Invalid sqlfu config at ${configPath}: "generate.sync" must be a boolean.`);
     }
+
+    const importExtension = generateRecord.importExtension;
+    if (importExtension !== undefined && importExtension !== '.js' && importExtension !== '.ts') {
+      throw new Error(`Invalid sqlfu config at ${configPath}: "generate.importExtension" must be '.js' or '.ts'.`);
+    }
+  }
+
+  if ('generatedImportExtension' in config) {
+    throw new Error(
+      `Invalid sqlfu config at ${configPath}: "generatedImportExtension" at the top level is no longer supported. ` +
+        `Use "generate.importExtension: '.js' | '.ts'" instead.`,
+    );
   }
 }
 

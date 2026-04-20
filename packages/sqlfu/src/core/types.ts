@@ -112,6 +112,13 @@ export interface SqlfuGenerateConfig {
    * non-async contexts (constructors, non-async callbacks).
    */
   readonly sync?: boolean;
+  /**
+   * Extension used in generated `.generated/index.ts` barrel re-exports (`./tables.js` vs
+   * `./tables.ts`). If omitted, sqlfu infers it from the nearest `tsconfig.json`:
+   * `.ts` when `allowImportingTsExtensions` / `rewriteRelativeImportExtensions` is on,
+   * otherwise `.js`.
+   */
+  readonly importExtension?: '.js' | '.ts';
 }
 
 export interface SqlfuConfig {
@@ -123,7 +130,6 @@ export interface SqlfuConfig {
   readonly migrations?: string;
   readonly definitions: string;
   readonly queries: string;
-  readonly generatedImportExtension?: '.js' | '.ts';
   readonly generate?: SqlfuGenerateConfig;
 }
 
@@ -133,11 +139,11 @@ export interface SqlfuProjectConfig {
   readonly migrations?: string;
   readonly definitions: string;
   readonly queries: string;
-  readonly generatedImportExtension: '.js' | '.ts';
   readonly generate: {
     readonly validator: SqlfuValidator | null;
     readonly prettyErrors: boolean;
     readonly sync: boolean;
+    readonly importExtension: '.js' | '.ts';
   };
 }
 

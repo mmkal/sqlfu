@@ -1,4 +1,4 @@
-import type {Client, SqlQuery} from 'sqlfu';
+import type {Client} from 'sqlfu';
 
 export const EnsureMigrationTableSql = `
 create table if not exists sqlfu_migrations(
@@ -8,7 +8,10 @@ create table if not exists sqlfu_migrations(
 );
 `
 
-export async function ensureMigrationTable(client: Client): Promise<void> {
-	const query: SqlQuery = { sql: EnsureMigrationTableSql, args: [], name: "ensure-migration-table" };
-	await client.run(query);
-}
+export const ensureMigrationTable = Object.assign(
+	async function ensureMigrationTable(client: Client): Promise<void> {
+		const query = { sql: EnsureMigrationTableSql, args: [], name: "ensure-migration-table" };
+		await client.run(query);
+	},
+	{ sql: EnsureMigrationTableSql },
+);

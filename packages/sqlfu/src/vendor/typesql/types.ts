@@ -1,4 +1,9 @@
-import type {DatabaseSync} from 'node:sqlite';
+// Local sqlfu divergence: upstream does `import type {DatabaseSync} from 'node:sqlite'`,
+// but that module specifier fails ESM link on Node < 22 even though the import is type-only
+// (tsx preserves the module reference for some paths). Since DatabaseSync is only used as the
+// client field on a few dialect types (never constructed here), replacing with `unknown` is
+// equivalent for the purposes of this file.
+type DatabaseSync = unknown;
 
 import type { DbType, MySqlType } from './mysql-mapping.js';
 import type { Brand } from './utility-types.js';

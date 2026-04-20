@@ -10,8 +10,6 @@
  * Everything else here (`uniqBy`, `camelCase`, `glob`, ISO literal checks,
  * `unsupportedDependency`) is sqlfu-original support code for the vendored tree.
  */
-import {glob as fsGlob} from 'node:fs/promises';
-
 export type Either<L, R> = {readonly _tag: 'Left'; readonly left: L} | {readonly _tag: 'Right'; readonly right: R};
 
 export function left<L, R = never>(value: L): Either<L, R> {
@@ -128,6 +126,9 @@ export function camelCase(value: string): string {
 }
 
 export async function glob(pattern: string, options?: {cwd?: string}): Promise<string[]> {
+  // Deferred so the vendored tree can be bundled for browsers that have no
+  // node:fs/promises — browser callers (demo mode) never invoke glob().
+  const {glob: fsGlob} = await import('node:fs/promises');
   const matches: string[] = [];
   for await (const match of fsGlob(pattern, options?.cwd ? {cwd: options?.cwd} : {})) {
     matches.push(String(match));

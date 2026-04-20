@@ -6,8 +6,13 @@ import CodeBlockWriter from '../../code-block-writer/index.js';
 import { createNestedTsDescriptor } from '../ts-nested-descriptor.js';
 import { mapToDynamicResultColumns, mapToDynamicParams, mapToDynamicSelectColumns } from '../ts-dynamic-query-descriptor.js';
 import type { FragmentInfoResult } from '../mysql-query-analyzer/types.js';
-import { EOL } from 'node:os';
 import { capitalize, convertToCamelCaseName, generateRelationType, ParamInfo, renameInvalidNames, TsDescriptor } from './shared/codegen-util.js';
+
+// sqlfu: replaces a static `import { EOL } from 'node:os'`; computed here so
+// this module can be bundled for browsers (demo mode). The code-gen functions
+// that use EOL only run in the node CLI path.
+const EOL: '\n' | '\r\n' =
+	(globalThis as {process?: {platform?: string}}).process?.platform === 'win32' ? '\r\n' : '\n';
 
 export function generateTsCodeForMySQL(tsDescriptor: TsDescriptor, fileName: string, crud = false): string {
 	const writer = new CodeBlockWriter();

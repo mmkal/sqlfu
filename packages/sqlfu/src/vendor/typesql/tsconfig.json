@@ -10,7 +10,8 @@
     "verbatimModuleSyntax": false,
     "skipLibCheck": true,
     "declaration": false,
-    "declarationMap": false
+    "declarationMap": false,
+    "sourceMap": false
   },
   "include": [
     "./**/*.ts",

@@ -17,6 +17,8 @@ import {migrationName, readMigrationHistory} from './migrations/index.js';
 import {stopProcessesListeningOnPort} from './core/port-process.js';
 import {generateQueryTypes} from './typegen/index.js';
 import {startSqlfuServer} from './ui/server.js';
+import {resolveSqlfuUi} from './ui/resolve-sqlfu-ui.js';
+import packageJson from '../package.json' with {type: 'json'};
 import {
   materializeDefinitionsSchemaForContext,
   materializeMigrationsSchemaForContext,
@@ -36,17 +38,27 @@ export const router = {
       z
         .object({
           port: z.number().int().positive(),
+          ui: z
+            .boolean()
+            .describe(
+              `Also serve @sqlfu/ui on the same port. Requires @sqlfu/ui@${packageJson.version} to be installed.`,
+            ),
         })
         .partial()
         .optional(),
     )
     .handler(async ({context, input}) => {
+      const ui = input?.ui ? resolveSqlfuUi({sqlfuVersion: packageJson.version}) : undefined;
+
       await startSqlfuServer({
         port: input?.port,
         projectRoot: context.projectRoot,
+        ui: ui ? {root: ui.root} : undefined,
       });
 
-      context.host.logger.log('sqlfu ready at https://local.sqlfu.dev');
+      context.host.logger.log(
+        ui ? `sqlfu ready (UI + backend on the same origin)` : 'sqlfu ready at https://local.sqlfu.dev',
+      );
 
       await new Promise(() => {});
     }),

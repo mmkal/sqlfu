@@ -50,7 +50,6 @@
     "react-dom": "^19.2.0",
     "react-hot-toast": "^2.6.0",
     "semver": "^7.7.4",
-    "sqlfu": "workspace:*",
     "tailwind-merge": "^3.5.0",
     "use-local-storage-state": "^19.5.0",
     "zod": "4.3.6"
@@ -62,6 +61,7 @@
     "@types/react-dom": "^19.2.2",
     "@types/semver": "^7.7.0",
     "@vitejs/plugin-react": "^5.1.0",
+    "sqlfu": "workspace:*",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "@typescript/native-preview": "^7.0.0-dev.20260414.1",

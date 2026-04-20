@@ -60,6 +60,32 @@ test('sqlfu server serves a local backend page and the ui rpc contract from pack
   });
 });
 
+test('sqlfu server serves a prebuilt @sqlfu/ui dist directory when passed ui.root', async () => {
+  const uiRoot = await createTempFixtureRoot('sqlfu-ui-prebuilt');
+  await writeFixtureFiles(uiRoot, {
+    'dist/index.html': '<!doctype html><html><body><div id="app">ui-bundle-ok</div></body></html>',
+    'dist/assets/app.js': '/* bundle */ globalThis.__sqlfuUiLoaded__ = true;',
+  });
+
+  await using fixture = await createUiServerFixture({uiRoot});
+
+  const homeResponse = await fetch(fixture.baseUrl, {signal: AbortSignal.timeout(5_000)});
+  expect(homeResponse.status).toBe(200);
+  expect(await homeResponse.text()).toContain('ui-bundle-ok');
+
+  const assetResponse = await fetch(`${fixture.baseUrl}/assets/app.js`, {signal: AbortSignal.timeout(5_000)});
+  expect(assetResponse.status).toBe(200);
+  expect(assetResponse.headers.get('content-type')).toMatch(/text\/javascript/u);
+  expect(await assetResponse.text()).toContain('__sqlfuUiLoaded__');
+
+  expect(await fixture.client.project.status()).toMatchObject({
+    initialized: true,
+    projectRoot: fixture.root,
+  });
+
+  await fs.rm(uiRoot, {recursive: true, force: true});
+});
+
 test('sqlfu server can serve the packages/ui Vite client in dev mode', async () => {
   await using fixture = await createUiServerFixture({
     dev: true,

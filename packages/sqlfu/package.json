@@ -77,6 +77,14 @@
     "valibot": "^1.3.1",
     "zod": "^4.3.6"
   },
+  "peerDependencies": {
+    "@sqlfu/ui": "workspace:*"
+  },
+  "peerDependenciesMeta": {
+    "@sqlfu/ui": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@hono/node-server": "^1.19.14",
     "@libsql/client": "^0.17.2",

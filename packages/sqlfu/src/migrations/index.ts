@@ -4,10 +4,10 @@ import type {AsyncClient, Client, SyncClient} from '../core/types.js';
 import {basename} from '../core/paths.js';
 import {driveAsync, driveSync, type DualGenerator} from './dual-dispatch.js';
 import {
-  DeleteMigrationHistorySql,
-  EnsureMigrationTableSql,
-  InsertMigrationSql,
-  SelectMigrationHistorySql,
+  deleteMigrationHistory as deleteMigrationHistoryWrapper,
+  ensureMigrationTable as ensureMigrationTableWrapper,
+  insertMigration as insertMigrationWrapper,
+  selectMigrationHistory as selectMigrationHistoryWrapper,
   type SqlfuMigrationsRow,
 } from './queries/.generated/index.js';
 
@@ -46,7 +46,7 @@ export function migrationsFromBundle(bundle: MigrationBundle): Migration[] {
 export type {SqlfuMigrationsRow};
 
 function* ensureMigrationTableGen(client: Client): DualGenerator<void> {
-  yield client.run({sql: EnsureMigrationTableSql, args: [], name: 'ensure-migration-table'});
+  yield client.run({sql: ensureMigrationTableWrapper.sql, args: [], name: 'ensure-migration-table'});
 }
 
 export function migrationName(migration: {path: string}) {
@@ -63,7 +63,7 @@ export function readMigrationHistory(client: Client): SqlfuMigrationsRow[] | Pro
 function* readMigrationHistoryGen(client: Client): DualGenerator<SqlfuMigrationsRow[]> {
   yield* ensureMigrationTableGen(client);
   return (yield client.all<SqlfuMigrationsRow>({
-    sql: SelectMigrationHistorySql,
+    sql: selectMigrationHistoryWrapper.sql,
     args: [],
     name: 'select-migration-history',
   })) as SqlfuMigrationsRow[];
@@ -151,7 +151,7 @@ function* applyOneMigrationGen(
 ): DualGenerator<void> {
   yield client.raw(input.content);
   yield client.run({
-    sql: InsertMigrationSql,
+    sql: insertMigrationWrapper.sql,
     args: [input.name, input.checksum, input.applied_at],
     name: 'insert-migration',
   });
@@ -171,10 +171,10 @@ function* baselineMigrationHistoryGen(client: Client, params: BaselineParams): D
 
 function* replaceMigrationHistoryGen(client: Client, migrations: readonly Migration[]): DualGenerator<void> {
   yield* ensureMigrationTableGen(client);
-  yield client.run({sql: DeleteMigrationHistorySql, args: [], name: 'delete-migration-history'});
+  yield client.run({sql: deleteMigrationHistoryWrapper.sql, args: [], name: 'delete-migration-history'});
   for (const migration of migrations) {
     yield client.run({
-      sql: InsertMigrationSql,
+      sql: insertMigrationWrapper.sql,
       args: [migrationName(migration), digest(migration.content), new Date().toISOString()],
       name: 'insert-migration',
     });

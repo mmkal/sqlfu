@@ -118,42 +118,38 @@ function isDdlStatement(sqlContent: string): boolean {
 function renderDdlWrapper(input: {relativePath: string; sql: string; sync: boolean}): string {
   const queryName = input.relativePath;
   const functionName = toCamelCase(queryName);
-  const capitalizedName = functionName[0]!.toUpperCase() + functionName.slice(1);
-  const sqlConstantName = `${capitalizedName}Sql`;
   const clientType = input.sync ? 'SyncClient' : 'Client';
   const maybeAsync = input.sync ? '' : 'async ';
-  const maybeAwait = input.sync ? '' : 'await ';
-  const returnType = input.sync ? 'void' : 'Promise<void>';
 
   return [
     `import type {${clientType}} from 'sqlfu';`,
     ``,
-    ...renderSqlConstant(sqlConstantName, input.sql),
+    ...renderSqlConstant(input.sql),
     ``,
     `export const ${functionName} = Object.assign(`,
-    `\t${maybeAsync}function ${functionName}(client: ${clientType}): ${returnType} {`,
-    `\t\tconst query = { sql: ${sqlConstantName}, args: [], name: ${JSON.stringify(queryName)} };`,
-    `\t\t${maybeAwait}client.run(query);`,
+    `\t${maybeAsync}function ${functionName}(client: ${clientType}) {`,
+    `\t\tconst query = { sql, args: [], name: ${JSON.stringify(queryName)} };`,
+    `\t\treturn client.run(query);`,
     `\t},`,
-    `\t{ sql: ${sqlConstantName} },`,
+    `\t{ sql },`,
     `);`,
     ``,
   ].join('\n');
 }
 
 /**
- * One-liner when the whole `export const Foo = \`SQL\`` line fits under 80 characters; otherwise
- * split across three lines with the SQL body on its own line. Short queries like
- * `delete from sqlfu_migrations;` read much better as one line.
+ * Module-scoped `const sql = \`…\``, accessed externally via the Object.assign-merged
+ * `whatever.sql`. Renders as a one-liner when the line fits under 80 characters,
+ * otherwise splits across three lines with the SQL body on its own line.
  */
-function renderSqlConstant(constantName: string, sql: string): string[] {
+function renderSqlConstant(sql: string): string[] {
   const trimmed = normalizeSqlForTemplate(sql).join('\n').trim();
-  const oneLiner = `export const ${constantName} = \`${trimmed}\``;
+  const oneLiner = `const sql = \`${trimmed}\``;
   if (!trimmed.includes('\n') && oneLiner.length <= 80) {
     return [oneLiner];
   }
   return [
-    `export const ${constantName} = \``,
+    `const sql = \``,
     trimmed,
     `\``,
   ];
@@ -523,27 +519,33 @@ function renderQueryWrapper(input: {
 
   const queryName = input.relativePath;
   const functionName = toCamelCase(queryName);
-  const capitalizedName = functionName[0]!.toUpperCase() + functionName.slice(1);
-  const sqlConstantName = `${capitalizedName}Sql`;
 
   const clientType = input.sync ? 'SyncClient' : 'Client';
   const maybeAsync = input.sync ? '' : 'async ';
   const hasData = (input.descriptor.data?.length ?? 0) > 0;
   const hasParams = input.descriptor.parameters.length > 0;
+  const resultMode = getResultMode(input.descriptor);
+  // SELECT-like results (a row type users hand-wrote in their select list) get a named
+  // Result type + reified shape. Non-SELECT without RETURNING (metadata mode) just passes
+  // client.run's return through — the caller sees QueryMetadata directly. No Result type,
+  // no guards, no reshape.
+  const emitResultType = resultMode !== 'metadata';
   const dataTypeRef = `${functionName}.Data`;
   const paramsTypeRef = `${functionName}.Params`;
   const resultTypeRef = `${functionName}.Result`;
 
-  const returnType = getReturnType(input.descriptor, resultTypeRef);
   const queryArgs = buildQueryArgs(input.descriptor);
 
   const functionSignatureArgs: string[] = [`client: ${clientType}`];
   if (hasData) functionSignatureArgs.push(`data: ${dataTypeRef}`);
   if (hasParams) functionSignatureArgs.push(`params: ${paramsTypeRef}`);
 
-  const functionDeclaration = input.sync
-    ? `\tfunction ${functionName}(${functionSignatureArgs.join(', ')}): ${returnType} {`
-    : `\t${maybeAsync}function ${functionName}(${functionSignatureArgs.join(', ')}): Promise<${returnType}> {`;
+  const signatureReturnAnnotation = emitResultType
+    ? input.sync
+      ? `: ${getReturnType(input.descriptor, resultTypeRef)}`
+      : `: Promise<${getReturnType(input.descriptor, resultTypeRef)}>`
+    : '';
+  const functionDeclaration = `\t${maybeAsync}function ${functionName}(${functionSignatureArgs.join(', ')})${signatureReturnAnnotation} {`;
 
   const namespaceLines: string[] = [];
   if (hasData) {
@@ -552,31 +554,35 @@ function renderQueryWrapper(input: {
   if (hasParams) {
     namespaceLines.push(`\texport type Params = ${renderObjectTypeBody(input.descriptor.parameters, 'parameter')};`);
   }
-  namespaceLines.push(`\texport type Result = ${renderObjectTypeBody(getResultFields(input.descriptor), 'result')};`);
+  if (emitResultType) {
+    namespaceLines.push(`\texport type Result = ${renderObjectTypeBody(getResultFields(input.descriptor), 'result')};`);
+  }
+
+  const implementationLines = emitResultType
+    ? buildGeneratedImplementation({
+        resultMode,
+        resultType: resultTypeRef,
+        sync: input.sync,
+        indent: '\t\t',
+      })
+    : [`\t\treturn client.run(query);`];
 
   return [
     `import type {${clientType}} from 'sqlfu';`,
     ``,
-    ...renderSqlConstant(sqlConstantName, input.descriptor.sql),
+    ...renderSqlConstant(input.descriptor.sql),
     ``,
     `export const ${functionName} = Object.assign(`,
     functionDeclaration,
-    `\t\tconst query = { sql: ${sqlConstantName}, args: ${queryArgs}, name: ${JSON.stringify(queryName)} };`,
-    ...buildGeneratedImplementation({
-      resultMode: getResultMode(input.descriptor),
-      resultType: resultTypeRef,
-      resultProperties: getResultProperties(input.descriptor),
-      sync: input.sync,
-      indent: '\t\t',
-    }),
+    `\t\tconst query = { sql, args: ${queryArgs}, name: ${JSON.stringify(queryName)} };`,
+    ...implementationLines,
     `\t},`,
-    `\t{ sql: ${sqlConstantName} },`,
+    `\t{ sql },`,
     `);`,
     ``,
-    `export namespace ${functionName} {`,
-    ...namespaceLines,
-    `}`,
-    ``,
+    ...(namespaceLines.length === 0
+      ? []
+      : [`export namespace ${functionName} {`, ...namespaceLines, `}`, ``]),
   ].join('\n');
 }
 
@@ -1273,16 +1279,6 @@ function refineDescriptor(
   };
 }
 
-function getResultProperties(descriptor: GeneratedQueryDescriptor): ReadonlyArray<{
-  readonly name: string;
-  readonly optional: boolean;
-}> {
-  return getResultFields(descriptor).map((field) => ({
-    name: field.name,
-    optional: !field.notNull,
-  }));
-}
-
 function toCamelCase(value: string): string {
   const parts = value
     .split(/[^A-Za-z0-9]+/)
@@ -1300,19 +1296,18 @@ function toCamelCase(value: string): string {
   );
 }
 
+/**
+ * SELECT-like bodies only (`many` / `nullableOne` / `one` — i.e. every mode except `metadata`).
+ * Metadata mode is rendered as a plain `return client.run(query);` pass-through at the call site.
+ */
 function buildGeneratedImplementation(input: {
-  resultMode: 'many' | 'nullableOne' | 'one' | 'metadata';
+  resultMode: 'many' | 'nullableOne' | 'one';
   resultType: string;
-  resultProperties: ReadonlyArray<{
-    readonly name: string;
-    readonly optional: boolean;
-  }>;
   sync: boolean;
   indent: string;
 }): string[] {
   const maybeAwait = input.sync ? '' : 'await ';
   const i = input.indent;
-  const ii = `${i}\t`;
 
   if (input.resultMode === 'many') {
     // `many` returns the client's result directly — the outer function's Promise<T[]> / T[] return
@@ -1327,29 +1322,7 @@ function buildGeneratedImplementation(input: {
     ];
   }
 
-  if (input.resultMode === 'one') {
-    return [`${i}const rows = ${maybeAwait}client.all<${input.resultType}>(query);`, `${i}return rows[0];`];
-  }
-
-  const guards = input.resultProperties.flatMap((property) => {
-    if (property.optional) {
-      return [];
-    }
-
-    return [
-      `${i}if (result.${property.name} === undefined${property.name === 'lastInsertRowid' ? ' || result.lastInsertRowid === null' : ''}) {`,
-      `${ii}throw new Error('Expected ${property.name} to be present on query result');`,
-      `${i}}`,
-    ];
-  });
-  const resultAssignments = input.resultProperties.map((property) => {
-    if (property.name === 'lastInsertRowid') {
-      return `${ii}lastInsertRowid: Number(result.lastInsertRowid),`;
-    }
-
-    return `${ii}${property.name}: result.${property.name},`;
-  });
-  return [`${i}const result = ${maybeAwait}client.run(query);`, ...guards, `${i}return {`, ...resultAssignments, `${i}};`];
+  return [`${i}const rows = ${maybeAwait}client.all<${input.resultType}>(query);`, `${i}return rows[0];`];
 }
 
 async function loadSchema(databasePath: string): Promise<ReadonlyMap<string, RelationInfo>> {

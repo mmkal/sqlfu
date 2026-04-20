@@ -1,23 +1,11 @@
 import type {Client} from 'sqlfu';
 
-export const DeleteMigrationHistorySql = `delete from sqlfu_migrations;`
+const sql = `delete from sqlfu_migrations;`
 
 export const deleteMigrationHistory = Object.assign(
-	async function deleteMigrationHistory(client: Client): Promise<deleteMigrationHistory.Result> {
-		const query = { sql: DeleteMigrationHistorySql, args: [], name: "delete-migration-history" };
-		const result = await client.run(query);
-		if (result.rowsAffected === undefined) {
-			throw new Error('Expected rowsAffected to be present on query result');
-		}
-		return {
-			rowsAffected: result.rowsAffected,
-		};
+	async function deleteMigrationHistory(client: Client) {
+		const query = { sql, args: [], name: "delete-migration-history" };
+		return client.run(query);
 	},
-	{ sql: DeleteMigrationHistorySql },
+	{ sql },
 );
-
-export namespace deleteMigrationHistory {
-	export type Result = {
-		rowsAffected: number;
-	};
-}

@@ -1,6 +1,6 @@
 import type {Client} from 'sqlfu';
 
-export const SelectMigrationHistorySql = `
+const sql = `
 select name, checksum, applied_at
 from sqlfu_migrations
 order by name;
@@ -8,10 +8,10 @@ order by name;
 
 export const selectMigrationHistory = Object.assign(
 	async function selectMigrationHistory(client: Client): Promise<selectMigrationHistory.Result[]> {
-		const query = { sql: SelectMigrationHistorySql, args: [], name: "select-migration-history" };
+		const query = { sql, args: [], name: "select-migration-history" };
 		return client.all<selectMigrationHistory.Result>(query);
 	},
-	{ sql: SelectMigrationHistorySql },
+	{ sql },
 );
 
 export namespace selectMigrationHistory {

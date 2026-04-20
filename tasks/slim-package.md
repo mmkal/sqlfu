@@ -10,11 +10,10 @@ Get the published tarball to under 1 MB. Started because `npm pack --dry-run` re
 
 ## Status
 
-- under 1 MB packed: yes, **245 kB** (originally 1.5 MB)
-- unpacked: **1.1 MB** (originally 18.8 MB)
-- all 1071 tests pass (down from 1688 — the 617 removed were non-sqlite sql-formatter fixtures deleted with the multi-dialect API)
-- still in progress: sqlite-query-analyzer still imports from MySQL's AST (via `instanceof *Context`), keeping ~846 kB of MySQL context classes reachable
-- next: untangle sqlite-query-analyzer from the MySQL AST; then decide on replacing ANTLR entirely
+- under 1 MB packed: yes, **217 kB** (originally 1.5 MB)
+- under 1 MB unpacked too: **967 kB** (originally 18.8 MB)
+- all 1071 tests pass (the 1688 → 1071 drop was the non-sqlite sql-formatter fixtures deleted with the multi-dialect API)
+- next: decide on dropping ANTLR entirely (hand-written SQLite parser). See "What's NOT being done" below.
 
 ## Progress
 
@@ -25,7 +24,7 @@ Get the published tarball to under 1 MB. Started because `npm pack --dry-run` re
 - [x] **Gut MySQLParser's parse tables at bundle time** — esbuild `onLoad` plugin (`gut-antlr-parsers`) rewrites `MySQLParser.ts`/`MySQLLexer.ts` in-memory, stripping the 2 MB `_serializedATN` data, parse methods, and ATN/DFA initializers. Context classes and static constants (the only things the sqlite path references) stay. Source files on disk untouched. Required vendor edits first: trim `describe-query.ts` to pure utils, gut `mysql-query-analyzer/parse.ts` to AST helpers only, remove test-only `describeNestedQuery`/`parseAndInferNotNull` helpers. _595 kB → 366 kB packed, 3.0 MB → 1.6 MB unpacked._
 - [x] **Sqlite-only sql-formatter + bundle** — `src/formatter.ts` now calls `formatDialect` directly with the sqlite dialect; dropped the `dialect` option and `supportedSqlDialects` from the public API. Added a second esbuild pass with a stdin entry re-exporting only `formatDialect` and an `onLoad` plugin that rewrites `allDialects.ts` to export only sqlite, so the 19 other dialect modules tree-shake. Deleted 5 multi-dialect fixture files (bigquery/mariadb/mysql/postgresql/tsql). _366 kB → 245 kB packed, 1.6 MB → 1.1 MB unpacked, 313 → 141 files._
 - [x] **Document the three-step build in `packages/sqlfu/CLAUDE.md`** — explained the bundle step, the two `onLoad` plugins, and why vendor edits live in the build plugin rather than in source (so upstream resyncs stay mechanical).
-- [ ] **Untangle sqlite-query-analyzer from the MySQL AST** — the remaining 846 kB of typesql bundle input is MySQL `*Context` classes kept because sqlite-query-analyzer does `instanceof` checks against them. Port those to SQLite context classes from `typesql-parser/sqlite/SQLiteParser.ts`, then drop the `typesql-parser/mysql` subtree and `typesql/mysql-query-analyzer` shared utilities entirely.
+- [x] **Untangle sqlite-query-analyzer from the MySQL AST** — _renamed `mysql-query-analyzer` → `shared-analyzer`, rewrote `collect-constraints.ts` / `select-columns.ts` / `traverse.ts` to drop every MySQL context-class reference (the shared utilities never needed them; they just happened to live alongside mysql-specific code upstream). Deleted `parse.ts`, `infer-column-nullability.ts`, `infer-param-nullability.ts`, `verify-multiple-result.ts`, `util.ts` from shared-analyzer. Deleted the entire `typesql-parser/mysql/` and `typesql-parser/postgres/` + `grammar/` subtrees, plus dead files at the typesql root (`cli.ts`, `sql-generator.ts`, etc.). Trimmed `describe-nested-query.ts` to types-only. Also removed the `gut-antlr-parsers` plugin from `scripts/bundle-vendor.ts` since there's no MySQL parser left to gut. Packed 245 kB → 217 kB, unpacked 1.1 MB → 967 kB._
 
 ## Size progression
 
@@ -36,22 +35,27 @@ Get the published tarball to under 1 MB. Started because `npm pack --dry-run` re
 | Prune dead postgres + unreached typesql | 741 kB | 5.4 MB | 368 |
 | Bundle `vendor/typesql` with esbuild | 595 kB | 3.0 MB | 313 |
 | Gut MySQLParser parse tables | 366 kB | 1.6 MB | 313 |
-| Sqlite-only sql-formatter + bundle | **245 kB** | **1.1 MB** | **141** |
+| Sqlite-only sql-formatter + bundle | 245 kB | 1.1 MB | 141 |
+| Untangle sqlite-query-analyzer from MySQL AST | **217 kB** | **967 kB** | **141** |
 
-## Remaining typesql bundle breakdown (post-gut, pre-untangle)
+## Remaining typesql bundle breakdown (post-untangle)
 
-Reported by esbuild metafile as input bytes (after our gut plugin, before minify):
+Reported by esbuild metafile as input bytes, before minify:
 
 | Area | Size |
 |---|---|
-| `typesql-parser/mysql` (context classes only) | 846 kB |
-| `typesql-parser/sqlite` (real parser) | 517 kB |
-| `typesql/mysql-query-analyzer` (shared inference utilities) | 134 kB |
+| `typesql-parser/sqlite/SQLiteParser.ts` | 445 kB |
 | `antlr4` runtime | 115 kB |
-| `typesql/sqlite-query-analyzer` | 92 kB |
-| `typesql/codegen` | 59 kB |
-| misc | 63 kB |
-| **Total** | **~1.83 MB** (minifies to ~640 kB on disk) |
+| `typesql-parser/sqlite/SQLiteLexer.ts` | 72 kB |
+| `typesql/sqlite-query-analyzer/traverse.ts` | 64 kB |
+| `typesql/codegen/sqlite.ts` | 36 kB |
+| `code-block-writer` | 30 kB |
+| `typesql/codegen/shared/codegen-util.ts` | 23 kB |
+| `typesql/shared-analyzer/unify.ts` | 20 kB |
+| misc | 74 kB |
+| **Total** | **~879 kB** (minifies to 480 kB on disk) |
+
+The sqlite parser and lexer are now the dominant cost. That's the target for the ANTLR-drop follow-up.
 
 ## Remaining sqlfu dist breakdown
 

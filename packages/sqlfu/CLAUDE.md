@@ -37,17 +37,15 @@ Three things to know before changing it:
 
 1. **It targets source, not `dist/`.** Entry points are `src/vendor/typesql/sqlfu.ts`, `src/vendor/sql-formatter/sqlFormatter.ts` (via a stdin wrapper), and `src/vendor/sql-formatter/languages/sqlite/sqlite.formatter.ts`. The output paths mirror the dist layout so `dist/typegen/*` and `dist/formatter.js` (produced by `build:runtime`) keep resolving `./vendor/typesql/sqlfu.js` and `./vendor/sql-formatter/*` without any edits. If you move an entry, update those consumers too.
 
-2. **Two esbuild `onLoad` plugins intercept vendored files.** They leave the on-disk `.ts` untouched so upstream resyncs stay a mechanical copy-over (see `src/vendor/{typesql-parser,sql-formatter}/CLAUDE.md`):
-   - `gut-antlr-parsers` rewrites `src/vendor/typesql-parser/mysql/MySQLParser.ts` and `MySQLLexer.ts` at bundle time, stripping the `_serializedATN` parse-table literals, every grammar-rule parse method, and the `_ATN` / `DecisionsToDFA` initializers. Anchored on `public get serializedATN()` and `static DecisionsToDFA` — if upstream regenerates the parsers and those anchors shift, the plugin throws instead of silently producing broken output. The sqlite path only imports the static constants and `*Context` classes from these files; it never instantiates the parser or lexer.
-   - `sqlite-only-dialects` rewrites `src/vendor/sql-formatter/allDialects.ts` to export only `sqlite`. Paired with a stdin entry that re-exports only `formatDialect`, this lets esbuild drop upstream's `format(query, {language})` entry point and, with it, 19 non-sqlite dialect modules (~1.3 MB of keyword/function data).
+2. **An esbuild `onLoad` plugin intercepts `src/vendor/sql-formatter/allDialects.ts` at bundle time** and rewrites it to export only `sqlite`. Paired with a stdin entry that re-exports only `formatDialect`, this lets esbuild drop upstream's `format(query, {language})` entry point and, with it, 19 non-sqlite dialect modules (~1.3 MB of keyword/function data). The on-disk `.ts` is untouched so upstream resyncs stay a mechanical copy-over (see `src/vendor/sql-formatter/CLAUDE.md`).
+
+   (There used to be a second plugin, `gut-antlr-parsers`, that stripped the vendored MySQL parser's `_serializedATN` data at bundle time. It's gone — along with the MySQL parser itself — once the sqlite analyzer was untangled from MySQL's AST. See `tasks/slim-package.md` for that history.)
 
 3. **The deletion lists at the end are exhaustive, not "whatever's left".** After bundling, the script `rm -rf`s every path under `dist/vendor/{typesql,sql-formatter}/**` that isn't the bundle output. If a future vendor edit adds a new file, the script won't magically delete it — it'll ship in the tarball until you add it to the list. Check `du -sh dist/vendor/*` after a build if you've touched vendor code.
 
 ### What breaks if you try to skip the bundle step
 
 - **Naive tree-shake with just the esbuild defaults on `sqlFormatter.ts`.** Upstream's `import * as allDialects from './allDialects.js'` is a side-effectful namespace import; esbuild won't prune it. You keep all 20 dialects regardless of whether `format` is ever called.
-- **Stripping MySQLParser's `_serializedATN` via the tsconfig `exclude` list.** Doesn't work — `_serializedATN` is a class field, and esbuild keeps the whole class when any of its members (including the `*Context` classes in the same file) is referenced. You need the onLoad plugin to actually remove the source text.
-- **Moving the vendor `.ts` edits into the source tree.** Tempting ("just commit the stripped MySQLParser"). But the deletion is ~45k lines, and any upstream resync turns into a 45k-line 3-way merge. Leaving the trim as a build plugin keeps `pnpm build` and the resync path decoupled.
 
 ### Performance today (for context, not a constraint to re-verify on every change)
 

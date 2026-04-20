@@ -1,5 +1,5 @@
 import { type Either, isLeft, left, right } from '../../small-utils.js';
-import type { ColumnInfo, ColumnSchema } from '../mysql-query-analyzer/types.js';
+import type { ColumnInfo, ColumnSchema } from '../shared-analyzer/types.js';
 import { parseSql } from '../sqlite-query-analyzer/parser.js';
 import CodeBlockWriter from '../../code-block-writer/index.js';
 import type {

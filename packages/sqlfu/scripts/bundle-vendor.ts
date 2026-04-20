@@ -1,5 +1,5 @@
 import * as esbuild from 'esbuild';
-import {readdir, readFile, rm} from 'node:fs/promises';
+import {readdir, rm} from 'node:fs/promises';
 import {resolve} from 'node:path';
 
 const pkgRoot = resolve(import.meta.dirname, '..');
@@ -8,60 +8,16 @@ const distVendor = resolve(pkgRoot, 'dist/vendor');
 // ------------------------------------------------------------------
 // vendor/typesql bundle
 // ------------------------------------------------------------------
-// The ANTLR-generated MySQLParser.ts and MySQLLexer.ts ship:
-//   - 2+ MB of `_serializedATN` number-literal parse tables
-//   - thousands of grammar-rule parse methods
-//   - `_ATN` / `DecisionsToDFA` initializers that deserialize those tables at
-//     module-load time
-// The sqlite path imports *only* the static token/rule constants and the
-// `*Context` classes that live in the same file, never instantiates the
-// parser or lexer, and never calls their parse methods. This esbuild plugin
-// strips the parse machinery at bundle time — leaving the static constants
-// (above) and the context classes (below) intact — so the bundle tree-shakes
-// the parse tables down to nothing.
+// The sqlite path is the only consumer of vendored typesql; it imports
+// `analyzeSqliteQueriesWithClient` from vendor/typesql/sqlfu.ts and goes from
+// there. The esbuild pass below bundles that entry into a single file so the
+// sqlite parser + our shared-analyzer helpers ship as one minified module.
 //
-// Idempotent and source-preserving: the on-disk .ts files are untouched, so
-// upstream resyncs stay a mechanical copy-over (see typesql-parser/CLAUDE.md).
-//
-// The anchors below identify two lines in each file: the getter
-// `public get serializedATN()` marks the start of the removable region, and
-// `static DecisionsToDFA` marks its end. If upstream regenerates the parsers,
-// verify these anchors still appear exactly once per file.
-const gutAntlrParserPlugin: esbuild.Plugin = {
-	name: 'gut-antlr-parsers',
-	setup(build) {
-		const targets = new Set([
-			resolve(pkgRoot, 'src/vendor/typesql-parser/mysql/MySQLParser.ts'),
-			resolve(pkgRoot, 'src/vendor/typesql-parser/mysql/MySQLLexer.ts'),
-		]);
-
-		build.onLoad({filter: /typesql-parser\/mysql\/MySQL(Parser|Lexer)\.ts$/}, async (args) => {
-			if (!targets.has(args.path)) return null;
-			const source = await readFile(args.path, 'utf8');
-
-			const startMatch = source.match(/^[ \t]*public get serializedATN\(\).*$/m);
-			const endMatch = source.match(/^[ \t]*static DecisionsToDFA.*$/m);
-			if (!startMatch || !endMatch) {
-				throw new Error(`gut-antlr-parsers: anchors not found in ${args.path}`);
-			}
-			const startIdx = startMatch.index!;
-			const endIdx = endMatch.index! + endMatch[0].length;
-
-			const stub = [
-				'',
-				'\t// sqlfu: parse-table data, parse methods, and ATN initializers stripped',
-				"\t// at bundle time by scripts/bundle-vendor.ts. Instantiating this",
-				'\t// class at runtime will fail fast.',
-				'\tpublic static readonly _serializedATN: number[] = [];',
-				'',
-			].join('\n');
-
-			const contents = source.slice(0, startIdx) + stub + source.slice(endIdx);
-			return {contents, loader: 'ts'};
-		});
-	},
-};
-
+// Previously there was a `gut-antlr-parsers` plugin here that rewrote the
+// vendored MySQL parser at bundle time to strip its parse-table data. That
+// plugin (and the entire typesql-parser/mysql + typesql/mysql-query-analyzer
+// subtrees) were deleted once the sqlite analyzer was untangled from MySQL's
+// AST — see tasks/slim-package.md for the history.
 await esbuild.build({
 	entryPoints: [resolve(pkgRoot, 'src/vendor/typesql/sqlfu.ts')],
 	bundle: true,
@@ -80,7 +36,6 @@ await esbuild.build({
 		'@sqlite.org/sqlite-wasm',
 		'node:*',
 	],
-	plugins: [gutAntlrParserPlugin],
 	logLevel: 'warning',
 });
 
@@ -107,7 +62,7 @@ const typesqlToDelete = [
 	'typesql/load-config.js.map',
 	'typesql/mysql-mapping.js',
 	'typesql/mysql-mapping.js.map',
-	'typesql/mysql-query-analyzer',
+	'typesql/shared-analyzer',
 	'typesql/schema-info.js',
 	'typesql/schema-info.js.map',
 	'typesql/sql-generator.js',

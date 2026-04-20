@@ -21,18 +21,6 @@
   ],
   "exclude": [
     "../../../../../node_modules",
-    "../../../dist",
-    "./cli.ts",
-    "./load-config.ts",
-    "./sql-generator.ts",
-    "./codegen/pg.ts",
-    "./codegen/mysql2.ts",
-    "./dialects/**/*",
-    "./drivers/libsql.ts",
-    "./drivers/postgres.ts",
-    "./drivers/types.ts",
-    "./postgres-query-analyzer/**/*",
-    "./queryExectutor.ts",
-    "../typesql-parser/postgres/**/*"
+    "../../../dist"
   ]
 }

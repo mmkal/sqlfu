@@ -5,9 +5,9 @@ size: large
 
 ## Status Summary
 
-- Roughly 85% done: the backend move, local-server entrypoint, website scaffold, and Cloudflare IaC are in place.
+- Roughly 90% done: the backend move, local-server entrypoint, website scaffold, Cloudflare IaC, and the website -> studio end-to-end spec design are in place.
 - Main completed pieces: the UI API now lives in `packages/sqlfu`, `npx sqlfu` starts the local backend, `packages/ui` is client-only, `website/` renders existing markdown into a static docs site, the local launcher simulates a hosted frontend talking to a separate local backend, and `alchemy.run.mts` now defines the Cloudflare zone plus the two hosted sites.
-- Main missing pieces: validate the localhost HTTPS path on a machine with `mkcert` installed, and add a fuller end-to-end path that exercises the deployed hosted UI talking back to a real local backend.
+- Main missing pieces: validate the localhost HTTPS path on a machine with `mkcert` installed, and add a fuller end-to-end path that exercises the deployed hosted UI talking back to a real local backend (design captured below; implementation in progress on `website-e2e`).
 
 ## Goal
 
@@ -68,6 +68,36 @@ Current working idea:
   - open the local studio instructions
   - run `npx sqlfu`
   - load the local backend successfully
+
+  ### Design
+
+  The spec simulates the full deployed topology (`www.sqlfu.dev` -> `local.sqlfu.dev` -> `npx sqlfu`) entirely on localhost, so it can run in CI without touching Cloudflare or real `ngrok`.
+
+  - **Website** (simulates `www.sqlfu.dev`): build `website/` with Astro, serve `website/dist` from a tiny built-in static server on its own port.
+  - **UI** (simulates `local.sqlfu.dev`): build `packages/ui/` with Vite, serve `packages/ui/dist` on its own port. Write a `runtime-config.js` next to `index.html` that pins `SQLFU_API_ORIGIN` at the backend origin (same mechanism the existing `local.sqlfu.dev` script uses).
+  - **Backend** (simulates `npx sqlfu`): spawn `packages/sqlfu/src/cli.ts` via `tsx` with `cwd` set to `packages/ui/test/projects/dev-project` (the checked-in scratch project). That is the codepath a real user hits when they run `npx sqlfu` in their project root. The CLI's default command starts the local backend server.
+
+  The landing-page CTA today hardcodes `https://local.sqlfu.dev/?demo=1`. To keep the test hermetic, the CTA reads a build-time env var (`PUBLIC_LOCAL_STUDIO_URL`) and falls back to the production URL. The test sets that env var when it builds the website, so the CTA becomes a link to the local UI port.
+
+  Fixture shape (Symbol.asyncDispose, not beforeEach/afterEach):
+
+  1. Build website + UI once for the spec run, reusing the outputs across tests in the file.
+  2. Per-test fixture starts the three servers on free ports, writes the UI `runtime-config.js`, and tears all three down on dispose.
+  3. Playwright navigates to the website's base URL (no explicit `baseURL` in the config entry for this spec).
+
+  Test flow:
+
+  1. `page.goto(websiteOrigin)` -> lands on the landing page.
+  2. Click the CTA labelled "Try the demo" (the actual CTA; test asserts it resolves to the UI origin).
+  3. On the UI page, wait for the sidebar heading `sqlfu/ui` and the `posts` relation to appear -> proves the UI talked to the backend and rendered schema.
+  4. Asserts one row from the seeded posts table (e.g. `hello-world`) is visible, proving schema browsing is actually wired up end-to-end.
+
+  Not in scope for this spec:
+  - real Cloudflare deployment or DNS
+  - real `ngrok`
+  - HTTPS / `mkcert` (the `local-sqlfu-dev.spec.ts` spec covers the ngrok path; this one stays on plain HTTP)
+
+  Location: `packages/ui/test/website-landing-to-studio.spec.ts`, alongside `local-sqlfu-dev.spec.ts`. NOT added to the default Playwright `webServer` - this spec manages its own servers so the existing harness stays snappy.
 - [x] Add a root launcher for the `local.sqlfu.dev` dev simulation. *`pnpm local.sqlfu.dev` now delegates to the UI package launcher, which starts a standalone Vite UI server, a standalone sqlfu backend server, and an `ngrok` tunnel that points only at the UI server.*
 - [x] Document the local-vs-hosted model clearly so users know what runs where. *Covered in the website landing page, `packages/sqlfu/README.md`, and the local backend HTML page.*
 

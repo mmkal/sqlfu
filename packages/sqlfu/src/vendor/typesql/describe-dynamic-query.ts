@@ -1,4 +1,4 @@
-import { splitName } from './mysql-query-analyzer/select-columns.js';
+import { splitName } from './shared-analyzer/select-columns.js';
 import type {
 	DynamicSqlInfo,
 	DynamicSqlInfo2,
@@ -14,7 +14,7 @@ import type {
 	WhereFragment,
 	WhereFragmentResult,
 	WithFragment
-} from './mysql-query-analyzer/types.js';
+} from './shared-analyzer/types.js';
 
 export function describeDynamicQuery(dynamicQueryInfo: DynamicSqlInfo, namedParameters: string[], orderBy: string[]): DynamicSqlInfoResult {
 	const { with: withFragments, select, from, where } = dynamicQueryInfo;

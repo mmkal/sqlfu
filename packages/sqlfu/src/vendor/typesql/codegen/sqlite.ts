@@ -1,7 +1,6 @@
 import { type Either, isLeft, left, right } from '../../small-utils.js';
-import type { ColumnInfo, ColumnSchema } from '../mysql-query-analyzer/types.js';
+import type { ColumnInfo, ColumnSchema } from '../shared-analyzer/types.js';
 import { parseSql } from '../sqlite-query-analyzer/parser.js';
-import { hasDateColumn, replaceOrderByParam, writeTypeBlock } from './mysql2.js';
 import CodeBlockWriter from '../../code-block-writer/index.js';
 import type {
 	BunDialect,
@@ -25,7 +24,7 @@ import { preprocessSql } from '../describe-query.js';
 import { explainSql } from '../sqlite-query-analyzer/query-executor.js';
 import { mapToDynamicParams, mapToDynamicResultColumns, mapToDynamicSelectColumns } from '../ts-dynamic-query-descriptor.js';
 import { mapper } from '../drivers/sqlite.js';
-import { capitalize, convertToCamelCaseName, generateRelationType, removeDuplicatedParameters2, renameInvalidNames, TsDescriptor, writeBuildOrderByBlock, writeBuildSqlFunction, writeDynamicQueryOperators, writeMapToResultFunction, writeNestedTypes, writeOrderByToObjectFunction, writeWhereConditionFunction, writeCollectFunction, writeGroupByFunction, createTypeNames, createCodeBlockWriter, writeDynamicQueryParamType, writeSelectFragements } from './shared/codegen-util.js';
+import { capitalize, convertToCamelCaseName, generateRelationType, hasDateColumn, removeDuplicatedParameters2, renameInvalidNames, replaceOrderByParam, TsDescriptor, writeBuildOrderByBlock, writeBuildSqlFunction, writeDynamicQueryOperators, writeMapToResultFunction, writeNestedTypes, writeOrderByToObjectFunction, writeTypeBlock, writeWhereConditionFunction, writeCollectFunction, writeGroupByFunction, createTypeNames, createCodeBlockWriter, writeDynamicQueryParamType, writeSelectFragements } from './shared/codegen-util.js';
 
 type ExecFunctionParams = {
 	functionName: string;

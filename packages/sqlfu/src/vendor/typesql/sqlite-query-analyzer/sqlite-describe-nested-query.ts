@@ -1,6 +1,6 @@
 import { type Either, left, right } from '../../small-utils.js';
 import type { Cardinality } from '../describe-nested-query.js';
-import type { ColumnInfo } from '../mysql-query-analyzer/types.js';
+import type { ColumnInfo } from '../shared-analyzer/types.js';
 import type { TypeSqlError } from '../types.js';
 
 export type Relation2 = {

@@ -7,20 +7,12 @@ type DatabaseSync = unknown;
 
 import type { DbType, MySqlType } from './mysql-mapping.js';
 import type { Brand } from './utility-types.js';
-import type { ColumnInfo, ColumnSchema, DynamicSqlInfoResult, DynamicSqlInfoResult2 } from './mysql-query-analyzer/types.js';
-import type { QueryContext } from '../typesql-parser/mysql/MySQLParser.js';
+import type { ColumnInfo, ColumnSchema, DynamicSqlInfoResult, DynamicSqlInfoResult2 } from './shared-analyzer/types.js';
 import type { NestedResultInfo } from './describe-nested-query.js';
 import type { RelationInfo2 } from './sqlite-query-analyzer/sqlite-describe-nested-query.js';
 
 export type DBSchema = {
 	columns: ColumnSchema[];
-};
-
-export type ParseResult = {
-	sql: string;
-	namedParameters: string[];
-	dbSchema: ColumnSchema[];
-	queryContext: QueryContext;
 };
 
 export type CrudQueryType = 'Select' | 'Insert' | 'Update' | 'Delete';

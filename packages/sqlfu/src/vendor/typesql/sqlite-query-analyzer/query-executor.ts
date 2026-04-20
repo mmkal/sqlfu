@@ -10,7 +10,7 @@
  */
 import { type Either, Result, err, left, ok, right } from '../../small-utils.js';
 import type { DatabaseClient, TypeSqlError } from '../types.js';
-import type { ColumnSchema, Table } from '../mysql-query-analyzer/types.js';
+import type { ColumnSchema, Table } from '../shared-analyzer/types.js';
 import type { EnumColumnMap, EnumMap, SQLiteType } from './types.js';
 import { enumParser } from './enum-parser.js';
 import { virtualTablesSchema } from './virtual-tables.js';

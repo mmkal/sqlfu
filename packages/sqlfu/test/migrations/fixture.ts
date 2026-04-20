@@ -33,6 +33,7 @@ export async function createMigrationsFixture(
     definitions: path.join(root, 'definitions.sql'),
     queries: path.join(root, 'sql'),
     generatedImportExtension: '.js',
+    generate: {validator: null, prettyErrors: true},
   };
 
   let nowUsage = 0;

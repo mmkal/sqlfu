@@ -337,7 +337,7 @@ export async function applyMigrateSql(context: SqlfuContext, confirm: SqlfuComma
 
   try {
     // apply migrations even if there are zero pending, because this will validate migration history
-    await applyMigrations(context.host, database.client, {migrations});
+    await applyMigrations(database.client, {migrations});
   } catch (error) {
     // figure out which migration was the first one to not make it into history
     const appliedAfter = await readMigrationHistory(database.client);
@@ -530,7 +530,7 @@ export async function applyBaselineSql(context: SqlfuContext, input: {target: st
     return;
   }
   await using database = await context.host.openDb(context.config);
-  await baselineMigrationHistory(context.host, database.client, {migrations, target: input.target});
+  await baselineMigrationHistory(database.client, {migrations, target: input.target});
 }
 
 export async function applyGotoSql(context: SqlfuContext, input: {target: string}, confirm: SqlfuCommandConfirm) {
@@ -561,7 +561,7 @@ export async function applyGotoSql(context: SqlfuContext, input: {target: string
     if (confirmedSql?.trim()) {
       await tx.raw(confirmedSql.trim());
     }
-    await replaceMigrationHistory(context.host, tx, targetMigrations);
+    await replaceMigrationHistory(tx, targetMigrations);
   });
 }
 
@@ -588,7 +588,7 @@ export async function materializeDefinitionsSchemaForContext(host: SqlfuHost, de
 
 export async function materializeMigrationsSchemaForContext(host: SqlfuHost, migrations: readonly Migration[]) {
   await using database = await host.openScratchDb('materialize-migrations');
-  await applyMigrations(host, database.client, {migrations});
+  await applyMigrations(database.client, {migrations});
   return await extractSchema(database.client, 'main', {
     excludedTables: schemaDriftExcludedTables,
   });

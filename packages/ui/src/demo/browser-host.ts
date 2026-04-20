@@ -1,4 +1,9 @@
 import {createSqliteWasmClient} from 'sqlfu/client';
+import {
+  analyzeVendoredTypesqlQueriesWithClient,
+  isInternalUnsupportedSqlAnalysisError,
+  toSqlEditorDiagnostic,
+} from 'sqlfu/browser';
 import type {
   AdHocSqlParams,
   AdHocSqlResult,
@@ -7,6 +12,7 @@ import type {
   HostFs,
   QueryCatalog,
   ResultRow,
+  SqlAnalysisResponse,
   SqlfuHost,
   SqlfuProjectConfig,
 } from 'sqlfu/browser';
@@ -26,6 +32,7 @@ export function buildDemoConfig(): SqlfuProjectConfig {
     migrations: `${DEMO_PROJECT_ROOT}/migrations`,
     queries: `${DEMO_PROJECT_ROOT}/sql`,
     generatedImportExtension: '.js',
+    generate: {validator: null, prettyErrors: true},
   };
 }
 
@@ -39,7 +46,7 @@ export async function createBrowserHost(input: {
 
   const config = buildDemoConfig();
   const fs = createVfsFs(vfs, config, input.onSchemaChange);
-  const catalog = createBrowserCatalog(vfs);
+  const catalog = createBrowserCatalog(vfs, database);
   const host: SqlfuHost = {
     fs,
     openDb: async () => ({
@@ -108,16 +115,52 @@ function statementReturnsRows(db: Database, sqlText: string): boolean {
   }
 }
 
-function createBrowserCatalog(vfs: DemoVfs): HostCatalog {
+function createBrowserCatalog(vfs: DemoVfs, database: Database): HostCatalog {
+  const typesqlDb = wasmDatabaseAsTypesqlClient(database);
   return {
     async load(): Promise<QueryCatalog> {
       return buildQueryCatalog(vfs);
     },
     async refresh() {},
-    async analyzeSql() {
-      return {};
+    async analyzeSql(_config, sql): Promise<SqlAnalysisResponse> {
+      if (!sql.trim()) return {};
+      try {
+        const [analysis] = await analyzeVendoredTypesqlQueriesWithClient(typesqlDb, [
+          {sqlPath: 'demo-sql-runner.sql', sqlContent: sql},
+        ]);
+        if (!analysis) return {};
+        if (analysis.ok) return {diagnostics: []};
+        throw new Error(analysis.error.description);
+      } catch (error) {
+        if (isInternalUnsupportedSqlAnalysisError(error)) return {};
+        return {diagnostics: [toSqlEditorDiagnostic(sql, error)]};
+      }
     },
   };
+}
+
+function wasmDatabaseAsTypesqlClient(database: Database) {
+  const shim = {
+    prepare(sql: string) {
+      database.prepare(sql).finalize();
+      return {
+        all(...args: unknown[]): unknown[] {
+          const bind = args.length > 0 ? (args as never) : undefined;
+          return database.exec({
+            sql,
+            bind,
+            rowMode: 'object',
+            returnValue: 'resultRows',
+          }) as unknown[];
+        },
+      };
+    },
+    exec(sql: string) {
+      database.exec(sql);
+    },
+    close() {},
+  };
+  return {type: 'sqlite', client: shim} as never;
 }
 
 function createVfsFs(vfs: DemoVfs, config: SqlfuProjectConfig, notify: () => void): HostFs {

@@ -22,6 +22,7 @@ export function createBetterSqlite3Client(database: BetterSqlite3DatabaseLike): 
   } = {
     driver: database,
     system: 'sqlite',
+    sync: true,
     all<TRow extends ResultRow = ResultRow>(query: SqlQuery) {
       return database.prepare<TRow>(query.sql).all(...query.args);
     },

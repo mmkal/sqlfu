@@ -1,9 +1,26 @@
 ---
-status: ready
+status: in-progress
 size: medium
 ---
 
 # applyMigrations: portable host + sync/async unification
+
+## High-level status
+
+- Done. Dropped the `host` parameter from `applyMigrations`/`baseline`/`replace` entirely. Single function for each; overloaded to return `void` for sync clients and `Promise<void>` for async clients.
+- Dual-dispatch: hand-rolled a ~40-line generator utility (`packages/sqlfu/src/migrations/dual-dispatch.ts`), quansync-shaped but no runtime dep on quansync itself.
+- Digest: one codepath for both sync and async, using `@noble/hashes/sha2`. Portable (pure JS, zero deps), byte-identical to `node:crypto.createHash('sha256')`, works in Workers/DO without `nodejs_compat`.
+- DO adapter left as-is (pass-through `transaction`). The DO test wraps the call in `state.storage.transactionSync(...)` — that's the real per-request atomicity boundary.
+
+## Decisions made for this worktree
+
+1. **Drop the `host: SqlfuHost` parameter entirely** from `applyMigrations`, `baselineMigrationHistory`, and `replaceMigrationHistory`. All three now just take `(client, params)`.
+2. **Digest**: one sync implementation (`@noble/hashes/sha2`) serves both sync and async callers. Went with `@noble/hashes` after discovering that `node:crypto.createHash` breaks miniflare's module locator (it'd need `nodejs_compat` and bundling tricks) and that `crypto.subtle.digest` is async-only so it can't service the sync overload. Noble ships pure-JS ESM with explicit file extensions, is zero-dep, and esbuild bundles it cleanly for the DO test.
+3. **Dual-dispatch**: internal utility at `packages/sqlfu/src/migrations/dual-dispatch.ts`. Generator-yielded promises get awaited in the async driver, or their synchronous equivalents are passed through in the sync driver. Mirrors `quansync`'s shape (yield a promise, it resolves and becomes the resume value). The sentinel `GET_IS_ASYNC` yield lets the generator branch when it needs to wire `client.transaction(cb)`, where `cb` itself has to be sync or async depending on the client.
+4. **DO adapter**: keep `client.transaction` as a pass-through (current behavior). The DO test wraps the whole `applyMigrations` call in `state.storage.transactionSync(...)` — that's the real atomicity boundary. No adapter API change.
+5. **DO test fixture**: switched to esbuild bundling for the worker entrypoint so miniflare can resolve `@noble/hashes/sha2.js` (a bare specifier the module locator won't find otherwise). Pre-existing `createDurableObjectClient` unit tests ride on the same fixture and keep passing.
+
+## Original problem statement
 
 Two related problems with `applyMigrations`/`baselineMigrationHistory`/`replaceMigrationHistory`. Both surfaced while building the migrations bundle (PR #8) for durable-object use; both are tracked here for whoever picks them up.
 
@@ -58,10 +75,22 @@ The real fix is to let DO callers wrap the whole thing in `state.storage.transac
 - All existing tests keep passing — `bundle.test.ts`, the migration-failure tests, everything in `test/migrations/*`.
 - No new dependency unless it's `quansync`-like and small.
 
-## Open questions
+## Open questions — resolved
 
-- Bundle a sync SHA-256 or accept a user-supplied digest? Leaning bundle.
-- Can the DO `client.transaction` adapter (currently a pass-through with no `BEGIN`/`COMMIT` — see `packages/sqlfu/src/adapters/durable-object.ts`) route automatically to `storage.transactionSync` once we have a sync `applyMigrations`? Probably yes; the DO adapter would gain a `storage` reference instead of just `storage.sql`.
+- Bundle a sync SHA-256 or accept a user-supplied digest? **Bundle.** Added `@noble/hashes` (zero-dep, ~27KB ESM). Picked it over `node:crypto.createHash` because the Workers runtime needs bundling tricks + `nodejs_compat` for Node built-ins, and over vendoring a hand-rolled sha256 because Noble is audited and small enough. Hash output is byte-identical to `node:crypto` for existing callers, so migration checksums stay stable.
+- Can the DO `client.transaction` adapter route automatically to `storage.transactionSync`? **Left as pass-through.** The DO test wraps the outer call in `transactionSync` explicitly — that's the documented atomicity boundary. Auto-routing from inside `client.transaction` would work but is redundant given the explicit outer wrap and harder to reason about when users compose.
+
+## Checklist
+
+- [x] _refined plan, committed in isolation_
+- [x] _failing DO integration test that wraps `applyMigrations` in `state.storage.transactionSync`_
+- [x] _dual-dispatch utility `packages/sqlfu/src/migrations/dual-dispatch.ts`_
+- [x] _overload `applyMigrations` (sync → void, async → Promise<void>)_
+- [x] _same treatment for `baselineMigrationHistory` + `replaceMigrationHistory`_
+- [x] _drop `host` param from all three; update every caller_
+- [x] _remove `as any` + hand-rolled host stub from DO test_
+- [x] _all existing tests pass (`pnpm --filter sqlfu test`)_
+- [x] _typecheck green (`pnpm --filter sqlfu typecheck`)_
 
 ## References
 

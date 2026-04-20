@@ -22,6 +22,8 @@ export interface SyncClient<TDriver = unknown> {
   readonly driver: TDriver;
   /** OTel `db.system.name`. Stamped by each adapter ('sqlite', 'postgresql', etc.). */
   readonly system: string;
+  /** `true` for a `SyncClient`; lets callers route sync/async logic without probing. */
+  readonly sync: true;
   all<TRow extends ResultRow = ResultRow>(query: SqlQuery): TRow[];
   run(query: SqlQuery): RunResult;
   raw(sql: string): RunResult;
@@ -35,6 +37,8 @@ export interface AsyncClient<TDriver = unknown> {
   readonly driver: TDriver;
   /** OTel `db.system.name`. Stamped by each adapter ('sqlite', 'postgresql', etc.). */
   readonly system: string;
+  /** `false` for an `AsyncClient`; lets callers route sync/async logic without probing. */
+  readonly sync: false;
   all<TRow extends ResultRow = ResultRow>(query: SqlQuery): Promise<TRow[]>;
   run(query: SqlQuery): Promise<RunResult>;
   raw(sql: string): Promise<RunResult>;
@@ -77,12 +81,37 @@ export interface SqlRowsPromise<TRow extends ResultRow = ResultRow> extends Prom
 
 export type SqlValue = QueryArg | SqlFragment;
 
+export type SqlfuValidator = 'zod' | 'valibot' | 'zod-mini';
+
+export interface SqlfuGenerateConfig {
+  /**
+   * Emit runtime validation schemas as the source of truth for each generated query's params and result.
+   *
+   * - `null` / `undefined` / omitted = plain TypeScript types, no runtime validation (the default).
+   * - `'zod'` = generated wrappers declare zod schemas, `.parse()` params on the way in and each row
+   *   on the way out, and types are derived via `z.infer`.
+   * - `'valibot'` = same shape, but with [valibot](https://valibot.dev) (smaller bundle, functional API).
+   * - `'zod-mini'` = same shape as `'zod'`, but imports from `zod/mini` and uses the functional
+   *   `z.parse(Schema, input)` API (smaller bundle than standard zod).
+   */
+  readonly validator?: SqlfuValidator | null;
+  /**
+   * When true (default), the generated wrapper catches validation errors thrown by `.parse()` and
+   * re-throws them with a readable, indented message built from the Standard Schema issues list.
+   * When false, the raw error from the underlying validator library passes through untouched.
+   *
+   * No effect when `validator` is null/undefined (plain TS types never throw validation errors).
+   */
+  readonly prettyErrors?: boolean;
+}
+
 export interface SqlfuConfig {
   readonly db: string;
   readonly migrations: string;
   readonly definitions: string;
   readonly queries: string;
   readonly generatedImportExtension?: '.js' | '.ts';
+  readonly generate?: SqlfuGenerateConfig;
 }
 
 export interface SqlfuProjectConfig {
@@ -92,6 +121,10 @@ export interface SqlfuProjectConfig {
   readonly definitions: string;
   readonly queries: string;
   readonly generatedImportExtension: '.js' | '.ts';
+  readonly generate: {
+    readonly validator: SqlfuValidator | null;
+    readonly prettyErrors: boolean;
+  };
 }
 
 export interface MigrateDiffResult {

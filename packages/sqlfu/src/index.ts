@@ -6,3 +6,4 @@ export * from './migrations/index.js';
 export * from './schemadiff/index.js';
 export * from './typegen/index.js';
 export * from './api.js';
+export {prettifyStandardSchemaError} from './vendor/standard-schema/errors.js';

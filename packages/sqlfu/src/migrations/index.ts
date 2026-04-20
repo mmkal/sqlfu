@@ -1,6 +1,8 @@
-import type {Client} from '../core/types.js';
-import type {SqlfuHost} from '../core/host.js';
+import {sha256} from '@noble/hashes/sha2.js';
+
+import type {AsyncClient, Client, SyncClient} from '../core/types.js';
 import {basename} from '../core/paths.js';
+import {driveAsync, driveSync, type DualGenerator} from './dual-dispatch.js';
 
 export type Migration = {
   path: string;
@@ -36,8 +38,15 @@ export type AppliedMigration = {
   appliedAt: string;
 };
 
-export async function ensureMigrationTable(client: Client) {
-  await client.run({
+export function ensureMigrationTable(client: SyncClient): void;
+export function ensureMigrationTable(client: AsyncClient): Promise<void>;
+export function ensureMigrationTable(client: Client): void | Promise<void>;
+export function ensureMigrationTable(client: Client): void | Promise<void> {
+  return client.sync ? driveSync(ensureMigrationTableGen(client)) : driveAsync(ensureMigrationTableGen(client));
+}
+
+function* ensureMigrationTableGen(client: Client): DualGenerator<void> {
+  yield client.run({
     sql: `
       create table if not exists sqlfu_migrations(
         name text primary key check(name not like '%.sql'),
@@ -48,13 +57,13 @@ export async function ensureMigrationTable(client: Client) {
     args: [],
   });
 
-  const columns = await client.all<{name: string}>({
+  const columns = (yield client.all<{name: string}>({
     sql: `select name from pragma_table_info('sqlfu_migrations') order by cid`,
     args: [],
-  });
+  })) as {name: string}[];
   const columnNames = new Set(columns.map((column) => column.name));
   if (columnNames.has('content') && !columnNames.has('checksum')) {
-    await client.run({
+    yield client.run({
       sql: `alter table sqlfu_migrations rename column content to checksum`,
       args: [],
     });
@@ -65,60 +74,64 @@ export function migrationName(migration: {path: string}) {
   return basename(migration.path, '.sql');
 }
 
-export async function readMigrationHistory(client: Client): Promise<AppliedMigration[]> {
-  await ensureMigrationTable(client);
-  return client.all<AppliedMigration>({
+export function readMigrationHistory(client: SyncClient): AppliedMigration[];
+export function readMigrationHistory(client: AsyncClient): Promise<AppliedMigration[]>;
+export function readMigrationHistory(client: Client): AppliedMigration[] | Promise<AppliedMigration[]>;
+export function readMigrationHistory(client: Client): AppliedMigration[] | Promise<AppliedMigration[]> {
+  return client.sync ? driveSync(readMigrationHistoryGen(client)) : driveAsync(readMigrationHistoryGen(client));
+}
+
+function* readMigrationHistoryGen(client: Client): DualGenerator<AppliedMigration[]> {
+  yield* ensureMigrationTableGen(client);
+  return (yield client.all<AppliedMigration>({
     sql: `
       select name, checksum, applied_at as appliedAt
       from sqlfu_migrations
       order by name
     `,
     args: [],
-  });
+  })) as AppliedMigration[];
 }
 
-export async function baselineMigrationHistory(
-  host: SqlfuHost,
-  client: Client,
-  params: {
-    migrations: readonly Migration[];
-    target: string;
-  },
-) {
-  const targetIndex = params.migrations.findIndex((migration) => migrationName(migration) === params.target);
-  if (targetIndex === -1) {
-    throw new Error(`migration ${params.target} not found`);
-  }
+type ApplyMigrationsParams = {
+  migrations: readonly Migration[];
+};
 
-  const applied = params.migrations.slice(0, targetIndex + 1);
-  await client.transaction(async (tx) => {
-    await replaceMigrationHistory(host, tx, applied);
-  });
+type BaselineParams = {
+  migrations: readonly Migration[];
+  target: string;
+};
+
+export function applyMigrations(client: SyncClient, params: ApplyMigrationsParams): void;
+export function applyMigrations(client: AsyncClient, params: ApplyMigrationsParams): Promise<void>;
+export function applyMigrations(client: Client, params: ApplyMigrationsParams): void | Promise<void>;
+export function applyMigrations(client: Client, params: ApplyMigrationsParams): void | Promise<void> {
+  return client.sync
+    ? driveSync(applyMigrationsGen(client, params))
+    : driveAsync(applyMigrationsGen(client, params));
 }
 
-export async function replaceMigrationHistory(host: SqlfuHost, client: Client, migrations: readonly Migration[]) {
-  await ensureMigrationTable(client);
-  await client.run({sql: 'delete from sqlfu_migrations', args: []});
-  for (const migration of migrations) {
-    await client.run({
-      sql: `
-        insert into sqlfu_migrations(name, checksum, applied_at)
-        values (?, ?, ?)
-      `,
-      args: [migrationName(migration), await host.digest(migration.content), host.now().toISOString()],
-    });
-  }
+export function baselineMigrationHistory(client: SyncClient, params: BaselineParams): void;
+export function baselineMigrationHistory(client: AsyncClient, params: BaselineParams): Promise<void>;
+export function baselineMigrationHistory(client: Client, params: BaselineParams): void | Promise<void>;
+export function baselineMigrationHistory(client: Client, params: BaselineParams): void | Promise<void> {
+  return client.sync
+    ? driveSync(baselineMigrationHistoryGen(client, params))
+    : driveAsync(baselineMigrationHistoryGen(client, params));
 }
 
-export async function applyMigrations(
-  host: SqlfuHost,
-  client: Client,
-  params: {
-    migrations: readonly Migration[];
-  },
-): Promise<void> {
-  await ensureMigrationTable(client);
-  const applied = await readMigrationHistory(client);
+export function replaceMigrationHistory(client: SyncClient, migrations: readonly Migration[]): void;
+export function replaceMigrationHistory(client: AsyncClient, migrations: readonly Migration[]): Promise<void>;
+export function replaceMigrationHistory(client: Client, migrations: readonly Migration[]): void | Promise<void>;
+export function replaceMigrationHistory(client: Client, migrations: readonly Migration[]): void | Promise<void> {
+  return client.sync
+    ? driveSync(replaceMigrationHistoryGen(client, migrations))
+    : driveAsync(replaceMigrationHistoryGen(client, migrations));
+}
+
+function* applyMigrationsGen(client: Client, params: ApplyMigrationsParams): DualGenerator<void> {
+  yield* ensureMigrationTableGen(client);
+  const applied = yield* readMigrationHistoryGen(client);
   const byName = new Map(params.migrations.map((migration) => [migrationName(migration), migration]));
 
   for (const historical of applied) {
@@ -126,7 +139,7 @@ export async function applyMigrations(
     if (!current) {
       throw new Error(`deleted applied migration: ${historical.name}`);
     }
-    if ((await host.digest(current.content)) !== historical.checksum) {
+    if (digest(current.content) !== historical.checksum) {
       throw new Error(`applied migration checksum mismatch: ${historical.name}`);
     }
   }
@@ -143,17 +156,65 @@ export async function applyMigrations(
       continue;
     }
 
-    const checksum = await host.digest(migration.content);
-    const appliedAt = host.now().toISOString();
-    await client.transaction(async (tx) => {
-      await tx.raw(migration.content);
-      await tx.run({
-        sql: `
-          insert into sqlfu_migrations(name, checksum, applied_at)
-          values (?, ?, ?)
-        `,
-        args: [name, checksum, appliedAt],
-      });
+    const checksum = digest(migration.content);
+    const appliedAt = new Date().toISOString();
+    // the sync transaction method takes a sync callback and returns its value;
+    // the async transaction method awaits an async callback. we route the
+    // inner generator through the matching driver so the same generator body
+    // services both shapes.
+    yield client.transaction((tx) => {
+      const innerGen = applyOneMigrationGen(tx, {content: migration.content, name, checksum, appliedAt});
+      return tx.sync ? (driveSync(innerGen) as unknown as Promise<void>) : driveAsync(innerGen);
     });
   }
+}
+
+function* applyOneMigrationGen(
+  client: Client,
+  input: {content: string; name: string; checksum: string; appliedAt: string},
+): DualGenerator<void> {
+  yield client.raw(input.content);
+  yield client.run({
+    sql: `
+      insert into sqlfu_migrations(name, checksum, applied_at)
+      values (?, ?, ?)
+    `,
+    args: [input.name, input.checksum, input.appliedAt],
+  });
+}
+
+function* baselineMigrationHistoryGen(client: Client, params: BaselineParams): DualGenerator<void> {
+  const targetIndex = params.migrations.findIndex((migration) => migrationName(migration) === params.target);
+  if (targetIndex === -1) {
+    throw new Error(`migration ${params.target} not found`);
+  }
+  const appliedSlice = params.migrations.slice(0, targetIndex + 1);
+  yield client.transaction((tx) => {
+    const innerGen = replaceMigrationHistoryGen(tx, appliedSlice);
+    return tx.sync ? (driveSync(innerGen) as unknown as Promise<void>) : driveAsync(innerGen);
+  });
+}
+
+function* replaceMigrationHistoryGen(client: Client, migrations: readonly Migration[]): DualGenerator<void> {
+  yield* ensureMigrationTableGen(client);
+  yield client.run({sql: 'delete from sqlfu_migrations', args: []});
+  for (const migration of migrations) {
+    yield client.run({
+      sql: `
+        insert into sqlfu_migrations(name, checksum, applied_at)
+        values (?, ?, ?)
+      `,
+      args: [migrationName(migration), digest(migration.content), new Date().toISOString()],
+    });
+  }
+}
+
+function digest(content: string): string {
+  // @noble/hashes is synchronous and portable (pure JS, zero deps), so both
+  // sync and async clients hash the same way. keeping a single sync impl
+  // avoids shimming node:crypto into Workers runtimes (which otherwise would
+  // require the nodejs_compat flag) and means checksums are byte-identical
+  // regardless of where migrations run.
+  const bytes = sha256(new TextEncoder().encode(content));
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
 }

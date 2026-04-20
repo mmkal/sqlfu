@@ -45,6 +45,7 @@ export function createLibsqlSyncClient(database: LibsqlSyncDatabaseLike): SyncCl
   const client: Omit<SyncClient<LibsqlSyncDatabaseLike>, 'sql'> & {sql: SyncClient<LibsqlSyncDatabaseLike>['sql']} = {
     driver: database,
     system: 'sqlite',
+    sync: true,
     all,
     run,
     raw,

@@ -7,6 +7,7 @@ Keep changes here mechanical where possible. Prefer preserving upstream structur
 Local changes that are expected:
 - sqlfu-specific behavior should stay outside this folder when possible
 - attribution comments or adjacent vendor notes
+- `parser/nearley-runtime.ts` is a vendored copy of the `nearley` npm package's runtime (`lib/nearley.js` in that package), converted to ESM so we don't depend on `nearley` at runtime. `parser/createParser.ts` imports it instead of `'nearley'`. If `grammar.ne` ever needs regenerating, use `pnpm dlx nearleyc grammar.ne -o grammar.ts` — we don't keep `nearleyc` installed because it's never needed at runtime.
 
 We vendor this instead of treating it as a plain dependency because we expect to change printer behavior locally.
 The first target is sql-formatter's tendency to force simple clauses onto separate lines, e.g.:

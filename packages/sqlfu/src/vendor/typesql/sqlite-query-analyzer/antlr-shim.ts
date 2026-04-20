@@ -1504,5 +1504,58 @@ export function wrapSqlStmt(sql: string, stmt: ParsedTopStmt): any {
 	return new ShimSql_stmtContext(stmt, sql, input, null);
 }
 
+/**
+ * Shim-parser entrypoint the analyzer uses in place of
+ * `parseSqlite(sql).sql_stmt()`. Dispatches on the first meaningful
+ * keyword and delegates to the appropriate sub-parser in
+ * `sqlfu-sqlite-parser/`. Returns a Sql_stmtContext-compatible shim.
+ *
+ * The implementation lives in a `.js` file indirection to avoid pulling
+ * the plain-data AST types into strict typechecking from consumers that
+ * want to stay loose. Call sites in `parser.ts` just see the opaque
+ * ANTLR-shaped shim.
+ */
+export function parseSqlToShim(sql: string): any {
+	// Dispatch on the first keyword (after optional whitespace/comments).
+	// `tokenize` is the canonical source of "first non-trivia token".
+	const tokens = tokenizeForDispatch(sql);
+	const first = tokens.find(t => t.kind === 'KEYWORD');
+	if (!first) {
+		throw new Error(`parseSqlToShim: no keyword found in SQL: ${JSON.stringify(sql.slice(0, 80))}`);
+	}
+	const kw = first.value;
+	// Recognise top-level statements the analyzer can handle. WITH is
+	// prefix to SELECT / INSERT / UPDATE / DELETE — only SELECT is
+	// supported at the top level by parseSelectStmt; WITH on DML is out
+	// of scope for now (matches the scope note in dml_stmt.ts).
+	if (kw === 'SELECT' || kw === 'WITH') {
+		const stmt = _parseSelectStmt(sql);
+		return wrapSqlStmt(sql, {kind: 'select', stmt});
+	}
+	if (kw === 'INSERT' || kw === 'REPLACE') {
+		const stmt = _parseInsertStmt(sql);
+		return wrapSqlStmt(sql, {kind: 'insert', stmt});
+	}
+	if (kw === 'UPDATE') {
+		const stmt = _parseUpdateStmt(sql);
+		return wrapSqlStmt(sql, {kind: 'update', stmt});
+	}
+	if (kw === 'DELETE') {
+		const stmt = _parseDeleteStmt(sql);
+		return wrapSqlStmt(sql, {kind: 'delete', stmt});
+	}
+	throw new Error(`parseSqlToShim: unsupported top-level keyword '${kw}'`);
+}
+
+// -----------------------------------------------------------------------------
+// Lazy re-imports of the sub-parsers. These sit at the bottom of the file
+// because the dispatcher is the only caller; callers of the shim classes
+// above don't need to pull the parser in.
+// -----------------------------------------------------------------------------
+
+import {tokenize as tokenizeForDispatch} from '../../sqlfu-sqlite-parser/tokenizer.js';
+import {parseSelectStmt as _parseSelectStmt} from '../../sqlfu-sqlite-parser/select_stmt.js';
+import {parseInsertStmt as _parseInsertStmt, parseUpdateStmt as _parseUpdateStmt, parseDeleteStmt as _parseDeleteStmt} from '../../sqlfu-sqlite-parser/dml_stmt.js';
+
 /** Exposed for enum-parser and tests. */
 export { ShimExprContext, ShimSql_stmtContext, ShimSelect_stmtContext, ShimSelect_coreContext };

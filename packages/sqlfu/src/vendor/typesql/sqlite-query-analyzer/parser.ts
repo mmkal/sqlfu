@@ -1,6 +1,7 @@
 import { type Either, isLeft, left, right } from '../../small-utils.js';
 import type { ParameterNameAndPosition, ParameterDef, SchemaDef, TypeSqlError } from '../types.js';
-import { type Sql_stmtContext, parseSql as parseSqlite } from '../../typesql-parser/sqlite/index.js';
+import { type Sql_stmtContext } from '../../typesql-parser/sqlite/index.js';
+import { parseSqlToShim } from './antlr-shim.js';
 import { tryTraverse_Sql_stmtContext } from './traverse.js';
 import {
 	type ColumnInfo,
@@ -31,8 +32,7 @@ export function traverseSql(sql: string, dbSchema: ColumnSchema[]): Either<TypeS
 	const { sql: processedSql, namedParameters } = preprocessSql(sql, 'sqlite');
 	const nested = hasAnnotation(sql, '@nested');
 	const dynamicQuery = hasAnnotation(sql, '@dynamicQuery');
-	const parser = parseSqlite(processedSql);
-	const sql_stmt = parser.sql_stmt();
+	const sql_stmt: Sql_stmtContext = parseSqlToShim(processedSql);
 	const traverseResult = traverseQuery(sql_stmt, dbSchema);
 	if (isLeft(traverseResult)) {
 		return traverseResult;

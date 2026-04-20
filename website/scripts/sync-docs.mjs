@@ -143,7 +143,7 @@ function rewriteHref(href, currentSourcePath) {
   const normalizedTarget = normalizePath(absolutePath);
   const linkedDoc = docBySourcePath.get(normalizedTarget);
   if (linkedDoc) {
-    return `/docs/${linkedDoc.slug}/${hash ? `#${hash}` : ''}`;
+    return `/docs/${linkedDoc.slug}${hash ? `#${hash}` : ''}`;
   }
 
   return githubPermalink(absoluteTarget);

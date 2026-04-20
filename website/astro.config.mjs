@@ -24,6 +24,7 @@ export default defineConfig({
         {label: 'Schema Diff Model', slug: 'docs/schema-diff-model'},
         {label: 'Migration Model', slug: 'docs/migration-model'},
         {label: 'Observability', slug: 'docs/observability'},
+        {label: 'Runtime validation', slug: 'docs/runtime-validation'},
         {label: 'UI', slug: 'docs/ui'},
       ],
       social: [{icon: 'github', label: 'GitHub', href: 'https://github.com/mmkal/sqlfu'}],

@@ -9,7 +9,7 @@
     "local.sqlfu.dev": "pnpm exec tsx test/local.sqlfu.dev.ts",
     "build": "vite build",
     "test:node": "vitest run src/runtime.test.ts src/startup-error.test.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsgo -p tsconfig.json --noEmit",
     "test": "playwright test"
   },
   "dependencies": {
@@ -51,6 +51,7 @@
     "@vitejs/plugin-react": "^5.1.0",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
+    "@typescript/native-preview": "^7.0.0-dev.20260414.1",
     "vite": "^7.1.12",
     "vitest": "^4.1.1"
   }

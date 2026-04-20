@@ -1,5 +1,15 @@
 export {queryNickname} from './core/naming.js';
 export type {QueryCatalog, QueryCatalogEntry} from './typegen/query-catalog.js';
+export type {SqlAnalysisResponse, SqlEditorDiagnostic} from './ui/shared.js';
+export {
+  isInternalUnsupportedSqlAnalysisError,
+  toSqlEditorDiagnostic,
+} from './core/sql-editor-diagnostic.js';
+export {analyzeVendoredTypesqlQueriesWithClient} from './typegen/analyze-vendored-typesql-with-client.js';
+export type {
+  VendoredQueryAnalysis,
+  VendoredQueryInput,
+} from './typegen/analyze-vendored-typesql-with-client.js';
 
 export type {
   AsyncClient,

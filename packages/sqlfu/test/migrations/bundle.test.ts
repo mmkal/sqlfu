@@ -7,7 +7,6 @@ import {ts} from 'ts-morph';
 import {expect, test} from 'vitest';
 
 import {createNodeSqliteClient} from '../../src/client.js';
-import {createNodeHost} from '../../src/core/node-host.js';
 import {applyMigrations, migrationsFromBundle, type MigrationBundle} from '../../src/migrations/index.js';
 import {generateQueryTypes} from '../../src/typegen/index.js';
 import {createTempFixtureRoot, writeFixtureFiles, dumpFixtureFs} from '../fs-fixture.js';
@@ -46,11 +45,10 @@ test('generate emits a typed migrations bundle that can apply migrations without
   `);
 
   const {default: bundle} = await project.importBundle();
-  const host = await createNodeHost();
   const database = new DatabaseSync(':memory:');
   const client = createNodeSqliteClient(database);
   try {
-    await applyMigrations(host, client, {migrations: migrationsFromBundle(bundle)});
+    await applyMigrations(client, {migrations: migrationsFromBundle(bundle)});
 
     const columns = await client.all<{name: string}>({
       sql: `select name from pragma_table_info('posts') order by cid`,

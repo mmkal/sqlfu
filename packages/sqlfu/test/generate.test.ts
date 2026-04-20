@@ -828,24 +828,488 @@ test('generate preserves nested query directories in output, name, and functionN
   `);
 });
 
+test('generate with validator: zod emits zod schemas as the source of truth with namespace-merged exports', async () => {
+  await using project = await createGenerateFixture({
+    definitionsSql: dedent`
+      create table posts (
+        id integer primary key,
+        slug text not null,
+        title text,
+        status text not null check (status in ('draft', 'published'))
+      );
+    `,
+    files: {
+      'sql/find-post-by-slug.sql': `select id, slug, title, status from posts where slug = :slug limit 1;`,
+    },
+    config: {generate: {validator: 'zod'}},
+  });
+
+  await project.generate();
+
+  await expect(project.getCompileDiagnostics()).resolves.toEqual([]);
+  expect(await project.dumpFs(generatedTsDump)).toMatchInlineSnapshot(`
+    "sql/
+      .generated/
+        find-post-by-slug.sql.ts
+          import {z} from 'zod';
+          import type {Client, SqlQuery} from 'sqlfu';
+          
+          const Params = z.object({
+          	slug: z.string(),
+          });
+          const Result = z.object({
+          	id: z.number(),
+          	slug: z.string(),
+          	title: z.string().nullable(),
+          	status: z.enum(["draft", "published"]),
+          });
+          const sql = \`
+          select id, slug, title, status from posts where slug = ? limit 1;
+          \`;
+          
+          export const findPostBySlug = Object.assign(
+          	async function findPostBySlug(client: Client, rawParams: z.infer<typeof Params>): Promise<z.infer<typeof Result> | null> {
+          		const parsedParams = Params.safeParse(rawParams);
+          		if (!parsedParams.success) throw new Error(z.prettifyError(parsedParams.error));
+          		const params = parsedParams.data;
+          		const query: SqlQuery = { sql, args: [params.slug], name: "find-post-by-slug" };
+          		const rows = await client.all(query);
+          		if (rows.length === 0) return null;
+          		const parsed = Result.safeParse(rows[0]);
+          		if (!parsed.success) throw new Error(z.prettifyError(parsed.error));
+          		return parsed.data;
+          	},
+          	{ Params, Result, sql },
+          );
+          
+          export namespace findPostBySlug {
+          	export type Params = z.infer<typeof findPostBySlug.Params>;
+          	export type Result = z.infer<typeof findPostBySlug.Result>;
+          }
+        index.ts
+          export * from "./find-post-by-slug.sql.js";
+    "
+  `);
+});
+
+test('generate with validator: zod emits zod wrappers for insert metadata queries', async () => {
+  await using project = await createGenerateFixture({
+    definitionsSql: dedent`
+      create table posts (id integer primary key, slug text not null);
+    `,
+    files: {
+      'sql/insert-post.sql': `insert into posts (slug) values (:slug);`,
+    },
+    config: {generate: {validator: 'zod'}},
+  });
+
+  await project.generate();
+  await expect(project.getCompileDiagnostics()).resolves.toEqual([]);
+  const generated = await project.readFile('sql/.generated/insert-post.sql.ts');
+  expect(generated).toContain('const Params = z.object({');
+  expect(generated).toContain('const Result = z.object({');
+  expect(generated).toContain('rowsAffected: z.number()');
+  expect(generated).toContain('lastInsertRowid: z.number()');
+  expect(generated).toContain('export namespace insertPost');
+});
+
+test('generate with validator: zod validates params and rows at runtime', async () => {
+  await using project = await createGenerateFixture({
+    definitionsSql: dedent`
+      create table posts (id integer primary key, slug text not null, title text);
+    `,
+    files: {
+      'sql/find-post-by-slug.sql': `select id, slug, title from posts where slug = :slug limit 1;`,
+    },
+    config: {generate: {validator: 'zod'}},
+  });
+
+  await project.generate();
+  await project.applyStatements(`insert into posts (id, slug, title) values (1, 'hello', 'Hello');`);
+
+  const mod = await project.importTranspiledModule<{
+    findPostBySlug: {
+      (client: unknown, params: {slug: string}): Promise<{id: number; slug: string; title: string | null} | null>;
+      Params: {parse: (value: unknown) => unknown};
+      Result: {parse: (value: unknown) => unknown};
+      sql: string;
+    };
+  }>('sql/.generated/find-post-by-slug.sql.ts');
+
+  using database = project.openDatabase();
+  const client = createNodeSqliteClient(database.database);
+
+  await expect(mod.findPostBySlug(client, {slug: 'hello'})).resolves.toMatchObject({
+    id: 1,
+    slug: 'hello',
+    title: 'Hello',
+  });
+
+  // Pretty-errors uses zod's native z.prettifyError, so the message is the prettified
+  // issues list — one line per issue, with the dotted path.
+  await expect(mod.findPostBySlug(client, {slug: 42 as unknown as string})).rejects.toThrow(
+    /Invalid input[\s\S]+slug/,
+  );
+
+  const badClient = {
+    ...client,
+    all: async () => [{id: 'not-a-number', slug: 'oops', title: null}],
+  };
+  await expect(mod.findPostBySlug(badClient as never, {slug: 'x'})).rejects.toThrow(
+    /Invalid input[\s\S]+id/,
+  );
+
+  expect(typeof mod.findPostBySlug.sql).toBe('string');
+  expect(mod.findPostBySlug.sql).toContain('from posts where slug = ?');
+});
+
+test('generate with validator: valibot emits valibot schemas and validates at runtime', async () => {
+  await using project = await createGenerateFixture({
+    definitionsSql: dedent`
+      create table posts (
+        id integer primary key,
+        slug text not null,
+        title text,
+        status text not null check (status in ('draft', 'published'))
+      );
+    `,
+    files: {
+      'sql/find-post-by-slug.sql': `select id, slug, title, status from posts where slug = :slug limit 1;`,
+    },
+    config: {generate: {validator: 'valibot'}},
+  });
+
+  await project.generate();
+
+  await expect(project.getCompileDiagnostics()).resolves.toEqual([]);
+  expect(await project.dumpFs(generatedTsDump)).toMatchInlineSnapshot(`
+    "sql/
+      .generated/
+        find-post-by-slug.sql.ts
+          import * as v from 'valibot';
+          import {prettifyStandardSchemaError, type Client, type SqlQuery} from 'sqlfu';
+          
+          const Params = v.object({
+          	slug: v.string(),
+          });
+          const Result = v.object({
+          	id: v.number(),
+          	slug: v.string(),
+          	title: v.nullable(v.string()),
+          	status: v.picklist(["draft", "published"]),
+          });
+          const sql = \`
+          select id, slug, title, status from posts where slug = ? limit 1;
+          \`;
+          
+          export const findPostBySlug = Object.assign(
+          	async function findPostBySlug(client: Client, rawParams: v.InferOutput<typeof Params>): Promise<v.InferOutput<typeof Result> | null> {
+          		const parsedParamsResult = Params['~standard'].validate(rawParams);
+          		if ('then' in parsedParamsResult) throw new Error('Unexpected async validation from Params.');
+          		if ('issues' in parsedParamsResult) throw new Error(prettifyStandardSchemaError(parsedParamsResult) || 'Validation failed');
+          		const params = parsedParamsResult.value;
+          		const query: SqlQuery = { sql, args: [params.slug], name: "find-post-by-slug" };
+          		const rows = await client.all(query);
+          		if (rows.length === 0) return null;
+          		const parsed = Result['~standard'].validate(rows[0]);
+          		if ('then' in parsed) throw new Error('Unexpected async validation from Result.');
+          		if ('issues' in parsed) throw new Error(prettifyStandardSchemaError(parsed) || 'Validation failed');
+          		return parsed.value;
+          	},
+          	{ Params, Result, sql },
+          );
+          
+          export namespace findPostBySlug {
+          	export type Params = v.InferOutput<typeof findPostBySlug.Params>;
+          	export type Result = v.InferOutput<typeof findPostBySlug.Result>;
+          }
+        index.ts
+          export * from "./find-post-by-slug.sql.js";
+    "
+  `);
+
+  await project.applyStatements(`insert into posts (id, slug, title, status) values (1, 'hello', 'Hello', 'draft');`);
+
+  const mod = await project.importTranspiledModule<{
+    findPostBySlug: (client: unknown, params: {slug: string}) => Promise<unknown>;
+  }>('sql/.generated/find-post-by-slug.sql.ts');
+
+  using database = project.openDatabase();
+  const client = createNodeSqliteClient(database.database);
+
+  await expect(mod.findPostBySlug(client, {slug: 'hello'})).resolves.toMatchObject({
+    slug: 'hello',
+    status: 'draft',
+  });
+  // Valibot's pretty-errors path inlines the Standard Schema result-guard and calls
+  // `prettifyStandardSchemaError` (re-exported from sqlfu) on the failure result — the
+  // resulting message is the prettified issues list, one line per issue.
+  await expect(mod.findPostBySlug(client, {slug: 42 as unknown as string})).rejects.toThrow(
+    /Invalid type[\s\S]+slug/,
+  );
+});
+
+test('generate with validator: zod-mini emits zod/mini schemas and validates at runtime', async () => {
+  await using project = await createGenerateFixture({
+    definitionsSql: dedent`
+      create table posts (id integer primary key, slug text not null, title text);
+    `,
+    files: {
+      'sql/find-post-by-slug.sql': `select id, slug, title from posts where slug = :slug limit 1;`,
+    },
+    config: {generate: {validator: 'zod-mini'}},
+  });
+
+  await project.generate();
+
+  await expect(project.getCompileDiagnostics()).resolves.toEqual([]);
+  expect(await project.dumpFs(generatedTsDump)).toMatchInlineSnapshot(`
+    "sql/
+      .generated/
+        find-post-by-slug.sql.ts
+          import * as z from 'zod/mini';
+          import {prettifyStandardSchemaError, type Client, type SqlQuery} from 'sqlfu';
+          
+          const Params = z.object({
+          	slug: z.string(),
+          });
+          const Result = z.object({
+          	id: z.number(),
+          	slug: z.string(),
+          	title: z.nullable(z.string()),
+          });
+          const sql = \`
+          select id, slug, title from posts where slug = ? limit 1;
+          \`;
+          
+          export const findPostBySlug = Object.assign(
+          	async function findPostBySlug(client: Client, rawParams: z.infer<typeof Params>): Promise<z.infer<typeof Result> | null> {
+          		const parsedParamsResult = Params['~standard'].validate(rawParams);
+          		if ('then' in parsedParamsResult) throw new Error('Unexpected async validation from Params.');
+          		if ('issues' in parsedParamsResult) throw new Error(prettifyStandardSchemaError(parsedParamsResult) || 'Validation failed');
+          		const params = parsedParamsResult.value;
+          		const query: SqlQuery = { sql, args: [params.slug], name: "find-post-by-slug" };
+          		const rows = await client.all(query);
+          		if (rows.length === 0) return null;
+          		const parsed = Result['~standard'].validate(rows[0]);
+          		if ('then' in parsed) throw new Error('Unexpected async validation from Result.');
+          		if ('issues' in parsed) throw new Error(prettifyStandardSchemaError(parsed) || 'Validation failed');
+          		return parsed.value;
+          	},
+          	{ Params, Result, sql },
+          );
+          
+          export namespace findPostBySlug {
+          	export type Params = z.infer<typeof findPostBySlug.Params>;
+          	export type Result = z.infer<typeof findPostBySlug.Result>;
+          }
+        index.ts
+          export * from "./find-post-by-slug.sql.js";
+    "
+  `);
+
+  await project.applyStatements(`insert into posts (id, slug, title) values (1, 'hello', 'Hello');`);
+
+  const mod = await project.importTranspiledModule<{
+    findPostBySlug: (client: unknown, params: {slug: string}) => Promise<unknown>;
+  }>('sql/.generated/find-post-by-slug.sql.ts');
+
+  using database = project.openDatabase();
+  const client = createNodeSqliteClient(database.database);
+
+  await expect(mod.findPostBySlug(client, {slug: 'hello'})).resolves.toMatchObject({
+    id: 1,
+    slug: 'hello',
+    title: 'Hello',
+  });
+  // zod-mini shares the same inline Standard Schema guard + prettifyStandardSchemaError call.
+  await expect(mod.findPostBySlug(client, {slug: 42 as unknown as string})).rejects.toThrow(
+    /Invalid input[\s\S]+slug/,
+  );
+});
+
+test('generate with prettyErrors: false + validator: zod lets the raw ZodError propagate', async () => {
+  await using project = await createGenerateFixture({
+    definitionsSql: dedent`
+      create table posts (id integer primary key, slug text not null);
+    `,
+    files: {
+      'sql/find-post-by-slug.sql': `select id, slug from posts where slug = :slug limit 1;`,
+    },
+    config: {generate: {validator: 'zod', prettyErrors: false}},
+  });
+
+  await project.generate();
+
+  const generated = await project.readFile('sql/.generated/find-post-by-slug.sql.ts');
+  // No safeParse wrapper, no prettifyError call — just Schema.parse directly.
+  expect(generated).not.toContain('safeParse');
+  expect(generated).not.toContain('prettifyError');
+  expect(generated).toContain('Params.parse(rawParams)');
+  // Only type-imports are allowed from sqlfu here — no runtime value dependency.
+  expect(generated).toContain(`import type {Client, SqlQuery} from 'sqlfu';`);
+
+  const mod = await project.importTranspiledModule<{
+    findPostBySlug: (client: unknown, params: {slug: string}) => Promise<unknown>;
+  }>('sql/.generated/find-post-by-slug.sql.ts');
+
+  using database = project.openDatabase();
+  const client = createNodeSqliteClient(database.database);
+
+  // Raw ZodError — `.issues` is an array, no prettified "validation failed" wrapper string.
+  await expect(mod.findPostBySlug(client, {slug: 42 as unknown as string})).rejects.toSatisfy((error: unknown) => {
+    if (!(error instanceof Error)) return false;
+    if (error.message.includes('Validation failed')) return false;
+    return Array.isArray((error as unknown as {issues?: unknown}).issues);
+  });
+});
+
+test('generate with prettyErrors: false + validator: valibot throws raw issues inline', async () => {
+  await using project = await createGenerateFixture({
+    definitionsSql: dedent`
+      create table posts (id integer primary key, slug text not null);
+    `,
+    files: {
+      'sql/find-post-by-slug.sql': `select id, slug from posts where slug = :slug limit 1;`,
+    },
+    config: {generate: {validator: 'valibot', prettyErrors: false}},
+  });
+
+  await project.generate();
+
+  const generated = await project.readFile('sql/.generated/find-post-by-slug.sql.ts');
+  // Inline Standard Schema guard + issue-throw, no sqlfu runtime value dependency.
+  expect(generated).toContain(`Params['~standard'].validate(rawParams)`);
+  expect(generated).toContain('throw Object.assign(new Error');
+  // Only type-imports from sqlfu — generated file is self-contained apart from valibot.
+  expect(generated).toContain(`import type {Client, SqlQuery} from 'sqlfu';`);
+  expect(generated).not.toContain('prettifyStandardSchemaError');
+
+  const mod = await project.importTranspiledModule<{
+    findPostBySlug: (client: unknown, params: {slug: string}) => Promise<unknown>;
+  }>('sql/.generated/find-post-by-slug.sql.ts');
+
+  using database = project.openDatabase();
+  const client = createNodeSqliteClient(database.database);
+
+  await expect(mod.findPostBySlug(client, {slug: 42 as unknown as string})).rejects.toSatisfy((error: unknown) => {
+    if (!(error instanceof Error)) return false;
+    return Array.isArray((error as unknown as {issues?: unknown}).issues);
+  });
+});
+
+test('generate with prettyErrors: false + validator: zod-mini throws raw issues inline', async () => {
+  await using project = await createGenerateFixture({
+    definitionsSql: dedent`
+      create table posts (id integer primary key, slug text not null);
+    `,
+    files: {
+      'sql/find-post-by-slug.sql': `select id, slug from posts where slug = :slug limit 1;`,
+    },
+    config: {generate: {validator: 'zod-mini', prettyErrors: false}},
+  });
+
+  await project.generate();
+
+  const generated = await project.readFile('sql/.generated/find-post-by-slug.sql.ts');
+  expect(generated).toContain(`Params['~standard'].validate(rawParams)`);
+  expect(generated).toContain('throw Object.assign(new Error');
+  // Same self-contained shape as the valibot prettyErrors: false case.
+  expect(generated).toContain(`import type {Client, SqlQuery} from 'sqlfu';`);
+  expect(generated).not.toContain('prettifyStandardSchemaError');
+
+  const mod = await project.importTranspiledModule<{
+    findPostBySlug: (client: unknown, params: {slug: string}) => Promise<unknown>;
+  }>('sql/.generated/find-post-by-slug.sql.ts');
+
+  using database = project.openDatabase();
+  const client = createNodeSqliteClient(database.database);
+
+  await expect(mod.findPostBySlug(client, {slug: 42 as unknown as string})).rejects.toSatisfy((error: unknown) => {
+    if (!(error instanceof Error)) return false;
+    return Array.isArray((error as unknown as {issues?: unknown}).issues);
+  });
+});
+
+test('generate rejects unknown validator values at config load', async () => {
+  await using project = await createGenerateFixture({
+    definitionsSql: `create table posts (id integer primary key);`,
+    files: {
+      'sql/list-posts.sql': `select id from posts;`,
+    },
+    rawGenerate: `{validator: 'not-a-real-validator' as any}`,
+  });
+
+  await expect(project.generate()).rejects.toThrow(
+    /"generate\.validator" must be one of 'zod', 'valibot', 'zod-mini', null, or undefined/,
+  );
+});
+
+test('generate rejects the legacy generate.zod flag with a migration hint', async () => {
+  await using project = await createGenerateFixture({
+    definitionsSql: `create table posts (id integer primary key);`,
+    files: {
+      'sql/list-posts.sql': `select id from posts;`,
+    },
+    rawGenerate: `{zod: true} as any`,
+  });
+
+  await expect(project.generate()).rejects.toThrow(
+    /"generate\.zod" is no longer supported[\s\S]+generate\.validator/,
+  );
+});
+
+test('generate without generate.validator keeps plain TS output unchanged', async () => {
+  await using project = await createGenerateFixture({
+    definitionsSql: dedent`
+      create table posts (id integer primary key, slug text not null);
+    `,
+    files: {
+      'sql/list-posts.sql': `select id, slug from posts;`,
+    },
+  });
+
+  await project.generate();
+
+  // Byte-identical to the plain-TS snapshot above — no zod/valibot import, no runtime validation.
+  const generated = await project.readFile('sql/.generated/list-posts.sql.ts');
+  expect(generated).not.toContain(`from 'zod'`);
+  expect(generated).not.toContain(`from 'valibot'`);
+  expect(generated).not.toContain('Object.assign');
+  expect(generated).toContain('export type ListPostsResult = {');
+});
+
 async function createGenerateFixture(input: {
   definitionsSql: string;
   files: Record<string, string>;
   config?: {
     generatedImportExtension?: '.js' | '.ts';
+    generate?: {validator?: 'zod' | 'valibot' | 'zod-mini' | null; prettyErrors?: boolean};
   };
+  /** Raw override for the generate block in the emitted `sqlfu.config.ts`. Useful for failure-case tests. */
+  rawGenerate?: string;
 }) {
   const root = await createTempFixtureRoot('generate');
   const dbPath = path.join(root, 'app.db');
+  const configBodyLines = [
+    `db: './app.db',`,
+    `migrations: './migrations',`,
+    `definitions: './definitions.sql',`,
+    `queries: './sql',`,
+    ...(input.config?.generatedImportExtension
+      ? [`generatedImportExtension: '${input.config.generatedImportExtension}',`]
+      : []),
+    ...(input.rawGenerate
+      ? [`generate: ${input.rawGenerate},`]
+      : input.config?.generate
+        ? [`generate: ${JSON.stringify(input.config.generate)},`]
+        : []),
+  ];
   await writeFixtureFiles(root, {
     'definitions.sql': input.definitionsSql,
     'sqlfu.config.ts': dedent`
       export default {
-        db: './app.db',
-        migrations: './migrations',
-        definitions: './definitions.sql',
-        queries: './sql',
-        ${input.config?.generatedImportExtension ? `generatedImportExtension: '${input.config.generatedImportExtension}',` : ''}
+        ${configBodyLines.join('\n        ')}
       };
     `,
     ...input.files,
@@ -856,6 +1320,18 @@ async function createGenerateFixture(input: {
   return {
     async generate() {
       await inWorkingDirectory(root, () => generateQueryTypes());
+    },
+    async applyStatements(sql: string) {
+      await applyDefinitionsToDatabase(dbPath, sql);
+    },
+    openDatabase() {
+      const database = new DatabaseSync(dbPath);
+      return {
+        database,
+        [Symbol.dispose]() {
+          database.close();
+        },
+      };
     },
     async readFile(relativePath: string) {
       return fs.readFile(path.join(root, relativePath), 'utf8');
@@ -877,7 +1353,11 @@ async function createGenerateFixture(input: {
         },
       });
 
-      await fs.writeFile(outputPath, transpiled.outputText);
+      // The transpiled file lives in os.tmpdir() where `import 'zod'` / `import 'sqlfu'` etc.
+      // cannot be resolved by Node's default ESM walk. Rewrite bare specifiers to absolute
+      // file URLs pointing at the packages the workspace already resolved.
+      const resolvedSource = rewriteBareImports(transpiled.outputText);
+      await fs.writeFile(outputPath, resolvedSource);
       return import(pathToFileURL(outputPath).href) as Promise<TModule>;
     },
     async getCompileDiagnostics() {
@@ -895,6 +1375,9 @@ async function createGenerateFixture(input: {
             sqlfu: [path.join(packageRoot, 'src', 'index.ts')],
             'sqlfu/client': [path.join(packageRoot, 'src', 'client.ts')],
             'better-sqlite3': [path.join(packageRoot, 'node_modules', 'better-sqlite3')],
+            zod: [path.join(packageRoot, 'node_modules', 'zod')],
+            'zod/mini': [path.join(packageRoot, 'node_modules', 'zod', 'mini')],
+            valibot: [path.join(packageRoot, 'node_modules', 'valibot')],
           },
           types: ['node'],
         },
@@ -939,4 +1422,24 @@ async function applyDefinitionsToDatabase(dbPath: string, definitionsSql: string
   } finally {
     database.close();
   }
+}
+
+/**
+ * The transpiled .mjs lives in os.tmpdir() where `import 'zod'` can't be resolved by Node's
+ * module walk. The test already knows where each package sits in the workspace, so replace
+ * bare specifiers in `import`/`export from` statements with absolute file URLs.
+ */
+function rewriteBareImports(source: string): string {
+  const mapping: Record<string, string> = {
+    sqlfu: pathToFileURL(path.join(packageRoot, 'src', 'index.ts')).href,
+    zod: pathToFileURL(path.join(packageRoot, 'node_modules', 'zod', 'index.js')).href,
+    'zod/mini': pathToFileURL(path.join(packageRoot, 'node_modules', 'zod', 'mini', 'index.js')).href,
+    valibot: pathToFileURL(path.join(packageRoot, 'node_modules', 'valibot', 'dist', 'index.mjs')).href,
+  };
+  // For sqlfu specifically we need to execute .ts source. vitest has a loader in-process, so
+  // pointing at the .ts file lets the process import it through the vitest TS pipeline.
+  return source.replace(/from\s+["']([^"']+)["']/g, (match, specifier) => {
+    const replacement = mapping[specifier];
+    return replacement ? `from "${replacement}"` : match;
+  });
 }

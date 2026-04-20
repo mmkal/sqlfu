@@ -20,6 +20,7 @@ export function createDurableObjectClient(
   } = {
     driver: storage,
     system: 'sqlite',
+    sync: true,
     all<TRow extends ResultRow = ResultRow>(query: SqlQuery) {
       return storage.exec<TRow>(query.sql, ...query.args).toArray();
     },

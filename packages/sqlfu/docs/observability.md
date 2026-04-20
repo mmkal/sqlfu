@@ -1,8 +1,8 @@
 # Observability
 
-Generated queries carry their filename to runtime as a `name` field. That name reaches OpenTelemetry spans, Sentry errors, PostHog events, Datadog metrics, and anywhere else you want to see it — without extra configuration per destination.
+Generated queries carry their filename to runtime as a `name` field. That name reaches OpenTelemetry spans, Sentry errors, PostHog events, Datadog metrics, and anywhere else you want to see it, without extra configuration per destination.
 
-Observability in sqlfu is a consequence of naming, not a separate feature axis.
+That sqlfu gives you best in class observability is mostly a consequence making "naming" a first-class concept. There isn't much to the actual instrumentation or observability implementation. It's <200 lines of code.
 
 ## The `name` field
 
@@ -15,20 +15,21 @@ const query: SqlQuery = {sql: ListProfilesSql, args: [], name: 'list-profiles'};
 
 Nested directories become slash-separated names (`sql/users/list-profiles.sql` → `name: 'users/list-profiles'`) and the generated function name is the camelCased path (`usersListProfiles`). Function names can't collide because distinct file paths produce distinct names.
 
-Ad-hoc SQL (via `client.sql\`...\``) has no name, but you can pass one explicitly:
+Ad-hoc SQL (via `` client.sql`...` ``) has no name, but you can pass one explicitly:
 
 ```ts
 client.run({sql: 'select 1', args: [], name: 'health-check'});
 ```
 
-## `instrument` — a single export
+## `instrument` helper
 
 ```ts
 import {instrument} from 'sqlfu';
 
-const client = instrument(baseClient,
-  instrument.otel({tracer}),
-  instrument.onError(({context, error}) => reportError(error)),
+const client = instrument(
+  baseClient,
+  instrument.otel({tracer: myOtelTracer}),
+  instrument.onError(({context, error}) => myErrorReportingService.report(error)),
 );
 ```
 
@@ -167,7 +168,8 @@ import {instrument} from 'sqlfu';
 
 const statsd = new StatsD({host: 'localhost', port: 8125});
 
-const client = instrument(baseClient,
+const client = instrument(
+  baseClient,
   ({context, execute, processResult}) => {
     const start = Date.now();
     const tags = [
@@ -202,7 +204,11 @@ client.run({sql, args, name: 'my-query'});
 
 **`iterate` and `transaction` pass through unchanged.** Queries issued *inside* a transaction still fire hooks because the tx client is re-instrumented on entry. Transactions themselves don't get their own spans. If you want transaction-level spans, wrap `client.transaction(...)` calls yourself using your tracer.
 
-**Composition order is outer-to-inner.** `instrument(client, a, b, c)` means `a` wraps `b` wraps `c` wraps the underlying call. If you put `instrument.otel` first, the OTel span covers everything including any error-reporter work.
+**Composition order is outer-to-inner.** `instrument(client, a, b, c)` means `a` wraps `b` wraps `c` wraps the underlying call. If you put `instrument.otel` first, the OTel span covers everything including any error-reporter work. You can of course wrap yourself if you prefer:
+
+```ts
+const myClient = instrument(instrument(baseClient, innerHook), outerHook)
+```
 
 ## Types
 

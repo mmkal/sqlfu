@@ -31,7 +31,7 @@ test('the goto shape works when destructive drops are explicitly enabled', async
       create table toy(name text not null);
     `);
 
-    await applyMigrations(sharedHost, createAsyncNodeSqliteClient(targetDb), {
+    await applyMigrations(createAsyncNodeSqliteClient(targetDb), {
       migrations: [
         {
           path: '2026-04-10T00.00.00.000Z_create_person.sql',

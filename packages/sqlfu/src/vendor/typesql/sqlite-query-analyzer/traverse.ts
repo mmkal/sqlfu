@@ -2155,8 +2155,14 @@ function traverse_delete_stmt(delete_stmt: Delete_stmtContext, traverseContext: 
 	const table_name = delete_stmt.qualified_table_name().getText();
 	const fromColumns = filterColumns(traverseContext.dbSchema, [], '', splitName(table_name));
 
+	// Upstream typesql doesn't guard this; `delete from <t>;` with no where clause produces a null
+	// expr and then `traverse_expr(null, ...)` throws `Cannot read properties of null`. The where
+	// clause is optional in SQLite, so a missing expr just means "no conditions" and nothing to
+	// traverse. sqlfu vendor divergence: added null guard.
 	const expr = delete_stmt.expr();
-	traverse_expr(expr, { ...traverseContext, fromColumns });
+	if (expr) {
+		traverse_expr(expr, { ...traverseContext, fromColumns });
+	}
 
 	const returning_clause = delete_stmt.returning_clause();
 	const returningColumns = returning_clause ? traverse_returning_clause(returning_clause, { ...traverseContext, fromColumns }) : [];

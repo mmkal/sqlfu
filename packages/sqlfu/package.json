@@ -59,7 +59,8 @@
     }
   },
   "scripts": {
-    "build": "pnpm run build:runtime && pnpm run build:vendor-typesql",
+    "build": "pnpm run build:internal-queries && pnpm run build:runtime && pnpm run build:vendor-typesql",
+    "build:internal-queries": "tsx scripts/generate-internal-queries.ts",
     "build:runtime": "tsgo -p tsconfig.build.json",
     "build:vendor-typesql": "rm -rf dist/vendor/antlr4 dist/vendor/code-block-writer dist/vendor/typesql dist/vendor/typesql-parser && tsgo -p src/vendor/typesql/tsconfig.json",
     "typecheck": "tsgo -p tsconfig.typecheck.json && pnpm run typecheck:vendor-typesql",

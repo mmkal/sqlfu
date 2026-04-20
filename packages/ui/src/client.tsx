@@ -876,7 +876,7 @@ function SchemaPanel(input: {projectName: string; check: SchemaCheckResponse; au
                     <summary role="button" className="migration-summary">
                       <span>{migration.name}</span>
                       <span className="migration-summary-right">
-                        <span className="muted">{formatAppliedAgo(migration.appliedAt)}</span>
+                        <span className="muted">{formatAppliedAgo(migration.applied_at)}</span>
                         {migration.integrity !== 'ok' ? <span className="pill pill-warn">⚠</span> : null}
                         <span className="accordion-chevron" aria-hidden="true">
                           ▾
@@ -940,8 +940,8 @@ function MigrationDetail(input: {
   const metadata = [
     `name: ${toYamlScalar(input.migration.name)}`,
     `filename: ${toYamlScalar(input.migration.fileName)}`,
-    `applied_at: ${toYamlScalar(input.migration.appliedAt)}`,
-    ...(input.migration.appliedAt
+    `applied_at: ${toYamlScalar(input.migration.applied_at)}`,
+    ...(input.migration.applied_at
       ? [`integrity: ${toYamlScalar(input.migration.integrity ?? 'checksum mismatch')}`]
       : []),
   ].join('\n');

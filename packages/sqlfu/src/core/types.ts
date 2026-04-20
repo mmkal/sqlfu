@@ -104,27 +104,47 @@ export interface SqlfuGenerateConfig {
    * No effect when `validator` is null/undefined (plain TS types never throw validation errors).
    */
   readonly prettyErrors?: boolean;
+  /**
+   * When true, generated wrappers take a `SyncClient` and return values synchronously (no
+   * `async`/`await`, no `Promise<...>` return types). Default false.
+   *
+   * Use this when you know your app always runs against a sync driver (`node:sqlite`,
+   * `better-sqlite3`, `bun:sqlite`). The resulting wrappers are easier to call from
+   * non-async contexts (constructors, non-async callbacks).
+   */
+  readonly sync?: boolean;
+  /**
+   * Extension used in generated `.generated/index.ts` barrel re-exports (`./tables.js` vs
+   * `./tables.ts`). If omitted, sqlfu infers it from the nearest `tsconfig.json`:
+   * `.ts` when `allowImportingTsExtensions` / `rewriteRelativeImportExtensions` is on,
+   * otherwise `.js`.
+   */
+  readonly importExtension?: '.js' | '.ts';
 }
 
 export interface SqlfuConfig {
   readonly db: string;
-  readonly migrations: string;
+  /**
+   * Directory containing migration `.sql` files. Optional — omit if your project doesn't use
+   * migrations (e.g. library-author use cases where definitions.sql alone is the source of truth).
+   */
+  readonly migrations?: string;
   readonly definitions: string;
   readonly queries: string;
-  readonly generatedImportExtension?: '.js' | '.ts';
   readonly generate?: SqlfuGenerateConfig;
 }
 
 export interface SqlfuProjectConfig {
   readonly projectRoot: string;
   readonly db: string;
-  readonly migrations: string;
+  readonly migrations?: string;
   readonly definitions: string;
   readonly queries: string;
-  readonly generatedImportExtension: '.js' | '.ts';
   readonly generate: {
     readonly validator: SqlfuValidator | null;
     readonly prettyErrors: boolean;
+    readonly sync: boolean;
+    readonly importExtension: '.js' | '.ts';
   };
 }
 

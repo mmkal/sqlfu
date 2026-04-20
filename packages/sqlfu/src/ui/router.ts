@@ -128,7 +128,7 @@ export const uiRouter = {
             fileName: migration.fileName,
             content: migration.content,
             applied: migration.applied,
-            appliedAt: migration.appliedAt,
+            applied_at: migration.applied_at,
             integrity: migration.integrity,
           })),
           migrationHistory: authorities.migrationHistory.map((migration) => ({
@@ -137,7 +137,7 @@ export const uiRouter = {
             fileName: migration.fileName,
             content: migration.content,
             applied: migration.applied,
-            appliedAt: migration.appliedAt,
+            applied_at: migration.applied_at,
             integrity: migration.integrity,
           })),
           liveSchemaSql: authorities.liveSchemaSql,

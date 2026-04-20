@@ -3,5 +3,5 @@ export default {
   migrations: './migrations',
   definitions: './definitions.sql',
   queries: './sql',
-  generatedImportExtension: '.ts',
+  generate: {importExtension: '.ts'},
 };

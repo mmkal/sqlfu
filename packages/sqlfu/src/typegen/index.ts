@@ -35,9 +35,19 @@ export async function generateQueryTypesForConfig(config: SqlfuProjectConfig): P
   const databasePath = await materializeTypegenDatabase(config);
   const schema = await loadSchema(databasePath);
   const queryFiles = await loadQueryFiles(config.queries);
+
+  // Partition into DDL vs queries that go through typesql. The vendored typesql dispatcher
+  // (sqlite-query-analyzer/traverse.ts `traverse_Sql_stmtContext`) throws `traverse_Sql_stmtContext`
+  // for every statement kind except select/insert/update/delete, so `create table`, `drop`,
+  // `pragma`, etc. all fail analysis. Rather than teach the analyzer a new `queryType: 'Ddl'`
+  // (that would propagate through the whole typesql pipeline + its downstream consumers), we
+  // detect DDL at the wrapper layer and emit a trivial `client.run(sql)` wrapper directly.
+  // Tracked for a proper fix in typesql-ddl-support (filed alongside this change).
+  const ddlFiles = queryFiles.filter((file) => isDdlStatement(file.sqlContent));
+  const nonDdlFiles = queryFiles.filter((file) => !ddlFiles.includes(file));
   const queryAnalyses = await analyzeVendoredTypesqlQueries(
     databasePath,
-    queryFiles.map((query) => ({
+    nonDdlFiles.map((query) => ({
       sqlPath: query.sqlPath,
       sqlContent: query.sqlContent,
     })),
@@ -48,28 +58,101 @@ export async function generateQueryTypesForConfig(config: SqlfuProjectConfig): P
 
   await Promise.all(
     queryFiles.map(async (queryFile) => {
+      const wrapperPath = path.join(generatedDir, `${queryFile.relativePath}.sql.ts`);
+      await fs.mkdir(path.dirname(wrapperPath), {recursive: true});
+
+      if (ddlFiles.includes(queryFile)) {
+        await fs.writeFile(
+          wrapperPath,
+          renderDdlWrapper({
+            relativePath: queryFile.relativePath,
+            sql: queryFile.sqlContent,
+            sync: config.generate.sync,
+          }),
+        );
+        return;
+      }
+
       const analysis = queryAnalyses.find((query) => query.sqlPath === queryFile.sqlPath);
       if (!analysis) {
         throw new Error(`Missing vendored TypeSQL analysis for ${queryFile.sqlPath}`);
       }
 
-      const wrapperPath = path.join(generatedDir, `${queryFile.relativePath}.sql.ts`);
-      await fs.mkdir(path.dirname(wrapperPath), {recursive: true});
       const contents = analysis.ok
         ? renderQueryWrapper({
             relativePath: queryFile.relativePath,
             descriptor: refineDescriptor(analysis.descriptor, queryFile.sqlContent, schema),
             validator: config.generate.validator,
             prettyErrors: config.generate.prettyErrors,
+            sync: config.generate.sync,
           })
         : `//Invalid SQL\nexport {};\n`;
       await fs.writeFile(wrapperPath, contents);
     }),
   );
 
-  await writeGeneratedBarrel(generatedDir, queryFiles, config.generatedImportExtension);
-  await writeQueryCatalog(config, queryFiles, queryAnalyses, schema);
-  await writeMigrationsBundle(config);
+  await writeTablesFile(generatedDir, schema);
+  await writeGeneratedBarrel(generatedDir, queryFiles, config.generate.importExtension);
+  await writeQueryCatalog(config, queryFiles, queryAnalyses, ddlFiles, schema);
+  if (config.migrations) {
+    await writeMigrationsBundle(config);
+  }
+}
+
+/**
+ * True for files whose SQL is a top-level DDL / connection-control statement that typesql can't
+ * meaningfully analyze for params or result columns. We generate a dead-simple `client.run(sql)`
+ * wrapper for these instead of falling back to `//Invalid SQL`.
+ *
+ * The match is intentionally conservative — queries that *look* like DDL but return rows
+ * (e.g. `create table ... returning`) aren't really SQLite; sticking to the leading keyword
+ * keeps this simple and predictable.
+ */
+function isDdlStatement(sqlContent: string): boolean {
+  const stripped = sqlContent.replace(/\/\*[\s\S]*?\*\//g, '').replace(/--.*$/gm, '').trim();
+  return /^(create|drop|alter|pragma|vacuum|reindex|analyze|attach|detach|begin|commit|rollback|savepoint|release)\b/i.test(
+    stripped,
+  );
+}
+
+function renderDdlWrapper(input: {relativePath: string; sql: string; sync: boolean}): string {
+  const queryName = input.relativePath;
+  const functionName = toCamelCase(queryName);
+  const clientType = input.sync ? 'SyncClient' : 'Client';
+  const maybeAsync = input.sync ? '' : 'async ';
+
+  return [
+    `import type {${clientType}} from 'sqlfu';`,
+    ``,
+    ...renderSqlConstant(input.sql),
+    ``,
+    `export const ${functionName} = Object.assign(`,
+    `\t${maybeAsync}function ${functionName}(client: ${clientType}) {`,
+    `\t\tconst query = { sql, args: [], name: ${JSON.stringify(queryName)} };`,
+    `\t\treturn client.run(query);`,
+    `\t},`,
+    `\t{ sql },`,
+    `);`,
+    ``,
+  ].join('\n');
+}
+
+/**
+ * Module-scoped `const sql = \`…\``, accessed externally via the Object.assign-merged
+ * `whatever.sql`. Renders as a one-liner when the line fits under 80 characters,
+ * otherwise splits across three lines with the SQL body on its own line.
+ */
+function renderSqlConstant(sql: string): string[] {
+  const trimmed = normalizeSqlForTemplate(sql).join('\n').trim();
+  const oneLiner = `const sql = \`${trimmed}\``;
+  if (!trimmed.includes('\n') && oneLiner.length <= 80) {
+    return [oneLiner];
+  }
+  return [
+    `const sql = \``,
+    trimmed,
+    `\``,
+  ];
 }
 
 export async function analyzeAdHocSqlForConfig(config: SqlfuProjectConfig, sql: string): Promise<AdHocQueryAnalysis> {
@@ -175,14 +258,33 @@ async function openMainDevDatabase(dbPath: string): Promise<DisposableClient> {
     };
   }
 
-  const {DatabaseSync} = await import('node:sqlite');
-  const database = new DatabaseSync(dbPath);
-  return {
-    client: createNodeSqliteClient(database as Parameters<typeof createNodeSqliteClient>[0]),
-    async [Symbol.asyncDispose]() {
-      database.close();
-    },
-  };
+  // `node:sqlite` landed in Node 22. On Node 20 we fall back to better-sqlite3, which is already
+  // used by the vendored typesql analyzer and works across every Node version sqlfu supports.
+  // The fallback keeps `sqlfu generate` working for users (and our own build job) before they
+  // upgrade to Node 22.
+  try {
+    const {DatabaseSync} = await import('node:sqlite');
+    const database = new DatabaseSync(dbPath);
+    return {
+      client: createNodeSqliteClient(database as Parameters<typeof createNodeSqliteClient>[0]),
+      async [Symbol.asyncDispose]() {
+        database.close();
+      },
+    };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code !== 'ERR_UNKNOWN_BUILTIN_MODULE') throw error;
+    const {default: BetterSqlite3} = (await import('better-sqlite3' as any)) as {
+      default: new (path: string) => unknown;
+    };
+    const {createBetterSqlite3Client} = await import('../adapters/better-sqlite3.js');
+    const database = new BetterSqlite3(dbPath) as Parameters<typeof createBetterSqlite3Client>[0] & {close(): void};
+    return {
+      client: createBetterSqlite3Client(database),
+      async [Symbol.asyncDispose]() {
+        database.close();
+      },
+    };
+  }
 }
 
 async function loadQueryFiles(queriesDir: string): Promise<readonly QueryFile[]> {
@@ -227,19 +329,70 @@ async function loadQueryFiles(queriesDir: string): Promise<readonly QueryFile[]>
 async function writeGeneratedBarrel(
   generatedDir: string,
   queryFiles: readonly QueryFile[],
-  generatedImportExtension: '.js' | '.ts',
+  importExtension: '.js' | '.ts',
 ): Promise<void> {
-  const lines = queryFiles
-    .map((queryFile) => queryFile.relativePath)
-    .sort((left, right) => left.localeCompare(right))
-    .map((relativePath) => `export * from "./${relativePath}.sql${generatedImportExtension}";`);
-  await fs.writeFile(path.join(generatedDir, 'index.ts'), lines.join('\n') + (lines.length > 0 ? '\n' : ''));
+  const lines = [
+    `export * from "./tables${importExtension}";`,
+    ...queryFiles
+      .map((queryFile) => queryFile.relativePath)
+      .sort((left, right) => left.localeCompare(right))
+      .map((relativePath) => `export * from "./${relativePath}.sql${importExtension}";`),
+  ];
+  await fs.writeFile(path.join(generatedDir, 'index.ts'), lines.join('\n') + '\n');
+}
+
+/**
+ * Emit a TS file with a row type for every table and view in the live schema.
+ *
+ * Naming convention: `<RelationName in PascalCase>Row`. `posts` → `PostsRow`,
+ * `post_events` → `PostEventsRow`, `post_summaries` → `PostSummariesRow`.
+ *
+ * Nullable columns are typed `T | null` (not `T?`). Every column is always
+ * present on a row; a null-valued column is distinct from an absent key,
+ * which is how query-result types treat it. Row types are literally what
+ * SQLite hands back for `select * from <table>`.
+ */
+async function writeTablesFile(
+  generatedDir: string,
+  schema: ReadonlyMap<string, RelationInfo>,
+): Promise<void> {
+  const relations = Array.from(schema.values()).sort((left, right) => left.name.localeCompare(right.name));
+
+  const blocks = relations.map((relation) => {
+    const typeName = `${relationTypeName(relation.name)}Row`;
+    const fieldLines: string[] = [];
+    for (const column of relation.columns.values()) {
+      const suffix = column.notNull ? '' : ' | null';
+      fieldLines.push(`\t${column.name}: ${column.tsType}${suffix};`);
+    }
+    return [`export type ${typeName} = {`, ...fieldLines, `};`].join('\n');
+  });
+
+  const header = [
+    `// Generated by \`sqlfu generate\`. Do not edit.`,
+    `// Row types for every table and view in your project's schema.`,
+    ``,
+  ];
+  const body = blocks.length === 0 ? [`export {};`] : blocks.flatMap((block, index) => (index === 0 ? [block] : ['', block]));
+
+  await fs.writeFile(path.join(generatedDir, 'tables.ts'), [...header, ...body, ``].join('\n'));
+}
+
+function relationTypeName(relationName: string): string {
+  return relationName
+    .split(/[^A-Za-z0-9]+/)
+    .filter(Boolean)
+    .map((part) => part[0]!.toUpperCase() + part.slice(1))
+    .join('');
 }
 
 async function writeMigrationsBundle(config: SqlfuProjectConfig): Promise<void> {
+  if (!config.migrations) return;
+  const migrationsDir = config.migrations;
+
   let fileNames: string[];
   try {
-    fileNames = (await fs.readdir(config.migrations))
+    fileNames = (await fs.readdir(migrationsDir))
       .filter((fileName) => fileName.endsWith('.sql'))
       .sort((left, right) => left.localeCompare(right));
   } catch (error) {
@@ -252,17 +405,17 @@ async function writeMigrationsBundle(config: SqlfuProjectConfig): Promise<void> 
 
   const entries: {key: string; content: string}[] = [];
   for (const fileName of fileNames) {
-    const filePath = path.join(config.migrations, fileName);
+    const filePath = path.join(migrationsDir, fileName);
     const content = await fs.readFile(filePath, 'utf8');
     const key = path.relative(config.projectRoot, filePath).split(path.sep).join('/');
     entries.push({key, content});
   }
 
-  const bundleDir = path.join(config.migrations, '.generated');
+  const bundleDir = path.join(migrationsDir, '.generated');
   await fs.mkdir(bundleDir, {recursive: true});
   const bundleLines = [
     `// Generated by \`sqlfu generate\`. Do not edit.`,
-    `// A bundle of every migration in ${path.relative(config.projectRoot, config.migrations).split(path.sep).join('/')}/,`,
+    `// A bundle of every migration in ${path.relative(config.projectRoot, migrationsDir).split(path.sep).join('/')}/,`,
     `// importable from runtimes without filesystem access (durable objects, edge workers, browsers).`,
     `// Pair with \`migrationsFromBundle\` + \`applyMigrations\` from 'sqlfu'.`,
     ``,
@@ -282,9 +435,15 @@ async function writeQueryCatalog(
   config: SqlfuProjectConfig,
   queryFiles: readonly QueryFile[],
   queryAnalyses: Awaited<ReturnType<typeof analyzeVendoredTypesqlQueries>>,
+  ddlFiles: readonly QueryFile[],
   schema: ReadonlyMap<string, RelationInfo>,
 ): Promise<void> {
-  const entries: QueryCatalogEntry[] = queryFiles.map((queryFile) => {
+  // DDL statements (e.g. `create table if not exists`) get trivial wrappers but have no
+  // params / result columns / json schema — nothing to populate a form with. Leaving them out
+  // of the catalog keeps UI consumers from rendering a meaningless "run" button for each one.
+  const entries: QueryCatalogEntry[] = queryFiles
+    .filter((queryFile) => !ddlFiles.includes(queryFile))
+    .map((queryFile) => {
     const analysis = queryAnalyses.find((query) => query.sqlPath === queryFile.sqlPath);
     if (!analysis) {
       throw new Error(`Missing vendored TypeSQL analysis for ${queryFile.sqlPath}`);
@@ -365,6 +524,7 @@ function renderQueryWrapper(input: {
   descriptor: GeneratedQueryDescriptor;
   validator: SqlfuValidator | null;
   prettyErrors: boolean;
+  sync: boolean;
 }): string {
   if (input.validator !== null) {
     return renderValidatorQueryWrapper({
@@ -372,46 +532,76 @@ function renderQueryWrapper(input: {
       descriptor: input.descriptor,
       emitter: getValidatorEmitter(input.validator),
       prettyErrors: input.prettyErrors,
+      sync: input.sync,
     });
   }
 
   const queryName = input.relativePath;
   const functionName = toCamelCase(queryName);
-  const capitalizedName = functionName[0]!.toUpperCase() + functionName.slice(1);
-  const dataTypeName = `${capitalizedName}Data`;
-  const paramsTypeName = `${capitalizedName}Params`;
-  const resultTypeName = `${capitalizedName}Result`;
-  const sqlConstantName = `${capitalizedName}Sql`;
-  const returnType = getReturnType(input.descriptor, resultTypeName);
-  const typeBlocks = buildTypeBlocks(input.descriptor, {
-    dataTypeName,
-    paramsTypeName,
-    resultTypeName,
-  });
+
+  const clientType = input.sync ? 'SyncClient' : 'Client';
+  const maybeAsync = input.sync ? '' : 'async ';
+  const hasData = (input.descriptor.data?.length ?? 0) > 0;
+  const hasParams = input.descriptor.parameters.length > 0;
+  const resultMode = getResultMode(input.descriptor);
+  // SELECT-like results (a row type users hand-wrote in their select list) get a named
+  // Result type + reified shape. Non-SELECT without RETURNING (metadata mode) just passes
+  // client.run's return through — the caller sees QueryMetadata directly. No Result type,
+  // no guards, no reshape.
+  const emitResultType = resultMode !== 'metadata';
+  const dataTypeRef = `${functionName}.Data`;
+  const paramsTypeRef = `${functionName}.Params`;
+  const resultTypeRef = `${functionName}.Result`;
+
   const queryArgs = buildQueryArgs(input.descriptor);
-  const restParameters = buildFunctionParameters(input.descriptor, {
-    dataTypeName,
-    paramsTypeName,
-  });
+
+  const functionSignatureArgs: string[] = [`client: ${clientType}`];
+  if (hasData) functionSignatureArgs.push(`data: ${dataTypeRef}`);
+  if (hasParams) functionSignatureArgs.push(`params: ${paramsTypeRef}`);
+
+  const signatureReturnAnnotation = emitResultType
+    ? input.sync
+      ? `: ${getReturnType(input.descriptor, resultTypeRef)}`
+      : `: Promise<${getReturnType(input.descriptor, resultTypeRef)}>`
+    : '';
+  const functionDeclaration = `\t${maybeAsync}function ${functionName}(${functionSignatureArgs.join(', ')})${signatureReturnAnnotation} {`;
+
+  const namespaceLines: string[] = [];
+  if (hasData) {
+    namespaceLines.push(`\texport type Data = ${renderObjectTypeBody(input.descriptor.data!, 'parameter')};`);
+  }
+  if (hasParams) {
+    namespaceLines.push(`\texport type Params = ${renderObjectTypeBody(input.descriptor.parameters, 'parameter')};`);
+  }
+  if (emitResultType) {
+    namespaceLines.push(`\texport type Result = ${renderObjectTypeBody(getResultFields(input.descriptor), 'result')};`);
+  }
+
+  const implementationLines = emitResultType
+    ? buildGeneratedImplementation({
+        resultMode,
+        resultType: resultTypeRef,
+        sync: input.sync,
+        indent: '\t\t',
+      })
+    : [`\t\treturn client.run(query);`];
 
   return [
-    `import type {Client, SqlQuery} from 'sqlfu';`,
+    `import type {${clientType}} from 'sqlfu';`,
     ``,
-    ...typeBlocks,
+    ...renderSqlConstant(input.descriptor.sql),
     ``,
-    `const ${sqlConstantName} = \``,
-    normalizeSqlForTemplate(input.descriptor.sql).join('\n').trim(),
-    `\``,
+    `export const ${functionName} = Object.assign(`,
+    functionDeclaration,
+    `\t\tconst query = { sql, args: ${queryArgs}, name: ${JSON.stringify(queryName)} };`,
+    ...implementationLines,
+    `\t},`,
+    `\t{ sql },`,
+    `);`,
     ``,
-    `export async function ${functionName}(client: Client${restParameters ? `, ${restParameters}` : ''}): Promise<${returnType}> {`,
-    `\tconst query: SqlQuery = { sql: ${sqlConstantName}, args: ${queryArgs}, name: ${JSON.stringify(queryName)} };`,
-    ...buildGeneratedImplementation({
-      resultMode: getResultMode(input.descriptor),
-      resultType: resultTypeName,
-      resultProperties: getResultProperties(input.descriptor),
-    }),
-    `}`,
-    ``,
+    ...(namespaceLines.length === 0
+      ? []
+      : [`export namespace ${functionName} {`, ...namespaceLines, `}`, ``]),
   ].join('\n');
 }
 
@@ -595,14 +785,20 @@ function renderValidatorQueryWrapper(input: {
   descriptor: GeneratedQueryDescriptor;
   emitter: ValidatorEmitter;
   prettyErrors: boolean;
+  sync: boolean;
 }): string {
   const queryName = input.relativePath;
   const functionName = toCamelCase(queryName);
-  const {descriptor, emitter, prettyErrors} = input;
+  const {descriptor, emitter, prettyErrors, sync} = input;
+  const clientType = sync ? 'SyncClient' : 'Client';
   const resultMode = getResultMode(descriptor);
   const resultFields = getResultFields(descriptor);
   const hasData = (descriptor.data?.length ?? 0) > 0;
   const hasParams = descriptor.parameters.length > 0;
+  // Same logic as plain-TS: only SELECT-like queries declare a Result schema and get their rows
+  // run through `.parse()`. Non-SELECT without RETURNING (metadata mode) passes client.run's
+  // return type through — no schema, no guards, no reshape, caller sees QueryMetadata directly.
+  const emitResultSchema = resultMode !== 'metadata';
 
   // Local schemas declared as module-scoped consts, so the function signature
   // can reference the inferred type without a circular dependency on the
@@ -615,15 +811,15 @@ function renderValidatorQueryWrapper(input: {
   if (hasParams) {
     schemaDeclarations.push(...renderObjectSchemaDeclaration(emitter, 'Params', descriptor.parameters, 'parameter'));
   }
-  schemaDeclarations.push(...renderObjectSchemaDeclaration(emitter, 'Result', resultFields, 'result'));
+  if (emitResultSchema) {
+    schemaDeclarations.push(...renderObjectSchemaDeclaration(emitter, 'Result', resultFields, 'result'));
+  }
 
   const sqlLines = [`const sql = \``, normalizeSqlForTemplate(descriptor.sql).join('\n').trim(), `\`;`];
 
-  const functionSignatureArgs: string[] = [`client: Client`];
+  const functionSignatureArgs: string[] = [`client: ${clientType}`];
   if (hasData) functionSignatureArgs.push(`rawData: ${emitter.inferExpression('Data')}`);
   if (hasParams) functionSignatureArgs.push(`rawParams: ${emitter.inferExpression('Params')}`);
-
-  const returnType = getReturnType(descriptor, emitter.inferExpression('Result'));
 
   const validationLines: string[] = [];
   if (hasData) {
@@ -638,17 +834,21 @@ function renderValidatorQueryWrapper(input: {
     paramsVariable: hasParams ? 'params' : null,
   });
 
-  const implementationLines = buildValidatorImplementation({
-    resultMode,
-    resultFields,
-    emitter,
-    prettyErrors,
-  });
+  const implementationLines = emitResultSchema
+    ? buildValidatorImplementation({
+        resultMode,
+        resultFields,
+        emitter,
+        prettyErrors,
+        sync,
+      })
+    : [`\t\treturn client.run(query);`];
 
   const attachedProperties: string[] = [];
   if (hasData) attachedProperties.push('Data');
   if (hasParams) attachedProperties.push('Params');
-  attachedProperties.push('Result', 'sql');
+  if (emitResultSchema) attachedProperties.push('Result');
+  attachedProperties.push('sql');
 
   const namespaceLines: string[] = [];
   if (hasData) {
@@ -657,9 +857,20 @@ function renderValidatorQueryWrapper(input: {
   if (hasParams) {
     namespaceLines.push(`\texport type Params = ${emitter.inferExpression(`${functionName}.Params`)};`);
   }
-  namespaceLines.push(`\texport type Result = ${emitter.inferExpression(`${functionName}.Result`)};`);
+  if (emitResultSchema) {
+    namespaceLines.push(`\texport type Result = ${emitter.inferExpression(`${functionName}.Result`)};`);
+  }
 
-  const runtimeImports = buildRuntimeImports(emitter, prettyErrors);
+  const runtimeImports = buildRuntimeImports(emitter, prettyErrors, clientType);
+
+  const signatureReturnAnnotation = emitResultSchema
+    ? sync
+      ? `: ${getReturnType(descriptor, emitter.inferExpression('Result'))}`
+      : `: Promise<${getReturnType(descriptor, emitter.inferExpression('Result'))}>`
+    : '';
+  const functionDeclaration = sync
+    ? `\tfunction ${functionName}(${functionSignatureArgs.join(', ')})${signatureReturnAnnotation} {`
+    : `\tasync function ${functionName}(${functionSignatureArgs.join(', ')})${signatureReturnAnnotation} {`;
 
   return [
     runtimeImports,
@@ -669,7 +880,7 @@ function renderValidatorQueryWrapper(input: {
     ...sqlLines,
     ``,
     `export const ${functionName} = Object.assign(`,
-    `\tasync function ${functionName}(${functionSignatureArgs.join(', ')}): Promise<${returnType}> {`,
+    functionDeclaration,
     ...validationLines,
     `\t\tconst query: SqlQuery = { sql, args: ${argsExpression}, name: ${JSON.stringify(queryName)} };`,
     ...implementationLines,
@@ -677,10 +888,9 @@ function renderValidatorQueryWrapper(input: {
     `\t{ ${attachedProperties.join(', ')} },`,
     `);`,
     ``,
-    `export namespace ${functionName} {`,
-    ...namespaceLines,
-    `}`,
-    ``,
+    ...(namespaceLines.length === 0
+      ? []
+      : [`export namespace ${functionName} {`, ...namespaceLines, `}`, ``]),
   ].join('\n');
 }
 
@@ -692,11 +902,11 @@ function renderValidatorQueryWrapper(input: {
  *  - with pretty errors off, no runtime value is imported from sqlfu in either path — the
  *    generated file is fully self-contained apart from its validator library.
  */
-function buildRuntimeImports(emitter: ValidatorEmitter, prettyErrors: boolean): string {
+function buildRuntimeImports(emitter: ValidatorEmitter, prettyErrors: boolean, clientType: string): string {
   if (emitter.parseFlavour === 'standard' && prettyErrors) {
-    return `import {prettifyStandardSchemaError, type Client, type SqlQuery} from 'sqlfu';`;
+    return `import {prettifyStandardSchemaError, type ${clientType}, type SqlQuery} from 'sqlfu';`;
   }
-  return `import type {Client, SqlQuery} from 'sqlfu';`;
+  return `import type {${clientType}, SqlQuery} from 'sqlfu';`;
 }
 
 function renderObjectSchemaDeclaration(
@@ -858,8 +1068,10 @@ function buildValidatorImplementation(input: {
   resultFields: readonly GeneratedField[];
   emitter: ValidatorEmitter;
   prettyErrors: boolean;
+  sync: boolean;
 }): string[] {
-  const {emitter, prettyErrors} = input;
+  const {emitter, prettyErrors, sync} = input;
+  const maybeAwait = sync ? '' : 'await ';
   const rowExpr = (rowExpression: string) => rowParseExpressionOrNull(emitter, rowExpression, prettyErrors);
   const rowBlock = (rowExpression: string, indent: string) =>
     rowParseStatements(emitter, rowExpression, prettyErrors, indent);
@@ -868,12 +1080,12 @@ function buildValidatorImplementation(input: {
     const expr = rowExpr('row');
     if (expr) {
       return [
-        `\t\tconst rows = await client.all(query);`,
+        `\t\tconst rows = ${maybeAwait}client.all(query);`,
         `\t\treturn rows.map((row) => ${expr});`,
       ];
     }
     return [
-      `\t\tconst rows = await client.all(query);`,
+      `\t\tconst rows = ${maybeAwait}client.all(query);`,
       `\t\treturn rows.map((row) => {`,
       ...rowBlock('row', '\t\t\t'),
       `\t\t});`,
@@ -884,12 +1096,12 @@ function buildValidatorImplementation(input: {
     const expr = rowExpr('rows[0]');
     if (expr) {
       return [
-        `\t\tconst rows = await client.all(query);`,
+        `\t\tconst rows = ${maybeAwait}client.all(query);`,
         `\t\treturn rows.length > 0 ? ${expr} : null;`,
       ];
     }
     return [
-      `\t\tconst rows = await client.all(query);`,
+      `\t\tconst rows = ${maybeAwait}client.all(query);`,
       `\t\tif (rows.length === 0) return null;`,
       ...rowBlock('rows[0]', '\t\t'),
     ];
@@ -899,12 +1111,12 @@ function buildValidatorImplementation(input: {
     const expr = rowExpr('rows[0]');
     if (expr) {
       return [
-        `\t\tconst rows = await client.all(query);`,
+        `\t\tconst rows = ${maybeAwait}client.all(query);`,
         `\t\treturn ${expr};`,
       ];
     }
     return [
-      `\t\tconst rows = await client.all(query);`,
+      `\t\tconst rows = ${maybeAwait}client.all(query);`,
       ...rowBlock('rows[0]', '\t\t'),
     ];
   }
@@ -939,7 +1151,7 @@ function buildValidatorImplementation(input: {
   const resultReturnLines = metadataExpr ? [`\t\treturn ${metadataExpr};`] : rowBlock('rawResult', '\t\t');
 
   return [
-    `\t\tconst result = await client.run(query);`,
+    `\t\tconst result = ${maybeAwait}client.run(query);`,
     ...guards,
     ...rawResultLines,
     ...resultReturnLines,
@@ -970,36 +1182,20 @@ function getResultMode(descriptor: GeneratedQueryDescriptor): 'many' | 'nullable
   return 'one';
 }
 
-function buildTypeBlocks(
-  descriptor: GeneratedQueryDescriptor,
-  names: {
-    dataTypeName: string;
-    paramsTypeName: string;
-    resultTypeName: string;
-  },
-): string[] {
-  const blocks: string[] = [];
-  if ((descriptor.data?.length ?? 0) > 0) {
-    blocks.push(renderObjectType(names.dataTypeName, descriptor.data!, 'parameter'));
-  }
-  if (descriptor.parameters.length > 0) {
-    blocks.push(renderObjectType(names.paramsTypeName, descriptor.parameters, 'parameter'));
-  }
-  blocks.push(renderObjectType(names.resultTypeName, getResultFields(descriptor), 'result'));
-  return blocks.flatMap((block, index) => (index === 0 ? [block] : ['', block]));
-}
-
-function renderObjectType(
-  typeName: string,
+/**
+ * Inline `{ foo: string; bar: number | null }` for use as the RHS of a namespace-scoped
+ * `export type Foo = …;`. Indentation is two tabs — one for the namespace, one for the fields.
+ */
+function renderObjectTypeBody(
   fields: readonly GeneratedField[],
   fieldKind: 'parameter' | 'result',
 ): string {
   const lines = fields.map((field) => {
     const optional = fieldKind === 'parameter' ? Boolean(field.optional) : !field.notNull;
     const orNull = fieldKind === 'parameter' && !field.notNull ? ' | null' : '';
-    return `\t${field.name}${optional ? '?' : ''}: ${field.tsType}${orNull};`;
+    return `\t\t${field.name}${optional ? '?' : ''}: ${field.tsType}${orNull};`;
   });
-  return [`export type ${typeName} = {`, ...lines, `}`].join('\n');
+  return [`{`, ...lines, `\t}`].join('\n');
 }
 
 function objectSchema(
@@ -1094,23 +1290,6 @@ function getResultFields(descriptor: GeneratedQueryDescriptor): readonly Generat
     ];
   }
   return [{name: 'rowsAffected', tsType: 'number', notNull: true}];
-}
-
-function buildFunctionParameters(
-  descriptor: GeneratedQueryDescriptor,
-  names: {
-    dataTypeName: string;
-    paramsTypeName: string;
-  },
-): string {
-  const parameters: string[] = [];
-  if ((descriptor.data?.length ?? 0) > 0) {
-    parameters.push(`data: ${names.dataTypeName}`);
-  }
-  if (descriptor.parameters.length > 0) {
-    parameters.push(`params: ${names.paramsTypeName}`);
-  }
-  return parameters.join(', ');
 }
 
 function buildQueryArgs(descriptor: GeneratedQueryDescriptor): string {
@@ -1213,16 +1392,6 @@ function refineDescriptor(
   };
 }
 
-function getResultProperties(descriptor: GeneratedQueryDescriptor): ReadonlyArray<{
-  readonly name: string;
-  readonly optional: boolean;
-}> {
-  return getResultFields(descriptor).map((field) => ({
-    name: field.name,
-    optional: !field.notNull,
-  }));
-}
-
 function toCamelCase(value: string): string {
   const parts = value
     .split(/[^A-Za-z0-9]+/)
@@ -1240,48 +1409,33 @@ function toCamelCase(value: string): string {
   );
 }
 
+/**
+ * SELECT-like bodies only (`many` / `nullableOne` / `one` — i.e. every mode except `metadata`).
+ * Metadata mode is rendered as a plain `return client.run(query);` pass-through at the call site.
+ */
 function buildGeneratedImplementation(input: {
-  resultMode: 'many' | 'nullableOne' | 'one' | 'metadata';
+  resultMode: 'many' | 'nullableOne' | 'one';
   resultType: string;
-  resultProperties: ReadonlyArray<{
-    readonly name: string;
-    readonly optional: boolean;
-  }>;
+  sync: boolean;
+  indent: string;
 }): string[] {
+  const maybeAwait = input.sync ? '' : 'await ';
+  const i = input.indent;
+
   if (input.resultMode === 'many') {
-    return [`\treturn client.all<${input.resultType}>(query);`];
+    // `many` returns the client's result directly — the outer function's Promise<T[]> / T[] return
+    // type already matches client.all's return type, so there's no need to await and re-wrap.
+    return [`${i}return client.all<${input.resultType}>(query);`];
   }
 
   if (input.resultMode === 'nullableOne') {
     return [
-      `\tconst rows = await client.all<${input.resultType}>(query);`,
-      `\treturn rows.length > 0 ? rows[0] : null;`,
+      `${i}const rows = ${maybeAwait}client.all<${input.resultType}>(query);`,
+      `${i}return rows.length > 0 ? rows[0] : null;`,
     ];
   }
 
-  if (input.resultMode === 'one') {
-    return [`\tconst rows = await client.all<${input.resultType}>(query);`, `\treturn rows[0];`];
-  }
-
-  const guards = input.resultProperties.flatMap((property) => {
-    if (property.optional) {
-      return [];
-    }
-
-    return [
-      `\tif (result.${property.name} === undefined${property.name === 'lastInsertRowid' ? ' || result.lastInsertRowid === null' : ''}) {`,
-      `\t\tthrow new Error('Expected ${property.name} to be present on query result');`,
-      `\t}`,
-    ];
-  });
-  const resultAssignments = input.resultProperties.map((property) => {
-    if (property.name === 'lastInsertRowid') {
-      return `\t\tlastInsertRowid: Number(result.lastInsertRowid),`;
-    }
-
-    return `\t\t${property.name}: result.${property.name},`;
-  });
-  return [`\tconst result = await client.run(query);`, ...guards, `\treturn {`, ...resultAssignments, `\t};`];
+  return [`${i}const rows = ${maybeAwait}client.all<${input.resultType}>(query);`, `${i}return rows[0];`];
 }
 
 async function loadSchema(databasePath: string): Promise<ReadonlyMap<string, RelationInfo>> {

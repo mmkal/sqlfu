@@ -1,0 +1,10 @@
+{
+  "extends": "./base.json",
+  "mainEntryPointFilePath": "<projectFolder>/dist/client.d.ts",
+  "apiReport": {
+    "reportFileName": "client.api.md"
+  },
+  "dtsRollup": {
+    "publicTrimmedFilePath": "<projectFolder>/dist/client.bundled.d.ts"
+  }
+}

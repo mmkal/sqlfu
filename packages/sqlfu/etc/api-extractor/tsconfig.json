@@ -1,0 +1,29 @@
+{
+  "//": "Used by api-extractor only. It analyzes the already-emitted .d.ts files under dist/. The `paths` mapping redirects self-imports of `sqlfu` (generated query files inside dist/ say `import type {Client} from 'sqlfu'`) to the dist build output instead of the package.json `exports` target, which would pull src/**/*.ts back into the program and break api-extractor's `.d.ts`-only requirement.",
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ESNext", "ESNext.Disposable"],
+    "strict": true,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "verbatimModuleSyntax": false,
+    "types": ["node"],
+    "baseUrl": "../..",
+    "paths": {
+      "sqlfu": ["./dist/index.d.ts"],
+      "sqlfu/browser": ["./dist/browser.d.ts"],
+      "sqlfu/client": ["./dist/client.d.ts"],
+      "sqlfu/api": ["./dist/api.d.ts"],
+      "sqlfu/ui": ["./dist/ui/index.d.ts"],
+      "sqlfu/ui/browser": ["./dist/ui/browser.d.ts"]
+    }
+  },
+  "files": ["../../dist/index.d.ts", "../../dist/browser.d.ts", "../../dist/client.d.ts", "../../dist/api.d.ts", "../../dist/ui/index.d.ts", "../../dist/ui/browser.d.ts"]
+}

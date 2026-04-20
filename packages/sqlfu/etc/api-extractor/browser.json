@@ -1,0 +1,10 @@
+{
+  "extends": "./base.json",
+  "mainEntryPointFilePath": "<projectFolder>/dist/browser.d.ts",
+  "apiReport": {
+    "reportFileName": "browser.api.md"
+  },
+  "dtsRollup": {
+    "publicTrimmedFilePath": "<projectFolder>/dist/browser.bundled.d.ts"
+  }
+}

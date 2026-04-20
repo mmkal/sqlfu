@@ -44,7 +44,6 @@
         "default": "./dist/api.js"
       },
       "./cli": {
-        "types": "./dist/cli.d.ts",
         "default": "./dist/cli.js"
       },
       "./ui": {
@@ -59,9 +58,10 @@
     }
   },
   "scripts": {
-    "build": "pnpm run build:internal-queries && pnpm run build:runtime && pnpm run build:vendor-typesql && pnpm run build:bundle-vendor",
+    "build": "pnpm run build:internal-queries && pnpm run build:runtime && pnpm run build:bundle-types && pnpm run build:vendor-typesql && pnpm run build:bundle-vendor",
     "build:internal-queries": "tsx scripts/generate-internal-queries.ts",
     "build:runtime": "tsgo -p tsconfig.build.json",
+    "build:bundle-types": "tsx scripts/bundle-types.ts",
     "build:vendor-typesql": "rm -rf dist/vendor/antlr4 dist/vendor/code-block-writer dist/vendor/typesql dist/vendor/typesql-parser && tsgo -p src/vendor/typesql/tsconfig.json",
     "build:bundle-vendor": "tsx scripts/bundle-vendor.ts",
     "typecheck": "tsgo -p tsconfig.typecheck.json && pnpm run typecheck:vendor-typesql",
@@ -88,6 +88,7 @@
   "devDependencies": {
     "@hono/node-server": "^1.19.14",
     "@libsql/client": "^0.17.2",
+    "@microsoft/api-extractor": "^7.58.6",
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/exporter-trace-otlp-http": "^0.215.0",
     "@opentelemetry/sdk-trace-node": "^2.7.0",

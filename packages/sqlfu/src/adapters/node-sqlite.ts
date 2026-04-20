@@ -19,6 +19,7 @@ export function createNodeSqliteClient(database: NodeSqliteDatabaseLike): SyncCl
   const client: Omit<SyncClient<NodeSqliteDatabaseLike>, 'sql'> & {sql: SyncClient<NodeSqliteDatabaseLike>['sql']} = {
     driver: database,
     system: 'sqlite',
+    sync: true,
     all<TRow extends ResultRow = ResultRow>(query: SqlQuery) {
       return materializeRows(database.prepare(query.sql).all(...query.args)) as TRow[];
     },

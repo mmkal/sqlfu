@@ -238,6 +238,7 @@ export function createAsyncNodeSqliteClient(database: NodeSqliteDatabase): Async
   const client: AsyncClient<NodeSqliteDatabase> = {
     driver: database,
     system: 'sqlite',
+    sync: false,
     async all<TRow extends ResultRow = ResultRow>(query: SqlQuery): Promise<TRow[]> {
       return database.prepare(query.sql).all(...(query.args as never[])) as TRow[];
     },

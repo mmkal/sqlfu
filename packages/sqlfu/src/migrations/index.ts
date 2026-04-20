@@ -2,7 +2,7 @@ import {sha256} from '@noble/hashes/sha2.js';
 
 import type {AsyncClient, Client, SyncClient} from '../core/types.js';
 import {basename} from '../core/paths.js';
-import {driveAsync, driveSync, GET_IS_ASYNC, type DualGenerator} from './dual-dispatch.js';
+import {driveAsync, driveSync, type DualGenerator} from './dual-dispatch.js';
 
 export type Migration = {
   path: string;
@@ -42,9 +42,7 @@ export function ensureMigrationTable(client: SyncClient): void;
 export function ensureMigrationTable(client: AsyncClient): Promise<void>;
 export function ensureMigrationTable(client: Client): void | Promise<void>;
 export function ensureMigrationTable(client: Client): void | Promise<void> {
-  return isSyncClient(client)
-    ? driveSync(ensureMigrationTableGen(client))
-    : driveAsync(ensureMigrationTableGen(client));
+  return client.sync ? driveSync(ensureMigrationTableGen(client)) : driveAsync(ensureMigrationTableGen(client));
 }
 
 function* ensureMigrationTableGen(client: Client): DualGenerator<void> {
@@ -80,9 +78,7 @@ export function readMigrationHistory(client: SyncClient): AppliedMigration[];
 export function readMigrationHistory(client: AsyncClient): Promise<AppliedMigration[]>;
 export function readMigrationHistory(client: Client): AppliedMigration[] | Promise<AppliedMigration[]>;
 export function readMigrationHistory(client: Client): AppliedMigration[] | Promise<AppliedMigration[]> {
-  return isSyncClient(client)
-    ? driveSync(readMigrationHistoryGen(client))
-    : driveAsync(readMigrationHistoryGen(client));
+  return client.sync ? driveSync(readMigrationHistoryGen(client)) : driveAsync(readMigrationHistoryGen(client));
 }
 
 function* readMigrationHistoryGen(client: Client): DualGenerator<AppliedMigration[]> {
@@ -110,7 +106,7 @@ export function applyMigrations(client: SyncClient, params: ApplyMigrationsParam
 export function applyMigrations(client: AsyncClient, params: ApplyMigrationsParams): Promise<void>;
 export function applyMigrations(client: Client, params: ApplyMigrationsParams): void | Promise<void>;
 export function applyMigrations(client: Client, params: ApplyMigrationsParams): void | Promise<void> {
-  return isSyncClient(client)
+  return client.sync
     ? driveSync(applyMigrationsGen(client, params))
     : driveAsync(applyMigrationsGen(client, params));
 }
@@ -119,7 +115,7 @@ export function baselineMigrationHistory(client: SyncClient, params: BaselinePar
 export function baselineMigrationHistory(client: AsyncClient, params: BaselineParams): Promise<void>;
 export function baselineMigrationHistory(client: Client, params: BaselineParams): void | Promise<void>;
 export function baselineMigrationHistory(client: Client, params: BaselineParams): void | Promise<void> {
-  return isSyncClient(client)
+  return client.sync
     ? driveSync(baselineMigrationHistoryGen(client, params))
     : driveAsync(baselineMigrationHistoryGen(client, params));
 }
@@ -128,14 +124,12 @@ export function replaceMigrationHistory(client: SyncClient, migrations: readonly
 export function replaceMigrationHistory(client: AsyncClient, migrations: readonly Migration[]): Promise<void>;
 export function replaceMigrationHistory(client: Client, migrations: readonly Migration[]): void | Promise<void>;
 export function replaceMigrationHistory(client: Client, migrations: readonly Migration[]): void | Promise<void> {
-  return isSyncClient(client)
+  return client.sync
     ? driveSync(replaceMigrationHistoryGen(client, migrations))
     : driveAsync(replaceMigrationHistoryGen(client, migrations));
 }
 
 function* applyMigrationsGen(client: Client, params: ApplyMigrationsParams): DualGenerator<void> {
-  const isAsync = (yield GET_IS_ASYNC) as boolean;
-
   yield* ensureMigrationTableGen(client);
   const applied = yield* readMigrationHistoryGen(client);
   const byName = new Map(params.migrations.map((migration) => [migrationName(migration), migration]));
@@ -170,7 +164,7 @@ function* applyMigrationsGen(client: Client, params: ApplyMigrationsParams): Dua
     // services both shapes.
     yield client.transaction((tx) => {
       const innerGen = applyOneMigrationGen(tx, {content: migration.content, name, checksum, appliedAt});
-      return isAsync ? driveAsync(innerGen) : (driveSync(innerGen) as unknown as Promise<void>);
+      return tx.sync ? (driveSync(innerGen) as unknown as Promise<void>) : driveAsync(innerGen);
     });
   }
 }
@@ -190,7 +184,6 @@ function* applyOneMigrationGen(
 }
 
 function* baselineMigrationHistoryGen(client: Client, params: BaselineParams): DualGenerator<void> {
-  const isAsync = (yield GET_IS_ASYNC) as boolean;
   const targetIndex = params.migrations.findIndex((migration) => migrationName(migration) === params.target);
   if (targetIndex === -1) {
     throw new Error(`migration ${params.target} not found`);
@@ -198,7 +191,7 @@ function* baselineMigrationHistoryGen(client: Client, params: BaselineParams): D
   const appliedSlice = params.migrations.slice(0, targetIndex + 1);
   yield client.transaction((tx) => {
     const innerGen = replaceMigrationHistoryGen(tx, appliedSlice);
-    return isAsync ? driveAsync(innerGen) : (driveSync(innerGen) as unknown as Promise<void>);
+    return tx.sync ? (driveSync(innerGen) as unknown as Promise<void>) : driveAsync(innerGen);
   });
 }
 
@@ -214,24 +207,6 @@ function* replaceMigrationHistoryGen(client: Client, migrations: readonly Migrat
       args: [migrationName(migration), digest(migration.content), new Date().toISOString()],
     });
   }
-}
-
-function isSyncClient(client: Client): client is SyncClient {
-  // all() returns TRow[] synchronously for SyncClient. AsyncClient returns a
-  // Promise. we detect by calling a cheap zero-arg query and inspecting the
-  // return value's shape.
-  // NOTE: every call site above distinguishes via the overload signatures at
-  // compile time. this runtime check exists only because one function body
-  // services both overloads; it runs once per applyMigrations / baseline /
-  // replace call and never at a rate that matters.
-  const probe = client.all({sql: 'select 1', args: []});
-  if (Array.isArray(probe)) {
-    return true;
-  }
-  // we started an async query but don't need its result; attach a no-op
-  // catch so an unexpected rejection doesn't surface as an unhandled promise.
-  (probe as Promise<unknown>).catch(() => undefined);
-  return false;
 }
 
 function digest(content: string): string {

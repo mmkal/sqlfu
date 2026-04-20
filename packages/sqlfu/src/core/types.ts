@@ -22,6 +22,8 @@ export interface SyncClient<TDriver = unknown> {
   readonly driver: TDriver;
   /** OTel `db.system.name`. Stamped by each adapter ('sqlite', 'postgresql', etc.). */
   readonly system: string;
+  /** `true` for a `SyncClient`; lets callers route sync/async logic without probing. */
+  readonly sync: true;
   all<TRow extends ResultRow = ResultRow>(query: SqlQuery): TRow[];
   run(query: SqlQuery): RunResult;
   raw(sql: string): RunResult;
@@ -35,6 +37,8 @@ export interface AsyncClient<TDriver = unknown> {
   readonly driver: TDriver;
   /** OTel `db.system.name`. Stamped by each adapter ('sqlite', 'postgresql', etc.). */
   readonly system: string;
+  /** `false` for an `AsyncClient`; lets callers route sync/async logic without probing. */
+  readonly sync: false;
   all<TRow extends ResultRow = ResultRow>(query: SqlQuery): Promise<TRow[]>;
   run(query: SqlQuery): Promise<RunResult>;
   raw(sql: string): Promise<RunResult>;

@@ -81,18 +81,19 @@ export interface SqlRowsPromise<TRow extends ResultRow = ResultRow> extends Prom
 
 export type SqlValue = QueryArg | SqlFragment;
 
-export type SqlfuValidator = 'zod' | 'valibot' | 'zod-mini';
+export type SqlfuValidator = 'arktype' | 'valibot' | 'zod' | 'zod-mini';
 
 export interface SqlfuGenerateConfig {
   /**
    * Emit runtime validation schemas as the source of truth for each generated query's params and result.
    *
    * - `null` / `undefined` / omitted = plain TypeScript types, no runtime validation (the default).
-   * - `'zod'` = generated wrappers declare zod schemas, `.parse()` params on the way in and each row
-   *   on the way out, and types are derived via `z.infer`.
-   * - `'valibot'` = same shape, but with [valibot](https://valibot.dev) (smaller bundle, functional API).
-   * - `'zod-mini'` = same shape as `'zod'`, but imports from `zod/mini` and uses the functional
-   *   `z.parse(Schema, input)` API (smaller bundle than standard zod).
+   * - `'arktype'` = generated wrappers declare [arktype](https://arktype.io) schemas via the
+   *   `type(...)` constructor, validate through Standard Schema, and derive types from `Schema.infer`.
+   * - `'valibot'` = [valibot](https://valibot.dev) schemas (smaller bundle, functional API).
+   * - `'zod'` = [zod](https://zod.dev) schemas with `.parse()` / `.safeParse()` and `z.infer`.
+   * - `'zod-mini'` = same schema primitives as zod, imported from `zod/mini` and called via the
+   *   functional `z.parse(Schema, input)` API (smaller bundle than standard zod).
    */
   readonly validator?: SqlfuValidator | null;
   /**

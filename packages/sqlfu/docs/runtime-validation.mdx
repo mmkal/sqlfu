@@ -1,0 +1,399 @@
+import {Tabs, TabItem} from '@astrojs/starlight/components';
+
+# Runtime validation
+
+Generated wrappers can be emitted with a validator library — [zod](https://zod.dev), [valibot](https://valibot.dev), [arktype](https://arktype.io), or [zod/mini](https://zod.dev/v4#introducing-zod-mini) — as the source of truth. Params are validated on the way in, rows are validated on the way out, and types are derived via the validator's native inference helper. One definition per thing, no drift.
+
+This is an opt-in mode. By default, `sqlfu generate` emits plain TypeScript types with zero runtime validation.
+
+## Why runtime validation at the wrapper boundary
+
+The generator has always made SQL → TypeScript a compile-time guarantee. Runtime validation closes the loop:
+
+- **Bad params fail loudly at the callsite.** Mistyped booleans, missing string args, enum typos throw a readable error before the SQL driver sees them.
+- **Schema drift surfaces at the adapter boundary.** A column removed without regenerating, a newly-non-null field, a new enum variant — these become exceptions at the boundary, not silently-wrong objects reaching a React component.
+
+The schemas are used by the generated wrapper itself, not just re-exported for consumers. That's the value-add over plain TS types — every query gets a validated request/response contract by default. The exported schemas are also usable for forms (`@rjsf`, react-hook-form), tRPC inputs, RPC wire validation, fixtures, etc. — but that's a secondary benefit.
+
+## Turning it on
+
+```ts
+// sqlfu.config.ts
+export default {
+  db: './db/app.sqlite',
+  migrations: './migrations',
+  definitions: './definitions.sql',
+  queries: './sql',
+  generate: {
+    validator: 'zod', // or 'valibot' | 'arktype' | 'zod-mini'
+  },
+};
+```
+
+After toggling, re-run `sqlfu generate`. Install the validator library yourself if it isn't already a dependency — `zod` and `zod/mini` ship as the same package; `valibot` and `arktype` are separate packages.
+
+## Picking a validator
+
+All four implement [Standard Schema](https://standardschema.dev), so sqlfu treats them interchangeably. Pick the one whose tradeoffs you already prefer — there's no "recommended" choice.
+
+- **`'zod'`** — largest API surface and richest ecosystem of downstream integrations (tRPC, react-hook-form, @rjsf). Chainable fluent syntax (`z.string().nullable()`). Bundle cost is non-trivial on the browser side.
+- **`'valibot'`** — smallest runtime, functional composition (`v.nullable(v.string())`, `v.parse(Schema, input)`). Best choice when you're shipping the validator to the browser and want to keep the bundle lean.
+- **`'arktype'`** — TypeScript syntax as schema: `type({slug: 'string', title: 'string | null'})`. Strongest editor feedback for complex TS types, zero-runtime-cost inference. Optional fields use key-suffix `?` (`'title?': 'string'`).
+- **`'zod-mini'`** — bundle-optimised subset of zod v4. Same schema primitives as standard zod, but a function-call API (`z.parse(Schema, input)`, `z.nullable(z.string())`). Valibot-sized bundle with zod's vocabulary.
+
+Whatever you pick, the public shape of the generated wrapper — one callable with `.Params`, `.Result`, `.sql` attached — is identical. You can switch later without touching callsites.
+
+## What the generated file looks like
+
+For a query `sql/find-post-by-slug.sql`:
+
+```sql
+select id, slug, title, status from posts where slug = :slug limit 1;
+```
+
+The same query renders differently depending on `generate.validator`:
+
+<Tabs>
+<TabItem label="TypeScript only (default)">
+
+```ts
+// sql/.generated/find-post-by-slug.sql.ts  (generated - do not edit)
+import type {Client, SqlQuery} from 'sqlfu';
+
+export type FindPostBySlugParams = {
+	slug: string;
+}
+
+export type FindPostBySlugResult = {
+	id: number;
+	slug: string;
+	title: string | null;
+	status: 'draft' | 'published';
+}
+
+const FindPostBySlugSql = `
+select id, slug, title, status from posts where slug = ? limit 1;
+`
+
+export async function findPostBySlug(client: Client, params: FindPostBySlugParams): Promise<FindPostBySlugResult | null> {
+	const query: SqlQuery = { sql: FindPostBySlugSql, args: [params.slug], name: "find-post-by-slug" };
+	const rows = await client.all<FindPostBySlugResult>(query);
+	return rows.length > 0 ? rows[0] : null;
+}
+```
+
+Plain types only — no validator import, no runtime checks, no `Object.assign` namespace wrapper.
+
+</TabItem>
+<TabItem label="zod">
+
+```ts
+// sql/.generated/find-post-by-slug.sql.ts  (generated - do not edit)
+import type {Client, SqlQuery} from 'sqlfu';
+import {z} from 'zod';
+
+const Params = z.object({
+	slug: z.string(),
+});
+const Result = z.object({
+	id: z.number(),
+	slug: z.string(),
+	title: z.string().nullable(),
+	status: z.enum(["draft", "published"]),
+});
+const sql = `
+select id, slug, title, status from posts where slug = ? limit 1;
+`;
+
+export const findPostBySlug = Object.assign(
+	async function findPostBySlug(client: Client, rawParams: z.infer<typeof Params>): Promise<z.infer<typeof Result> | null> {
+		const parsedParams = Params.safeParse(rawParams);
+		if (!parsedParams.success) throw new Error(z.prettifyError(parsedParams.error));
+		const params = parsedParams.data;
+		const query: SqlQuery = { sql, args: [params.slug], name: "find-post-by-slug" };
+		const rows = await client.all(query);
+		if (rows.length === 0) return null;
+		const parsed = Result.safeParse(rows[0]);
+		if (!parsed.success) throw new Error(z.prettifyError(parsed.error));
+		return parsed.data;
+	},
+	{ Params, Result, sql },
+);
+
+export namespace findPostBySlug {
+	export type Params = z.infer<typeof findPostBySlug.Params>;
+	export type Result = z.infer<typeof findPostBySlug.Result>;
+}
+```
+
+Zod uses its native `safeParse` + `z.prettifyError` helper — no sqlfu runtime import needed, just a validator library.
+
+</TabItem>
+<TabItem label="valibot">
+
+```ts
+// sql/.generated/find-post-by-slug.sql.ts  (generated - do not edit)
+import {prettifyStandardSchemaError, type Client, type SqlQuery} from 'sqlfu';
+import * as v from 'valibot';
+
+const Params = v.object({
+	slug: v.string(),
+});
+const Result = v.object({
+	id: v.number(),
+	slug: v.string(),
+	title: v.nullable(v.string()),
+	status: v.picklist(["draft", "published"]),
+});
+const sql = `
+select id, slug, title, status from posts where slug = ? limit 1;
+`;
+
+export const findPostBySlug = Object.assign(
+	async function findPostBySlug(client: Client, rawParams: v.InferOutput<typeof Params>): Promise<v.InferOutput<typeof Result> | null> {
+		const parsedParamsResult = Params['~standard'].validate(rawParams);
+		if ('then' in parsedParamsResult) throw new Error('Unexpected async validation from Params.');
+		if ('issues' in parsedParamsResult) throw new Error(prettifyStandardSchemaError(parsedParamsResult) || 'Validation failed');
+		const params = parsedParamsResult.value;
+		const query: SqlQuery = { sql, args: [params.slug], name: "find-post-by-slug" };
+		const rows = await client.all(query);
+		if (rows.length === 0) return null;
+		const parsed = Result['~standard'].validate(rows[0]);
+		if ('then' in parsed) throw new Error('Unexpected async validation from Result.');
+		if ('issues' in parsed) throw new Error(prettifyStandardSchemaError(parsed) || 'Validation failed');
+		return parsed.value;
+	},
+	{ Params, Result, sql },
+);
+
+export namespace findPostBySlug {
+	export type Params = v.InferOutput<typeof findPostBySlug.Params>;
+	export type Result = v.InferOutput<typeof findPostBySlug.Result>;
+}
+```
+
+Valibot composes functionally — `v.nullable(v.string())`, `v.picklist([...])`. Same Standard Schema validation path as arktype and zod-mini.
+
+</TabItem>
+<TabItem label="arktype">
+
+```ts
+// sql/.generated/find-post-by-slug.sql.ts  (generated - do not edit)
+import {prettifyStandardSchemaError, type Client, type SqlQuery} from 'sqlfu';
+import {type} from 'arktype';
+
+const Params = type({
+	slug: "string",
+});
+const Result = type({
+	id: "number",
+	slug: "string",
+	title: "string | null",
+	status: "\"draft\" | \"published\"",
+});
+const sql = `
+select id, slug, title, status from posts where slug = ? limit 1;
+`;
+
+export const findPostBySlug = Object.assign(
+	async function findPostBySlug(client: Client, rawParams: typeof Params.infer): Promise<typeof Result.infer | null> {
+		const parsedParamsResult = Params['~standard'].validate(rawParams);
+		if ('then' in parsedParamsResult) throw new Error('Unexpected async validation from Params.');
+		if ('issues' in parsedParamsResult) throw new Error(prettifyStandardSchemaError(parsedParamsResult) || 'Validation failed');
+		const params = parsedParamsResult.value;
+		const query: SqlQuery = { sql, args: [params.slug], name: "find-post-by-slug" };
+		const rows = await client.all(query);
+		if (rows.length === 0) return null;
+		const parsed = Result['~standard'].validate(rows[0]);
+		if ('then' in parsed) throw new Error('Unexpected async validation from Result.');
+		if ('issues' in parsed) throw new Error(prettifyStandardSchemaError(parsed) || 'Validation failed');
+		return parsed.value;
+	},
+	{ Params, Result, sql },
+);
+
+export namespace findPostBySlug {
+	export type Params = typeof findPostBySlug.Params.infer;
+	export type Result = typeof findPostBySlug.Result.infer;
+}
+```
+
+Arktype's schemas live in TS-syntax strings. Optional parameters would appear as `'title?': 'string'` on the key side.
+
+</TabItem>
+<TabItem label="zod-mini">
+
+```ts
+// sql/.generated/find-post-by-slug.sql.ts  (generated - do not edit)
+import {prettifyStandardSchemaError, type Client, type SqlQuery} from 'sqlfu';
+import * as z from 'zod/mini';
+
+const Params = z.object({
+	slug: z.string(),
+});
+const Result = z.object({
+	id: z.number(),
+	slug: z.string(),
+	title: z.nullable(z.string()),
+	status: z.enum(["draft", "published"]),
+});
+const sql = `
+select id, slug, title, status from posts where slug = ? limit 1;
+`;
+
+export const findPostBySlug = Object.assign(
+	async function findPostBySlug(client: Client, rawParams: z.infer<typeof Params>): Promise<z.infer<typeof Result> | null> {
+		const parsedParamsResult = Params['~standard'].validate(rawParams);
+		if ('then' in parsedParamsResult) throw new Error('Unexpected async validation from Params.');
+		if ('issues' in parsedParamsResult) throw new Error(prettifyStandardSchemaError(parsedParamsResult) || 'Validation failed');
+		const params = parsedParamsResult.value;
+		const query: SqlQuery = { sql, args: [params.slug], name: "find-post-by-slug" };
+		const rows = await client.all(query);
+		if (rows.length === 0) return null;
+		const parsed = Result['~standard'].validate(rows[0]);
+		if ('then' in parsed) throw new Error('Unexpected async validation from Result.');
+		if ('issues' in parsed) throw new Error(prettifyStandardSchemaError(parsed) || 'Validation failed');
+		return parsed.value;
+	},
+	{ Params, Result, sql },
+);
+
+export namespace findPostBySlug {
+	export type Params = z.infer<typeof findPostBySlug.Params>;
+	export type Result = z.infer<typeof findPostBySlug.Result>;
+}
+```
+
+Zod-mini keeps zod's vocabulary but uses the functional `z.nullable(z.string())` form to stay tree-shakeable. It routes through the same Standard Schema codepath as valibot and arktype.
+
+</TabItem>
+</Tabs>
+
+The public shape — one callable, `.Params`, `.Result`, `.sql` — is identical across every validator. You can swap `generate.validator` and regenerate without touching any callsites.
+
+## Pretty errors
+
+By default (`generate.prettyErrors: true`), validation failures throw an `Error` whose message is a readable, indented issues list. One line per issue with the dotted path:
+
+```
+✖ Expected string, received number → at slug
+```
+
+- **Zod** uses zod's native pretty-printer: `z.prettifyError(zodError)`. The generated wrapper calls `Params.safeParse(rawParams)` and throws `new Error(z.prettifyError(error))` on failure. No runtime helper is imported from sqlfu.
+- **Arktype, valibot, zod-mini** share the [Standard Schema](https://standardschema.dev) `~standard.validate(input)` entry point. The generated wrapper inlines the result-guard (promise-check, then `'issues' in result`) and, on failure, calls `prettifyStandardSchemaError` (re-exported from `sqlfu`) to build the thrown `Error`'s message. That's the only thing imported from sqlfu in pretty-errors mode.
+
+`prettifyStandardSchemaError` is vendored from [trpc-cli](https://github.com/mmkal/trpc-cli/tree/main/src/standard-schema) and re-exported as a reference implementation. It's a small function you're welcome to copy and adapt. The stable contract is the Standard Schema `Result` shape, not sqlfu's prettifier.
+
+### `prettyErrors: false`
+
+Set `prettyErrors: false` to let the raw error from the underlying validator library pass through untouched. Choose this if you have error-handling middleware that already introspects the validator's issues list structurally.
+
+- **Zod** emits `Params.parse(rawParams)` directly. A `ZodError` propagates unchanged with `.issues` on it.
+- **Arktype, valibot, zod-mini** emit an inline check on the Standard Schema result. On failure: `throw Object.assign(new Error('Validation failed'), {issues: result.issues})`. You still get the issues array on `error.issues`, without running it through the prettifier.
+
+In `prettyErrors: false` mode with any Standard Schema validator, the generated file has **zero runtime dependency on sqlfu**. Only `type Client` and `type SqlQuery` are imported, both erased at compile time. The wrapper is fully self-contained apart from its validator library.
+
+```ts
+generate: {
+  validator: 'zod',
+  prettyErrors: false, // default: true
+},
+```
+
+## One identifier per query
+
+The function name (camelCase, matching the SQL filename) is the identifier for everything related to the query:
+
+```ts
+import {findPostBySlug} from './sql/.generated/find-post-by-slug.sql.js';
+
+// Call it.
+const post = await findPostBySlug(client, {slug: 'hello'});
+//    ^? findPostBySlug.Result | null
+
+// Inferred types.
+type P = findPostBySlug.Params; // { slug: string }
+type R = findPostBySlug.Result; // { id: number; slug: string; title: string | null; status: 'draft' | 'published' }
+
+// Runtime schemas (for forms, RPC, fixtures, etc.).
+const schema = findPostBySlug.Params;
+const result = findPostBySlug.Result;
+
+// The raw SQL text.
+const queryText = findPostBySlug.sql;
+```
+
+Namespace merging is what makes `findPostBySlug.Params` resolve as a value (the schema) *and* a type. Consumers don't have to think about this: they write `findPostBySlug.Params` in either position.
+
+For queries with `update` semantics, the shape is `findPostBySlug.Data` + `findPostBySlug.Params` + `findPostBySlug.Result`, matching the plain-TS output.
+
+## Error behavior
+
+Validation throws on invalid input. Callers who want recovery can call the schemas directly via each library's safe-parse equivalent:
+
+<Tabs>
+<TabItem label="zod">
+
+```ts
+const parsed = findPostBySlug.Params.safeParse(userInput);
+if (!parsed.success) return handleError(parsed.error);
+// parsed.data is the validated value
+```
+
+</TabItem>
+<TabItem label="valibot">
+
+```ts
+import * as v from 'valibot';
+const parsed = v.safeParse(findPostBySlug.Params, userInput);
+if (!parsed.success) return handleError(parsed.issues);
+// parsed.output is the validated value
+```
+
+</TabItem>
+<TabItem label="arktype">
+
+```ts
+import {type} from 'arktype';
+const parsed = findPostBySlug.Params(userInput);
+if (parsed instanceof type.errors) return handleError(parsed);
+// parsed is now the validated value
+```
+
+</TabItem>
+<TabItem label="zod-mini">
+
+```ts
+import * as z from 'zod/mini';
+const parsed = z.safeParse(findPostBySlug.Params, userInput);
+if (!parsed.success) return handleError(parsed.error);
+// parsed.data is the validated value
+```
+
+</TabItem>
+</Tabs>
+
+The wrapper throwing by default is intentional. This is generated code, and the right default is to fail loudly at the boundary.
+
+## Not emitting a validator
+
+If `generate.validator` is unset, `null`, or `undefined`, the generator emits the plain TS output (no validator import, no `.parse()` calls, types declared directly). There's no hybrid mode: a project picks one.
+
+## Extending the generated shape
+
+The generated file is readable and small. If you want a *specific* validator refinement (e.g. `.url()`, `.email()`, custom refinements) for a column, the honest answer today is to wrap the generated function in your application code:
+
+```ts
+import {findPostBySlug as rawFindPostBySlug} from './sql/.generated/find-post-by-slug.sql.js';
+import {z} from 'zod';
+
+const RichParams = rawFindPostBySlug.Params.extend({
+  slug: z.string().regex(/^[a-z0-9-]+$/),
+});
+
+export async function findPostBySlug(client: Client, params: z.infer<typeof RichParams>) {
+  return rawFindPostBySlug(client, RichParams.parse(params));
+}
+```
+
+The generated schemas will never be richer than what a SQL type system can tell us. Column-level refinement is an application concern today. Pluggable validators and per-column overrides are [planned](https://github.com/mmkal/sqlfu/blob/main/tasks/typegen-extensibility.md) but not in scope yet.

@@ -35,3 +35,7 @@ Don't jump straight to "add a section to the README". Most non-trivial features 
 ### Reference code in docs should invite copy-paste
 
 When a feature ships a helper like `createOtelHook`, the doc should plainly say it's a reference implementation, not the blessed-forever API. The stable contract is the underlying hook/type; the helper is one valid way to satisfy it. Users should copy it and edit it to match their team's conventions without feeling they're going off-piste.
+
+---
+
+When I say "bedtime!" as well as your normal instructions I want you to *always* do the evergreen `tasks/improve-docs.md` and `tasks/cleanup-tasks.md` tasks. Don't move them to complete, just update it with your notes as necessary, especially when you make executive decisions on my behalf (which you are welcome to do if you think there's a clear benefit - I will always review the changes before merging anyway).

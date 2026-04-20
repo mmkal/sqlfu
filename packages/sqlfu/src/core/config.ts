@@ -87,7 +87,7 @@ export function resolveProjectConfig(
   };
 }
 
-const validValidators: readonly SqlfuValidator[] = ['zod', 'valibot', 'zod-mini'];
+const validValidators: readonly SqlfuValidator[] = ['arktype', 'valibot', 'zod', 'zod-mini'];
 
 type TsconfigPreferences = {
   readonly prefersTsImportExtensions?: boolean;

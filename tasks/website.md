@@ -61,13 +61,13 @@ Current working idea:
   - no shipping the website bundle inside `packages/sqlfu`
   - no coupling the CLI install path to browser assets
   *The backend now serves API plus a small HTML status page by default; frontend assets remain outside the runtime package.*
-- [ ] Add an end-to-end spec for the first shipped user journey.
-  Good first candidate:
-  - open website
-  - reach docs
-  - open the local studio instructions
-  - run `npx sqlfu`
-  - load the local backend successfully
+- [~~ ~~] ~~Add an end-to-end spec for the first shipped user journey.~~ *Won't do — PR #26 attempted this (website-e2e branch) but was closed on 2026-04-20; moved on. The existing `packages/ui/test/local-sqlfu-dev.spec.ts` covers the ngrok path and is deemed sufficient for now.*
+  ~~Good first candidate:~~
+  - ~~open website~~
+  - ~~reach docs~~
+  - ~~open the local studio instructions~~
+  - ~~run `npx sqlfu`~~
+  - ~~load the local backend successfully~~
 - [x] Add a root launcher for the `local.sqlfu.dev` dev simulation. *`pnpm local.sqlfu.dev` now delegates to the UI package launcher, which starts a standalone Vite UI server, a standalone sqlfu backend server, and an `ngrok` tunnel that points only at the UI server.*
 - [x] Document the local-vs-hosted model clearly so users know what runs where. *Covered in the website landing page, `packages/sqlfu/README.md`, and the local backend HTML page.*
 
@@ -108,3 +108,4 @@ That gives us the intended local product model without taking on remote executio
 - 2026-04-16: added a root `pnpm local.sqlfu.dev` launcher that now delegates to the UI package script, runs the UI and backend on separate ports, points `ngrok` only at the UI server, and configures the browser client to talk to the standalone backend origin.
 - 2026-04-17: kept the default Playwright `webServer` on `packages/ui/test/start-server.ts`, switched that harness to import the sqlfu UI server from source, and added `packages/ui/test/local-sqlfu-dev.spec.ts` so the ngrok path is tested as an extra layer instead of replacing the normal UI+API test server.
 - 2026-04-17: added `alchemy.run.mts` plus root `infra`/`deploy`/`destroy` scripts so `www.sqlfu.dev` and `local.sqlfu.dev` can be managed as Cloudflare Websites from this repo.
+- 2026-04-20: closed PR #26 (the e2e spec attempt on the `website-e2e` branch) and crossed out the corresponding checklist item — moving on; `local-sqlfu-dev.spec.ts` stays as the coverage for that path.

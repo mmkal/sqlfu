@@ -37,9 +37,10 @@ const docs = [
   },
   {
     slug: 'runtime-validation',
-    title: 'Runtime validation with zod',
-    sourcePath: path.join(repoRoot, 'packages', 'sqlfu', 'docs', 'runtime-validation.md'),
-    description: 'Generate zod schemas as the source of truth. Validate params and rows at the wrapper boundary.',
+    title: 'Runtime validation',
+    sourcePath: path.join(repoRoot, 'packages', 'sqlfu', 'docs', 'runtime-validation.mdx'),
+    description:
+      'Generate arktype, valibot, zod, or zod/mini schemas as the source of truth. Validate params and rows at the wrapper boundary.',
   },
   {
     slug: 'ui',
@@ -72,7 +73,10 @@ for (const doc of docs) {
     '',
   ].join('\n');
 
-  const destPath = path.join(contentDocsDir, `${doc.slug}.md`);
+  // Preserve the source extension so .mdx files (which import Astro components like
+  // Starlight's <Tabs>) round-trip as .mdx into the Starlight content collection.
+  const sourceExtension = path.extname(doc.sourcePath);
+  const destPath = path.join(contentDocsDir, `${doc.slug}${sourceExtension}`);
   await fs.writeFile(destPath, frontmatter + content);
 
   for (const assetPath of assetPaths) {
@@ -143,7 +147,7 @@ function rewriteHref(href, currentSourcePath) {
   const normalizedTarget = normalizePath(absolutePath);
   const linkedDoc = docBySourcePath.get(normalizedTarget);
   if (linkedDoc) {
-    return `/docs/${linkedDoc.slug}/${hash ? `#${hash}` : ''}`;
+    return `/docs/${linkedDoc.slug}${hash ? `#${hash}` : ''}`;
   }
 
   return githubPermalink(absoluteTarget);

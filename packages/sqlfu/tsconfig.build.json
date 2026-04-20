@@ -9,5 +9,9 @@
     "sourceMap": false
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["src/vendor/code-block-writer/**/*", "src/vendor/typesql/**/*", "src/vendor/typesql-parser/**/*"]
+  "exclude": [
+    "src/vendor/code-block-writer/**/*",
+    "src/vendor/typesql/**/*",
+    "src/vendor/sqlfu-sqlite-parser/**/*"
+  ]
 }

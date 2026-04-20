@@ -7,7 +7,6 @@
   "exclude": [
     "src/vendor/code-block-writer/**/*",
     "src/vendor/typesql/**/*",
-    "src/vendor/typesql-parser/**/*",
     "test/**/*.old-test-ignoreme.ts"
   ]
 }

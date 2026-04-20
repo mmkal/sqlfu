@@ -1,5 +1,5 @@
 ---
-status: needs-investigation
+status: in-progress
 size: medium
 ---
 
@@ -7,7 +7,27 @@ size: medium
 
 ## Status summary
 
-Not started. Requires investigation before committing to an approach. Spawned from PR #19 where we discussed merging `build:runtime` + `build:vendor-typesql` → one step and hit two concrete regressions that killed the naive merge.
+Investigation in progress (2026-04-20 bedtime session, worktree `collapse-sqlfu-build-steps`). Spawned from PR #19 where we discussed merging `build:runtime` + `build:vendor-typesql` → one step and hit two concrete regressions that killed the naive merge.
+
+## Investigation plan (bedtime 2026-04-20)
+
+The brief suggests three options. We will try them in order and stop at the first one that satisfies all hard constraints:
+
+1. **Measure current baseline.** Record clean `pnpm --filter sqlfu build` time, clean `pnpm --filter sqlfu build:runtime` time, `npm pack --dry-run` size (files + KB), and that typecheck/tests pass on main. Everything below gets compared against these numbers.
+2. **Prototype option A (tsdown / oxc-based builder).** Add tsdown as a devDep, write equivalent config, measure. Acceptance criteria:
+    - Cold `pnpm build` ≤ 5s (so `ensureBuilt()`-gated tests with 5000ms timeouts survive)
+    - Warm `ensureBuilt()` ≤ ~2s (current 1.4s baseline)
+    - `npm pack --dry-run` size does NOT regress vs current
+    - Public `.d.ts` shape for `dist/{index,browser,client,api,cli,ui/index,ui/browser}.d.ts` is equivalent (`diff -r` against main)
+    - `.d.ts` emission is suppressed under `dist/vendor/{antlr4,code-block-writer,typesql,typesql-parser}/`
+    - `@ts-nocheck` in `src/vendor/sql-formatter/**` (91 files) is respected
+    - `allowJs` works for `src/vendor/antlr4/index.js`
+    - Smoke-test: `node -e "import('./packages/sqlfu/dist/index.js').then(m => console.log(Object.keys(m).length))"` succeeds for each public entry point
+    - `pnpm --filter sqlfu test --run` stays green
+3. **Prototype option B (`tsc -b` with project references)** only if A fails. Same acceptance criteria.
+4. **Option C (do nothing + document rationale)** if both fail. Add a prominent note to `packages/sqlfu/CLAUDE.md` explaining why the two-step build exists so the next agent doesn't repeat PR #19.
+
+Whichever option wins, update `packages/sqlfu/CLAUDE.md` (creating it if needed) to describe the new build story or the status-quo rationale.
 
 ## Motivation
 

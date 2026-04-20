@@ -10,6 +10,8 @@ Local changes that are expected:
 - attribution comments on touched files
 - local imports to `src/vendor/small-utils.ts`
 - vendored support code may live alongside this tree under `src/vendor/*`
+- `sqlfu.ts` exports `analyzeSqliteQueriesWithClient` so browser callers can run
+  analysis against an already-open sqlite client (e.g. sqlite-wasm in demo mode)
 
 When updating from upstream:
 - copy upstream `src/` over this directory again rather than editing file-by-file

@@ -1,0 +1,8 @@
+{
+  "extends": "../../../../tsconfig.base.json",
+  "compilerOptions": {
+    "verbatimModuleSyntax": false,
+    "noEmit": true
+  },
+  "include": ["./**/*.ts"]
+}

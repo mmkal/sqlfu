@@ -1,0 +1,72 @@
+name: pr-package-size
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          path: head
+
+      - name: Checkout main baseline
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: base
+
+      - run: corepack enable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: |
+            head/pnpm-lock.yaml
+            base/pnpm-lock.yaml
+
+      - name: Install (PR)
+        working-directory: head
+        run: pnpm install --frozen-lockfile
+
+      - name: Build (PR)
+        working-directory: head
+        run: pnpm --filter sqlfu build
+
+      - name: Pack (PR)
+        working-directory: head/packages/sqlfu
+        run: npm pack --dry-run --json > "$GITHUB_WORKSPACE/head.json"
+
+      - name: Install (main)
+        working-directory: base
+        run: pnpm install --frozen-lockfile
+
+      - name: Build (main)
+        working-directory: base
+        run: pnpm --filter sqlfu build
+
+      - name: Pack (main)
+        working-directory: base/packages/sqlfu
+        run: npm pack --dry-run --json > "$GITHUB_WORKSPACE/base.json"
+
+      - name: Render markdown report
+        working-directory: head
+        run: pnpm exec tsx scripts/compare-package-size.ts --base "$GITHUB_WORKSPACE/base.json" --head "$GITHUB_WORKSPACE/head.json" > "$GITHUB_WORKSPACE/report.md"
+
+      - name: Show report in job summary
+        run: cat "$GITHUB_WORKSPACE/report.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Post sticky PR comment
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: package-size
+          path: report.md

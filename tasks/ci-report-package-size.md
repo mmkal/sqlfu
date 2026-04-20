@@ -5,6 +5,8 @@ size: small
 
 # Report published-package size on PRs
 
+**Status:** mostly done; awaiting first CI run on PR #31 to confirm the sticky comment renders correctly on a real PR. The script is implemented, the workflow is wired up, and the output has been spot-checked locally with fabricated inputs.
+
 After the slim-package work (PR #29) got the tarball from 1.5 MB / 18.8 MB down to 217 kB / 965 kB, we should surface any regression in a PR comment before it lands on main. `npm pack --dry-run --json` has everything we need (packed size, unpacked size, file count, per-file sizes).
 
 ## Executive decisions (locked in)
@@ -21,10 +23,10 @@ After the slim-package work (PR #29) got the tarball from 1.5 MB / 18.8 MB down 
 
 ## Checklist
 
-- [ ] create `scripts/compare-package-size.ts` — tsx-runnable, accepts `--base <path-to-main.json> --head <path-to-pr.json>`, emits markdown to stdout. Knows how to humanize bytes and format a percent delta.
-- [ ] create `.github/workflows/pr-package-size.yml` — PR-only workflow that packs on the PR branch and on `main`, diffs the two, and posts a sticky comment.
-- [ ] dogfood the output locally (run build on main, save json; checkout branch, build, save json; feed both to the script).
-- [ ] sanity-check the workflow in the PR itself. The first run should compare `ci-report-package-size` against `main` and the sizes should be nearly identical (only `.github/` + `scripts/` additions, which aren't in the npm tarball).
+- [x] create `scripts/compare-package-size.ts` _implemented; groups `dist/vendor/*/*.js` by subdir, handles single-file vendor entries like `sha256.js` directly, warns at ≥10% packed bump_
+- [x] create `.github/workflows/pr-package-size.yml` _PR-only, dual-checkout (head + main baseline), posts via `marocchino/sticky-pull-request-comment@v2`_
+- [x] dogfood the output locally _ran against /tmp/sqlfu-pack-main.json as both base and head (zero deltas as expected) and against a fabricated +12% head to confirm warning renders_
+- [ ] sanity-check the workflow in the PR itself _pending — will be visible on the PR once it runs_
 
 ## Design notes
 
@@ -85,4 +87,8 @@ If any row's packed Δ ≥ +10%, prepend a warning line: "Package size bump >10%
 
 ## Implementation log
 
-<!-- filled during implementation -->
+- `npm pack --dry-run --json` on `packages/sqlfu` after a full build returns the array shape we expected: `[{name, version, size, unpackedSize, entryCount, files: [{path, size}]}]`. We only look at the first element.
+- Current tip-of-main numbers (2026-04-20, local build): packed 213.6 kB, unpacked 946.7 kB, 143 files. `dist/vendor/typesql/sqlfu.js` alone is 476.5 kB — that's the row to watch.
+- Chose `marocchino/sticky-pull-request-comment@v2` over `peter-evans/create-or-update-comment@v4` because the former is one step (`header: package-size` acts as the sticky key) vs the latter needing a separate "find comment" step. Same output either way.
+- Workflow does two checkouts into `head/` and `base/` and installs twice. The second `pnpm install` is cheap thanks to `actions/setup-node`'s pnpm store cache; overhead is dominated by the two `pnpm --filter sqlfu build` runs (~3s cold each on my machine; CI will be a bit slower). Accepted tradeoff for not having to think about `actions/cache` invalidation.
+- Report also gets written to `$GITHUB_STEP_SUMMARY` so the workflow run page itself displays the table without clicking through to the PR comment. Handy when debugging CI.

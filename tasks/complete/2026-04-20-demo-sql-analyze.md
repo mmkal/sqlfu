@@ -1,9 +1,26 @@
 ---
-status: ready
+status: done
 size: medium
 ---
 
 # Make `sql.analyze` work in demo mode (red underlines in the browser)
+
+## Status
+
+Shipped in PR #18 (merged 2026-04-20). Demo mode (`?demo=1`) now runs the real
+vendored typesql analyzer against the sqlite-wasm DB, producing the same
+`SqlEditorDiagnostic[]` the node backend produces. The CodeMirror linter renders
+red wavy underlines for syntax errors, unknown columns, and type-level issues.
+
+Key landing points:
+- `packages/sqlfu/src/vendor/typesql/sqlfu.ts` — new `analyzeSqliteQueriesWithClient(dbClient, queries)` entrypoint alongside the URI-based one.
+- `packages/sqlfu/src/typegen/analyze-vendored-typesql-with-client.{js,d.ts}` — thin `.js` re-export so the main TS program doesn't walk into the vendored tree (allowJs: false), but bundlers do.
+- `packages/sqlfu/src/core/sql-editor-diagnostic.ts` — lifted `toSqlEditorDiagnostic` + `isInternalUnsupportedSqlAnalysisError` out of `node-host.ts` so node and browser share identical error → editor-range mapping.
+- `packages/ui/src/demo/browser-host.ts` — `wasmDatabaseAsTypesqlClient()` duck-types sqlite-wasm into the `DatabaseType` typesql expects; `analyzeSql` runs the real pipeline.
+- `packages/ui/test/demo-sql-analyze.spec.ts` — two playwright specs (syntax error, unknown column) both passing.
+- `packages/sqlfu/src/vendor/antlr4/index.js` swapped from `dist/antlr4.node.mjs` to `dist/antlr4.web.mjs` for browser compat; various small `node:fs` / `node:os` lazy-import patches in the vendored typesql tree.
+
+Bundle-size hit: +2.05 MB raw / +370 KB gzipped on the UI main bundle. Accepted per task scope.
 
 ## Problem
 
@@ -45,12 +62,12 @@ In demo mode, typing SQL that fails to parse (syntax error) or that references u
 
 ## Acceptance
 
-- [ ] Typing `selet * from posts` in the SQL runner at `?demo=1#sql` shows the red wavy underline and a `near "selet": syntax error` message on hover.
-- [ ] Typing `select nosuchcol from posts` (referencing an unknown column on a known table) produces an underline at the `nosuchcol` token.
-- [ ] Valid SQL produces zero diagnostics (no false positives).
-- [ ] New Playwright spec for demo-mode diagnostics passes.
-- [ ] Existing `studio.spec.ts` diagnostic tests still pass.
-- [ ] `pnpm --filter sqlfu typecheck` and `pnpm --filter sqlfu build` still pass; vendored typesql still resyncable (any local edits appended to the "Local changes that are expected" list in `packages/sqlfu/src/vendor/typesql/CLAUDE.md`).
+- [x] Typing `selet * from posts` in the SQL runner at `?demo=1#sql` shows the red wavy underline and a `near "selet": syntax error` message on hover. _covered by `packages/ui/test/demo-sql-analyze.spec.ts:3`_
+- [x] Typing `select nosuchcol from posts` (referencing an unknown column on a known table) produces an underline at the `nosuchcol` token. _covered by `packages/ui/test/demo-sql-analyze.spec.ts:14`_
+- [x] Valid SQL produces zero diagnostics (no false positives). _`analyzeSql` returns `{diagnostics: []}` on `analysis.ok`; visually confirmed on the artifact.ci preview_
+- [x] New Playwright spec for demo-mode diagnostics passes. _2 tests green_
+- [x] Existing `studio.spec.ts` diagnostic tests still pass. _verified locally against the node backend harness_
+- [x] `pnpm --filter sqlfu typecheck` and `pnpm --filter sqlfu build` still pass; vendored typesql still resyncable. _local edits appended to `packages/sqlfu/src/vendor/typesql/CLAUDE.md` and `packages/sqlfu/src/vendor/antlr4/CLAUDE.md` (new)_
 
 ## Out-of-band notes
 

@@ -36,10 +36,13 @@ export async function generateQueryTypesForConfig(config: SqlfuProjectConfig): P
   const schema = await loadSchema(databasePath);
   const queryFiles = await loadQueryFiles(config.queries);
 
-  // Partition into DDL (analyzed as a parameterless command) vs queries that go through typesql.
-  // DDL like `create table if not exists` has no params and no returned columns, so typesql
-  // can't make sense of it; we emit a trivial `client.run(sql)` wrapper for it instead of the
-  // `//Invalid SQL` placeholder.
+  // Partition into DDL vs queries that go through typesql. The vendored typesql dispatcher
+  // (sqlite-query-analyzer/traverse.ts `traverse_Sql_stmtContext`) throws `traverse_Sql_stmtContext`
+  // for every statement kind except select/insert/update/delete, so `create table`, `drop`,
+  // `pragma`, etc. all fail analysis. Rather than teach the analyzer a new `queryType: 'Ddl'`
+  // (that would propagate through the whole typesql pipeline + its downstream consumers), we
+  // detect DDL at the wrapper layer and emit a trivial `client.run(sql)` wrapper directly.
+  // Tracked for a proper fix in typesql-ddl-support (filed alongside this change).
   const ddlFiles = queryFiles.filter((file) => isDdlStatement(file.sqlContent));
   const nonDdlFiles = queryFiles.filter((file) => !ddlFiles.includes(file));
   const queryAnalyses = await analyzeVendoredTypesqlQueries(
@@ -75,21 +78,6 @@ export async function generateQueryTypesForConfig(config: SqlfuProjectConfig): P
         throw new Error(`Missing vendored TypeSQL analysis for ${queryFile.sqlPath}`);
       }
 
-      // Typesql trips on a few trivially valid SQLite shapes (notably `delete from <table>;`
-      // with no where clause). When analysis fails AND the SQL has no placeholders, the
-      // user's statement is side-effect-only — emit the same trivial wrapper we use for DDL.
-      if (!analysis.ok && !hasPlaceholders(queryFile.sqlContent)) {
-        await fs.writeFile(
-          wrapperPath,
-          renderDdlWrapper({
-            relativePath: queryFile.relativePath,
-            sql: queryFile.sqlContent,
-            sync: config.generate.sync,
-          }),
-        );
-        return;
-      }
-
       const contents = analysis.ok
         ? renderQueryWrapper({
             relativePath: queryFile.relativePath,
@@ -121,22 +109,10 @@ export async function generateQueryTypesForConfig(config: SqlfuProjectConfig): P
  * keeps this simple and predictable.
  */
 function isDdlStatement(sqlContent: string): boolean {
-  const stripped = stripSqlComments(sqlContent).trim();
+  const stripped = sqlContent.replace(/\/\*[\s\S]*?\*\//g, '').replace(/--.*$/gm, '').trim();
   return /^(create|drop|alter|pragma|vacuum|reindex|analyze|attach|detach|begin|commit|rollback|savepoint|release)\b/i.test(
     stripped,
   );
-}
-
-function hasPlaceholders(sqlContent: string): boolean {
-  const stripped = stripSqlComments(sqlContent);
-  // `:ident`, `$ident`, `@ident` — all three are sqlite bound-param shapes. Also match standalone `?`.
-  if (/[:$@][A-Za-z_][A-Za-z0-9_]*/.test(stripped)) return true;
-  if (/(?<![A-Za-z0-9_])\?(?:\d+)?/.test(stripped)) return true;
-  return false;
-}
-
-function stripSqlComments(sqlContent: string): string {
-  return sqlContent.replace(/\/\*[\s\S]*?\*\//g, '').replace(/--.*$/gm, '');
 }
 
 function renderDdlWrapper(input: {relativePath: string; sql: string; sync: boolean}): string {

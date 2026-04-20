@@ -12,6 +12,9 @@ Local changes that are expected:
 - vendored support code may live alongside this tree under `src/vendor/*`
 - `sqlfu.ts` exports `analyzeSqliteQueriesWithClient` so browser callers can run
   analysis against an already-open sqlite client (e.g. sqlite-wasm in demo mode)
+- `sqlite-query-analyzer/traverse.ts` — `traverse_delete_stmt` guards the optional
+  where-clause expr before calling `traverse_expr`. Upstream crashes on
+  `delete from <t>;` with no where clause (null-deref on `expr.function_name()`).
 
 When updating from upstream:
 - copy upstream `src/` over this directory again rather than editing file-by-file

@@ -417,39 +417,61 @@ function renderQueryWrapper(input: {
 
 /**
  * Abstracts the validator-library-specific concerns of emission so the wrapper renderer
- * itself is library-agnostic. Each validator has its own module spec to import, expression
- * vocabulary for field types, object-schema construction, inference helper, and parse-call
- * shape — but the overall file layout (schemas as module-scoped consts, namespace merging,
- * Object.assign) is identical across all three.
+ * itself is library-agnostic. Each validator has its own module spec to import, field-line
+ * rendering, object-schema construction, inference helper, and parse-call shape — but the
+ * overall file layout (schemas as module-scoped consts, namespace merging, Object.assign)
+ * is identical across all of them.
  *
  * The emission split between `'zod'` and `'standard'` flavours mirrors the real divide:
  * zod has a first-class `safeParse` + `z.prettifyError`, so it doesn't need anything from
- * sqlfu at runtime. Valibot and zod-mini share the Standard Schema `~standard.validate`
- * entry point — the generated wrapper inlines the result-guard (promise-check, issues-check)
- * and, when pretty errors are on, calls sqlfu's re-export of `prettifyStandardSchemaError`
- * on the failure result. When pretty errors are off, nothing is imported from sqlfu.
+ * sqlfu at runtime. Valibot, zod-mini, and arktype share the Standard Schema
+ * `~standard.validate` entry point — the generated wrapper inlines the result-guard
+ * (promise-check, issues-check) and, when pretty errors are on, calls sqlfu's re-export of
+ * `prettifyStandardSchemaError` on the failure result. When pretty errors are off, nothing
+ * is imported from sqlfu.
  */
 type ValidatorEmitter = {
   readonly importLine: string;
   /** `'zod'` uses safeParse/z.prettifyError; `'standard'` uses `~standard.validate` + sqlfu helper. */
   readonly parseFlavour: 'zod' | 'standard';
-  /** Called to render a single field expression for a TS type (e.g. `string` → `z.string()`). */
-  readonly expressionForTsType: (tsType: string) => string;
-  /** Wrap a base expression with nullable (column may be null) and optional (param may be absent). */
-  readonly nullable: (expression: string) => string;
-  readonly optional: (expression: string) => string;
+  /**
+   * Render a single `"  name: expression,"` line for a schema object. Controls both the
+   * key (for validators like arktype that express optionality via `"name?"`) and the value
+   * (each validator's native nullable/enum/array/etc. encoding).
+   */
+  readonly renderFieldLine: (field: GeneratedField, fieldKind: 'parameter' | 'result') => string;
   /** Build the `const Foo = object({...})` declaration lines. */
   readonly objectSchemaDeclaration: (input: {schemaName: string; fieldLines: string[]}) => string[];
   /** The call used in function signatures and return types to infer a TS type from a schema. */
   readonly inferExpression: (schemaName: string) => string;
 };
 
+/** Default field-line rendering for the zod/valibot/zod-mini emitters — key is plain, value is wrapped. */
+function valueWrappedFieldLine(
+  expressionForTsType: (tsType: string) => string,
+  nullable: (expression: string) => string,
+  optional: (expression: string) => string,
+): (field: GeneratedField, fieldKind: 'parameter' | 'result') => string {
+  return (field, fieldKind) => {
+    let expression = expressionForTsType(field.tsType);
+    if (!field.notNull) {
+      expression = nullable(expression);
+    }
+    if (fieldKind === 'parameter' && Boolean(field.optional)) {
+      expression = optional(expression);
+    }
+    return `\t${field.name}: ${expression},`;
+  };
+}
+
 const zodEmitter: ValidatorEmitter = {
   importLine: `import {z} from 'zod';`,
   parseFlavour: 'zod',
-  expressionForTsType: (tsType) => zodExpressionForTsType(tsType, 'z'),
-  nullable: (expression) => `${expression}.nullable()`,
-  optional: (expression) => `${expression}.optional()`,
+  renderFieldLine: valueWrappedFieldLine(
+    (tsType) => zodExpressionForTsType(tsType, 'z'),
+    (expression) => `${expression}.nullable()`,
+    (expression) => `${expression}.optional()`,
+  ),
   objectSchemaDeclaration: ({schemaName, fieldLines}) => [
     `const ${schemaName} = z.object({`,
     ...fieldLines,
@@ -461,11 +483,13 @@ const zodEmitter: ValidatorEmitter = {
 const zodMiniEmitter: ValidatorEmitter = {
   importLine: `import * as z from 'zod/mini';`,
   parseFlavour: 'standard',
-  expressionForTsType: (tsType) => zodExpressionForTsType(tsType, 'z'),
   // zod-mini keeps the same nullable/optional wrapper calls as standard zod — the same schema
   // object, a smaller bundle path.
-  nullable: (expression) => `z.nullable(${expression})`,
-  optional: (expression) => `z.optional(${expression})`,
+  renderFieldLine: valueWrappedFieldLine(
+    (tsType) => zodExpressionForTsType(tsType, 'z'),
+    (expression) => `z.nullable(${expression})`,
+    (expression) => `z.optional(${expression})`,
+  ),
   objectSchemaDeclaration: ({schemaName, fieldLines}) => [
     `const ${schemaName} = z.object({`,
     ...fieldLines,
@@ -477,9 +501,11 @@ const zodMiniEmitter: ValidatorEmitter = {
 const valibotEmitter: ValidatorEmitter = {
   importLine: `import * as v from 'valibot';`,
   parseFlavour: 'standard',
-  expressionForTsType: (tsType) => valibotExpressionForTsType(tsType),
-  nullable: (expression) => `v.nullable(${expression})`,
-  optional: (expression) => `v.optional(${expression})`,
+  renderFieldLine: valueWrappedFieldLine(
+    (tsType) => valibotExpressionForTsType(tsType),
+    (expression) => `v.nullable(${expression})`,
+    (expression) => `v.optional(${expression})`,
+  ),
   objectSchemaDeclaration: ({schemaName, fieldLines}) => [
     `const ${schemaName} = v.object({`,
     ...fieldLines,
@@ -488,10 +514,80 @@ const valibotEmitter: ValidatorEmitter = {
   inferExpression: (schemaName) => `v.InferOutput<typeof ${schemaName}>`,
 };
 
+/**
+ * Arktype's idiomatic shape is TS-syntax-as-schema: `type({slug: "string", title: "string | null"})`.
+ * Optional fields are expressed by suffixing `"?"` on the *key*, not by wrapping the value. Primitive
+ * types, arrays, and string-literal unions fit naturally in the string form. `Uint8Array` isn't a
+ * reserved keyword, so we fall back to `type.instanceOf(Uint8Array)` (arktype accepts a Type value
+ * as an object-literal field).
+ */
+const arktypeEmitter: ValidatorEmitter = {
+  importLine: `import {type} from 'arktype';`,
+  parseFlavour: 'standard',
+  renderFieldLine: (field, fieldKind) => {
+    const keySuffix = fieldKind === 'parameter' && Boolean(field.optional) ? '?' : '';
+    const keyText = keySuffix
+      ? JSON.stringify(`${field.name}${keySuffix}`)
+      : field.name;
+    return `\t${keyText}: ${arktypeFieldExpression(field.tsType, field.notNull)},`;
+  },
+  objectSchemaDeclaration: ({schemaName, fieldLines}) => [
+    `const ${schemaName} = type({`,
+    ...fieldLines,
+    `});`,
+  ],
+  inferExpression: (schemaName) => `typeof ${schemaName}.infer`,
+};
+
 function getValidatorEmitter(validator: SqlfuValidator): ValidatorEmitter {
   if (validator === 'zod') return zodEmitter;
   if (validator === 'zod-mini') return zodMiniEmitter;
-  return valibotEmitter;
+  if (validator === 'valibot') return valibotEmitter;
+  return arktypeEmitter;
+}
+
+/**
+ * Render the value side of an arktype object-literal field. Primitive keywords, arrays, and
+ * string-literal unions stay in the arktype string grammar; `Uint8Array` escapes to the
+ * `type.instanceOf(...)` helper (arktype accepts a Type value in an object literal alongside
+ * string definitions).
+ */
+function arktypeFieldExpression(tsType: string, notNull: boolean): string {
+  const baseExpression = arktypeBaseExpression(tsType);
+  if (notNull) return baseExpression;
+
+  // Nullable: for the string form we widen the union; for the escape-hatch form
+  // (`type.instanceOf(...)`) we fall back to the Type-value form with a union.
+  if (baseExpression.startsWith('"') && baseExpression.endsWith('"')) {
+    const innerDefinition = baseExpression.slice(1, -1);
+    return JSON.stringify(`${innerDefinition} | null`);
+  }
+  return `type(${baseExpression}, '|', 'null')`;
+}
+
+function arktypeBaseExpression(tsType: string): string {
+  if (tsType === 'string') return '"string"';
+  if (tsType === 'number') return '"number"';
+  if (tsType === 'boolean') return '"boolean"';
+  if (tsType === 'Date') return '"Date"';
+  if (tsType === 'Uint8Array' || tsType === 'ArrayBuffer') return 'type.instanceOf(Uint8Array)';
+  if (tsType === 'any') return '"unknown"';
+  if (tsType.endsWith('[]')) {
+    const innerBase = arktypeBaseExpression(tsType.slice(0, -2));
+    if (innerBase.startsWith('"') && innerBase.endsWith('"')) {
+      const innerDefinition = innerBase.slice(1, -1);
+      return JSON.stringify(`${innerDefinition}[]`);
+    }
+    // Escape-hatch: wrap the Type value in an array via the chainable helper.
+    return `${innerBase}.array()`;
+  }
+
+  const enumValues = parseStringLiteralUnion(tsType);
+  if (enumValues) {
+    return JSON.stringify(enumValues.map((value) => JSON.stringify(value)).join(' | '));
+  }
+
+  return '"unknown"';
 }
 
 function renderValidatorQueryWrapper(input: {
@@ -566,8 +662,8 @@ function renderValidatorQueryWrapper(input: {
   const runtimeImports = buildRuntimeImports(emitter, prettyErrors);
 
   return [
-    emitter.importLine,
     runtimeImports,
+    emitter.importLine,
     ``,
     ...schemaDeclarations,
     ...sqlLines,
@@ -609,24 +705,9 @@ function renderObjectSchemaDeclaration(
   fields: readonly GeneratedField[],
   fieldKind: 'parameter' | 'result',
 ): string[] {
-  const fieldLines = fields.map((field) => `\t${field.name}: ${expressionForField(emitter, field, fieldKind)},`);
-  return emitter.objectSchemaDeclaration({schemaName, fieldLines});
-}
-
-function expressionForField(
-  emitter: ValidatorEmitter,
-  field: GeneratedField,
-  fieldKind: 'parameter' | 'result',
-): string {
   // see tasks/typegen-extensibility.md — future user-provided validator plugins and per-column overrides would hook in here.
-  let expression = emitter.expressionForTsType(field.tsType);
-  if (!field.notNull) {
-    expression = emitter.nullable(expression);
-  }
-  if (fieldKind === 'parameter' && Boolean(field.optional)) {
-    expression = emitter.optional(expression);
-  }
-  return expression;
+  const fieldLines = fields.map((field) => emitter.renderFieldLine(field, fieldKind));
+  return emitter.objectSchemaDeclaration({schemaName, fieldLines});
 }
 
 function zodExpressionForTsType(tsType: string, namespace: 'z'): string {

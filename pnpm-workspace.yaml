@@ -8,3 +8,7 @@ ignoredBuiltDependencies:
 
 onlyBuiltDependencies:
   - simple-git-hooks
+  # Needed by `pnpm --filter sqlfu build:internal-queries`, which opens a dev DB to
+  # materialize the schema for typegen. Without a built native binding the script's
+  # `new BetterSqlite3(...)` throws `Could not locate the bindings file`.
+  - better-sqlite3

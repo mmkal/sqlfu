@@ -52,26 +52,34 @@
  *  Sourced from `src/vendor/typesql-parser/sqlite/SQLiteLexer.ts`. This is a
  *  superset of what the MVP parser will need in phase 2; shipping the full
  *  set is fine because the runtime cost is O(1) per identifier (Set lookup). */
+// Non-reserved / contextual keywords are NOT in this set: `RANK`, `ROW_NUMBER`,
+// `DENSE_RANK`, `CUME_DIST`, `FIRST_VALUE`, `LAST_VALUE`, `NTH_VALUE`, `NTILE`,
+// `PERCENT_RANK`, `LEAD`, `LAG` (window-function identifiers — legal as
+// regular function names or column names); `FILTER` stays a keyword so that
+// aggregate `count(*) FILTER (WHERE ...)` parses; the window framing words
+// (`PARTITION`, `RANGE`, `ROWS`, `GROUPS`, `UNBOUNDED`, `PRECEDING`,
+// `FOLLOWING`, `CURRENT`, `TIES`, `OTHERS`, `EXCLUDE`, `NO`, `WINDOW`, `OVER`)
+// appear only inside OVER (...) where the parser currently brace-matches, so
+// their reserved-status doesn't affect expression parsing.
 const KEYWORDS = new Set([
 	'ABORT', 'ACTION', 'ADD', 'AFTER', 'ALL', 'ALTER', 'ALWAYS', 'ANALYZE', 'AND', 'AS', 'ASC',
 	'ATTACH', 'AUTOINCREMENT', 'BEFORE', 'BEGIN', 'BETWEEN', 'BY', 'CASCADE', 'CASE', 'CAST',
 	'CHECK', 'COLLATE', 'COLUMN', 'COMMIT', 'CONFLICT', 'CONSTRAINT', 'CREATE', 'CROSS',
-	'CURRENT', 'CURRENT_DATE', 'CURRENT_TIME', 'CURRENT_TIMESTAMP', 'DATABASE', 'DEFAULT',
+	'CURRENT_DATE', 'CURRENT_TIME', 'CURRENT_TIMESTAMP', 'DATABASE', 'DEFAULT',
 	'DEFERRABLE', 'DEFERRED', 'DELETE', 'DESC', 'DETACH', 'DISTINCT', 'DO', 'DROP', 'EACH',
-	'ELSE', 'END', 'ESCAPE', 'EXCEPT', 'EXCLUDE', 'EXCLUSIVE', 'EXISTS', 'EXPLAIN', 'FAIL',
-	'FALSE', 'FILTER', 'FIRST', 'FIRST_VALUE', 'FOLLOWING', 'FOR', 'FOREIGN', 'FROM', 'FULL',
-	'GENERATED', 'GLOB', 'GROUP', 'GROUPS', 'HAVING', 'IF', 'IGNORE', 'IMMEDIATE', 'IN',
+	'ELSE', 'END', 'ESCAPE', 'EXCEPT', 'EXCLUSIVE', 'EXISTS', 'EXPLAIN', 'FAIL',
+	'FALSE', 'FILTER', 'FIRST', 'FOR', 'FOREIGN', 'FROM', 'FULL',
+	'GENERATED', 'GLOB', 'GROUP', 'HAVING', 'IF', 'IGNORE', 'IMMEDIATE', 'IN',
 	'INDEX', 'INDEXED', 'INITIALLY', 'INNER', 'INSERT', 'INSTEAD', 'INTERSECT', 'INTO', 'IS',
-	'ISNULL', 'JOIN', 'KEY', 'LAG', 'LAST', 'LAST_VALUE', 'LEAD', 'LEFT', 'LIKE', 'LIMIT',
-	'MATCH', 'NATURAL', 'NO', 'NOT', 'NOTHING', 'NOTNULL', 'NULL', 'NULLS', 'OF', 'OFFSET',
-	'ON', 'OR', 'ORDER', 'OTHERS', 'OUTER', 'OVER', 'PARTITION', 'PLAN', 'PRAGMA', 'PRECEDING',
-	'PRIMARY', 'QUERY', 'RAISE', 'RANGE', 'RANK', 'RECURSIVE', 'REFERENCES', 'REGEXP',
+	'ISNULL', 'JOIN', 'KEY', 'LAST', 'LEFT', 'LIKE', 'LIMIT',
+	'MATCH', 'NATURAL', 'NOT', 'NOTHING', 'NOTNULL', 'NULL', 'NULLS', 'OF', 'OFFSET',
+	'ON', 'OR', 'ORDER', 'OUTER', 'OVER', 'PLAN', 'PRAGMA',
+	'PRIMARY', 'QUERY', 'RAISE', 'RECURSIVE', 'REFERENCES', 'REGEXP',
 	'REINDEX', 'RELEASE', 'RENAME', 'REPLACE', 'RESTRICT', 'RETURNING', 'RIGHT', 'ROLLBACK',
-	'ROW', 'ROW_NUMBER', 'ROWS', 'SAVEPOINT', 'SELECT', 'SET', 'STORED', 'TABLE', 'TEMP',
-	'TEMPORARY', 'THEN', 'TIES', 'TO', 'TRANSACTION', 'TRIGGER', 'TRUE', 'UNBOUNDED',
+	'ROW', 'SAVEPOINT', 'SELECT', 'SET', 'STORED', 'TABLE', 'TEMP',
+	'TEMPORARY', 'THEN', 'TO', 'TRANSACTION', 'TRIGGER', 'TRUE',
 	'UNION', 'UNIQUE', 'UPDATE', 'USING', 'VACUUM', 'VALUES', 'VIEW', 'VIRTUAL', 'WHEN',
-	'WHERE', 'WINDOW', 'WITH', 'WITHOUT', 'CUME_DIST', 'DENSE_RANK', 'NTH_VALUE', 'NTILE',
-	'PERCENT_RANK'
+	'WHERE', 'WITH', 'WITHOUT',
 ]);
 
 export type TokenKind =
@@ -152,6 +160,22 @@ export function tokenize(sql: string): Token[] {
 			continue;
 		}
 
+		// --- x'deadbeef' BLOB literal — checked BEFORE the identifier branch
+		// because `x` is an identifier start character but `x'...'` is a blob. ---
+		if (
+			(ch === 0x78 /* x */ || ch === 0x58 /* X */) &&
+			sql.charCodeAt(pos + 1) === 0x27 /* ' */
+		) {
+			pos += 2;
+			while (pos < len && sql.charCodeAt(pos) !== 0x27) pos++;
+			if (pos >= len) {
+				throw new SqlTokenizerError(`unterminated BLOB literal starting at offset ${start}`, start);
+			}
+			pos++; // consume closing '
+			tokens.push({ kind: 'BLOB_LITERAL', value: sql.slice(start, pos), start, stop: pos - 1 });
+			continue;
+		}
+
 		// --- identifier / keyword ---
 		if (isIdentStart(ch)) {
 			pos++;
@@ -196,21 +220,6 @@ export function tokenize(sql: string): Token[] {
 		if (ch === 0x27 /* ' */) {
 			pos = scanQuoted(sql, pos, 0x27);
 			tokens.push({ kind: 'STRING_LITERAL', value: sql.slice(start, pos), start, stop: pos - 1 });
-			continue;
-		}
-
-		// --- x'deadbeef' BLOB literal ---
-		if (
-			(ch === 0x78 /* x */ || ch === 0x58 /* X */) &&
-			sql.charCodeAt(pos + 1) === 0x27 /* ' */
-		) {
-			pos += 2;
-			while (pos < len && sql.charCodeAt(pos) !== 0x27) pos++;
-			if (pos >= len) {
-				throw new SqlTokenizerError(`unterminated BLOB literal starting at offset ${start}`, start);
-			}
-			pos++; // consume closing '
-			tokens.push({ kind: 'BLOB_LITERAL', value: sql.slice(start, pos), start, stop: pos - 1 });
 			continue;
 		}
 

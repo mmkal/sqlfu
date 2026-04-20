@@ -273,25 +273,25 @@ The public shape — one callable, `.Params`, `.Result`, `.sql` — is identical
 
 ## Pretty errors
 
-By default (`generate.prettyErrors: true`), validation failures throw an `Error` whose message is a readable, indented issues list — one line per issue with the dotted path:
+By default (`generate.prettyErrors: true`), validation failures throw an `Error` whose message is a readable, indented issues list. One line per issue with the dotted path:
 
 ```
 ✖ Expected string, received number → at slug
 ```
 
 - **Zod** uses zod's native pretty-printer: `z.prettifyError(zodError)`. The generated wrapper calls `Params.safeParse(rawParams)` and throws `new Error(z.prettifyError(error))` on failure. No runtime helper is imported from sqlfu.
-- **Arktype, valibot, zod-mini** share the [Standard Schema](https://standardschema.dev) `~standard.validate(input)` entry point. The generated wrapper inlines the result-guard (promise-check, then `'issues' in result`) and, on failure, calls `prettifyStandardSchemaError` — re-exported from `sqlfu` — to build the thrown `Error`'s message. That's the only thing imported from sqlfu in pretty-errors mode.
+- **Arktype, valibot, zod-mini** share the [Standard Schema](https://standardschema.dev) `~standard.validate(input)` entry point. The generated wrapper inlines the result-guard (promise-check, then `'issues' in result`) and, on failure, calls `prettifyStandardSchemaError` (re-exported from `sqlfu`) to build the thrown `Error`'s message. That's the only thing imported from sqlfu in pretty-errors mode.
 
-`prettifyStandardSchemaError` is vendored from [trpc-cli](https://github.com/mmkal/trpc-cli/tree/main/src/standard-schema) and re-exported as a reference implementation — it's a small function you're welcome to copy and adapt. The stable contract is the Standard Schema `Result` shape, not sqlfu's prettifier.
+`prettifyStandardSchemaError` is vendored from [trpc-cli](https://github.com/mmkal/trpc-cli/tree/main/src/standard-schema) and re-exported as a reference implementation. It's a small function you're welcome to copy and adapt. The stable contract is the Standard Schema `Result` shape, not sqlfu's prettifier.
 
 ### `prettyErrors: false`
 
 Set `prettyErrors: false` to let the raw error from the underlying validator library pass through untouched. Choose this if you have error-handling middleware that already introspects the validator's issues list structurally.
 
-- **Zod** emits `Params.parse(rawParams)` directly — a `ZodError` propagates unchanged with `.issues` on it.
-- **Arktype, valibot, zod-mini** emit an inline check on the Standard Schema result — on failure, `throw Object.assign(new Error('Validation failed'), {issues: result.issues})`. You still get the issues array on `error.issues`, without running it through the prettifier.
+- **Zod** emits `Params.parse(rawParams)` directly. A `ZodError` propagates unchanged with `.issues` on it.
+- **Arktype, valibot, zod-mini** emit an inline check on the Standard Schema result. On failure: `throw Object.assign(new Error('Validation failed'), {issues: result.issues})`. You still get the issues array on `error.issues`, without running it through the prettifier.
 
-In `prettyErrors: false` mode with any Standard Schema validator, the generated file has **zero runtime dependency on sqlfu** — only `type Client` and `type SqlQuery` are imported, both erased at compile time. The wrapper is fully self-contained apart from its validator library.
+In `prettyErrors: false` mode with any Standard Schema validator, the generated file has **zero runtime dependency on sqlfu**. Only `type Client` and `type SqlQuery` are imported, both erased at compile time. The wrapper is fully self-contained apart from its validator library.
 
 ```ts
 generate: {
@@ -323,7 +323,7 @@ const result = findPostBySlug.Result;
 const queryText = findPostBySlug.sql;
 ```
 
-Namespace merging is what makes `findPostBySlug.Params` resolve as a value (the schema) *and* a type. Consumers of the library don't have to think about this — they just write `findPostBySlug.Params` in either position.
+Namespace merging is what makes `findPostBySlug.Params` resolve as a value (the schema) *and* a type. Consumers don't have to think about this: they write `findPostBySlug.Params` in either position.
 
 For queries with `update` semantics, the shape is `findPostBySlug.Data` + `findPostBySlug.Params` + `findPostBySlug.Result`, matching the plain-TS output.
 
@@ -373,11 +373,11 @@ if (!parsed.success) return handleError(parsed.error);
 </TabItem>
 </Tabs>
 
-The wrapper throwing by default is intentional — this is generated code and the right default is to fail loudly at the boundary.
+The wrapper throwing by default is intentional. This is generated code, and the right default is to fail loudly at the boundary.
 
 ## Not emitting a validator
 
-If `generate.validator` is unset, `null`, or `undefined`, the generator emits the plain TS output (no validator import, no `.parse()` calls, types declared directly). No hybrid mode — a project picks one.
+If `generate.validator` is unset, `null`, or `undefined`, the generator emits the plain TS output (no validator import, no `.parse()` calls, types declared directly). There's no hybrid mode: a project picks one.
 
 ## Extending the generated shape
 
@@ -396,4 +396,4 @@ export async function findPostBySlug(client: Client, params: z.infer<typeof Rich
 }
 ```
 
-The generated schemas will never be richer than what a SQL type system can tell us. Column-level refinement is an application concern — today. Pluggable validators and per-column overrides are [planned](https://github.com/mmkal/sqlfu/blob/main/tasks/typegen-extensibility.md) but not in scope yet.
+The generated schemas will never be richer than what a SQL type system can tell us. Column-level refinement is an application concern today. Pluggable validators and per-column overrides are [planned](https://github.com/mmkal/sqlfu/blob/main/tasks/typegen-extensibility.md) but not in scope yet.

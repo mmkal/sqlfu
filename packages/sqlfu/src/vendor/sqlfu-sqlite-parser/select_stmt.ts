@@ -393,6 +393,16 @@ export function parseSelectFrom(tokens: Token[], sql: string, startIndex: number
 	return {stmt, nextIndex: p.position()};
 }
 
+/** Exposed for the DML parser — parse a single expression (at full precedence)
+ *  starting at `startIndex` in the shared token stream, returning the
+ *  resulting expression and the new cursor position. */
+export function parseExprFromCursor(tokens: Token[], sql: string, startIndex: number): {expr: ParsedExpr; nextIndex: number} {
+	const p = new Parser(tokens, sql);
+	p.seek(startIndex);
+	const expr = p.parseExpr();
+	return {expr, nextIndex: p.position()};
+}
+
 // -----------------------------------------------------------------------------
 // Parser
 // -----------------------------------------------------------------------------

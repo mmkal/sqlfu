@@ -48,7 +48,10 @@ import {AppToaster} from './components/ui/toaster.js';
 import {resolveApiOrigin, resolveApiRpcUrl} from './runtime.js';
 import {classifyStartupError} from './startup-error.js';
 import {DEMO_URL, LOCAL_URL, createDemoClient, isDemoMode} from './demo/index.js';
+import {initThemeOnLoad, useThemePreference} from './theme.js';
 import './styles.css';
+
+initThemeOnLoad();
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -469,9 +472,12 @@ function Studio() {
   return (
     <Shell>
       <aside className="sidebar">
-        <div className="sidebar-block">
-          <h1>sqlfu/ui</h1>
-          <p className="lede">{schemaQuery.data.projectName}</p>
+        <div className="sidebar-block sidebar-header">
+          <div className="sidebar-title">
+            <h1>sqlfu/ui</h1>
+            <p className="lede">{schemaQuery.data.projectName}</p>
+          </div>
+          <ThemeToggle />
         </div>
 
         <nav className="sidebar-block">
@@ -2014,6 +2020,22 @@ function Shell(input: {children?: ReactNode; loading?: boolean}) {
       <ModeBanner />
       {input.children}
     </div>
+  );
+}
+
+function ThemeToggle() {
+  const {preference, cycle} = useThemePreference();
+  const label =
+    preference === 'light'
+      ? 'Theme: light (click for dark)'
+      : preference === 'dark'
+        ? 'Theme: dark (click for system)'
+        : 'Theme: system (click for dark)';
+  const glyph = preference === 'light' ? '☼' : preference === 'dark' ? '☾' : '◐';
+  return (
+    <button type="button" className="icon-button theme-toggle" aria-label={label} title={label} onClick={cycle}>
+      <span aria-hidden>{glyph}</span>
+    </button>
   );
 }
 

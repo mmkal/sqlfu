@@ -11,7 +11,7 @@ Why vendor at all? Two reasons:
 
 | Directory | Upstream | License | Summary |
 | --- | --- | --- | --- |
-| [`antlr4/`](./antlr4/) | [antlr/antlr4](https://github.com/antlr/antlr4) v4.13.2 | BSD-3-Clause | JavaScript runtime for the ANTLR4 parsers TypeSQL uses. |
+| [`antlr4/`](./antlr4/) | [antlr/antlr4](https://github.com/antlr/antlr4) v4.13.2 (`dist/antlr4.web.mjs`) | BSD-3-Clause | JavaScript runtime for the ANTLR4 parsers TypeSQL uses. See [`antlr4/CLAUDE.md`](./antlr4/CLAUDE.md) for why we use the web build in both runtimes. |
 | [`code-block-writer/`](./code-block-writer/) | [dsherret/code-block-writer](https://github.com/dsherret/code-block-writer) v13.0.3 | MIT | Small helper used by TypeSQL's code generator. |
 | [`sql-formatter/`](./sql-formatter/) | [sql-formatter-org/sql-formatter](https://github.com/sql-formatter-org/sql-formatter) v15.7.3 | MIT | SQL formatter; wrapped by `src/formatter.ts` with sqlfu defaults. See [`sql-formatter/CLAUDE.md`](./sql-formatter/CLAUDE.md). |
 | [`typesql/`](./typesql/) | [wsporto/typesql](https://github.com/wsporto/typesql) @ commit f0356201 | MIT | Query analysis and code generation; drives `sqlfu generate`. See [`typesql/CLAUDE.md`](./typesql/CLAUDE.md). |

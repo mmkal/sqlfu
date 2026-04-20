@@ -1,5 +1,5 @@
 ---
-status: ready
+status: done
 size: small
 ---
 
@@ -9,8 +9,9 @@ When the hosted browser UI on `local.sqlfu.dev` talks to a locally-running `npx 
 
 ## Status summary
 
-- Planned. Spec committed first; implementation + tests to follow in subsequent commits on the `skew` branch.
-- Main decisions: server exposes its own version, client holds the compatibility rule, version-mismatch composes with the existing `StartupFailure` taxonomy.
+- Shipped. Server exposes `project.status.serverVersion`; hosted client holds `MINIMUM_SERVER_VERSION` + `compareSqlfuVersions` and renders a dedicated upgrade panel via a new `'version-mismatch'` arm of `StartupFailureScreen`.
+- Floor is set to the current package version so the plumbing is live but has no behavioral effect today. Bump it together with any future RPC-shape change.
+- Spot-checked live in Chrome: flipping the floor to `9.9.9` shows the upgrade screen; flipping back to `0.0.2-3` goes straight to the schema page. Also covered by two playwright tests that stub `project.status` via `page.route`.
 
 ## Design
 
@@ -78,14 +79,23 @@ No `semver` npm dep. sqlfu's versions are prerelease-heavy (`0.0.2-3`). A tiny i
 
 ## Checklist
 
-- [ ] Extend `project.status` RPC to include `serverVersion: string`, sourced from `packages/sqlfu/package.json`.
-- [ ] Add integration test in `packages/sqlfu/test/ui-server.test.ts` asserting `serverVersion` matches `packageJson.version` shape.
-- [ ] Add `MINIMUM_SERVER_VERSION` + `compareSqlfuVersions` in `packages/ui/src/startup-error.ts` with unit tests in `startup-error.test.ts`.
-- [ ] Add `'version-mismatch'` to `StartupFailureKind` and a classifier arm.
-- [ ] Perform the version check right after `project.status` resolves in `Studio`. Throw a typed error that the boundary catches.
-- [ ] Render an upgrade panel in `StartupFailureScreen` for the new kind.
-- [ ] Spot-check the upgrade screen in Chrome via `claude-in-chrome` MCP by temporarily serving an old version string.
-- [ ] `pnpm --filter sqlfu typecheck` + `pnpm --filter sqlfu-ui typecheck` + `pnpm --filter sqlfu test --run` + `pnpm --filter sqlfu-ui run test:node`.
+- [x] Extend `project.status` RPC to include `serverVersion: string`, sourced from `packages/sqlfu/package.json`. _packages/sqlfu/src/ui/router.ts_
+- [x] Add integration test in `packages/sqlfu/test/ui-server.test.ts` asserting `serverVersion` matches `packageJson.version` shape.
+- [x] Add `MINIMUM_SERVER_VERSION` + `compareSqlfuVersions` in `packages/ui/src/startup-error.ts` with unit tests in `startup-error.test.ts`.
+- [x] Add `'version-mismatch'` to `StartupFailureKind` and a classifier arm. _plus a `ServerVersionMismatchError` thrown from `Studio`_
+- [x] Perform the version check right after `project.status` resolves in `Studio`. Throw a typed error that the boundary catches.
+- [x] Render an upgrade panel in `StartupFailureScreen` for the new kind. _two arms: sub-floor and pre-version unknown_
+- [x] Spot-check the upgrade screen in Chrome via `claude-in-chrome` MCP by temporarily serving an old version string.
+- [x] `pnpm --filter sqlfu typecheck` + `pnpm --filter sqlfu-ui typecheck` + `pnpm --filter sqlfu test --run` + `pnpm --filter sqlfu-ui run test:node`.
+- [x] Add playwright coverage of the upgrade screen via `page.route` stub. _packages/ui/test/studio.spec.ts_
+
+## Implementation log
+
+- `project.status` now returns `serverVersion`, sourced from `packages/sqlfu/package.json` at runtime (`import ... with {type: 'json'}`, same pattern as `cli.ts`).
+- Client: `compareSqlfuVersions` handles the sqlfu version shape (`MAJOR.MINOR.PATCH[-N]`) and throws on anything else — the project controls both sides of the wire, so there is never a legitimate reason to accept a malformed version.
+- The check runs inside `Studio` right after `useSuspenseQuery(orpc.project.status.queryOptions())` resolves. If the floor is not met, it throws a `ServerVersionMismatchError`; the existing `StartupErrorBoundary` already catches anything thrown from render.
+- `classifyStartupError` gains a `version-mismatch` arm with `serverVersion` and `minimumServerVersion` fields so the screen can render both values without poking at the raw error.
+- Two playwright specs stub `project.status` via `page.route` — one with an old version string, one omitting the field entirely — and assert the upgrade copy + retry button. The pre-existing `table browser, sql runner...` and `sql runner keeps line numbers...` failures on `main` are unrelated and not caused by this branch.
 
 ## Open questions / decisions made-up-on-user's-behalf (bedtime task)
 

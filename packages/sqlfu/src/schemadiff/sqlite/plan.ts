@@ -112,8 +112,26 @@ export function planSchemaDiff(input: {
     }
   }
 
+  // Views whose baseline SQL directly references a rebuilt table are rewritten by SQLite during
+  // `alter table ... rename to ...` to point at the temporary name, so we must drop and recreate
+  // them around the rebuild. Transitive dependents must also be dropped (and recreated) because
+  // SQLite's rename does a validation pass that re-parses every dependent view.
+  const recreatedViewNames = transitiveViewDependents(
+    [...rebuiltTables],
+    baselineViewDependencyFacts,
+    input.baseline.views,
+  )
+    .filter((viewName) => viewName in input.desired.views)
+    .filter((viewName) => !modifiedViewNames.includes(viewName))
+    .sort((left, right) => left.localeCompare(right));
+
   const recreatedTriggerNames = Object.entries(input.desired.triggers)
-    .filter(([, trigger]) => rebuiltTables.has(trigger.onName) || modifiedViewNames.includes(trigger.onName))
+    .filter(
+      ([, trigger]) =>
+        rebuiltTables.has(trigger.onName) ||
+        modifiedViewNames.includes(trigger.onName) ||
+        recreatedViewNames.includes(trigger.onName),
+    )
     .map(([triggerName]) => triggerName)
     .sort((left, right) => left.localeCompare(right));
 
@@ -165,7 +183,9 @@ export function planSchemaDiff(input: {
     prefixes.push(`drop trigger ${maybeQuoteIdentifier(triggerName)};`);
   }
 
-  for (const viewName of [...removedViewNames, ...modifiedViewNames].sort((left, right) => left.localeCompare(right))) {
+  for (const viewName of [...new Set([...removedViewNames, ...modifiedViewNames, ...recreatedViewNames])].sort(
+    (left, right) => left.localeCompare(right),
+  )) {
     if (handledRemovedViewNames.has(viewName)) {
       continue;
     }
@@ -193,7 +213,9 @@ export function planSchemaDiff(input: {
     statements.push(createIndex);
   }
 
-  for (const viewName of [...addedViewNames, ...modifiedViewNames].sort((left, right) => left.localeCompare(right))) {
+  for (const viewName of [...new Set([...addedViewNames, ...modifiedViewNames, ...recreatedViewNames])].sort(
+    (left, right) => left.localeCompare(right),
+  )) {
     if (handledCreatedViewNames.has(viewName)) {
       continue;
     }
@@ -580,6 +602,33 @@ function orderOperations(operations: readonly SchemadiffOperation[]): string[] {
 
   const orderedIds = result.chunks.flatMap((chunk) => [...chunk].sort((left, right) => left.localeCompare(right)));
   return orderedIds.flatMap((id) => splitStatementForOutput(operationsById.get(id)!.sql));
+}
+
+function transitiveViewDependents(
+  seedNames: readonly string[],
+  viewDependencyFacts: readonly SqliteDependencyFact[],
+  views: Record<string, SqliteInspectedView>,
+): string[] {
+  const seeds = new Set(seedNames);
+  const result = new Set<string>();
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const view of Object.values(views)) {
+      if (result.has(view.name)) {
+        continue;
+      }
+      const fact = viewDependencyFacts.find((f) => f.ownerName === view.name);
+      if (!fact) {
+        continue;
+      }
+      if (fact.dependsOnNames.some((name) => seeds.has(name) || result.has(name))) {
+        result.add(view.name);
+        changed = true;
+      }
+    }
+  }
+  return [...result];
 }
 
 function orderViewsForCreate(

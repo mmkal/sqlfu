@@ -60,7 +60,7 @@ jobs:
 
       - name: Build website
         working-directory: website
-        run: node build.mjs
+        run: pnpm run build
 
       # See note on the `ui` job above — artifact.ci is what turns this
       # upload into a viewable preview URL.

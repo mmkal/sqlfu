@@ -1,0 +1,227 @@
+/*
+ * Starlight theme overrides to preserve the sqlfu "motherfuckingwebsite" aesthetic
+ * on both light and dark: warm beige/orange palette, serif body, mono eyebrow
+ * labels, rounded panels. Dark mode is a warm sepia-night variant of the same
+ * palette, tuned so midnight reading doesn't hurt.
+ *
+ * Fonts and shared vars go in :root; the colour palette lives under the two
+ * [data-theme] blocks. Starlight applies data-theme='light' or 'dark' on <html>
+ * before first paint (see ThemeProvider.astro in @astrojs/starlight).
+ */
+
+:root {
+  --sl-font: 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Georgia, serif;
+  --sl-font-system: ui-sans-serif, system-ui, sans-serif;
+  --sl-font-system-mono: ui-monospace, 'SFMono-Regular', monospace;
+  --sl-color-bg: transparent;
+  --sl-color-bg-nav: transparent;
+  --sl-color-bg-sidebar: transparent;
+}
+
+:root[data-theme='light'] {
+  --sl-color-accent-low: #f6d9b6;
+  --sl-color-accent: #9d4d12;
+  --sl-color-accent-high: #6f2d00;
+  --sl-color-white: #201710;
+  --sl-color-gray-1: #201710;
+  --sl-color-gray-2: #3b2a1d;
+  --sl-color-gray-3: #6f5947;
+  --sl-color-gray-4: #8a7563;
+  --sl-color-gray-5: #b8a78e;
+  --sl-color-gray-6: #e4d7bf;
+  --sl-color-gray-7: #efe1c6;
+  --sl-color-black: #fffdf9;
+  --sl-color-bg-inline-code: rgba(121, 73, 24, 0.08);
+  --sl-color-text: #201710;
+  --sl-color-text-accent: #6f2d00;
+  --sl-color-text-invert: #fff9f2;
+  --sl-color-hairline: rgba(85, 52, 24, 0.16);
+  --sl-color-hairline-light: rgba(85, 52, 24, 0.1);
+  --sl-color-hairline-shade: rgba(85, 52, 24, 0.22);
+
+  --sqlfu-page-gradient-top: rgba(255, 214, 153, 0.38);
+  --sqlfu-page-gradient-start: #efe1c6;
+  --sqlfu-page-gradient-mid: #f6efe2;
+  --sqlfu-page-gradient-end: #fffdf9;
+  --sqlfu-header-bg: rgba(255, 252, 246, 0.72);
+  --sqlfu-sidebar-bg: rgba(248, 240, 223, 0.55);
+  --sqlfu-table-bg: rgba(255, 255, 255, 0.72);
+  --sqlfu-table-th-bg: rgba(239, 225, 198, 0.7);
+  --sqlfu-blockquote-border: rgba(121, 73, 24, 0.28);
+  --sqlfu-doc-source-bg: rgba(255, 255, 255, 0.45);
+  --sqlfu-code-block-bg: #20140f;
+  --sqlfu-code-block-text: #fff4e8;
+}
+
+:root[data-theme='dark'] {
+  --sl-color-accent-low: #3a2515;
+  --sl-color-accent: #e89b66;
+  --sl-color-accent-high: #f2b07f;
+  --sl-color-white: #f0e6d6;
+  --sl-color-gray-1: #f0e6d6;
+  --sl-color-gray-2: #d9cab0;
+  --sl-color-gray-3: #b5a58f;
+  --sl-color-gray-4: #8a7c66;
+  --sl-color-gray-5: #5a4e3f;
+  --sl-color-gray-6: #3b2f24;
+  --sl-color-gray-7: #2a2017;
+  --sl-color-black: #15100c;
+  --sl-color-bg-inline-code: rgba(232, 155, 102, 0.14);
+  --sl-color-text: #f0e6d6;
+  --sl-color-text-accent: #f2b07f;
+  --sl-color-text-invert: #1a1410;
+  --sl-color-hairline: rgba(240, 230, 214, 0.14);
+  --sl-color-hairline-light: rgba(240, 230, 214, 0.08);
+  --sl-color-hairline-shade: rgba(240, 230, 214, 0.2);
+
+  --sqlfu-page-gradient-top: rgba(232, 155, 102, 0.08);
+  --sqlfu-page-gradient-start: #15100c;
+  --sqlfu-page-gradient-mid: #1a1410;
+  --sqlfu-page-gradient-end: #1f1812;
+  --sqlfu-header-bg: rgba(21, 16, 12, 0.72);
+  --sqlfu-sidebar-bg: rgba(26, 20, 16, 0.55);
+  --sqlfu-table-bg: rgba(33, 25, 18, 0.6);
+  --sqlfu-table-th-bg: rgba(58, 37, 21, 0.6);
+  --sqlfu-blockquote-border: rgba(232, 155, 102, 0.35);
+  --sqlfu-doc-source-bg: rgba(33, 25, 18, 0.45);
+  --sqlfu-code-block-bg: #15100c;
+  --sqlfu-code-block-text: #f0e6d6;
+}
+
+html {
+  min-height: 100%;
+  background:
+    radial-gradient(circle at top, var(--sqlfu-page-gradient-top), transparent 32rem),
+    linear-gradient(
+      180deg,
+      var(--sqlfu-page-gradient-start) 0%,
+      var(--sqlfu-page-gradient-mid) 22%,
+      var(--sqlfu-page-gradient-end) 100%
+    );
+  background-attachment: fixed;
+}
+
+body {
+  color: var(--sl-color-text);
+}
+
+/* Header / nav */
+
+header.header {
+  background: var(--sqlfu-header-bg);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--sl-color-hairline);
+}
+
+.site-title {
+  font-family: var(--sl-font-system-mono);
+  font-size: 0.84rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--sl-color-accent);
+}
+
+/* Sidebar */
+
+nav.sidebar {
+  background: var(--sqlfu-sidebar-bg);
+  border-right: 1px solid var(--sl-color-hairline);
+}
+
+.sidebar-content ul li a {
+  font-family: var(--sl-font-system);
+}
+
+/* Main content */
+
+.main-frame {
+  background: transparent;
+}
+
+main h1,
+main h2,
+main h3 {
+  font-family: var(--sl-font);
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+}
+
+main h1 {
+  font-size: clamp(2.6rem, 6vw, 4.4rem);
+}
+
+main h2 {
+  margin-top: 2.2rem;
+  font-size: 1.9rem;
+}
+
+main h3 {
+  margin-top: 1.7rem;
+  font-size: 1.35rem;
+}
+
+main p,
+main li,
+main blockquote {
+  font-size: 1.05rem;
+  line-height: 1.75;
+}
+
+main :not(pre) > code {
+  font-family: var(--sl-font-system-mono);
+  font-size: 0.92em;
+  background: var(--sl-color-bg-inline-code);
+  padding: 0.12rem 0.32rem;
+  border-radius: 0.35rem;
+  color: var(--sl-color-text);
+}
+
+main pre {
+  border-radius: 1rem;
+  background: var(--sqlfu-code-block-bg) !important;
+  color: var(--sqlfu-code-block-text);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+main table {
+  border-collapse: collapse;
+  border-radius: 0.9rem;
+  overflow: hidden;
+  background: var(--sqlfu-table-bg);
+  box-shadow: inset 0 0 0 1px var(--sl-color-hairline);
+}
+
+main th {
+  font-family: var(--sl-font-system);
+  font-size: 0.9rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--sl-color-accent-high);
+  background: var(--sqlfu-table-th-bg);
+}
+
+main blockquote {
+  margin: 1rem 0;
+  padding-left: 1rem;
+  border-left: 3px solid var(--sqlfu-blockquote-border);
+  color: var(--sl-color-gray-3);
+}
+
+/* "Source: …" meta shown at the top of each page */
+
+.doc-source-meta {
+  margin: 0 0 1.25rem;
+  padding: 0.5rem 0.85rem;
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: 0.75rem;
+  background: var(--sqlfu-doc-source-bg);
+  color: var(--sl-color-gray-3);
+  font-family: var(--sl-font-system);
+  font-size: 0.9rem;
+}
+
+.doc-source-meta a {
+  color: inherit;
+  text-decoration-thickness: 1px;
+}

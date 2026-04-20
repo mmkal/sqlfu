@@ -44,7 +44,7 @@ describe('draft', () => {
       migrations/
         2026-04-10T00.00.00.000Z_create_person.sql
           create table person(name text)
-        2026-04-10T02.00.00.000Z_create_table_pet.sql
+        2026-04-10T01.00.00.000Z_create_table_pet.sql
           create table pet(name text);
       "
     `);
@@ -198,7 +198,7 @@ describe('migrate', () => {
     );
 
     await expect(fixture.api.migrate()).rejects.toMatchInlineSnapshot(`
-      [Error: Migration 2026-04-10T02.00.00.000Z_add_pet_and_fail failed: near "this": syntax error
+      [Error: Migration 2026-04-10T01.00.00.000Z_add_pet_and_fail failed: near "this": syntax error
 
       The database is still healthy for migrate. Fix the migration and retry.]
     `);
@@ -228,7 +228,7 @@ describe('migrate', () => {
     );
 
     await expect(fixture.api.migrate()).rejects.toMatchInlineSnapshot(`
-      [Error: Migration 2026-04-10T02.00.00.000Z_commit_then_fail failed: near "this": syntax error
+      [Error: Migration 2026-04-10T01.00.00.000Z_commit_then_fail failed: near "this": syntax error
 
       The database is no longer healthy for migrate. Reconcile before retrying.
 

@@ -56,6 +56,7 @@ export function createSqliteWasmClient(database: SqliteWasmDatabaseLike): AsyncC
   const client: Omit<AsyncClient<SqliteWasmDatabaseLike>, 'sql'> & {sql: AsyncClient<SqliteWasmDatabaseLike>['sql']} = {
     driver: database,
     system: 'sqlite',
+    sync: false,
     all,
     run,
     raw,

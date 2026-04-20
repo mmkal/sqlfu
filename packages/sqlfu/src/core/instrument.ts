@@ -61,9 +61,7 @@ const processResult: ProcessResult = <T>(
  * transaction still fire the hook because the tx client is re-instrumented.
  */
 export function instrumentClient<TClient extends Client>(client: TClient, hook: QueryExecutionHook): TClient {
-  return isAsyncClient(client)
-    ? (instrumentAsync(client, hook) as TClient)
-    : (instrumentSync(client as SyncClient, hook) as TClient);
+  return client.sync ? (instrumentSync(client, hook) as TClient) : (instrumentAsync(client, hook) as TClient);
 }
 
 /**
@@ -134,6 +132,7 @@ function instrumentAsync<TDriver>(client: AsyncClient<TDriver>, hook: QueryExecu
   const wrapped: Omit<AsyncClient<TDriver>, 'sql'> & {sql: AsyncClient<TDriver>['sql']} = {
     driver: client.driver,
     system: client.system,
+    sync: false,
     all: (query) => hook(buildHookArgs({query, operation: 'all', system: client.system}, () => client.all(query))),
     run: (query) => hook(buildHookArgs({query, operation: 'run', system: client.system}, () => client.run(query))),
     raw: (sql) => client.raw(sql),
@@ -149,6 +148,7 @@ function instrumentSync<TDriver>(client: SyncClient<TDriver>, hook: QueryExecuti
   const wrapped: Omit<SyncClient<TDriver>, 'sql'> & {sql: SyncClient<TDriver>['sql']} = {
     driver: client.driver,
     system: client.system,
+    sync: true,
     all: (query) => hook(buildHookArgs({query, operation: 'all', system: client.system}, () => client.all(query))),
     run: (query) => hook(buildHookArgs({query, operation: 'run', system: client.system}, () => client.run(query))),
     raw: (sql) => client.raw(sql),
@@ -161,13 +161,6 @@ function instrumentSync<TDriver>(client: SyncClient<TDriver>, hook: QueryExecuti
   };
   wrapped.sql = bindSyncSql(wrapped);
   return wrapped;
-}
-
-function isAsyncClient<TDriver>(client: Client<TDriver>): client is AsyncClient<TDriver> {
-  // Adapters declare `all` as either a regular function (sync clients) or an
-  // `async` function (async clients). The Function constructor name is the
-  // cleanest side-effect-free discriminator.
-  return client.all.constructor.name === 'AsyncFunction';
 }
 
 function isPromiseLike<T>(value: T | Promise<T>): value is Promise<T> {

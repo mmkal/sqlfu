@@ -423,9 +423,11 @@ function renderQueryWrapper(input: {
  * Object.assign) is identical across all three.
  *
  * The emission split between `'zod'` and `'standard'` flavours mirrors the real divide:
- * zod has a first-class `safeParse` + `z.prettifyError`, so it doesn't need sqlfu's runtime
- * helper; valibot and zod-mini share the Standard Schema `~standard.validate` entry point
- * and route through `getValueOrThrowPrettyError` (or an inline throw when pretty errors are off).
+ * zod has a first-class `safeParse` + `z.prettifyError`, so it doesn't need anything from
+ * sqlfu at runtime. Valibot and zod-mini share the Standard Schema `~standard.validate`
+ * entry point — the generated wrapper inlines the result-guard (promise-check, issues-check)
+ * and, when pretty errors are on, calls sqlfu's re-export of `prettifyStandardSchemaError`
+ * on the failure result. When pretty errors are off, nothing is imported from sqlfu.
  */
 type ValidatorEmitter = {
   readonly importLine: string;
@@ -589,12 +591,14 @@ function renderValidatorQueryWrapper(input: {
 /**
  * What to import from `'sqlfu'` in the generated wrapper:
  *  - zod path never needs a runtime helper (uses `z.prettifyError` directly).
- *  - standard-schema path pulls in `getValueOrThrowPrettyError` when pretty errors are on.
- *  - with pretty errors off, no runtime helper is imported in either path.
+ *  - standard-schema path pulls in `prettifyStandardSchemaError` when pretty errors are on,
+ *    so the inline failure branch can turn issues into a readable message.
+ *  - with pretty errors off, no runtime value is imported from sqlfu in either path — the
+ *    generated file is fully self-contained apart from its validator library.
  */
 function buildRuntimeImports(emitter: ValidatorEmitter, prettyErrors: boolean): string {
   if (emitter.parseFlavour === 'standard' && prettyErrors) {
-    return `import {getValueOrThrowPrettyError, type Client, type SqlQuery} from 'sqlfu';`;
+    return `import {prettifyStandardSchemaError, type Client, type SqlQuery} from 'sqlfu';`;
   }
   return `import type {Client, SqlQuery} from 'sqlfu';`;
 }
@@ -668,6 +672,12 @@ function valibotExpressionForTsType(tsType: string): string {
  * validated local (`params`, `data`). Shape depends on the validator flavour and whether
  * pretty errors are on.
  *
+ * For the Standard Schema flavour (valibot, zod-mini) we always inline the result-guard —
+ * promise-check then issues-check — so the generated file doesn't depend on a sqlfu-side
+ * wrapper helper. When pretty errors are on we call sqlfu's re-exported
+ * `prettifyStandardSchemaError` on the failure result; otherwise we attach `.issues` to a
+ * generic `Error` and throw that.
+ *
  * `indent` is the prefix for each emitted line (two tabs inside the wrapper body).
  */
 function buildInputValidationStatements(
@@ -689,24 +699,23 @@ function buildInputValidationStatements(
     ];
   }
 
-  // Standard Schema flavour (valibot, zod-mini).
-  if (prettyErrors) {
-    return [
-      `${indent}const ${validatedVariable} = getValueOrThrowPrettyError(${schemaName}['~standard'].validate(${rawVariable}));`,
-    ];
-  }
+  // Standard Schema flavour (valibot, zod-mini). Inline result-guard either way.
+  const resultName = `parsed${schemaName}Result`;
   return [
-    `${indent}const ${validatedVariable}Result = ${schemaName}['~standard'].validate(${rawVariable});`,
-    `${indent}if (${validatedVariable}Result instanceof Promise) throw new Error('Unexpected async validation from ${schemaName}.');`,
-    `${indent}if (${validatedVariable}Result.issues) throw Object.assign(new Error('Validation failed'), {issues: ${validatedVariable}Result.issues});`,
-    `${indent}const ${validatedVariable} = ${validatedVariable}Result.value;`,
+    `${indent}const ${resultName} = ${schemaName}['~standard'].validate(${rawVariable});`,
+    `${indent}if ('then' in ${resultName}) throw new Error('Unexpected async validation from ${schemaName}.');`,
+    prettyErrors
+      ? `${indent}if ('issues' in ${resultName}) throw new Error(prettifyStandardSchemaError(${resultName}) || 'Validation failed');`
+      : `${indent}if ('issues' in ${resultName}) throw Object.assign(new Error('Validation failed'), {issues: ${resultName}.issues});`,
+    `${indent}const ${validatedVariable} = ${resultName}.value;`,
   ];
 }
 
 /**
  * The row-parsing expression for validator flavours where a single-expression form exists
- * (valibot/zod-mini + pretty errors, and zod + no pretty errors). Returns `null` when the
- * flavour needs a multi-statement form instead.
+ * (zod + no pretty errors). Returns `null` when the flavour needs a multi-statement form.
+ * Standard Schema always needs the multi-statement form now — the promise-check +
+ * issues-check is inline in the generated file, so there's no one-liner for it.
  */
 function rowParseExpressionOrNull(
   emitter: ValidatorEmitter,
@@ -716,16 +725,13 @@ function rowParseExpressionOrNull(
   if (emitter.parseFlavour === 'zod' && !prettyErrors) {
     return `Result.parse(${rowExpression})`;
   }
-  if (emitter.parseFlavour === 'standard' && prettyErrors) {
-    return `getValueOrThrowPrettyError(Result['~standard'].validate(${rowExpression}))`;
-  }
   return null;
 }
 
 /**
- * Multi-statement body for parsing a row into its validated form. Used when a single
- * expression isn't available — zod + pretty (safeParse/prettifyError) and standard + no-pretty
- * (validate() with inline issue-throw). The last statement is `return <value>;`.
+ * Multi-statement body for parsing a row into its validated form. Used for zod + pretty
+ * (safeParse/prettifyError) and both standard-flavour variants (always — since there is no
+ * one-liner helper on the standard path anymore). The last statement is `return <value>;`.
  */
 function rowParseStatements(
   emitter: ValidatorEmitter,
@@ -741,11 +747,13 @@ function rowParseStatements(
       `${indent}return parsed.data;`,
     ];
   }
-  // standard + !pretty.
+  // Standard Schema — same inline 3-step guard as for params, flipped to prettyErrors.
   return [
     `${indent}const parsed = Result['~standard'].validate(${rowExpression});`,
-    `${indent}if (parsed instanceof Promise) throw new Error('Unexpected async validation from Result.');`,
-    `${indent}if (parsed.issues) throw Object.assign(new Error('Validation failed'), {issues: parsed.issues});`,
+    `${indent}if ('then' in parsed) throw new Error('Unexpected async validation from Result.');`,
+    prettyErrors
+      ? `${indent}if ('issues' in parsed) throw new Error(prettifyStandardSchemaError(parsed) || 'Validation failed');`
+      : `${indent}if ('issues' in parsed) throw Object.assign(new Error('Validation failed'), {issues: parsed.issues});`,
     `${indent}return parsed.value;`,
   ];
 }

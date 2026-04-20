@@ -987,7 +987,7 @@ test('generate with validator: valibot emits valibot schemas and validates at ru
       .generated/
         find-post-by-slug.sql.ts
           import * as v from 'valibot';
-          import {getValueOrThrowPrettyError, type Client, type SqlQuery} from 'sqlfu';
+          import {prettifyStandardSchemaError, type Client, type SqlQuery} from 'sqlfu';
           
           const Params = v.object({
           	slug: v.string(),
@@ -1004,10 +1004,17 @@ test('generate with validator: valibot emits valibot schemas and validates at ru
           
           export const findPostBySlug = Object.assign(
           	async function findPostBySlug(client: Client, rawParams: v.InferOutput<typeof Params>): Promise<v.InferOutput<typeof Result> | null> {
-          		const params = getValueOrThrowPrettyError(Params['~standard'].validate(rawParams));
+          		const parsedParamsResult = Params['~standard'].validate(rawParams);
+          		if ('then' in parsedParamsResult) throw new Error('Unexpected async validation from Params.');
+          		if ('issues' in parsedParamsResult) throw new Error(prettifyStandardSchemaError(parsedParamsResult) || 'Validation failed');
+          		const params = parsedParamsResult.value;
           		const query: SqlQuery = { sql, args: [params.slug], name: "find-post-by-slug" };
           		const rows = await client.all(query);
-          		return rows.length > 0 ? getValueOrThrowPrettyError(Result['~standard'].validate(rows[0])) : null;
+          		if (rows.length === 0) return null;
+          		const parsed = Result['~standard'].validate(rows[0]);
+          		if ('then' in parsed) throw new Error('Unexpected async validation from Result.');
+          		if ('issues' in parsed) throw new Error(prettifyStandardSchemaError(parsed) || 'Validation failed');
+          		return parsed.value;
           	},
           	{ Params, Result, sql },
           );
@@ -1034,8 +1041,9 @@ test('generate with validator: valibot emits valibot schemas and validates at ru
     slug: 'hello',
     status: 'draft',
   });
-  // Valibot's pretty-errors path runs through sqlfu's getValueOrThrowPrettyError — the
-  // resulting message is the Standard Schema prettified issues list (one line per issue).
+  // Valibot's pretty-errors path inlines the Standard Schema result-guard and calls
+  // `prettifyStandardSchemaError` (re-exported from sqlfu) on the failure result — the
+  // resulting message is the prettified issues list, one line per issue.
   await expect(mod.findPostBySlug(client, {slug: 42 as unknown as string})).rejects.toThrow(
     /Invalid type[\s\S]+slug/,
   );
@@ -1060,7 +1068,7 @@ test('generate with validator: zod-mini emits zod/mini schemas and validates at 
       .generated/
         find-post-by-slug.sql.ts
           import * as z from 'zod/mini';
-          import {getValueOrThrowPrettyError, type Client, type SqlQuery} from 'sqlfu';
+          import {prettifyStandardSchemaError, type Client, type SqlQuery} from 'sqlfu';
           
           const Params = z.object({
           	slug: z.string(),
@@ -1076,10 +1084,17 @@ test('generate with validator: zod-mini emits zod/mini schemas and validates at 
           
           export const findPostBySlug = Object.assign(
           	async function findPostBySlug(client: Client, rawParams: z.infer<typeof Params>): Promise<z.infer<typeof Result> | null> {
-          		const params = getValueOrThrowPrettyError(Params['~standard'].validate(rawParams));
+          		const parsedParamsResult = Params['~standard'].validate(rawParams);
+          		if ('then' in parsedParamsResult) throw new Error('Unexpected async validation from Params.');
+          		if ('issues' in parsedParamsResult) throw new Error(prettifyStandardSchemaError(parsedParamsResult) || 'Validation failed');
+          		const params = parsedParamsResult.value;
           		const query: SqlQuery = { sql, args: [params.slug], name: "find-post-by-slug" };
           		const rows = await client.all(query);
-          		return rows.length > 0 ? getValueOrThrowPrettyError(Result['~standard'].validate(rows[0])) : null;
+          		if (rows.length === 0) return null;
+          		const parsed = Result['~standard'].validate(rows[0]);
+          		if ('then' in parsed) throw new Error('Unexpected async validation from Result.');
+          		if ('issues' in parsed) throw new Error(prettifyStandardSchemaError(parsed) || 'Validation failed');
+          		return parsed.value;
           	},
           	{ Params, Result, sql },
           );
@@ -1107,7 +1122,7 @@ test('generate with validator: zod-mini emits zod/mini schemas and validates at 
     slug: 'hello',
     title: 'Hello',
   });
-  // zod-mini also routes through sqlfu's getValueOrThrowPrettyError.
+  // zod-mini shares the same inline Standard Schema guard + prettifyStandardSchemaError call.
   await expect(mod.findPostBySlug(client, {slug: 42 as unknown as string})).rejects.toThrow(
     /Invalid input[\s\S]+slug/,
   );
@@ -1127,11 +1142,12 @@ test('generate with prettyErrors: false + validator: zod lets the raw ZodError p
   await project.generate();
 
   const generated = await project.readFile('sql/.generated/find-post-by-slug.sql.ts');
-  // No sqlfu runtime helpers imported, no safeParse wrapper — just Schema.parse directly.
-  expect(generated).not.toContain('getValueOrThrowPrettyError');
+  // No safeParse wrapper, no prettifyError call — just Schema.parse directly.
   expect(generated).not.toContain('safeParse');
   expect(generated).not.toContain('prettifyError');
   expect(generated).toContain('Params.parse(rawParams)');
+  // Only type-imports are allowed from sqlfu here — no runtime value dependency.
+  expect(generated).toContain(`import type {Client, SqlQuery} from 'sqlfu';`);
 
   const mod = await project.importTranspiledModule<{
     findPostBySlug: (client: unknown, params: {slug: string}) => Promise<unknown>;
@@ -1162,10 +1178,12 @@ test('generate with prettyErrors: false + validator: valibot throws raw issues i
   await project.generate();
 
   const generated = await project.readFile('sql/.generated/find-post-by-slug.sql.ts');
-  // No sqlfu runtime helper import — just the Standard Schema validate() call with an inline issue-throw.
-  expect(generated).not.toContain('getValueOrThrowPrettyError');
+  // Inline Standard Schema guard + issue-throw, no sqlfu runtime value dependency.
   expect(generated).toContain(`Params['~standard'].validate(rawParams)`);
   expect(generated).toContain('throw Object.assign(new Error');
+  // Only type-imports from sqlfu — generated file is self-contained apart from valibot.
+  expect(generated).toContain(`import type {Client, SqlQuery} from 'sqlfu';`);
+  expect(generated).not.toContain('prettifyStandardSchemaError');
 
   const mod = await project.importTranspiledModule<{
     findPostBySlug: (client: unknown, params: {slug: string}) => Promise<unknown>;
@@ -1194,9 +1212,11 @@ test('generate with prettyErrors: false + validator: zod-mini throws raw issues 
   await project.generate();
 
   const generated = await project.readFile('sql/.generated/find-post-by-slug.sql.ts');
-  expect(generated).not.toContain('getValueOrThrowPrettyError');
   expect(generated).toContain(`Params['~standard'].validate(rawParams)`);
   expect(generated).toContain('throw Object.assign(new Error');
+  // Same self-contained shape as the valibot prettyErrors: false case.
+  expect(generated).toContain(`import type {Client, SqlQuery} from 'sqlfu';`);
+  expect(generated).not.toContain('prettifyStandardSchemaError');
 
   const mod = await project.importTranspiledModule<{
     findPostBySlug: (client: unknown, params: {slug: string}) => Promise<unknown>;

@@ -16,7 +16,7 @@ const recipesDir = path.resolve(
 test('nanoid recipe generates 21-char ids from the url-safe alphabet', () => {
   using fixture = loadRecipe('nanoid.sql');
   const alphabet = 'useandom-26T198340PX75pxJACKVERYMINDBUSHWOLF_GQZbfghjklqvwyzrict';
-  const ids = generate(fixture, 'select sqlfu_nanoid() as id', 1000);
+  const ids = generate(fixture, 'select id from sqlfu_nanoid', 1000);
 
   expect(ids).toHaveLength(1000);
   for (const id of ids) {
@@ -33,7 +33,7 @@ test('nanoid recipe generates 21-char ids from the url-safe alphabet', () => {
 test('ulid recipe generates 26-char crockford-base32 ids that sort by time', () => {
   using fixture = loadRecipe('ulid.sql');
   const alphabet = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
-  const ids = generate(fixture, 'select sqlfu_ulid() as id', 1000);
+  const ids = generate(fixture, 'select id from sqlfu_ulid', 1000);
 
   expect(ids).toHaveLength(1000);
   for (const id of ids) {
@@ -51,28 +51,34 @@ test('ulid recipe generates 26-char crockford-base32 ids that sort by time', () 
   expect(prefixes).toEqual(sorted);
 });
 
-test('ksuid recipe generates 27-char ids with a sortable time prefix', () => {
+test('ksuid recipe generates 32-char sqlite-friendly ksuid ids that sort by time', () => {
+  // Canonical KSUID is 27-char base62. Base62 in pure sqlite SQL is awkward
+  // (160-bit divmod), so this recipe encodes the same 20-byte payload
+  // (4 time + 16 random) in Crockford base32 — 32 chars — and documents the
+  // deviation from the canonical spec. Same sort behavior, different alphabet.
   using fixture = loadRecipe('ksuid.sql');
-  const ids = generate(fixture, 'select sqlfu_ksuid() as id', 500);
+  const alphabet = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+  const ids = generate(fixture, 'select id from sqlfu_ksuid', 500);
 
   expect(ids).toHaveLength(500);
   for (const id of ids) {
-    expect(id).toHaveLength(27);
-    // base62: digits + upper + lower
-    expect(id).toMatch(/^[\dA-Za-z]{27}$/);
+    expect(id).toHaveLength(32);
+    for (const c of id) expect(alphabet).toContain(c);
   }
   expect(new Set(ids).size).toBe(500);
 
-  // Within a single test run, seconds-precision timestamps give us monotonic
-  // prefixes within the same second. Assert time-prefix monotonicity.
-  const prefixes = ids.map((id) => id.slice(0, 7));
+  // First 6 base32 chars = 30 time bits (out of 32). Within a single run the
+  // full 32-bit second is constant, so the first 6 chars are identical —
+  // which sorts monotonically trivially. The 7th char mixes the remaining
+  // 2 time bits with 3 entropy bits, so it's not monotonic within a second.
+  const prefixes = ids.map((id) => id.slice(0, 6));
   const sorted = [...prefixes].sort();
   expect(prefixes).toEqual(sorted);
 });
 
 test('cuid2-shaped recipe generates 24-char ids starting with a letter', () => {
   using fixture = loadRecipe('cuid2.sql');
-  const ids = generate(fixture, 'select sqlfu_cuid2() as id', 1000);
+  const ids = generate(fixture, 'select id from sqlfu_cuid2', 1000);
 
   expect(ids).toHaveLength(1000);
   for (const id of ids) {

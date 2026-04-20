@@ -5,13 +5,7 @@ import url from 'node:url';
 import BetterSqlite3 from 'better-sqlite3';
 import {expect, test} from 'vitest';
 
-const recipesDir = path.resolve(
-  path.dirname(url.fileURLToPath(import.meta.url)),
-  '..',
-  '..',
-  'recipes',
-  'id-helpers',
-);
+const recipesDir = path.resolve(path.dirname(url.fileURLToPath(import.meta.url)), '..', '..', 'recipes', 'id-helpers');
 
 test('nanoid recipe generates 21-char ids from the url-safe alphabet', () => {
   using fixture = loadRecipe('nanoid.sql');

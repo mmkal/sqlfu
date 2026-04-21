@@ -17,8 +17,7 @@
     "./**/*.ts",
     "../code-block-writer/**/*.ts",
     "../small-utils.ts",
-    "../typesql-parser/**/*.ts",
-    "../antlr4/**/*.js"
+    "../sqlfu-sqlite-parser/**/*.ts"
   ],
   "exclude": [
     "../../../../../node_modules",

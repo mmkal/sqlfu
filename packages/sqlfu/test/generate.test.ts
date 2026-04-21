@@ -60,6 +60,60 @@ test('generate emits a trivial wrapper for DDL-only queries', async () => {
   await expect(project.getCompileDiagnostics()).resolves.toEqual([]);
 });
 
+test('generate emits trivial wrappers for drop / alter / pragma / multi-statement / comments', async () => {
+  // Covers the analyzer DDL branches that the old `isDdlStatement` regex either only
+  // approximated (leading-comment stripping) or outright missed (multi-statement).
+  await using project = await createGenerateFixture({
+    definitionsSql: dedent`
+      create table posts (id integer primary key, slug text not null);
+    `,
+    files: {
+      'sql/drop-posts.sql': `drop table posts;`,
+      'sql/alter-posts-add-title.sql': `alter table posts add column title text;`,
+      'sql/enable-foreign-keys.sql': `pragma foreign_keys = on;`,
+      'sql/reset-posts.sql': dedent`
+        drop table if exists posts;
+        create table posts (id integer primary key, slug text not null);
+      `,
+      'sql/commented-create.sql': dedent`
+        -- ensure the drafts table exists before we import
+        /* multi-line
+           comment */
+        create table if not exists drafts (id integer primary key, body text not null);
+      `,
+    },
+  });
+
+  await project.generate();
+
+  for (const file of [
+    'sql/.generated/drop-posts.sql.ts',
+    'sql/.generated/alter-posts-add-title.sql.ts',
+    'sql/.generated/enable-foreign-keys.sql.ts',
+    'sql/.generated/reset-posts.sql.ts',
+    'sql/.generated/commented-create.sql.ts',
+  ]) {
+    const contents = await project.readFile(file);
+    expect(contents).toContain(`import type {Client} from 'sqlfu';`);
+    expect(contents).toContain(`return client.run(query);`);
+    expect(contents).not.toContain(`//Invalid SQL`);
+  }
+
+  // Multi-statement file's SQL body is preserved verbatim (both statements end up in the
+  // template literal so the runtime actually runs them both).
+  const multiStatement = await project.readFile('sql/.generated/reset-posts.sql.ts');
+  expect(multiStatement).toContain('drop table if exists posts;');
+  expect(multiStatement).toContain('create table posts');
+
+  // Leading SQL comments don't trip up the wrapper emission.
+  const commented = await project.readFile('sql/.generated/commented-create.sql.ts');
+  expect(commented).toContain('-- ensure the drafts table exists');
+  expect(commented).toContain('create table if not exists drafts');
+
+  expect(await project.readJson('.sqlfu/query-catalog.json')).toMatchObject({queries: []});
+  await expect(project.getCompileDiagnostics()).resolves.toEqual([]);
+});
+
 test('generate omits the migrations bundle when migrations is not configured', async () => {
   await using project = await createGenerateFixture({
     definitionsSql: dedent`

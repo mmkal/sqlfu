@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
+import dedent from 'dedent';
 
 const websiteRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const repoRoot = path.resolve(websiteRoot, '..');
@@ -52,6 +53,9 @@ const docs = [
 
 const docBySourcePath = new Map(docs.map((doc) => [normalizePath(doc.sourcePath), doc]));
 
+const fixturesSourceDir = path.join(repoRoot, 'packages', 'sqlfu', 'test', 'generate', 'fixtures');
+const fixturesSubdir = 'examples';
+
 await fs.rm(contentDocsDir, {recursive: true, force: true});
 await fs.mkdir(contentDocsDir, {recursive: true});
 await fs.rm(publicAssetsRoot, {recursive: true, force: true});
@@ -86,7 +90,132 @@ for (const doc of docs) {
   }
 }
 
-console.log(`synced ${docs.length} docs into ${path.relative(websiteRoot, contentDocsDir)}`);
+const fixtureCount = await syncGenerateFixtures();
+
+console.log(
+  `synced ${docs.length} docs and ${fixtureCount} generate fixtures into ${path.relative(websiteRoot, contentDocsDir)}`,
+);
+
+async function syncGenerateFixtures() {
+  const examplesDir = path.join(contentDocsDir, fixturesSubdir);
+  await fs.mkdir(examplesDir, {recursive: true});
+
+  const entries = (await fs.readdir(fixturesSourceDir, {withFileTypes: true}))
+    .filter((entry) => entry.isFile() && entry.name.endsWith('.md'))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const overviewEntries = [];
+
+  for (const entry of entries) {
+    const sourcePath = path.join(fixturesSourceDir, entry.name);
+    const raw = await fs.readFile(sourcePath, 'utf8');
+    const slug = entry.name.replace(/\.md$/, '');
+    const {intro, body} = splitIntroAndBody(raw);
+    const transformed = transformFixtureBody(body);
+
+    const relativeSource = path.relative(repoRoot, sourcePath).split(path.sep).join('/');
+    const title = titleForFixture(slug);
+    const description = descriptionForIntro(intro, slug);
+    const frontmatter = [
+      '---',
+      `title: ${yamlString(title)}`,
+      `description: ${yamlString(description)}`,
+      `sourcePath: ${yamlString(relativeSource)}`,
+      `sourceUrl: ${yamlString(`${repositoryBaseUrl}/blob/${gitSha}/${relativeSource}`)}`,
+      '---',
+      '',
+    ].join('\n');
+
+    const destPath = path.join(examplesDir, `${slug}.md`);
+    const intoDoc = intro ? `${intro}\n\n${transformed}` : transformed;
+    await fs.writeFile(destPath, frontmatter + intoDoc);
+
+    overviewEntries.push({slug, title, description});
+  }
+
+  await writeExamplesOverview(overviewEntries);
+  return entries.length;
+}
+
+async function writeExamplesOverview(overviewEntries) {
+  const relativeSource = path
+    .relative(repoRoot, fixturesSourceDir)
+    .split(path.sep)
+    .join('/');
+
+  const frontmatter = [
+    '---',
+    `title: ${yamlString('Generate examples')}`,
+    `description: ${yamlString(
+      'Executable snapshot fixtures for the `sqlfu generate` command. Each example below is a live test.',
+    )}`,
+    `sourcePath: ${yamlString(relativeSource)}`,
+    `sourceUrl: ${yamlString(`${repositoryBaseUrl}/tree/${gitSha}/${relativeSource}`)}`,
+    '---',
+    '',
+  ].join('\n');
+
+  const pageLinks = overviewEntries
+    .map(({slug, title, description}) => `- **[${title}](/docs/examples/${slug})** — ${description}`)
+    .join('\n');
+
+  const body = dedent`
+    These pages are snapshot fixtures from \`packages/sqlfu/test/generate/fixtures/\`. Each \`##\`
+    heading you'll find inside is a real test: the test harness parses the same markdown,
+    runs \`sqlfu generate\` against the declared inputs, and asserts the outputs match what's
+    shown. That means every TypeScript file under an **output** block on these pages is
+    exactly what you'd find in your checkout after running the CLI — there is no drift.
+
+    Start here if you want to see what \`sqlfu generate\` produces for a given schema shape,
+    query style, or config knob, before you try it in your own project.
+
+    ## Pages
+
+    ${pageLinks}
+  ` + '\n';
+
+  await fs.writeFile(path.join(contentDocsDir, 'examples.md'), frontmatter + body);
+}
+
+function splitIntroAndBody(markdown) {
+  // The fixture intro is a free-floating paragraph at the top of the file, ending at the first
+  // line that begins with `<details>`. Anchoring to start-of-line avoids triggering on the word
+  // "<details>" used in the prose itself.
+  const match = markdown.match(/^<details[\s>]/m);
+  if (!match) {
+    return {intro: markdown.trim(), body: ''};
+  }
+
+  const detailsStart = match.index;
+  return {intro: markdown.slice(0, detailsStart).trim(), body: markdown.slice(detailsStart)};
+}
+
+function descriptionForIntro(intro, slug) {
+  if (!intro) {
+    return `Generate fixtures — ${slug}`;
+  }
+
+  // Collapse newlines so YAML on a single line isn't forced to wrap, and trim to one sentence
+  // for the page's `<meta name="description">`. The sentence terminator must be followed by
+  // whitespace or end-of-string so internal dots (`.ts`, `U.K.`) don't split the sentence.
+  const flat = intro.replace(/\s+/g, ' ').trim();
+  const firstSentence = flat.match(/^[\s\S]*?[.!?](?=\s|$)/);
+  return firstSentence ? firstSentence[0].trim() : flat.slice(0, 180);
+}
+
+function transformFixtureBody(body) {
+  // Rewrite ```ts (sql/foo.ts) into ```ts title="sql/foo.ts" so Starlight's expressive-code
+  // renders the filename as a caption above each code block.
+  return body.replace(/^(```[\w-]+)\s*\(([^)]+)\)\s*$/gm, (_match, fence, filePath) => {
+    return `${fence} title="${filePath.trim()}"`;
+  });
+}
+
+function titleForFixture(slug) {
+  // Sentence case ("Query shapes"), matching the sidebar labels in astro.config.mjs.
+  const prose = slug.replace(/-/g, ' ');
+  return prose[0].toUpperCase() + prose.slice(1);
+}
 
 async function transformMarkdown(markdown, currentDoc) {
   const assetPaths = [];

@@ -19,7 +19,7 @@ export type StartupFailure =
 /**
  * Semver range describing which sqlfu server versions speak today's oRPC
  * contract. Tighten whenever the hosted client relies on a new/changed RPC
- * field, query param, or event shape. The hosted client on local.sqlfu.dev is
+ * field, query param, or event shape. The hosted client on sqlfu.dev/ui is
  * always the tip of main; a user's local `npx sqlfu` is whatever they happened
  * to install. When the local server falls outside this range, we show an
  * upgrade screen instead of letting the mismatch surface as a cryptic 4xx.

@@ -1,7 +1,6 @@
-import { ParserRuleContext } from '../../typesql-parser/index.js';
+import { ShimParserRuleContext, ShimSelect_coreContextBase } from '../sqlite-query-analyzer/antlr-shim.js';
 import type { ColumnDef, ColumnSchema, FieldName } from './types.js';
 import { createColumnTypeFomColumnSchema } from './collect-constraints.js';
-import { Select_coreContext } from '../../typesql-parser/sqlite/index.js';
 
 export function includeColumn(column: ColumnDef, table: string) {
 	return column.table.toLowerCase() === table.toLowerCase() || column.tableAlias?.toLowerCase() === table.toLowerCase();
@@ -140,27 +139,30 @@ export function findColumnOrNull(fieldName: FieldName, columns: ColumnDef[]): Co
 }
 
 type Expr = {
-	expr: ParserRuleContext;
+	expr: ShimParserRuleContext;
 	isSubQuery: boolean;
 };
 
 // sqlfu: upstream also checked `child instanceof SimpleExprSubQueryContext` here
-// (MySQL's subquery AST node). After dropping the MySQL parser, only the SQLite
-// `Select_coreContext` check matters for the only caller (sqlite-query-analyzer).
-export function getExpressions(ctx: ParserRuleContext, exprType: any): Expr[] {
+// (MySQL's subquery AST node). After dropping ANTLR entirely (phase 5 of
+// `tasks/drop-antlr.md`), `ShimParserRuleContext` is the shared identity for
+// every rule-level shim node, and `ShimSelect_coreContextBase` is the
+// `Select_coreContext` stand-in for the subquery-depth flag.
+export function getExpressions(ctx: ShimParserRuleContext, exprType: any): Expr[] {
 	const tokens: Expr[] = [];
 	collectExpr(tokens, ctx, exprType);
 	return tokens;
 }
 
-function collectExpr(tokens: Expr[], parent: ParserRuleContext, exprType: any, isSubQuery = false) {
+function collectExpr(tokens: Expr[], parent: ShimParserRuleContext, exprType: any, isSubQuery = false) {
 	if (parent instanceof exprType) {
 		tokens.push({ expr: parent, isSubQuery });
 	}
-	for (let i = 0; i < parent.getChildCount(); i++) {
-		const child = parent.getChild(i);
-		if (child instanceof ParserRuleContext) {
-			collectExpr(tokens, child, exprType, isSubQuery || child instanceof Select_coreContext);
+	const count = (parent as any).getChildCount();
+	for (let i = 0; i < count; i++) {
+		const child = (parent as any).getChild(i);
+		if (child instanceof ShimParserRuleContext) {
+			collectExpr(tokens, child, exprType, isSubQuery || child instanceof ShimSelect_coreContextBase);
 		}
 	}
 }

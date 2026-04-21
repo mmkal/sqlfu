@@ -1,19 +1,32 @@
-import {
-	type Select_stmtContext,
-	type Sql_stmtContext,
-	ExprContext,
-	type Table_or_subqueryContext,
-	type Result_columnContext,
-	type Insert_stmtContext,
-	Column_nameContext,
-	type Update_stmtContext,
-	type Delete_stmtContext,
-	type Join_constraintContext,
-	type Table_nameContext,
-	type Join_operatorContext,
-	type Returning_clauseContext,
-	type Select_coreContext
-} from '../../typesql-parser/sqlite/index.js';
+// The *Context type aliases below refer to hand-rolled shim classes. Phase 5
+// of `tasks/drop-antlr.md` removed the ANTLR dependency; the shim keeps the
+// same runtime shape (accessor methods + `.start.start` / `.stop?.stop` /
+// `.parentCtx`). Types are `any` because the analyzer reads duck-typed
+// accessors across dozens of node kinds — precise types offered no additional
+// safety under the old ANTLR imports either.
+type Select_stmtContext = any;
+type Sql_stmtContext = any;
+type Table_or_subqueryContext = any;
+type Result_columnContext = any;
+type Insert_stmtContext = any;
+type Update_stmtContext = any;
+type Delete_stmtContext = any;
+type Join_constraintContext = any;
+type Table_nameContext = any;
+type Join_operatorContext = any;
+type Returning_clauseContext = any;
+type Select_coreContext = any;
+import { ShimColumn_nameContext, ShimExprContextBase, ShimParserRuleContext } from './antlr-shim.js';
+// `ExprContext` stands for the shim identity base; the traverse code calls
+// `parent instanceof ExprContext` (guards the date-function argument handling)
+// and `getExpressions(expr, ExprContext)` (asks collectExpr to walk all rule
+// nodes that are Expr-kind and collect them).
+const ExprContext = ShimExprContextBase;
+type ExprContext = any;
+// Similarly for column_name — used as the 2nd arg to `getExpressions` to
+// collect ColumnRef-kind nodes.
+const Column_nameContext = ShimColumn_nameContext;
+type Column_nameContext = any;
 import type { ColumnDef, ColumnSchema, ExtensionFunctionCatalog, FieldName, TraverseContext, TypeAndNullInfer, TypeAndNullInferParam } from '../shared-analyzer/types.js';
 import { filterColumns, findColumn, getExpressions, includeColumn, splitName } from '../shared-analyzer/select-columns.js';
 import { freshVar } from '../shared-analyzer/collect-constraints.js';
@@ -29,7 +42,10 @@ import {
 import type { Relation2 } from './sqlite-describe-nested-query.js';
 import { type Either, left, right } from '../../small-utils.js';
 import type { TypeSqlError } from '../types.js';
-import type { ParserRuleContext } from '../../typesql-parser/index.js';
+// ParserRuleContext was the ANTLR base type; `ShimParserRuleContext` is its
+// post-phase-5 stand-in (imported above from `./antlr-shim.js`). Re-alias at
+// the old name to minimize churn in the many function signatures below.
+type ParserRuleContext = ShimParserRuleContext;
 
 function traverse_Sql_stmtContext(sql_stmt: Sql_stmtContext, traverseContext: TraverseContext): TraverseResult2 {
 	const select_stmt = sql_stmt.select_stmt();
@@ -51,6 +67,36 @@ function traverse_Sql_stmtContext(sql_stmt: Sql_stmtContext, traverseContext: Tr
 	if (delete_stmt) {
 		const deleteResult = traverse_delete_stmt(delete_stmt, traverseContext);
 		return deleteResult;
+	}
+	// sqlfu divergence: DDL and connection-control statements. Upstream throws here.
+	// We return a trivial descriptor so the caller can emit a `client.run(sql)` wrapper.
+	const ddl_contexts = [
+		sql_stmt.create_table_stmt(),
+		sql_stmt.create_index_stmt(),
+		sql_stmt.create_view_stmt(),
+		sql_stmt.create_trigger_stmt(),
+		sql_stmt.create_virtual_table_stmt(),
+		sql_stmt.alter_table_stmt(),
+		sql_stmt.drop_stmt(),
+		sql_stmt.pragma_stmt(),
+		sql_stmt.vacuum_stmt(),
+		sql_stmt.reindex_stmt(),
+		sql_stmt.analyze_stmt(),
+		sql_stmt.attach_stmt(),
+		sql_stmt.detach_stmt(),
+		sql_stmt.begin_stmt(),
+		sql_stmt.commit_stmt(),
+		sql_stmt.rollback_stmt(),
+		sql_stmt.savepoint_stmt(),
+		sql_stmt.release_stmt(),
+	];
+	if (ddl_contexts.some((ctx) => ctx != null)) {
+		return {
+			queryType: 'Ddl',
+			constraints: [],
+			parameters: [],
+			returningColumns: []
+		};
 	}
 	throw Error('traverse_Sql_stmtContext');
 }

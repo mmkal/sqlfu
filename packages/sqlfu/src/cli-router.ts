@@ -32,7 +32,7 @@ export const router = {
   serve: base
     .meta({
       default: true,
-      description: `Start the local sqlfu backend server used by local.sqlfu.dev.`,
+      description: `Start the local sqlfu backend server used by the hosted studio at sqlfu.dev/ui.`,
     })
     .input(
       z
@@ -57,7 +57,7 @@ export const router = {
       });
 
       context.host.logger.log(
-        ui ? `sqlfu ready (UI + backend on the same origin)` : 'sqlfu ready at https://local.sqlfu.dev',
+        ui ? `sqlfu ready (UI + backend on the same origin)` : 'sqlfu ready at https://sqlfu.dev/ui',
       );
 
       await new Promise(() => {});

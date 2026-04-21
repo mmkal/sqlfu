@@ -15,6 +15,18 @@ Local changes that are expected:
 - `sqlite-query-analyzer/traverse.ts` — `traverse_delete_stmt` guards the optional
   where-clause expr before calling `traverse_expr`. Upstream crashes on
   `delete from <t>;` with no where clause (null-deref on `expr.function_name()`).
+- `sqlite-query-analyzer/traverse.ts` — `traverse_Sql_stmtContext` recognizes DDL /
+  connection-control statements (`create_*_stmt`, `alter_table_stmt`, `drop_stmt`,
+  `pragma_stmt`, `vacuum_stmt`, `reindex_stmt`, `analyze_stmt`, `attach_stmt`,
+  `detach_stmt`, and the transaction statements) and returns a `queryType: 'Ddl'`
+  descriptor. Upstream throws `traverse_Sql_stmtContext` for anything other than
+  select/insert/update/delete. Callers turn the `Ddl` descriptor into a trivial
+  `client.run(sql)` wrapper. The `Ddl` variant also shows up in
+  `shared-analyzer/traverse.ts::TraverseResult2`, `types.ts::QueryType`, and
+  `codegen/sqlite.ts::mapColumns` (which returns `[]` for it). The new parser
+  in `src/vendor/sqlfu-sqlite-parser/` doesn't fully parse DDL structure — the
+  shim's `Sql_stmtContext.<ddl_kind>_stmt()` accessor returns an opaque truthy
+  marker for the matching `DdlKind`, and the analyzer reads only presence.
 
 When updating from upstream:
 - copy upstream `src/` over this directory again rather than editing file-by-file

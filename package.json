@@ -7,7 +7,7 @@
     "sync:root-readme": "tsx scripts/sync-root-readme.ts sync",
     "sync:root-readme:check": "tsx scripts/sync-root-readme.ts check",
     "sync:root-readme:pre-commit": "tsx scripts/sync-root-readme.ts pre-commit",
-    "local.sqlfu.dev": "pnpm --filter @sqlfu/ui build && pnpm --filter @sqlfu/ui local.sqlfu.dev -- --skip-build",
+    "hosted-sim": "pnpm --filter @sqlfu/ui build && pnpm --filter @sqlfu/ui hosted-sim -- --skip-build",
     "sqlfu": "cd packages/sqlfu && pnpm",
     "ui": "cd packages/ui && pnpm",
     "website": "pnpm --filter sqlfu-website dev",

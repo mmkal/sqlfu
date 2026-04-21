@@ -89,14 +89,32 @@ export function parseSchemadiffFixture(contents: string): SchemadiffFixtureCase[
   return cases;
 }
 
-export async function rewriteSchemadiffFixtures(root: string): Promise<void> {
-  for (const fixturePath of await listFixtureFiles(root)) {
-    const original = await fs.readFile(fixturePath, 'utf8');
-    const rewritten = await rewriteFixtureContents(original);
-    if (rewritten !== original) {
-      await fs.writeFile(fixturePath, rewritten);
-    }
+/**
+ * Rewrite a single region of a schemadiff fixture to match the current diff engine's output.
+ * Called from the test harness in `-u` / `--update` mode, via `inject('updateSnapshots')`, so
+ * a mismatched case is patched in place instead of failing.
+ */
+export async function updateSchemadiffFixtureCase(fixturePath: string, testName: string): Promise<void> {
+  const contents = await fs.readFile(fixturePath, 'utf8');
+  const defaultConfig = parseDefaultConfig(contents);
+  const regionPattern = new RegExp(
+    `^-- #region: ${escapeRegex(testName)}\\n(?<body>[\\s\\S]*?)^-- #endregion$`,
+    'm',
+  );
+  const match = regionPattern.exec(contents);
+  if (!match) {
+    throw new Error(`Region "${testName}" not found in ${fixturePath}`);
   }
+
+  const rewritten = await rewriteRegion(testName, match.groups!.body, defaultConfig);
+  const updated = contents.slice(0, match.index) + rewritten + contents.slice(match.index + match[0].length);
+  if (updated !== contents) {
+    await fs.writeFile(fixturePath, updated);
+  }
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function parseDefaultConfig(contents: string): Record<string, unknown> {
@@ -108,24 +126,6 @@ function parseDefaultConfig(contents: string): Record<string, unknown> {
 
 function trimFixtureBlock(value: string): string {
   return value.replace(/\n+$/g, '');
-}
-
-async function rewriteFixtureContents(contents: string): Promise<string> {
-  const defaultConfig = parseDefaultConfig(contents);
-  const regionPattern = /^-- #region: (?<name>.+)\n(?<body>[\s\S]*?)^-- #endregion$/gm;
-  const rewrittenRegions: string[] = [];
-
-  for (const match of contents.matchAll(regionPattern)) {
-    const groups = match.groups;
-    if (!groups) {
-      throw new Error('Invalid schemadiff fixture while rewriting');
-    }
-
-    rewrittenRegions.push(await rewriteRegion(groups.name, groups.body, defaultConfig));
-  }
-
-  const header = contents.match(/^-- default config: .+\n\n/m)?.[0] ?? '';
-  return `${header}${rewrittenRegions.join('\n\n')}\n`;
 }
 
 async function rewriteRegion(name: string, body: string, defaultConfig: Record<string, unknown>): Promise<string> {

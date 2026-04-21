@@ -4,7 +4,7 @@ import {ensureNgrokTunnel, stopNgrokTunnel} from './ngrok.ts';
 
 test.skip(!process.env.SQLFU_TEST_NGROK, 'Set SQLFU_TEST_NGROK=1 to run the ngrok tunnel smoke test.');
 
-test('local.sqlfu.dev is reachable through ngrok on top of the normal UI test server', async ({page}) => {
+test('hosted UI simulation is reachable through ngrok on top of the normal UI test server', async ({page}) => {
   await using fixture = await startNgrokForUiServer();
 
   expect(fixture.publicUrl).toMatch(/^https:\/\//u);

@@ -22,4 +22,4 @@ Playwright uses the same entrypoint, but starts a separate seeded `fixture-proje
 
 ## Inspiration
 
-The intended product shape - a hosted UI at `local.sqlfu.dev` talking to a locally running sqlfu backend - is directly inspired by [Drizzle](https://orm.drizzle.team/)'s [`local.drizzle.studio`](https://local.drizzle.studio/). See [CLAUDE.md](./CLAUDE.md) for more detail, including why "public HTTPS page talks to localhost" needs the CORS, private-network, and `mkcert` handling that lives in `packages/sqlfu`.
+The intended product shape - a hosted UI at `sqlfu.dev/ui` talking to a locally running sqlfu backend - is directly inspired by [Drizzle](https://orm.drizzle.team/)'s [`local.drizzle.studio`](https://local.drizzle.studio/). See [CLAUDE.md](./CLAUDE.md) for more detail, including why "public HTTPS page talks to localhost" needs the CORS, private-network, and `mkcert` handling that lives in `packages/sqlfu`.

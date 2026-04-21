@@ -293,7 +293,7 @@ a {
 }
 
 .hero-solo h1 {
-  font-size: clamp(3.2rem, 10vw, 6rem);
+  font-size: clamp(3.2rem, 9vw, 6rem);
 }
 
 .hero-solo .lede {

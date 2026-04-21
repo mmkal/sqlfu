@@ -16,7 +16,7 @@ export type GeneratedField = {
 
 export type GeneratedQueryDescriptor = {
   readonly sql: string;
-  readonly queryType: 'Select' | 'Insert' | 'Update' | 'Delete' | 'Copy';
+  readonly queryType: 'Select' | 'Insert' | 'Update' | 'Delete' | 'Copy' | 'Ddl';
   readonly returning?: true;
   readonly multipleRowsResult: boolean;
   readonly columns: readonly GeneratedField[];

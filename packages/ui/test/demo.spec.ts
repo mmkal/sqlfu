@@ -4,7 +4,7 @@ test('demo mode runs fully in-browser', async ({page}) => {
   await page.goto('http://127.0.0.1:3218/?demo=1');
 
   await expect(page.getByText('Demo mode', {exact: true})).toBeVisible();
-  await expect(page.getByRole('link', {name: 'Back to local.sqlfu.dev'})).toBeVisible();
+  await expect(page.getByRole('link', {name: 'Back to sqlfu.dev/ui'})).toBeVisible();
 
   await expect(page.getByRole('link', {name: /^posts/})).toBeVisible();
   await expect(page.getByRole('link', {name: /^post_cards/})).toBeVisible();

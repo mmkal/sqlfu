@@ -164,7 +164,7 @@ async function runCliServer() {
         : undefined,
   });
   void server;
-  console.log('sqlfu ready at https://local.sqlfu.dev');
+  console.log('sqlfu ready at https://sqlfu.dev/ui');
 }
 
 async function normalizeListenError(error: unknown, port: number) {
@@ -462,7 +462,7 @@ async function createUiDevServer(root: string, httpServer: http.Server) {
     root,
     appType: 'custom',
     server: {
-      allowedHosts: ['local.sqlfu.dev', '.ngrok.app', '.ngrok.dev'],
+      allowedHosts: ['sqlfu.dev', 'www.sqlfu.dev', '.ngrok.app', '.ngrok.dev'],
       middlewareMode: true,
       hmr: {
         server: httpServer,
@@ -510,7 +510,7 @@ function renderServerHomePage(project: ResolvedUiProject) {
       '  <main>',
       '    <div class="eyebrow">sqlfu local backend</div>',
       '    <h1>This directory is not initialized yet.</h1>',
-      `    <p>Run <code>sqlfu init</code> or open <code>local.sqlfu.dev</code> to initialize <code>${escapeHtml(project.projectRoot)}</code>.</p>`,
+      `    <p>Run <code>sqlfu init</code> or open <code>sqlfu.dev/ui</code> to initialize <code>${escapeHtml(project.projectRoot)}</code>.</p>`,
       '  </main>',
       '</body>',
       '</html>',
@@ -542,11 +542,11 @@ function renderServerHomePage(project: ResolvedUiProject) {
     '    <div class="eyebrow">sqlfu local backend</div>',
     '    <h1>Local project server is running.</h1>',
     `    <p>This backend is serving the sqlfu project at <code>${escapeHtml(config.projectRoot)}</code>.</p>`,
-    '    <p>Use the UI against this origin via <code>local.sqlfu.dev</code>, or point a client at <code>/api/rpc</code>.</p>',
+    '    <p>Use the UI against this origin via <code>sqlfu.dev/ui</code>, or point a client at <code>/api/rpc</code>.</p>',
     '    <div class="card">',
     '      <p><strong>API base:</strong> <code>/api/rpc</code></p>',
     '      <p><strong>Configured database:</strong> <code>' + escapeHtml(config.db) + '</code></p>',
-    '      <p><a href="https://www.sqlfu.dev">Open docs on www.sqlfu.dev</a></p>',
+    '      <p><a href="https://sqlfu.dev">Open docs on sqlfu.dev</a></p>',
     '    </div>',
     '  </main>',
     '</body>',

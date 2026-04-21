@@ -1,7 +1,26 @@
-status: ready
+---
+status: done
 size: medium
+---
 
 # Add DDL support to vendored typesql, drop the regex shim in typegen
+
+## Outcome (2026-04-20)
+
+Done as two commits on top of the drop-antlr branch (PR #32) rather than on
+its own branch — the standalone PR (#34) conflicted with drop-antlr at the
+analyzer entry point (`parseSqlToShim` throws on anything it doesn't route,
+so #34's DDL accessors would never fire). Closing #34; the DDL work is now:
+
+- `drop-antlr: add Ddl descriptor variant to the vendored sqlite analyzer` —
+  parser recognises DDL keywords, shim exposes per-DDL-kind accessors, the
+  analyzer returns `queryType: 'Ddl'`.
+- `drop-antlr: branch on queryType === 'Ddl' in typegen, drop isDdlStatement
+  regex` — typegen no longer pre-partitions files; every `.sql` flows through
+  the analyzer, DDL detected by the descriptor variant. New test in
+  `generate.test.ts` covers drop / alter / pragma / multi-statement /
+  leading-comments. 1217 tests pass.
+
 
 ## Context
 

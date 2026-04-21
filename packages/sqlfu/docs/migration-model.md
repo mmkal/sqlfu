@@ -73,7 +73,7 @@ That means `sync` is intentionally allowed to make Migration History and Live Sc
 | Pending Migrations | Migrations <> Migration History | The database has unapplied migrations | Yes | `sqlfu migrate` |
 | History Drift | Migrations <> Migration History | The database claims to have applied migrations that no longer match the known migration set | No | fix the repo first, or reconcile deliberately with `sqlfu baseline <target>` and `sqlfu goto <target>` |
 | Schema Drift | Migration History <> Live Schema | The database schema does not match what its recorded history implies | Normal on a dev db after `sqlfu sync` | `sqlfu baseline <target>` or `sqlfu goto <target>` |
-| Schema Not Current | Desired Schema <> Live Schema | The database does not currently match the desired schema | Yes | depends on the other mismatches |
+| Sync Drift | Desired Schema <> Live Schema | The database does not currently match the desired schema | Yes | depends on the other mismatches |
 
 ## What Each Disagreement Means
 
@@ -146,7 +146,7 @@ This is the main reason `sync` needs to be described carefully.
 
 `sync` is useful, but after running it the database may no longer be history-clean.
 
-### Schema Not Current
+### Sync Drift
 
 Question:
 Does the database currently match the schema the application wants?
@@ -289,20 +289,20 @@ Recommendations should be based on named mismatch types, not generic failure tex
   Recommend `sqlfu baseline <target>` or `sqlfu goto <target>`.
   If `sqlfu check` can prove that the Live Schema matches a replayed migration prefix exactly, it should recommend that exact target.
 
-- Schema Not Current only
+- Sync Drift only
   If the database is otherwise history-clean, recommend:
   - `sqlfu migrate`, if migrations are pending
   - `sqlfu sync`, if the user is intentionally choosing a fast local-development path
   If the database is not otherwise history-clean, the recommendation should defer to the more specific mismatch, especially Schema Drift or History Drift.
 
-- Pending Migrations plus Schema Not Current
+- Pending Migrations plus Sync Drift
   Recommend `sqlfu migrate`.
-  If `Sync Drift` is also reported, its recommendation should defer to that same step rather than suggesting `sqlfu sync`.
+  The Sync Drift card's recommendation should defer to that same step rather than suggesting `sqlfu sync`.
 
-- Repo Drift plus Schema Not Current
+- Repo Drift plus Sync Drift
   Recommend `sqlfu draft`.
   The repo needs a migration before the database can become migration-current honestly.
-  If `Sync Drift` is also reported, its recommendation should point back to Repo Drift.
+  The Sync Drift card's recommendation should point back to Repo Drift.
 
 - Repo Drift plus Schema Drift
   Recommend:
@@ -329,7 +329,7 @@ Recommendations should be based on named mismatch types, not generic failure tex
   2. History Drift
   3. Pending Migrations
   4. Schema Drift
-  5. Schema Not Current
+  5. Sync Drift
   This keeps `sqlfu check` from recommending database reconciliation before the repo itself is coherent.
   Downstream cards may still be shown, but their recommendation text should defer to the highest-priority unresolved mismatch.
 

@@ -11,11 +11,10 @@ Why vendor at all? Two reasons:
 
 | Directory | Upstream | License | Summary |
 | --- | --- | --- | --- |
-| [`antlr4/`](./antlr4/) | [antlr/antlr4](https://github.com/antlr/antlr4) v4.13.2 (`dist/antlr4.web.mjs`) | BSD-3-Clause | JavaScript runtime for the ANTLR4 parsers TypeSQL uses. See [`antlr4/CLAUDE.md`](./antlr4/CLAUDE.md) for why we use the web build in both runtimes. |
 | [`code-block-writer/`](./code-block-writer/) | [dsherret/code-block-writer](https://github.com/dsherret/code-block-writer) v13.0.3 | MIT | Small helper used by TypeSQL's code generator. |
 | [`sql-formatter/`](./sql-formatter/) | [sql-formatter-org/sql-formatter](https://github.com/sql-formatter-org/sql-formatter) v15.7.3 | MIT | SQL formatter; wrapped by `src/formatter.ts` with sqlfu defaults. See [`sql-formatter/CLAUDE.md`](./sql-formatter/CLAUDE.md). |
+| [`sqlfu-sqlite-parser/`](./sqlfu-sqlite-parser/) | sqlfu-original | MIT (sqlfu) | Hand-rolled SQLite tokenizer + recursive-descent parser. Replaced the ANTLR4 + typesql-parser trees in `tasks/drop-antlr.md` (phases 1–5). Consumed through a compat shim at `typesql/sqlite-query-analyzer/antlr-shim.ts`. |
 | [`typesql/`](./typesql/) | [wsporto/typesql](https://github.com/wsporto/typesql) @ commit f0356201 | MIT | Query analysis and code generation; drives `sqlfu generate`. See [`typesql/CLAUDE.md`](./typesql/CLAUDE.md). |
-| [`typesql-parser/`](./typesql-parser/) | [wsporto/typesql-parser](https://github.com/wsporto/typesql-parser) v0.0.3 | MIT | ANTLR4 grammars + generated parsers for MySQL/Postgres/SQLite used by TypeSQL. See [`typesql-parser/CLAUDE.md`](./typesql-parser/CLAUDE.md). |
 | [`small-utils.ts`](./small-utils.ts) | sqlfu-original + neverthrow-shaped helpers | MIT (sqlfu) | Minimal replacements for the subset of [`neverthrow`](https://github.com/supermacro/neverthrow) TypeSQL uses, plus sqlfu-original helpers consumed by the vendored tree. |
 
 ## Attribution policy
@@ -31,4 +30,4 @@ We intentionally do *not* add per-file attribution comments inside the vendored 
 
 Where a file has enough sqlfu-specific modification to be worth explaining in place (e.g. `small-utils.ts`, `typesql/sqlfu.ts`, `typesql/cli.ts`, `typesql/sqlite-query-analyzer/query-executor.ts`), it has its own banner.
 
-Entry-point files (`sql-formatter/index.ts`, `sql-formatter/sqlFormatter.ts`, `typesql-parser/index.ts`, `antlr4/index.js`, `code-block-writer/index.ts`) carry short banners pointing back at upstream and at this file.
+Entry-point files (`sql-formatter/index.ts`, `sql-formatter/sqlFormatter.ts`, `code-block-writer/index.ts`) carry short banners pointing back at upstream and at this file.

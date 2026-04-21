@@ -40,9 +40,11 @@ await esbuild.build({
 });
 
 const typesqlToDelete = [
-	'typesql-parser',
-	'antlr4',
 	'code-block-writer',
+	// `sqlfu-sqlite-parser` is compiled by `build:vendor-typesql` into the
+	// parser's per-file dist output, but the esbuild pass above inlines all
+	// of it into `typesql/sqlfu.js` — so we drop the unbundled copies.
+	'sqlfu-sqlite-parser',
 	'small-utils.js',
 	'small-utils.js.map',
 	'small-utils.d.ts',

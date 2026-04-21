@@ -16,7 +16,10 @@ export type DBSchema = {
 };
 
 export type CrudQueryType = 'Select' | 'Insert' | 'Update' | 'Delete';
-export type QueryType = CrudQueryType | 'Copy';
+// sqlfu divergence: 'Ddl' covers create/drop/alter/pragma/vacuum/begin/commit/etc.
+// The sqlite analyzer recognizes these and emits an empty descriptor the wrapper
+// layer turns into a trivial `client.run(sql)` call.
+export type QueryType = CrudQueryType | 'Copy' | 'Ddl';
 
 export type SchemaDef = {
 	sql: string;

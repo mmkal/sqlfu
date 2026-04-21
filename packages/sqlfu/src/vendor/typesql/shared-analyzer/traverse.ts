@@ -10,7 +10,17 @@ export type QuerySpecificationResult = {
 	fromColumns: ColumnDef[];
 };
 
-export type TraverseResult2 = SelectResult | InsertResult | UpdateResult | DeleteResult;
+export type TraverseResult2 = SelectResult | InsertResult | UpdateResult | DeleteResult | DdlResult;
+
+// sqlfu divergence: upstream typesql throws on DDL / connection-control statements
+// from `traverse_Sql_stmtContext`. We recognize them and return an empty descriptor so
+// sqlfu can emit a trivial `client.run(sql)` wrapper without a regex pre-filter upstream.
+export type DdlResult = {
+	queryType: 'Ddl';
+	constraints: Constraint[];
+	parameters: TypeAndNullInferParam[];
+	returningColumns: TypeAndNullInfer[];
+};
 
 export type SelectResult = {
 	queryType: 'Select';

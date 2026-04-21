@@ -76,18 +76,19 @@ export function resolveProjectConfig(
   return {
     projectRoot: configDir,
     db: resolveConfigPathValue(configDir, fileConfig.db),
-    migrations: resolveConfigPathValue(configDir, fileConfig.migrations),
+    migrations: fileConfig.migrations && resolveConfigPathValue(configDir, fileConfig.migrations),
     definitions: resolveConfigPathValue(configDir, fileConfig.definitions),
     queries: resolveConfigPathValue(configDir, fileConfig.queries),
-    generatedImportExtension: fileConfig.generatedImportExtension ?? inferGeneratedImportExtension(tsconfigPreferences),
     generate: {
       validator: fileConfig.generate?.validator ?? null,
       prettyErrors: fileConfig.generate?.prettyErrors !== false,
+      sync: fileConfig.generate?.sync === true,
+      importExtension: fileConfig.generate?.importExtension ?? inferImportExtension(tsconfigPreferences),
     },
   };
 }
 
-const validValidators: readonly SqlfuValidator[] = ['zod', 'valibot', 'zod-mini'];
+const validValidators: readonly SqlfuValidator[] = ['arktype', 'valibot', 'zod', 'zod-mini'];
 
 type TsconfigPreferences = {
   readonly prefersTsImportExtensions?: boolean;
@@ -147,7 +148,7 @@ async function loadTsconfigPreferences(cwd: string): Promise<TsconfigPreferences
   };
 }
 
-function inferGeneratedImportExtension(tsconfigPreferences: TsconfigPreferences): '.js' | '.ts' {
+function inferImportExtension(tsconfigPreferences: TsconfigPreferences): '.js' | '.ts' {
   return tsconfigPreferences.prefersTsImportExtensions ? '.ts' : '.js';
 }
 
@@ -194,10 +195,14 @@ function stripTrailingCommas(value: string): string {
 }
 
 function assertConfigShape(configPath: string, config: object): asserts config is SqlfuConfig {
-  for (const field of ['db', 'migrations', 'definitions', 'queries'] as const) {
+  for (const field of ['db', 'definitions', 'queries'] as const) {
     if (!(field in config) || typeof (config as Record<string, unknown>)[field] !== 'string') {
       throw new Error(`Invalid sqlfu config at ${configPath}: missing required string field "${field}".`);
     }
+  }
+  const migrations = (config as Record<string, unknown>).migrations;
+  if (migrations !== undefined && typeof migrations !== 'string') {
+    throw new Error(`Invalid sqlfu config at ${configPath}: "migrations" must be a string if provided.`);
   }
   const generate = (config as Record<string, unknown>).generate;
   if (generate !== undefined) {
@@ -225,6 +230,23 @@ function assertConfigShape(configPath: string, config: object): asserts config i
     if (prettyErrors !== undefined && typeof prettyErrors !== 'boolean') {
       throw new Error(`Invalid sqlfu config at ${configPath}: "generate.prettyErrors" must be a boolean.`);
     }
+
+    const sync = generateRecord.sync;
+    if (sync !== undefined && typeof sync !== 'boolean') {
+      throw new Error(`Invalid sqlfu config at ${configPath}: "generate.sync" must be a boolean.`);
+    }
+
+    const importExtension = generateRecord.importExtension;
+    if (importExtension !== undefined && importExtension !== '.js' && importExtension !== '.ts') {
+      throw new Error(`Invalid sqlfu config at ${configPath}: "generate.importExtension" must be '.js' or '.ts'.`);
+    }
+  }
+
+  if ('generatedImportExtension' in config) {
+    throw new Error(
+      `Invalid sqlfu config at ${configPath}: "generatedImportExtension" at the top level is no longer supported. ` +
+        `Use "generate.importExtension: '.js' | '.ts'" instead.`,
+    );
   }
 }
 

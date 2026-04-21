@@ -10,7 +10,7 @@
  */
 import { type Either, Result, err, left, ok, right } from '../../small-utils.js';
 import type { DatabaseClient, TypeSqlError } from '../types.js';
-import type { ColumnSchema, Table } from '../mysql-query-analyzer/types.js';
+import type { ColumnSchema, Table } from '../shared-analyzer/types.js';
 import type { EnumColumnMap, EnumMap, SQLiteType } from './types.js';
 import { enumParser } from './enum-parser.js';
 import { virtualTablesSchema } from './virtual-tables.js';
@@ -30,8 +30,18 @@ async function loadDatabaseConstructor(): Promise<new (databaseUri: string) => D
 		return Database as unknown as new (databaseUri: string) => DatabaseType;
 	}
 
-	const {DatabaseSync} = await import('node:sqlite');
-	return DatabaseSync as unknown as new (databaseUri: string) => DatabaseType;
+	// `node:sqlite` landed in Node 22. Fall back to better-sqlite3 on older Node so the vendored
+	// typesql analyzer works across every Node version sqlfu supports. sqlfu divergence.
+	try {
+		const {DatabaseSync} = await import('node:sqlite');
+		return DatabaseSync as unknown as new (databaseUri: string) => DatabaseType;
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException)?.code !== 'ERR_UNKNOWN_BUILTIN_MODULE') throw error;
+		const {default: BetterSqlite3} = (await import('better-sqlite3' as any)) as {
+			default: new (databaseUri: string) => DatabaseType;
+		};
+		return BetterSqlite3;
+	}
 }
 
 export async function createSqliteClient(client: 'sqlite' | 'better-sqlite3' | 'bun:sqlite' | 'd1' | 'libsql', databaseUri: string, attachList: string[], loadExtensions: string[]): Promise<Result<DatabaseClient, TypeSqlError>> {

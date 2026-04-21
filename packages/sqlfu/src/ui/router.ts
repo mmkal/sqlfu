@@ -1,6 +1,7 @@
 import {ORPCError, os} from '@orpc/server';
 import {z} from 'zod';
 
+import packageJson from '../../package.json' with {type: 'json'};
 import {
   getCheckAnalysis,
   getMigrationResultantSchema,
@@ -64,6 +65,7 @@ export const uiRouter = {
     status: uiBase.handler(({context}) => ({
       initialized: context.project.initialized,
       projectRoot: context.project.projectRoot,
+      serverVersion: packageJson.version,
     })),
   },
   schema: {
@@ -126,7 +128,7 @@ export const uiRouter = {
             fileName: migration.fileName,
             content: migration.content,
             applied: migration.applied,
-            appliedAt: migration.appliedAt,
+            applied_at: migration.applied_at,
             integrity: migration.integrity,
           })),
           migrationHistory: authorities.migrationHistory.map((migration) => ({
@@ -135,7 +137,7 @@ export const uiRouter = {
             fileName: migration.fileName,
             content: migration.content,
             applied: migration.applied,
-            appliedAt: migration.appliedAt,
+            applied_at: migration.applied_at,
             integrity: migration.integrity,
           })),
           liveSchemaSql: authorities.liveSchemaSql,

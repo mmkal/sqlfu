@@ -37,7 +37,7 @@ export type SchemaAuthorityMigration = {
   readonly name: string;
   readonly content: string;
   readonly applied: boolean;
-  readonly appliedAt: string | null;
+  readonly applied_at: string | null;
   readonly integrity: 'ok' | 'checksum mismatch' | null;
 };
 

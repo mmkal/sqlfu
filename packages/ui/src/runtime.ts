@@ -24,7 +24,7 @@ function readApiOrigin() {
     return globalValue;
   }
 
-  if (window.location.hostname === 'local.sqlfu.dev') {
+  if (window.location.hostname === 'sqlfu.dev' || window.location.hostname === 'www.sqlfu.dev') {
     return defaultHostedApiOrigin;
   }
 

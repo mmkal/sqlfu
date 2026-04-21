@@ -3,31 +3,27 @@
  * https://github.com/sql-formatter-org/sql-formatter at version 15.7.3 / commit
  * a66b90020b7373155aa2e95a1bdc7d18055ae601 (MIT).
  *
- * Local modifications are intentionally small:
- * - support a `dialect` option name in sqlfu's public API
- * - default to the sqlite dialect
- * - provide a sqlfu-specific compact style that inlines simple clause bodies
+ * sqlfu is sqlite-only, so we call `formatDialect` directly with the sqlite
+ * dialect (rather than upstream's `format`, which ships a 20-dialect lookup
+ * table). This lets esbuild tree-shake the other dialects out of the bundle.
+ * If sqlfu ever grows multi-dialect formatting again, reintroduce a thin
+ * language-string lookup here, not in the vendored code.
  */
 
-import {format, supportedDialects} from './vendor/sql-formatter/sqlFormatter.js';
+import {formatDialect} from './vendor/sql-formatter/sqlFormatter.js';
+import {sqlite} from './vendor/sql-formatter/languages/sqlite/sqlite.formatter.js';
 
-import type {
-  FormatOptionsWithLanguage as VendoredFormatOptionsWithLanguage,
-  SqlLanguage,
-} from './vendor/sql-formatter/sqlFormatter.js';
+import type {FormatOptionsWithLanguage as VendoredFormatOptionsWithLanguage} from './vendor/sql-formatter/sqlFormatter.js';
 
-export type SqlFormatDialect = SqlLanguage;
 export type SqlFormatStyle = 'sqlfu' | 'upstream';
 
 export type FormatSqlOptions = Omit<VendoredFormatOptionsWithLanguage, 'language'> & {
-  readonly dialect?: SqlFormatDialect;
   readonly style?: SqlFormatStyle;
   readonly printWidth?: number;
   readonly inlineClauses?: boolean;
   readonly newlineBeforeTableName?: boolean;
 };
 
-export const supportedSqlDialects = supportedDialects;
 const sqlfuDefaultOptions = {
   tabWidth: 2,
   keywordCase: 'lower',
@@ -40,7 +36,6 @@ const compactableClauses = new Set(['select', 'from', 'where', 'group by', 'havi
 
 export function formatSql(sql: string, options: FormatSqlOptions = {}): string {
   const {
-    dialect = 'sqlite',
     style = 'sqlfu',
     printWidth = 80,
     inlineClauses = style === 'sqlfu',
@@ -48,9 +43,9 @@ export function formatSql(sql: string, options: FormatSqlOptions = {}): string {
     ...rest
   } = options;
   const vendoredOptions = style === 'sqlfu' ? {...sqlfuDefaultOptions, ...rest} : rest;
-  const formatted = format(sql, {
+  const formatted = formatDialect(sql, {
     ...vendoredOptions,
-    language: dialect,
+    dialect: sqlite,
   });
 
   if (!inlineClauses) {

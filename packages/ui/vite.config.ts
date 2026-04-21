@@ -5,7 +5,7 @@ export default defineConfig({
   base: './',
   plugins: [react()],
   server: {
-    allowedHosts: ['local.sqlfu.dev', '.ngrok.app', '.ngrok.dev'],
+    allowedHosts: ['.ngrok.app', '.ngrok.dev'],
   },
   build: {
     outDir: 'dist',

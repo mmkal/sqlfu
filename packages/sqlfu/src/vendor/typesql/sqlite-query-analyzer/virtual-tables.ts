@@ -1,4 +1,4 @@
-import { ColumnSchema } from '../mysql-query-analyzer/types.js';
+import { ColumnSchema } from '../shared-analyzer/types.js';
 
 export const virtualTablesSchema: ColumnSchema[] = [
 	{

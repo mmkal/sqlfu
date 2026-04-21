@@ -15,6 +15,50 @@ test('shows a helpful startup error page when the local backend is unreachable',
   await expect(page.getByRole('button', {name: 'Retry connection'})).toBeVisible();
 });
 
+test('shows a version-mismatch upgrade screen when the local backend is older than the floor', async ({page}) => {
+  await page.route('**/api/rpc/project/status', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        json: {
+          initialized: true,
+          projectRoot: '/tmp/fake',
+          serverVersion: '0.0.0',
+        },
+      }),
+    });
+  });
+
+  await page.goto('/');
+
+  await expect(page.getByRole('heading', {name: 'Please upgrade the local sqlfu server'})).toBeVisible();
+  await expect(page.getByText(/Your local backend is running/u)).toContainText('0.0.0');
+  await expect(page.getByText(/npm install -g sqlfu@latest/u)).toBeVisible();
+  await expect(page.getByRole('button', {name: 'Retry connection'})).toBeVisible();
+});
+
+test('shows the upgrade screen when the local backend does not report a version at all', async ({page}) => {
+  await page.route('**/api/rpc/project/status', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        json: {
+          initialized: true,
+          projectRoot: '/tmp/fake',
+        },
+      }),
+    });
+  });
+
+  await page.goto('/');
+
+  await expect(page.getByRole('heading', {name: 'Please upgrade the local sqlfu server'})).toBeVisible();
+  await expect(page.getByText(/does not satisfy/u)).toContainText('>=0.0.2-3');
+  await expect(page.getByText(/pre-dates the version-reporting RPC field/u)).toBeVisible();
+});
+
 test('schema page shows mismatch cards and can run the recommended sqlfu draft command', async ({page, projectDir}) => {
   const migrationsDir = path.join(projectDir, 'migrations');
 
@@ -349,7 +393,7 @@ test('table browser, sql runner, and generated query form work against a live fi
 
   await page.getByRole('link', {name: /find-post-by-slug/i}).click();
   await page.getByLabel('slug').fill('hello-world');
-  await page.getByRole('button', {name: 'Run generated query'}).click();
+  await page.getByRole('button', {name: 'Run query'}).click();
   await expect(page.getByText('Hello World')).toBeVisible();
 });
 
@@ -428,7 +472,7 @@ test('views created from the sql runner can be browsed without crashing the app'
 test('clicking a saved query result cell shows the full cell content below the table', async ({page}) => {
   await page.goto('/#query/list-post-cards');
 
-  await page.getByRole('button', {name: 'Run generated query'}).click();
+  await page.getByRole('button', {name: 'Run query'}).click();
   await page.locator('.reactgrid [data-cell-rowidx="1"][data-cell-colidx="3"]').click();
 
   const selectedCellPanel = page.locator('.selected-cell-panel');
@@ -655,12 +699,12 @@ test('switching between saved queries does not leak form state between schemas',
   await page.goto('/#query/find-post-by-slug');
 
   await page.getByLabel('slug').fill('hello-world');
-  await page.getByRole('button', {name: 'Run generated query'}).click();
+  await page.getByRole('button', {name: 'Run query'}).click();
   await expect(page.getByText('Hello World')).toBeVisible();
 
   await page.getByRole('link', {name: /list-post-cards/i}).click();
   await expect(page.getByText("'findPostBySlug params' must NOT have additional properties")).toHaveCount(0);
-  await page.getByRole('button', {name: 'Run generated query'}).click();
+  await page.getByRole('button', {name: 'Run query'}).click();
   await expect(page.getByText('Draft Notes')).toBeVisible();
 });
 
@@ -707,7 +751,7 @@ test('saved queries can be renamed, edited, and deleted from the query view', as
 
   await expect(page.getByLabel('slug')).toBeVisible();
   await page.getByLabel('slug').fill('hello-world');
-  await page.getByRole('button', {name: 'Run generated query'}).click();
+  await page.getByRole('button', {name: 'Run query'}).click();
   await expect(page.getByText('Hello World')).toBeVisible();
   await expect(fs.readFile(renamedPath, 'utf8')).resolves.toContain('where slug = :slug');
 
@@ -759,7 +803,7 @@ test('invalid saved queries still show editable sql', async ({page, projectDir})
 
   await expect(page.getByLabel('slug')).toBeVisible();
   await page.getByLabel('slug').fill('hello-world');
-  await page.getByRole('button', {name: 'Run generated query'}).click();
+  await page.getByRole('button', {name: 'Run query'}).click();
   await expect(page.getByText('Hello World')).toBeVisible();
 });
 
@@ -825,8 +869,8 @@ test('sql runner understands sqlfu_migrations and suggests a non-noisy saved nam
   await expect(page).toHaveURL(/#query\/list-sqlfu-migrations$/);
   await expect(fs.readFile(savedQueryPath, 'utf8')).resolves.toContain('from sqlfu_migrations');
   await expect(page.getByText('Query error')).toHaveCount(0);
-  await expect(page.getByRole('button', {name: 'Run generated query'})).toBeVisible();
-  await page.getByRole('button', {name: 'Run generated query'}).click();
+  await expect(page.getByRole('button', {name: 'Run query'})).toBeVisible();
+  await page.getByRole('button', {name: 'Run query'}).click();
   await expect(page.getByText('checksum')).toBeVisible();
   await expect(page.getByText('no such table: sqlfu_migrations')).toHaveCount(0);
 });
@@ -853,7 +897,7 @@ test('schema queries are invalidated after sql runs, saved query runs, and relat
   await page.goto('/#query/list-post-cards');
   await Promise.all([
     page.waitForResponse((response) => response.url().includes('/api/rpc/schema/') && response.ok()),
-    page.getByRole('button', {name: 'Run generated query'}).click(),
+    page.getByRole('button', {name: 'Run query'}).click(),
   ]);
 
   await page.goto('/#table/posts');

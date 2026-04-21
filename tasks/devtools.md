@@ -1,4 +1,9 @@
-status: ready for bedtime
+---
+status: in-progress
+size: medium
+---
+
+Tracked in PR #16 (devtools: lint plugin + vscode extension scaffolding).
 
 add dev tools:
 - oxlint/eslint plugin

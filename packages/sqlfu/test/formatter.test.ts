@@ -1,23 +1,32 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {describe, expect, test} from 'vitest';
+import {describe, expect, inject, test} from 'vitest';
 
 import {formatSql} from '../src/index.js';
 
-const fixturesDir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'formatter');
-const shouldUpdateFixtures = process.env.SQLFU_FORMATTER_UPDATE === '1';
-
-if (shouldUpdateFixtures) {
-  await rewriteFormatterFixtures(fixturesDir);
+// Declared in vitest.config.ts → test.provide. `inject('updateSnapshots')` returns true when
+// vitest was invoked with `-u` / `--update`; on mismatch the test rewrites its own region
+// instead of failing.
+declare module 'vitest' {
+  export interface ProvidedContext {
+    updateSnapshots: boolean;
+  }
 }
+
+const fixturesDir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'formatter');
 
 for (const fixturePath of await listFixtureFiles(fixturesDir)) {
   describe(path.basename(fixturePath), async () => {
     const cases = parseFormatterFixture(await fs.readFile(fixturePath, 'utf8'));
 
     for (const fixtureCase of cases) {
-      test(fixtureCase.name, () => {
+      test(fixtureCase.name, async () => {
+        if (inject('updateSnapshots')) {
+          await updateFormatterFixtureCase(fixturePath, fixtureCase.name);
+          return;
+        }
+
         if (fixtureCase.error) {
           expect(normalizeThrownError(() => formatSql(fixtureCase.input, fixtureCase.config))).toBe(
             normalizeErrorMessage(fixtureCase.error),
@@ -138,30 +147,23 @@ function normalizeErrorMessage(value: string): string {
   return value.replace(/^Error:\s*/, '').trimEnd();
 }
 
-async function rewriteFormatterFixtures(root: string): Promise<void> {
-  for (const fixturePath of await listFixtureFiles(root)) {
-    const original = await fs.readFile(fixturePath, 'utf8');
-    const rewritten = rewriteFixtureContents(original);
-    if (rewritten !== original) {
-      await fs.writeFile(fixturePath, rewritten);
-    }
-  }
-}
-
-function rewriteFixtureContents(contents: string): string {
+async function updateFormatterFixtureCase(fixturePath: string, testName: string): Promise<void> {
+  const contents = await fs.readFile(fixturePath, 'utf8');
   const defaultConfig = parseDefaultConfig(contents);
-  const regionPattern = /^-- #region: (?<name>.+)\n(?<body>[\s\S]*?)^-- #endregion$/gm;
-  const rewrittenRegions = [...contents.matchAll(regionPattern)].map((match) => {
-    const groups = match.groups;
-    if (!groups) {
-      throw new Error('Invalid formatter fixture while rewriting');
-    }
+  const regionPattern = new RegExp(
+    `^-- #region: ${escapeRegex(testName)}\\n(?<body>[\\s\\S]*?)^-- #endregion$`,
+    'm',
+  );
+  const match = regionPattern.exec(contents);
+  if (!match) {
+    throw new Error(`Region "${testName}" not found in ${fixturePath}`);
+  }
 
-    return rewriteRegion(groups.name, groups.body, defaultConfig);
-  });
-
-  const header = contents.match(/^-- default config: .+\n\n/m)?.[0] ?? '';
-  return `${header}${rewrittenRegions.join('\n\n')}\n`;
+  const rewritten = rewriteRegion(testName, match.groups!.body, defaultConfig);
+  const updated = contents.slice(0, match.index) + rewritten + contents.slice(match.index + match[0].length);
+  if (updated !== contents) {
+    await fs.writeFile(fixturePath, updated);
+  }
 }
 
 function rewriteRegion(name: string, body: string, defaultConfig: Record<string, unknown>): string {
@@ -195,4 +197,8 @@ function rewriteRegion(name: string, body: string, defaultConfig: Record<string,
     ...resultLines,
     '-- #endregion',
   ].join('\n');
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

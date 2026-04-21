@@ -46,8 +46,8 @@ import {
 } from './components/ui/dialog.js';
 import {AppToaster} from './components/ui/toaster.js';
 import {resolveApiOrigin, resolveApiRpcUrl} from './runtime.js';
-import {classifyStartupError} from './startup-error.js';
-import {DEMO_URL, LOCAL_URL, createDemoClient, isDemoMode} from './demo/index.js';
+import {checkServerVersion, classifyStartupError, type StartupFailure} from './startup-error.js';
+import {DEMO_URL, HOSTED_URL, createDemoClient, isDemoMode} from './demo/index.js';
 import {initThemeOnLoad, useThemePreference} from './theme.js';
 import './styles.css';
 
@@ -281,6 +281,27 @@ function StartupFailureScreen(input: {error: unknown}) {
                 </ol>
               </>
             ) : null}
+            {startupError.kind === 'version-mismatch' ? (
+              <>
+                <h2>Please upgrade the local sqlfu server</h2>
+                <p>{renderVersionMismatchLede(startupError)}</p>
+                <ol className="startup-steps">
+                  <li>
+                    Stop the local backend (Ctrl+C in the terminal running <code>npx sqlfu</code>).
+                  </li>
+                  <li>
+                    Run <code>npm install -g sqlfu@latest</code>, or start it with{' '}
+                    <code>npx sqlfu@latest</code> next time.
+                  </li>
+                  <li>Reload this page.</li>
+                </ol>
+                <p>
+                  Don&apos;t want to upgrade right now? Run <code>npx sqlfu --ui</code> instead of{' '}
+                  <code>npx sqlfu</code> to serve a version-matched UI locally — that avoids this mismatch screen
+                  entirely and lets you stay on your current sqlfu version.
+                </p>
+              </>
+            ) : null}
             <div className="startup-actions">
               <button className="button primary" type="button" onClick={() => window.location.reload()}>
                 Retry connection
@@ -359,6 +380,19 @@ function StartupFailureScreen(input: {error: unknown}) {
                 <p>The browser reached the local backend, but it responded with HTTP {startupError.status}.</p>
                 <p>
                   The detailed stack trace should be in the terminal where <code>npx sqlfu</code> is running.
+                </p>
+              </>
+            ) : null}
+            {startupError.kind === 'version-mismatch' ? (
+              <>
+                <h2>Why am I seeing this?</h2>
+                <p>
+                  The hosted UI on <code>sqlfu.dev/ui</code> tracks the latest sqlfu release. When your local
+                  backend falls outside <code>{startupError.supportedRange}</code>, the RPC contracts do not line up
+                  and the UI would otherwise surface cryptic 4xx or 5xx errors.
+                </p>
+                <p>
+                  Upgrading the local backend is the fix. Your project data is untouched.
                 </p>
               </>
             ) : null}
@@ -456,6 +490,12 @@ function ConfirmationDialogHost() {
 
 function Studio() {
   const projectStatusQuery = useSuspenseQuery(orpc.project.status.queryOptions());
+
+  const versionMismatch = checkServerVersion({serverVersion: projectStatusQuery.data.serverVersion});
+  if (versionMismatch) {
+    throw versionMismatch;
+  }
+
   if (!projectStatusQuery.data.initialized) {
     return <ProjectInitScreen projectRoot={projectStatusQuery.data.projectRoot} />;
   }
@@ -836,7 +876,7 @@ function SchemaPanel(input: {projectName: string; check: SchemaCheckResponse; au
                     <summary role="button" className="migration-summary">
                       <span>{migration.name}</span>
                       <span className="migration-summary-right">
-                        <span className="muted">{formatAppliedAgo(migration.appliedAt)}</span>
+                        <span className="muted">{formatAppliedAgo(migration.applied_at)}</span>
                         {migration.integrity !== 'ok' ? <span className="pill pill-warn">⚠</span> : null}
                         <span className="accordion-chevron" aria-hidden="true">
                           ▾
@@ -900,8 +940,8 @@ function MigrationDetail(input: {
   const metadata = [
     `name: ${toYamlScalar(input.migration.name)}`,
     `filename: ${toYamlScalar(input.migration.fileName)}`,
-    `applied_at: ${toYamlScalar(input.migration.appliedAt)}`,
-    ...(input.migration.appliedAt
+    `applied_at: ${toYamlScalar(input.migration.applied_at)}`,
+    ...(input.migration.applied_at
       ? [`integrity: ${toYamlScalar(input.migration.integrity ?? 'checksum mismatch')}`]
       : []),
   ].join('\n');
@@ -1204,6 +1244,7 @@ function SqlRunnerPanel(input: {relations: readonly StudioRelation[]}) {
       sqlEditorRelations={input.relations}
       sqlEditorDiagnostics={analysisQuery.data?.diagnostics}
       sqlEditorOnExecute={() => runMutation.mutate({sql: draft.sql, params: sanitizedParams})}
+      sqlEditorOnSave={() => handleSave()}
       paramsSchema={omitSchemaTitle(detectedParamsSchema)}
       paramsData={sanitizedParams}
       onSqlChange={(sql) => setDraft({...draft, sql})}
@@ -1235,7 +1276,7 @@ function QueryPanel(input: {entry: QueryCatalogEntry; relations: readonly Studio
     defaultValue: entry.id,
   });
   const [sqlDraft, setSqlDraft] = useLocalStorageState(`sqlfu-ui/query-sql/${entry.id}`, {
-    defaultValue: entry.sql,
+    defaultValue: entry.sqlFileContent,
   });
   const [renameMode, setRenameMode] = useLocalStorageState(`sqlfu-ui/query-rename-mode/${entry.id}`, {
     defaultValue: false,
@@ -1321,7 +1362,7 @@ function QueryPanel(input: {entry: QueryCatalogEntry; relations: readonly Studio
           </>
         ) : undefined
       }
-      sql={sqlEditMode ? sqlDraft : entry.sql}
+      sql={sqlEditMode ? sqlDraft : entry.sqlFileContent}
       paramsSchema={entry.kind === 'query' ? buildExecutionSchema(entry) : undefined}
       paramsData={undefined}
       sqlEditorRelations={input.relations}
@@ -1354,7 +1395,7 @@ function QueryPanel(input: {entry: QueryCatalogEntry; relations: readonly Studio
               className="button"
               type="button"
               onClick={() => {
-                setSqlDraft(entry.sql);
+                setSqlDraft(entry.sqlFileContent);
                 setSqlEditMode(false);
               }}
             >
@@ -1400,7 +1441,7 @@ function QueryPanel(input: {entry: QueryCatalogEntry; relations: readonly Studio
       emptyMessage={
         entry.kind === 'query' ? 'Submit form data to execute the query.' : 'Edit the SQL to repair this saved query.'
       }
-      runLabel="Run generated query"
+      runLabel="Run query"
       paramsCardTitle="Params"
     />
   );
@@ -1416,6 +1457,7 @@ function QueryWorkbench(input: {
   sqlEditorRelations?: readonly StudioRelation[];
   sqlEditorDiagnostics?: readonly SqlEditorDiagnostic[];
   sqlEditorOnExecute?: (value: string) => void;
+  sqlEditorOnSave?: (value: string) => void;
   paramsSchema?: RJSFSchema;
   paramsData?: Record<string, unknown>;
   readonlyMeta?: ReactNode;
@@ -1463,13 +1505,20 @@ function QueryWorkbench(input: {
                   relations={input.sqlEditorRelations ?? []}
                   diagnostics={input.sqlEditorDiagnostics}
                   onExecute={input.sqlEditorOnExecute}
+                  onSave={input.sqlEditorOnSave}
                   onChange={(value) => input.onSqlChange?.(value)}
                 />
               </label>
               {input.sqlEditorActions}
             </div>
           ) : (
-            <pre className="code-block">{input.sql}</pre>
+            <SqlCodeMirror
+              value={input.sql}
+              ariaLabel={input.sqlEditorLabel ?? 'Saved query SQL'}
+              relations={input.sqlEditorRelations ?? []}
+              readOnly
+              onChange={() => {}}
+            />
           )}
         </section>
 
@@ -2047,8 +2096,8 @@ function ModeBanner() {
     <div className="mode-banner demo">
       <strong>Demo mode</strong>
       <span>In-browser SQLite. Nothing is saved. Refresh to reset.</span>
-      <a className="mode-banner-link" href={LOCAL_URL}>
-        Back to local.sqlfu.dev
+      <a className="mode-banner-link" href={HOSTED_URL}>
+        Back to sqlfu.dev/ui
       </a>
     </div>
   );
@@ -2420,6 +2469,23 @@ function suggestSqlRunnerName(sql: string) {
 
 function normalizeSqlDraft(value: string) {
   return value.trimEnd();
+}
+
+function renderVersionMismatchLede(startupError: Extract<StartupFailure, {kind: 'version-mismatch'}>) {
+  if (startupError.serverVersion) {
+    return (
+      <>
+        Your local backend is running <code>sqlfu v{startupError.serverVersion}</code>, but this UI requires a version
+        satisfying <code>{startupError.supportedRange}</code>.
+      </>
+    );
+  }
+  return (
+    <>
+      Your local backend does not satisfy <code>{startupError.supportedRange}</code> (it pre-dates the version-reporting
+      RPC field). Upgrading will fix the mismatch.
+    </>
+  );
 }
 
 function detectBrowserName() {

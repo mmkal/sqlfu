@@ -1,3 +1,8 @@
+---
+status: needs-grilling
+size: small
+---
+
 you could in theory write `definitions.sql` like this:
 
 ```sql

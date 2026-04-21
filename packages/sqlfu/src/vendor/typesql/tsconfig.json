@@ -10,23 +10,17 @@
     "verbatimModuleSyntax": false,
     "skipLibCheck": true,
     "declaration": false,
-    "declarationMap": false
+    "declarationMap": false,
+    "sourceMap": false
   },
   "include": [
     "./**/*.ts",
     "../code-block-writer/**/*.ts",
     "../small-utils.ts",
-    "../typesql-parser/**/*.ts",
-    "../antlr4/**/*.js"
+    "../sqlfu-sqlite-parser/**/*.ts"
   ],
   "exclude": [
     "../../../../../node_modules",
-    "../../../dist",
-    "./codegen/pg.ts",
-    "./drivers/libsql.ts",
-    "./drivers/postgres.ts",
-    "./drivers/types.ts",
-    "./postgres-query-analyzer/**/*",
-    "./queryExectutor.ts"
+    "../../../dist"
   ]
 }

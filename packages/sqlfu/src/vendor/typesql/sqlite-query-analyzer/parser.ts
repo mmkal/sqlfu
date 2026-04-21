@@ -1,6 +1,10 @@
 import { type Either, isLeft, left, right } from '../../small-utils.js';
 import type { ParameterNameAndPosition, ParameterDef, SchemaDef, TypeSqlError } from '../types.js';
-import { type Sql_stmtContext, parseSql as parseSqlite } from '../../typesql-parser/sqlite/index.js';
+// `Sql_stmtContext` used to refer to the ANTLR-generated class; post-phase-5
+// (see `tasks/drop-antlr.md`) the shim returns a `ShimSql_stmtContext`. The
+// analyzer only reads duck-typed accessors, so `any` is enough here.
+type Sql_stmtContext = any;
+import { parseSqlToShim } from './antlr-shim.js';
 import { tryTraverse_Sql_stmtContext } from './traverse.js';
 import {
 	type ColumnInfo,
@@ -9,14 +13,14 @@ import {
 	type TraverseContext,
 	type TypeAndNullInfer,
 	TypeAndNullInferParam
-} from '../mysql-query-analyzer/types.js';
-import { getVarType } from '../mysql-query-analyzer/collect-constraints.js';
-import { unify } from '../mysql-query-analyzer/unify.js';
+} from '../shared-analyzer/types.js';
+import { getVarType } from '../shared-analyzer/collect-constraints.js';
+import { unify } from '../shared-analyzer/unify.js';
 import { hasAnnotation, preprocessSql, verifyNotInferred } from '../describe-query.js';
 import { describeNestedQuery } from './sqlite-describe-nested-query.js';
 import { indexGroupBy } from '../util.js';
 import { replaceListParams } from './replace-list-params.js';
-import type { TraverseResult2 } from '../mysql-query-analyzer/traverse.js';
+import type { TraverseResult2 } from '../shared-analyzer/traverse.js';
 import { describeDynamicQuery2 } from '../describe-dynamic-query.js';
 
 type ParseAndTraverseResult = {
@@ -31,8 +35,7 @@ export function traverseSql(sql: string, dbSchema: ColumnSchema[]): Either<TypeS
 	const { sql: processedSql, namedParameters } = preprocessSql(sql, 'sqlite');
 	const nested = hasAnnotation(sql, '@nested');
 	const dynamicQuery = hasAnnotation(sql, '@dynamicQuery');
-	const parser = parseSqlite(processedSql);
-	const sql_stmt = parser.sql_stmt();
+	const sql_stmt: Sql_stmtContext = parseSqlToShim(processedSql);
 	const traverseResult = traverseQuery(sql_stmt, dbSchema);
 	if (isLeft(traverseResult)) {
 		return traverseResult;
@@ -258,6 +261,18 @@ function createSchemaDefinition(
 			schemaDef.returning = true;
 		}
 
+		return right(schemaDef);
+	}
+	if (queryResult.queryType === 'Ddl') {
+		// sqlfu divergence: DDL statements (create/drop/alter/pragma/etc.) don't have params
+		// or result columns; the wrapper layer just emits `client.run(sql)`.
+		const schemaDef: SchemaDef = {
+			sql,
+			queryType: 'Ddl',
+			multipleRowsResult: false,
+			columns: [],
+			parameters: []
+		};
 		return right(schemaDef);
 	}
 	if (queryResult.queryType === 'Delete') {

@@ -3,6 +3,10 @@ import {defineConfig} from '@playwright/test';
 export default defineConfig({
   testDir: './test',
   timeout: 30_000,
+  // Snapshots are used for pure-algorithm output (no browser rendering), so
+  // drop Playwright's default {platform} suffix — one file works on mac + linux.
+  snapshotPathTemplate: '{testDir}/{testFilePath}-snapshots/{arg}{ext}',
+  reporter: process.env.CI ? [['list'], ['html', {open: 'never'}]] : 'list',
   use: {
     baseURL: 'http://127.0.0.1:3218',
     headless: true,

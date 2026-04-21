@@ -7,6 +7,7 @@ export default defineConfig({
   // drop Playwright's default {platform} suffix — one file works on mac + linux.
   snapshotPathTemplate: '{testDir}/{testFilePath}-snapshots/{arg}{ext}',
   reporter: process.env.CI ? [['list'], ['html', {open: 'never'}]] : 'list',
+  globalSetup: './test/global-setup.ts',
   use: {
     baseURL: 'http://127.0.0.1:3218',
     headless: true,

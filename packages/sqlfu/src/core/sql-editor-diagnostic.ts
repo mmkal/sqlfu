@@ -17,6 +17,11 @@ export function toSqlEditorDiagnostic(sql: string, error: unknown): SqlEditorDia
 
 export function isInternalUnsupportedSqlAnalysisError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
+  // The analyzer signals "I can't handle this statement kind" via one of a few
+  // specific messages. Match on shape, not text equality — the hand-rolled
+  // parser's `parseSqlToShim` prefix carries the offending keyword in the
+  // rest of the message (`parseSqlToShim: unsupported top-level keyword 'X'`).
+  if (message.startsWith('parseSqlToShim:')) return true;
   return ['traverse_Sql_stmtContext', 'Not supported!'].includes(message);
 }
 

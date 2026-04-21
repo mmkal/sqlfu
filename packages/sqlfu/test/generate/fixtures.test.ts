@@ -40,18 +40,26 @@ for (const fixturePath of listFixtureFiles(fixturesDir)) {
         expect(result.kind).toBe('ok');
         if (result.kind !== 'ok') return;
 
+        // Every fixture's generated code has to typecheck against sqlfu's real source — a
+        // missing import, wrong signature, or enum-narrowing goof shows up here even when
+        // the text snapshot would still match.
+        expect(result.diagnostics, `TypeScript errors in generated files:\n${result.diagnostics.join('\n')}`).toEqual([]);
+
         if (inject('updateSnapshots')) {
-          // Rewrite exact-match outputs (.ts / text files) back into the fixture. JSON outputs
-          // are partial matches by design — e.g. the query catalog's `generatedAt` timestamp
-          // and deeper metadata fields aren't restated in the fixture — so we skip those to
-          // avoid bloating the fixture with every field generate happens to emit today.
+          // Rewrite exact-match outputs (.ts / text files) back into the fixture. JSON fences
+          // are partial matches by design (the catalog's `generatedAt` timestamp + deeper
+          // metadata fields aren't restated in the fixture) — so in glob-curated mode we still
+          // honour whatever JSON fence the author hand-wrote without rewriting its body, and
+          // in legacy mode we skip touching JSON fences too.
           const textActuals: Record<string, string> = {};
-          for (const file of fixtureCase.outputFiles) {
-            if (!file.path.endsWith('.json')) {
-              textActuals[file.path] = result.outputs[file.path];
+          for (const [filePath, content] of Object.entries(result.outputs)) {
+            if (!filePath.endsWith('.json')) {
+              textActuals[filePath] = content;
             }
           }
-          updateFixtureOutputs(fixturePath, fixtureCase.name, textActuals);
+          updateFixtureOutputs(fixturePath, fixtureCase.name, textActuals, {
+            outputGlobs: fixtureCase.outputGlobs,
+          });
           return;
         }
 

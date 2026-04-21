@@ -51,7 +51,7 @@ export async function getSchemaAuthorities(context: SqlfuContext) {
         fileName: basename(migration.path),
         content: migration.content,
         applied: appliedByName.has(name),
-        appliedAt: appliedEntry?.appliedAt ?? null,
+        applied_at: appliedEntry?.applied_at ?? null,
         integrity: appliedEntry
           ? await getMigrationIntegrity(context.host, migration.content, appliedEntry.checksum)
           : null,
@@ -67,7 +67,7 @@ export async function getSchemaAuthorities(context: SqlfuContext) {
         fileName: current ? basename(current.path) : null,
         content: current?.content ?? '-- migration file missing from repo',
         applied: true,
-        appliedAt: migration.appliedAt,
+        applied_at: migration.applied_at,
         integrity: await getMigrationIntegrity(context.host, current?.content, migration.checksum),
       };
     }),
@@ -201,9 +201,12 @@ export async function runSqlfuCommand(
 }
 
 export async function readMigrationsFromContext(context: SqlfuContext): Promise<Migration[]> {
+  if (!context.config.migrations) return [];
+  const migrationsDir = context.config.migrations;
+
   let fileNames: string[];
   try {
-    fileNames = (await context.host.fs.readdir(context.config.migrations))
+    fileNames = (await context.host.fs.readdir(migrationsDir))
       .filter((fileName) => fileName.endsWith('.sql'))
       .sort();
   } catch (error) {
@@ -215,7 +218,7 @@ export async function readMigrationsFromContext(context: SqlfuContext): Promise<
 
   const migrations: Migration[] = [];
   for (const fileName of fileNames) {
-    const filePath = joinPath(context.config.migrations, fileName);
+    const filePath = joinPath(migrationsDir, fileName);
     const content = await context.host.fs.readFile(filePath);
     migrations.push({path: filePath, content});
   }
@@ -260,6 +263,9 @@ export async function applyDraftSql(
   });
   if (!body?.trim()) {
     return;
+  }
+  if (!context.config.migrations) {
+    throw new Error('sqlfu draft requires a `migrations` directory in sqlfu.config.ts');
   }
   const fileName = `${getMigrationPrefix(context.host.now())}_${slugify(input?.name ?? migrationNickname(body))}.sql`;
   await context.host.fs.mkdir(context.config.migrations);

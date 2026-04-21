@@ -1,21 +1,18 @@
-import type {DatabaseSync} from 'node:sqlite';
+// Local sqlfu divergence: upstream does `import type {DatabaseSync} from 'node:sqlite'`,
+// but that module specifier fails ESM link on Node < 22 even though the import is type-only
+// (tsx preserves the module reference for some paths). Since DatabaseSync is only used as the
+// client field on a few dialect types (never constructed here), replacing with `unknown` is
+// equivalent for the purposes of this file.
+type DatabaseSync = unknown;
 
 import type { DbType, MySqlType } from './mysql-mapping.js';
 import type { Brand } from './utility-types.js';
-import type { ColumnInfo, ColumnSchema, DynamicSqlInfoResult, DynamicSqlInfoResult2 } from './mysql-query-analyzer/types.js';
-import type { QueryContext } from '../typesql-parser/mysql/MySQLParser.js';
+import type { ColumnInfo, ColumnSchema, DynamicSqlInfoResult, DynamicSqlInfoResult2 } from './shared-analyzer/types.js';
 import type { NestedResultInfo } from './describe-nested-query.js';
 import type { RelationInfo2 } from './sqlite-query-analyzer/sqlite-describe-nested-query.js';
 
 export type DBSchema = {
 	columns: ColumnSchema[];
-};
-
-export type ParseResult = {
-	sql: string;
-	namedParameters: string[];
-	dbSchema: ColumnSchema[];
-	queryContext: QueryContext;
 };
 
 export type CrudQueryType = 'Select' | 'Insert' | 'Update' | 'Delete';

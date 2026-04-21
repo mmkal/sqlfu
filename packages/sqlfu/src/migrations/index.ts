@@ -1,8 +1,15 @@
-import {sha256} from '@noble/hashes/sha2.js';
+import {sha256} from '../vendor/sha256.js';
 
 import type {AsyncClient, Client, SyncClient} from '../core/types.js';
 import {basename} from '../core/paths.js';
 import {driveAsync, driveSync, type DualGenerator} from './dual-dispatch.js';
+import {
+  deleteMigrationHistory as deleteMigrationHistoryWrapper,
+  ensureMigrationTable as ensureMigrationTableWrapper,
+  insertMigration as insertMigrationWrapper,
+  selectMigrationHistory as selectMigrationHistoryWrapper,
+  type SqlfuMigrationsRow,
+} from './queries/.generated/index.js';
 
 export type Migration = {
   path: string;
@@ -32,65 +39,34 @@ export function migrationsFromBundle(bundle: MigrationBundle): Migration[] {
     .map(([path, content]) => ({path, content}));
 }
 
-export type AppliedMigration = {
-  name: string;
-  checksum: string;
-  appliedAt: string;
-};
-
-export function ensureMigrationTable(client: SyncClient): void;
-export function ensureMigrationTable(client: AsyncClient): Promise<void>;
-export function ensureMigrationTable(client: Client): void | Promise<void>;
-export function ensureMigrationTable(client: Client): void | Promise<void> {
-  return client.sync ? driveSync(ensureMigrationTableGen(client)) : driveAsync(ensureMigrationTableGen(client));
-}
+// The shape of a `sqlfu_migrations` row — re-exported from the generated output so
+// external callers (and the sqlfu UI) can type their migration-history consumers
+// without knowing where the type comes from. If you want to change the shape, edit
+// `packages/sqlfu/internal/definitions.sql` and run `pnpm run build:internal-queries`.
+export type {SqlfuMigrationsRow};
 
 function* ensureMigrationTableGen(client: Client): DualGenerator<void> {
-  yield client.run({
-    sql: `
-      create table if not exists sqlfu_migrations(
-        name text primary key check(name not like '%.sql'),
-        checksum text not null,
-        applied_at text not null
-      );
-    `,
-    args: [],
-  });
-
-  const columns = (yield client.all<{name: string}>({
-    sql: `select name from pragma_table_info('sqlfu_migrations') order by cid`,
-    args: [],
-  })) as {name: string}[];
-  const columnNames = new Set(columns.map((column) => column.name));
-  if (columnNames.has('content') && !columnNames.has('checksum')) {
-    yield client.run({
-      sql: `alter table sqlfu_migrations rename column content to checksum`,
-      args: [],
-    });
-  }
+  yield client.run({sql: ensureMigrationTableWrapper.sql, args: [], name: 'ensure-migration-table'});
 }
 
 export function migrationName(migration: {path: string}) {
   return basename(migration.path, '.sql');
 }
 
-export function readMigrationHistory(client: SyncClient): AppliedMigration[];
-export function readMigrationHistory(client: AsyncClient): Promise<AppliedMigration[]>;
-export function readMigrationHistory(client: Client): AppliedMigration[] | Promise<AppliedMigration[]>;
-export function readMigrationHistory(client: Client): AppliedMigration[] | Promise<AppliedMigration[]> {
+export function readMigrationHistory(client: SyncClient): SqlfuMigrationsRow[];
+export function readMigrationHistory(client: AsyncClient): Promise<SqlfuMigrationsRow[]>;
+export function readMigrationHistory(client: Client): SqlfuMigrationsRow[] | Promise<SqlfuMigrationsRow[]>;
+export function readMigrationHistory(client: Client): SqlfuMigrationsRow[] | Promise<SqlfuMigrationsRow[]> {
   return client.sync ? driveSync(readMigrationHistoryGen(client)) : driveAsync(readMigrationHistoryGen(client));
 }
 
-function* readMigrationHistoryGen(client: Client): DualGenerator<AppliedMigration[]> {
+function* readMigrationHistoryGen(client: Client): DualGenerator<SqlfuMigrationsRow[]> {
   yield* ensureMigrationTableGen(client);
-  return (yield client.all<AppliedMigration>({
-    sql: `
-      select name, checksum, applied_at as appliedAt
-      from sqlfu_migrations
-      order by name
-    `,
+  return (yield client.all<SqlfuMigrationsRow>({
+    sql: selectMigrationHistoryWrapper.sql,
     args: [],
-  })) as AppliedMigration[];
+    name: 'select-migration-history',
+  })) as SqlfuMigrationsRow[];
 }
 
 type ApplyMigrationsParams = {
@@ -157,13 +133,13 @@ function* applyMigrationsGen(client: Client, params: ApplyMigrationsParams): Dua
     }
 
     const checksum = digest(migration.content);
-    const appliedAt = new Date().toISOString();
+    const applied_at = new Date().toISOString();
     // the sync transaction method takes a sync callback and returns its value;
     // the async transaction method awaits an async callback. we route the
     // inner generator through the matching driver so the same generator body
     // services both shapes.
     yield client.transaction((tx) => {
-      const innerGen = applyOneMigrationGen(tx, {content: migration.content, name, checksum, appliedAt});
+      const innerGen = applyOneMigrationGen(tx, {content: migration.content, name, checksum, applied_at});
       return tx.sync ? (driveSync(innerGen) as unknown as Promise<void>) : driveAsync(innerGen);
     });
   }
@@ -171,15 +147,13 @@ function* applyMigrationsGen(client: Client, params: ApplyMigrationsParams): Dua
 
 function* applyOneMigrationGen(
   client: Client,
-  input: {content: string; name: string; checksum: string; appliedAt: string},
+  input: {content: string; name: string; checksum: string; applied_at: string},
 ): DualGenerator<void> {
   yield client.raw(input.content);
   yield client.run({
-    sql: `
-      insert into sqlfu_migrations(name, checksum, applied_at)
-      values (?, ?, ?)
-    `,
-    args: [input.name, input.checksum, input.appliedAt],
+    sql: insertMigrationWrapper.sql,
+    args: [input.name, input.checksum, input.applied_at],
+    name: 'insert-migration',
   });
 }
 
@@ -197,24 +171,19 @@ function* baselineMigrationHistoryGen(client: Client, params: BaselineParams): D
 
 function* replaceMigrationHistoryGen(client: Client, migrations: readonly Migration[]): DualGenerator<void> {
   yield* ensureMigrationTableGen(client);
-  yield client.run({sql: 'delete from sqlfu_migrations', args: []});
+  yield client.run({sql: deleteMigrationHistoryWrapper.sql, args: [], name: 'delete-migration-history'});
   for (const migration of migrations) {
     yield client.run({
-      sql: `
-        insert into sqlfu_migrations(name, checksum, applied_at)
-        values (?, ?, ?)
-      `,
+      sql: insertMigrationWrapper.sql,
       args: [migrationName(migration), digest(migration.content), new Date().toISOString()],
+      name: 'insert-migration',
     });
   }
 }
 
 function digest(content: string): string {
-  // @noble/hashes is synchronous and portable (pure JS, zero deps), so both
-  // sync and async clients hash the same way. keeping a single sync impl
-  // avoids shimming node:crypto into Workers runtimes (which otherwise would
-  // require the nodejs_compat flag) and means checksums are byte-identical
-  // regardless of where migrations run.
+  // Pure-JS sha256 (vendored from @noble/hashes in src/vendor/sha256.ts).
+  // Sync, portable, and avoids shimming node:crypto into Workers runtimes.
   const bytes = sha256(new TextEncoder().encode(content));
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
 }

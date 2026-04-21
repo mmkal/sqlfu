@@ -15,6 +15,50 @@ test('shows a helpful startup error page when the local backend is unreachable',
   await expect(page.getByRole('button', {name: 'Retry connection'})).toBeVisible();
 });
 
+test('shows a version-mismatch upgrade screen when the local backend is older than the floor', async ({page}) => {
+  await page.route('**/api/rpc/project/status', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        json: {
+          initialized: true,
+          projectRoot: '/tmp/fake',
+          serverVersion: '0.0.0',
+        },
+      }),
+    });
+  });
+
+  await page.goto('/');
+
+  await expect(page.getByRole('heading', {name: 'Please upgrade the local sqlfu server'})).toBeVisible();
+  await expect(page.getByText(/Your local backend is running/u)).toContainText('0.0.0');
+  await expect(page.getByText(/npm install -g sqlfu@latest/u)).toBeVisible();
+  await expect(page.getByRole('button', {name: 'Retry connection'})).toBeVisible();
+});
+
+test('shows the upgrade screen when the local backend does not report a version at all', async ({page}) => {
+  await page.route('**/api/rpc/project/status', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        json: {
+          initialized: true,
+          projectRoot: '/tmp/fake',
+        },
+      }),
+    });
+  });
+
+  await page.goto('/');
+
+  await expect(page.getByRole('heading', {name: 'Please upgrade the local sqlfu server'})).toBeVisible();
+  await expect(page.getByText(/does not satisfy/u)).toContainText('>=0.0.2-3');
+  await expect(page.getByText(/pre-dates the version-reporting RPC field/u)).toBeVisible();
+});
+
 test('schema page shows mismatch cards and can run the recommended sqlfu draft command', async ({page, projectDir}) => {
   const migrationsDir = path.join(projectDir, 'migrations');
 

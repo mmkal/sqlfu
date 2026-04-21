@@ -1,6 +1,6 @@
 import CodeBlockWriter from '../../../code-block-writer/index.js';
 import { CamelCaseName, QueryType, TsFieldDescriptor, TsParameterDescriptor } from '../../types.js';
-import { DynamicSqlInfoResult, DynamicSqlInfoResult2, SelectFragmentResult } from '../../mysql-query-analyzer/types.js';
+import { DynamicSqlInfoResult, DynamicSqlInfoResult2, SelectFragmentResult } from '../../shared-analyzer/types.js';
 import { NestedTsDescriptor, RelationType2 } from '../../ts-nested-descriptor.js';
 import {camelCase} from '../../../small-utils.js';
 
@@ -542,4 +542,48 @@ export function writeGroupByFunction(writer: CodeBlockWriter) {
 			})
 			.write(', new Map<Q, T[]>());');
 	});
+}
+
+// sqlfu: moved from codegen/mysql2.ts so codegen/sqlite.ts doesn't have to pull
+// the mysql2 module into the bundle.
+export function writeTypeBlock(
+	writer: CodeBlockWriter,
+	fields: TsFieldDescriptor[],
+	typeName: string,
+	updateCrud: boolean,
+	extraField?: string
+) {
+	const writeBlockCond = fields.length > 0 || extraField != null;
+	if (writeBlockCond) {
+		writer.write(`export type ${typeName} =`).block(() => {
+			fields.forEach((tsField, index) => {
+				if (updateCrud && index % 2 !== 0) {
+					writer.writeLine(`${tsFieldToStr(tsField, true)};`);
+				} else if (!updateCrud) {
+					writer.writeLine(`${tsFieldToStr(tsField, false)};`);
+				}
+			});
+			if (extraField) {
+				writer.write(`${extraField};`);
+			}
+		});
+		writer.blankLine();
+	}
+}
+
+function tsFieldToStr(tsField: TsFieldDescriptor, isCrudUpdate: boolean) {
+	if (isCrudUpdate) {
+		return `${tsField.name}?: ${tsField.tsType}${tsField.notNull === false ? ' | null' : ''}`;
+	}
+	return tsField.name + (tsField.notNull ? ': ' : '?: ') + tsField.tsType;
+}
+
+export function hasDateColumn(columns: TsFieldDescriptor[]) {
+	return columns.some((c) => c.tsType === 'Date');
+}
+
+export function replaceOrderByParam(sql: string) {
+	const patern = /(.*order\s+by\s*)(\?)(.\n$)*/i;
+	const newSql = sql.replace(patern, '$1${buildOrderBy(params.orderBy)}$3');
+	return newSql;
 }

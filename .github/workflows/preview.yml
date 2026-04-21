@@ -31,7 +31,7 @@ jobs:
         run: pnpm --filter sqlfu build
 
       - name: Build UI
-        run: pnpm --filter sqlfu-ui build
+        run: pnpm --filter @sqlfu/ui build
 
       # artifact.ci watches this repo and serves any artifact uploaded here
       # as a previewable static site. This workflow doesn't deploy anywhere

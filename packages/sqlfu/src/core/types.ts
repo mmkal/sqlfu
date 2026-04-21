@@ -81,18 +81,19 @@ export interface SqlRowsPromise<TRow extends ResultRow = ResultRow> extends Prom
 
 export type SqlValue = QueryArg | SqlFragment;
 
-export type SqlfuValidator = 'zod' | 'valibot' | 'zod-mini';
+export type SqlfuValidator = 'arktype' | 'valibot' | 'zod' | 'zod-mini';
 
 export interface SqlfuGenerateConfig {
   /**
    * Emit runtime validation schemas as the source of truth for each generated query's params and result.
    *
    * - `null` / `undefined` / omitted = plain TypeScript types, no runtime validation (the default).
-   * - `'zod'` = generated wrappers declare zod schemas, `.parse()` params on the way in and each row
-   *   on the way out, and types are derived via `z.infer`.
-   * - `'valibot'` = same shape, but with [valibot](https://valibot.dev) (smaller bundle, functional API).
-   * - `'zod-mini'` = same shape as `'zod'`, but imports from `zod/mini` and uses the functional
-   *   `z.parse(Schema, input)` API (smaller bundle than standard zod).
+   * - `'arktype'` = generated wrappers declare [arktype](https://arktype.io) schemas via the
+   *   `type(...)` constructor, validate through Standard Schema, and derive types from `Schema.infer`.
+   * - `'valibot'` = [valibot](https://valibot.dev) schemas (smaller bundle, functional API).
+   * - `'zod'` = [zod](https://zod.dev) schemas with `.parse()` / `.safeParse()` and `z.infer`.
+   * - `'zod-mini'` = same schema primitives as zod, imported from `zod/mini` and called via the
+   *   functional `z.parse(Schema, input)` API (smaller bundle than standard zod).
    */
   readonly validator?: SqlfuValidator | null;
   /**
@@ -103,27 +104,47 @@ export interface SqlfuGenerateConfig {
    * No effect when `validator` is null/undefined (plain TS types never throw validation errors).
    */
   readonly prettyErrors?: boolean;
+  /**
+   * When true, generated wrappers take a `SyncClient` and return values synchronously (no
+   * `async`/`await`, no `Promise<...>` return types). Default false.
+   *
+   * Use this when you know your app always runs against a sync driver (`node:sqlite`,
+   * `better-sqlite3`, `bun:sqlite`). The resulting wrappers are easier to call from
+   * non-async contexts (constructors, non-async callbacks).
+   */
+  readonly sync?: boolean;
+  /**
+   * Extension used in generated `.generated/index.ts` barrel re-exports (`./tables.js` vs
+   * `./tables.ts`). If omitted, sqlfu infers it from the nearest `tsconfig.json`:
+   * `.ts` when `allowImportingTsExtensions` / `rewriteRelativeImportExtensions` is on,
+   * otherwise `.js`.
+   */
+  readonly importExtension?: '.js' | '.ts';
 }
 
 export interface SqlfuConfig {
   readonly db: string;
-  readonly migrations: string;
+  /**
+   * Directory containing migration `.sql` files. Optional — omit if your project doesn't use
+   * migrations (e.g. library-author use cases where definitions.sql alone is the source of truth).
+   */
+  readonly migrations?: string;
   readonly definitions: string;
   readonly queries: string;
-  readonly generatedImportExtension?: '.js' | '.ts';
   readonly generate?: SqlfuGenerateConfig;
 }
 
 export interface SqlfuProjectConfig {
   readonly projectRoot: string;
   readonly db: string;
-  readonly migrations: string;
+  readonly migrations?: string;
   readonly definitions: string;
   readonly queries: string;
-  readonly generatedImportExtension: '.js' | '.ts';
   readonly generate: {
     readonly validator: SqlfuValidator | null;
     readonly prettyErrors: boolean;
+    readonly sync: boolean;
+    readonly importExtension: '.js' | '.ts';
   };
 }
 

@@ -10,7 +10,8 @@
     "verbatimModuleSyntax": false,
     "skipLibCheck": true,
     "declaration": false,
-    "declarationMap": false
+    "declarationMap": false,
+    "sourceMap": false
   },
   "include": [
     "./**/*.ts",
@@ -21,12 +22,6 @@
   ],
   "exclude": [
     "../../../../../node_modules",
-    "../../../dist",
-    "./codegen/pg.ts",
-    "./drivers/libsql.ts",
-    "./drivers/postgres.ts",
-    "./drivers/types.ts",
-    "./postgres-query-analyzer/**/*",
-    "./queryExectutor.ts"
+    "../../../dist"
   ]
 }

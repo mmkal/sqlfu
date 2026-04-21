@@ -29,18 +29,15 @@ importers:
       '@clack/prompts':
         specifier: ^1.2.0
         version: 1.2.0
-      '@noble/hashes':
-        specifier: ^2.2.0
-        version: 2.2.0
       '@orpc/server':
         specifier: ^1.13.13
         version: 1.13.13(@opentelemetry/api@1.9.1)(crossws@0.3.5)(ws@8.20.0)
+      '@sqlfu/ui':
+        specifier: workspace:*
+        version: link:../ui
       trpc-cli:
         specifier: ^0.14.0
         version: 0.14.0(@orpc/server@1.13.13(@opentelemetry/api@1.9.1)(crossws@0.3.5)(ws@8.20.0))(valibot@1.3.1(typescript@5.9.3))(zod@4.3.6)
-      valibot:
-        specifier: ^1.3.1
-        version: 1.3.1(typescript@5.9.3)
       zod:
         specifier: ^4.3.6
         version: 4.3.6
@@ -75,6 +72,9 @@ importers:
       '@typescript/native-preview':
         specifier: ^7.0.0-dev.20260414.1
         version: 7.0.0-dev.20260420.1
+      arktype:
+        specifier: ^2.2.0
+        version: 2.2.0
       better-sqlite3:
         specifier: ^12.8.0
         version: 12.9.0
@@ -114,6 +114,9 @@ importers:
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
+      valibot:
+        specifier: ^1.3.1
+        version: 1.3.1(typescript@5.9.3)
       vite:
         specifier: ^7.1.12
         version: 7.3.2(@types/node@24.12.0)(lightningcss@1.32.0)(sass@1.99.0)(tsx@4.21.0)(yaml@2.8.3)
@@ -198,9 +201,9 @@ importers:
       react-hot-toast:
         specifier: ^2.6.0
         version: 2.6.0(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
-      sqlfu:
-        specifier: workspace:*
-        version: link:../sqlfu
+      semver:
+        specifier: ^7.7.4
+        version: 7.7.4
       tailwind-merge:
         specifier: ^3.5.0
         version: 3.5.0
@@ -223,12 +226,18 @@ importers:
       '@types/react-dom':
         specifier: ^19.2.2
         version: 19.2.3(@types/react@19.2.14)
+      '@types/semver':
+        specifier: ^7.7.0
+        version: 7.7.1
       '@typescript/native-preview':
         specifier: ^7.0.0-dev.20260414.1
         version: 7.0.0-dev.20260420.1
       '@vitejs/plugin-react':
         specifier: ^5.1.0
         version: 5.2.0(vite@7.3.2(@types/node@24.12.0)(lightningcss@1.32.0)(sass@1.99.0)(tsx@4.21.0)(yaml@2.8.3))
+      sqlfu:
+        specifier: workspace:*
+        version: link:../sqlfu
       tsx:
         specifier: ^4.21.0
         version: 4.21.0
@@ -255,6 +264,12 @@ importers:
         version: 0.33.5
 
 packages:
+
+  '@ark/schema@0.56.0':
+    resolution: {integrity: sha512-ECg3hox/6Z/nLajxXqNhgPtNdHWC9zNsDyskwO28WinoFEnWow4IsERNz9AnXRhTZJnYIlAJ4uGn3nlLk65vZA==}
+
+  '@ark/util@0.56.0':
+    resolution: {integrity: sha512-BghfRC8b9pNs3vBoDJhcta0/c1J1rsoS1+HgVUreMFPdhz/CRAKReAu57YEllNaSy98rWAdY1gE+gFup7OXpgA==}
 
   '@astrojs/compiler@2.13.1':
     resolution: {integrity: sha512-f3FN83d2G/v32ipNClRKgYv30onQlMZX1vCeZMjPsMMPl1mDpmbl0+N5BYo4S/ofzqJyS5hvwacEo0CCVDn/Qg==}
@@ -1534,10 +1549,6 @@ packages:
 
   '@neon-rs/load@0.0.4':
     resolution: {integrity: sha512-kTPhdZyTQxB+2wpiRcFWrDcejc4JI6tkPuS7UZCG4l6Zvc5kU/gGQ/ozvHTh1XR5tS+UlfAfGuPajjzQjCiHCw==}
-
-  '@noble/hashes@2.2.0':
-    resolution: {integrity: sha512-IYqDGiTXab6FniAgnSdZwgWbomxpy9FtYvLKs7wCUs2a8RkITG+DFGO1DM9cr+E3/RgADRpFjrKVaJ1z6sjtEg==}
-    engines: {node: '>= 20.19.0'}
 
   '@nodable/entities@1.1.0':
     resolution: {integrity: sha512-bidpxmTBP0pOsxULw6XlxzQpTgrAGLDHGBK/JuWhPDL6ZV0GZ/PmN9CA9do6e+A9lYI6qx6ikJUtJYRxup141g==}
@@ -3012,6 +3023,9 @@ packages:
   '@types/sax@1.2.7':
     resolution: {integrity: sha512-rO73L89PJxeYM3s3pPPjiPgVVcymqU490g0YO5n5By0k2Erzj6tay/4lr1CHAAU4JyOWd1rpQ8bCf6cZfHU96A==}
 
+  '@types/semver@7.7.1':
+    resolution: {integrity: sha512-FmgJfu+MOcQ370SD0ev7EI8TlCAfKYU+B4m5T3yXc1CiRN94g/SZPtsCkk506aUDtlMnFZvasDwHHUcZUEaYuA==}
+
   '@types/tedious@4.0.14':
     resolution: {integrity: sha512-KHPsfX/FoVbUGbyYvk1q9MMQHLPeRZhRJZdO45Q4YjvFkv4hMNghCWTvy7rdKessBsmtz4euWCWAB6/tVpI1Iw==}
 
@@ -3246,6 +3260,12 @@ packages:
   aria-query@5.3.2:
     resolution: {integrity: sha512-COROpnaoap1E2F000S62r6A60uHZnmlvomhfyT2DlTcrY1OrBKn2UhH7qn5wTC9zMvD0AY7csdPSNwKP+7WiQw==}
     engines: {node: '>= 0.4'}
+
+  arkregex@0.0.5:
+    resolution: {integrity: sha512-ncYjBdLlh5/QnVsAA8De16Tc9EqmYM7y/WU9j+236KcyYNUXogpz3sC4ATIZYzzLxwI+0sEOaQLEmLmRleaEXw==}
+
+  arktype@2.2.0:
+    resolution: {integrity: sha512-t54MZ7ti5BhOEvzEkgKnWvqj+UbDfWig+DHr5I34xatymPusKLS0lQpNJd8M6DzmIto2QGszHfNKoFIT8tMCZQ==}
 
   array-iterate@2.0.1:
     resolution: {integrity: sha512-I1jXZMjAgCMmxT4qxXfPXa6SthSoE8h6gkSI9BGGNv8mP8G/v0blc+qFnZu6K42vTOiuME596QaLO0TP3Lk0xg==}
@@ -5759,6 +5779,12 @@ packages:
 
 snapshots:
 
+  '@ark/schema@0.56.0':
+    dependencies:
+      '@ark/util': 0.56.0
+
+  '@ark/util@0.56.0': {}
+
   '@astrojs/compiler@2.13.1': {}
 
   '@astrojs/internal-helpers@0.7.6': {}
@@ -7113,8 +7139,6 @@ snapshots:
       - supports-color
 
   '@neon-rs/load@0.0.4': {}
-
-  '@noble/hashes@2.2.0': {}
 
   '@nodable/entities@1.1.0': {}
 
@@ -8590,6 +8614,8 @@ snapshots:
     dependencies:
       '@types/node': 24.12.0
 
+  '@types/semver@7.7.1': {}
+
   '@types/tedious@4.0.14':
     dependencies:
       '@types/node': 24.12.0
@@ -8836,6 +8862,16 @@ snapshots:
       tslib: 2.8.1
 
   aria-query@5.3.2: {}
+
+  arkregex@0.0.5:
+    dependencies:
+      '@ark/util': 0.56.0
+
+  arktype@2.2.0:
+    dependencies:
+      '@ark/schema': 0.56.0
+      '@ark/util': 0.56.0
+      arkregex: 0.0.5
 
   array-iterate@2.0.1: {}
 

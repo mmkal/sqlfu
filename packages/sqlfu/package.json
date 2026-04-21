@@ -1,6 +1,6 @@
 {
   "name": "sqlfu",
-  "version": "0.0.3-2",
+  "version": "0.0.3-3",
   "description": "sql-first client, migrator, diff engine, typescript generator, formatter, and ui.",
   "repository": {
     "type": "git",

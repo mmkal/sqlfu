@@ -68,6 +68,7 @@ The integration test drives the worker via `tick()`, virtual clock, and asserts:
 
 ## Out of scope for this PR (follow-ups)
 
+- Polymorphic sync/async return types — see `tasks/outbox-polymorphic-sync.md`.
 - oRPC middleware for registering consumers / emitting events from handlers.
 - tracing / OpenTelemetry span-per-job (easy to add via the existing `instrument()` hook on the client).
 - DLQ as a separate queue (today: `status = 'failed'` is the DLQ).

@@ -24,6 +24,16 @@ import {DemoVfs} from './vfs.js';
 export const DEMO_PROJECT_ROOT = '/demo';
 export const DEMO_PROJECT_NAME = 'demo';
 
+// The `await using ...` bundle helper emitted by esbuild/Vite reads the dispose
+// slot as `Symbol.asyncDispose || Symbol.for("Symbol.asyncDispose")`. Using the
+// same expression for the *writer* side (here) guarantees we always land the
+// method under the key the reader is looking for — otherwise a mismatch between
+// native and polyfilled symbols anywhere in the runtime surfaces as the cryptic
+// "Object not disposable" TypeError we saw on iOS.
+const ASYNC_DISPOSE: symbol =
+  (Symbol as unknown as {asyncDispose?: symbol}).asyncDispose ?? Symbol.for('Symbol.asyncDispose');
+const DISPOSE: symbol = (Symbol as unknown as {dispose?: symbol}).dispose ?? Symbol.for('Symbol.dispose');
+
 function fallbackUuid() {
   const bytes = new Uint8Array(16);
   crypto.getRandomValues(bytes);
@@ -57,19 +67,24 @@ export async function createBrowserHost(input: {
   const catalog = createBrowserCatalog(vfs, database);
   const host: SqlfuHost = {
     fs,
-    openDb: async () => ({
-      client: liveClient,
-      async [Symbol.asyncDispose]() {},
-    }),
+    openDb: async () =>
+      ({
+        client: liveClient,
+        [DISPOSE]() {},
+        async [ASYNC_DISPOSE]() {},
+      }) as unknown as DisposableAsyncClient,
     openScratchDb: async () => {
       const scratchDatabase = await openWasmDatabase();
       const scratchClient = createSqliteWasmClient(scratchDatabase);
       return {
         client: scratchClient,
-        async [Symbol.asyncDispose]() {
+        [DISPOSE]() {
           scratchDatabase.close();
         },
-      } satisfies DisposableAsyncClient;
+        async [ASYNC_DISPOSE]() {
+          scratchDatabase.close();
+        },
+      } as unknown as DisposableAsyncClient;
     },
     execAdHocSql: async (client, sqlText, params): Promise<AdHocSqlResult> => {
       const db = client.driver as Database;

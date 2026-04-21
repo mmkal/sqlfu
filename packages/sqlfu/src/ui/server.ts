@@ -218,13 +218,29 @@ async function ensureProjectConfig(input: {
   templateRoot: string;
 }) {
   const projectRoot = path.join(input.projectsRoot, input.projectName);
-  await ensureProjectFiles({
-    projectRoot,
-    projectsRoot: input.projectsRoot,
-    templateRoot: input.templateRoot,
+  // Concurrent first-request callers for the same project must share a single
+  // initialization or they race the template copy and the seed insert —
+  // a second caller that arrives between `fs.cp` starting and the seed
+  // finishing otherwise sees a half-populated project.
+  await dedupeInit(projectRoot, async () => {
+    await ensureProjectFiles({
+      projectRoot,
+      projectsRoot: input.projectsRoot,
+      templateRoot: input.templateRoot,
+    });
+    await ensureDatabase(input.host, projectRoot);
   });
-  await ensureDatabase(input.host, projectRoot);
   return await loadProjectStateFrom(projectRoot);
+}
+
+const projectInitLocks = new Map<string, Promise<void>>();
+
+function dedupeInit(key: string, fn: () => Promise<void>) {
+  const existing = projectInitLocks.get(key);
+  if (existing) return existing;
+  const pending = fn().finally(() => projectInitLocks.delete(key));
+  projectInitLocks.set(key, pending);
+  return pending;
 }
 
 async function ensureProjectFiles(input: {projectRoot: string; projectsRoot: string; templateRoot: string}) {

@@ -23,7 +23,10 @@ export type QueryCatalogEntry =
       readonly id: string;
       readonly sqlFile: string;
       readonly functionName: string;
+      /** Runtime-ready SQL with `?` placeholders; this is what the driver executes. */
       readonly sql: string;
+      /** Original `.sql` file contents (preserves named `:param` placeholders); shown in the UI. */
+      readonly sqlFileContent: string;
       readonly queryType: 'Select' | 'Insert' | 'Update' | 'Delete' | 'Copy';
       readonly multipleRowsResult: boolean;
       readonly resultMode: 'many' | 'nullableOne' | 'one' | 'metadata';
@@ -39,6 +42,7 @@ export type QueryCatalogEntry =
       readonly sqlFile: string;
       readonly functionName: string;
       readonly sql: string;
+      readonly sqlFileContent: string;
       readonly error: {
         readonly name: string;
         readonly description: string;

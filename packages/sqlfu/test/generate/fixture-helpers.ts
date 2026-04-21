@@ -193,3 +193,63 @@ async function applyDefinitionsToDatabase(dbPath: string, definitionsSql: string
     database.close();
   }
 }
+
+/**
+ * Rewrite the `output` block of the named test in `fixturePath`, replacing the body of each
+ * `(path)`-tagged fence with the corresponding actual from `outputs`. Leaves fences whose path
+ * isn't in `outputs` untouched, so the caller can skip (e.g.) JSON fixtures that rely on
+ * partial matching.
+ */
+export function updateFixtureOutputs(
+  fixturePath: string,
+  testName: string,
+  outputs: Record<string, string>,
+): void {
+  const contents = fs.readFileSync(fixturePath, 'utf8');
+  const updated = rewriteTestOutputs(contents, testName, outputs);
+  if (updated !== contents) {
+    fs.writeFileSync(fixturePath, updated);
+  }
+}
+
+function rewriteTestOutputs(
+  contents: string,
+  testName: string,
+  outputs: Record<string, string>,
+): string {
+  const headings = [...contents.matchAll(/^##[ \t]+(.+?)[ \t]*$/gm)];
+  const target = headings.findIndex((heading) => heading[1].trim() === testName);
+  if (target < 0) {
+    throw new Error(`Test section "${testName}" not found in fixture`);
+  }
+
+  const sectionStart = headings[target].index!;
+  const sectionEnd = headings[target + 1]?.index ?? contents.length;
+  const rewrittenSection = rewriteOutputBlock(contents.slice(sectionStart, sectionEnd), outputs);
+
+  return contents.slice(0, sectionStart) + rewrittenSection + contents.slice(sectionEnd);
+}
+
+function rewriteOutputBlock(section: string, outputs: Record<string, string>): string {
+  return section.replace(
+    /(<details>\s*<summary>output<\/summary>)([\s\S]*?)(<\/details>)/,
+    (_match, open: string, inner: string, close: string) => `${open}${rewriteFences(inner, outputs)}${close}`,
+  );
+}
+
+function rewriteFences(inner: string, outputs: Record<string, string>): string {
+  return inner.replace(
+    /(^```[\w-]+[ \t]*\(([^)]+)\)[ \t]*\n)([\s\S]*?)(^```[ \t]*$)/gm,
+    (match, openFence: string, rawPath: string, _oldContent: string, closeFence: string) => {
+      const filePath = rawPath.trim();
+      const actual = outputs[filePath];
+      if (actual === undefined) {
+        return match;
+      }
+      // `actual` is the raw file content (ends with \n because generate writes trailing
+      // newlines), so concatenating it between the open-fence line and the ``` close-fence
+      // line produces a well-formed block.
+      return `${openFence}${actual}${closeFence}`;
+    },
+  );
+}

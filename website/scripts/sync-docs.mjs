@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
+import dedent from 'dedent';
 
 const websiteRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const repoRoot = path.resolve(websiteRoot, '..');
@@ -154,23 +155,24 @@ async function writeExamplesOverview(overviewEntries) {
     '',
   ].join('\n');
 
-  const body = [
-    'These pages are snapshot fixtures from `packages/sqlfu/test/generate/fixtures/`. Each `##`',
-    'heading you\'ll find inside is a real test: the test harness parses the same markdown,',
-    'runs `sqlfu generate` against the declared inputs, and asserts the outputs match what\'s',
-    'shown. That means every TypeScript file under an **output** block on these pages is',
-    'exactly what you\'d find in your checkout after running the CLI — there is no drift.',
-    '',
-    'Start here if you want to see what `sqlfu generate` produces for a given schema shape,',
-    'query style, or config knob, before you try it in your own project.',
-    '',
-    '## Pages',
-    '',
-    ...overviewEntries.map(
-      ({slug, title, description}) => `- **[${title}](/docs/examples/${slug})** — ${description}`,
-    ),
-    '',
-  ].join('\n');
+  const pageLinks = overviewEntries
+    .map(({slug, title, description}) => `- **[${title}](/docs/examples/${slug})** — ${description}`)
+    .join('\n');
+
+  const body = dedent`
+    These pages are snapshot fixtures from \`packages/sqlfu/test/generate/fixtures/\`. Each \`##\`
+    heading you'll find inside is a real test: the test harness parses the same markdown,
+    runs \`sqlfu generate\` against the declared inputs, and asserts the outputs match what's
+    shown. That means every TypeScript file under an **output** block on these pages is
+    exactly what you'd find in your checkout after running the CLI — there is no drift.
+
+    Start here if you want to see what \`sqlfu generate\` produces for a given schema shape,
+    query style, or config knob, before you try it in your own project.
+
+    ## Pages
+
+    ${pageLinks}
+  ` + '\n';
 
   await fs.writeFile(path.join(contentDocsDir, 'examples.md'), frontmatter + body);
 }

@@ -17,8 +17,9 @@ It is built around a simple idea: SQL should be the source language for schema, 
   - [Diff Engine](#diff-engine)
   - [Type Generator](#type-generator)
   - [Formatter](#formatter)
+  - [Observability](#observability)
   - [UI](#ui)
-  - [Agent skill](#agent-skill)
+  - [Agent Skill](#agent-skill)
 - [Quick Start](#quick-start)
   - [Install](#install)
   - [Minimal Setup](#minimal-setup)
@@ -156,7 +157,7 @@ No peer dependencies on OpenTelemetry or Sentry. `TracerLike` is structural; hoo
 
 `sqlfu` also has a UI package for working with the project interactively. It sits on top of the same SQL-first model rather than inventing a separate one.
 
-### Agent skill
+### Agent Skill
 
 `sqlfu` ships an agent skill at [`skills/using-sqlfu`](../../skills/using-sqlfu/SKILL.md). It teaches an agent the project's source-of-truth files, the schema-change workflow, the query workflow, and the command reference, so an agent dropped into a sqlfu repo does not hand-author migrations or invent old config field names.
 
@@ -299,7 +300,7 @@ Then start the local backend:
 npx sqlfu
 ```
 
-That starts the UI backend on `localhost:56081`. Open `https://local.sqlfu.dev` in your browser.
+That starts the UI backend on `localhost:56081`. Open `https://sqlfu.dev/ui` in your browser.
 
 If you ever need to avoid a local port conflict, `sqlfu serve --port <port>` overrides the default. Most users should never need this.
 
@@ -387,7 +388,7 @@ Current limits also matter:
 - [prettier-plugin-sql-cst](https://github.com/nene/prettier-plugin-sql-cst) by Rene Saarsoo (MIT). The target output shape for `formatSql()` draws on this project's style, and a large set of its upstream tests are imported into sqlfu's formatter fixtures under [`test/formatter/generated-prettier-plugin-sql-cst-*.fixture.sql`](./test/formatter/).
 - [antlr4](https://github.com/antlr/antlr4) JavaScript runtime (BSD-3-Clause). Vendored under [`src/vendor/antlr4`](./src/vendor/antlr4) so TypeSQL's parser can run without loading from `node_modules`.
 - [code-block-writer](https://github.com/dsherret/code-block-writer) by David Sherret (MIT). Vendored under [`src/vendor/code-block-writer`](./src/vendor/code-block-writer) and used by TypeSQL's code generator.
-- [Drizzle](https://orm.drizzle.team/). The [`local.drizzle.studio`](https://local.drizzle.studio/) product model - hosted UI shell talking to a local backend via a permissioned localhost API - is the direct inspiration for `local.sqlfu.dev` and the shape of the sqlfu UI package. More generally, Drizzle raised the bar for what modern SQL-oriented tooling should feel like, and sqlfu is trying to meet that bar for a different slice of the workflow.
+- [Drizzle](https://orm.drizzle.team/). The [`local.drizzle.studio`](https://local.drizzle.studio/) product model - hosted UI shell talking to a local backend via a permissioned localhost API - is the direct inspiration for `sqlfu.dev/ui` and the shape of the sqlfu UI package. More generally, Drizzle raised the bar for what modern SQL-oriented tooling should feel like, and sqlfu is trying to meet that bar for a different slice of the workflow.
 - [`@pgkit/schemainspect`](https://github.com/mmkal/pgkit/tree/main/packages/schemainspect) and [`@pgkit/migra`](https://github.com/mmkal/pgkit/tree/main/packages/migra). The sqlfu schemadiff engine under [`src/schemadiff`](./src/schemadiff) is structurally inspired by these libraries: materialize both schemas into scratch databases, inspect them into a typed model, diff the inspected models, and emit an ordered statement plan. The SQLite-specific implementation does not copy their code, but the shape is taken from them. See [`src/schemadiff/CLAUDE.md`](./src/schemadiff/CLAUDE.md) for more detail.
 - [`djrobstep/schemainspect`](https://github.com/djrobstep/schemainspect) and [`djrobstep/migra`](https://github.com/djrobstep/migra) by Robert Lechte. These are the Python originals that the `@pgkit/*` packages ported to TypeScript, and therefore the upstream lineage of the sqlfu diff engine.
 - [pgkit](https://github.com/mmkal/pgkit) (same author). pgkit is sqlfu's Postgres-focused prior art. A lot of the mental model for sqlfu - "SQL as the authored source, generated types next to queries, schema-diff-driven migrations, a web UI that sits on the real client" - comes from trying that approach in pgkit first. sqlfu is the SQLite-first version of that idea, with the goal of eventually growing back to Postgres.

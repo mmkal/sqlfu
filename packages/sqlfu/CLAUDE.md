@@ -7,7 +7,7 @@
 ```jsonc
 "build": "pnpm run build:internal-queries && pnpm run build:runtime && pnpm run build:vendor-typesql && pnpm run build:bundle-vendor",
 "build:runtime": "tsgo -p tsconfig.build.json",
-"build:vendor-typesql": "rm -rf dist/vendor/antlr4 dist/vendor/code-block-writer dist/vendor/typesql dist/vendor/typesql-parser && tsgo -p src/vendor/typesql/tsconfig.json",
+"build:vendor-typesql": "rm -rf dist/vendor/code-block-writer dist/vendor/sqlfu-sqlite-parser dist/vendor/typesql && tsgo -p src/vendor/typesql/tsconfig.json",
 "build:bundle-vendor": "tsx scripts/bundle-vendor.ts",
 ```
 
@@ -16,22 +16,22 @@
 ### Why two configs
 
 - `tsconfig.build.json` compiles our real code plus the vendored `sql-formatter` (91 files) and `standard-schema`. Strict mode is on. `sql-formatter` files carry `@ts-nocheck` per file; the other vendored trees don't.
-- `src/vendor/typesql/tsconfig.json` compiles the vendored TypeSQL + TypeSQL-parser + `code-block-writer` + the ANTLR4 web-bundle (`.js`). It sets `noCheck: true`, `strict: false`, `allowJs: true`, `declaration: false`, and `declarationMap: false`. These codebases have real type errors upstream and emit enormous `.d.ts` files that nobody imports.
+- `src/vendor/typesql/tsconfig.json` compiles the vendored TypeSQL + `code-block-writer`. It sets `noCheck: true`, `strict: false`, `allowJs: true`, `declaration: false`, and `declarationMap: false`. These codebases have real type errors upstream and emit enormous `.d.ts` files that nobody imports. (Pre-`drop-antlr` this config also pulled in the vendored `typesql-parser/` + `antlr4/` web-bundle; those trees are gone — see `tasks/complete/2026-04-20-drop-antlr.md`.)
 
 ### What kills each "collapse" attempt
 
 - **Naive merge into one `tsconfig.build.json` with `noCheck: true`.** `noCheck: true` distorts inferred types in our own code — `src/api.ts`'s `getSchemaAuthorities` return type loses `string | null` fields (observed 2026-04-20 during the collapse investigation). Anything consuming `dist/api.d.ts` gets a subtly different public surface.
 - **Merge without `noCheck: true`.** The vendored typesql tree fails type-checking (dozens of `getText`/`ParserRuleContext` errors) the moment it's pulled into the main `tsc` run, because it expects the looser `strict: false, noImplicitAny: false` settings.
-- **`tsc -b` composite projects.** Composite projects are not allowed to set `declaration: false` (`TS6304`). Turning declaration on under the vendor config brings back the ~128 unwanted `.d.ts` + `.d.ts.map` files (~2.1 MB uncompressed) that the second step is specifically trying to avoid. You end up needing a post-build `find dist/vendor/{antlr4,code-block-writer,typesql,typesql-parser} -name '*.d.ts*' -delete` which is just a more awkward form of the current `rm -rf`, and you also inherit `.tsbuildinfo` files that need excluding from pack.
+- **`tsc -b` composite projects.** Composite projects are not allowed to set `declaration: false` (`TS6304`). Turning declaration on under the vendor config brings back the unwanted `.d.ts` + `.d.ts.map` files that the second step is specifically trying to avoid. You end up needing a post-build `find dist/vendor/{code-block-writer,typesql} -name '*.d.ts*' -delete` which is just a more awkward form of the current `rm -rf`, and you also inherit `.tsbuildinfo` files that need excluding from pack.
 - **Bundler-based builders (tsdown, tsup).** Paradigm mismatch. Our consumers read individual files under `dist/` (tests via `packageRoot + '/dist/cli.js'`, `publishConfig.exports` mapping each entry separately, `ensureBuilt()` calling `node dist/cli.js`). Unbundle mode exists but still emits `.mjs`/`.d.mts` by default and still produces `.d.mts` files for the vendor tree. The work to rewrite extensions, exports, and `ensureBuilt()` paths for a build we're not fundamentally unhappy with is a negative ROI.
 
-### What `rm -rf dist/vendor/{antlr4,code-block-writer,typesql,typesql-parser}` is actually for
+### What `rm -rf dist/vendor/{code-block-writer,typesql}` is actually for
 
-Not for the merge story — it's orthogonal. It's a **pre-step cleanup** so that obsolete files from a previous build (stale output of renamed/deleted sources in the vendor tree) don't linger in `dist/`. The four directories listed are exactly the ones owned by `build:vendor-typesql` and not by `build:runtime`, so there's no overlap between those two build steps; neither one clobbers the other. The third step (`build:bundle-vendor`) runs after and collapses the typesql + sql-formatter output into a few minified bundles (see below).
+Not for the merge story — it's orthogonal. It's a **pre-step cleanup** so that obsolete files from a previous build (stale output of renamed/deleted sources in the vendor tree) don't linger in `dist/`. The two directories listed are exactly the ones owned by `build:vendor-typesql` and not by `build:runtime`, so there's no overlap between those two build steps; neither one clobbers the other. The third step (`build:bundle-vendor`) runs after and collapses the typesql + sql-formatter output into a few minified bundles (see below).
 
 ## `build:bundle-vendor` — what it does and why
 
-`scripts/bundle-vendor.ts` runs esbuild over `dist/vendor/typesql` and `dist/vendor/sql-formatter` after the tsgo steps have produced unbundled per-file output. It replaces those subtrees with small minified bundles and then deletes the now-orphaned files. Without this step the published tarball is ~18 MB unpacked (dominated by ANTLR parse tables and 20 sql-formatter dialects the sqlite-only runtime never reaches); with it, it's ~1 MB.
+`scripts/bundle-vendor.ts` runs esbuild over `dist/vendor/typesql` and `dist/vendor/sql-formatter` after the tsgo steps have produced unbundled per-file output. It replaces those subtrees with small minified bundles and then deletes the now-orphaned files. Without this step the published tarball is ~2 MB unpacked (dominated by the 20 sql-formatter dialects the sqlite-only runtime never reaches); with it, it's well under 1 MB.
 
 Three things to know before changing it:
 

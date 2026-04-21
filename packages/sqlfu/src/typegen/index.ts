@@ -36,18 +36,9 @@ export async function generateQueryTypesForConfig(config: SqlfuProjectConfig): P
   const schema = await loadSchema(databasePath);
   const queryFiles = await loadQueryFiles(config.queries);
 
-  // Partition into DDL vs queries that go through typesql. The vendored typesql dispatcher
-  // (sqlite-query-analyzer/traverse.ts `traverse_Sql_stmtContext`) throws `traverse_Sql_stmtContext`
-  // for every statement kind except select/insert/update/delete, so `create table`, `drop`,
-  // `pragma`, etc. all fail analysis. Rather than teach the analyzer a new `queryType: 'Ddl'`
-  // (that would propagate through the whole typesql pipeline + its downstream consumers), we
-  // detect DDL at the wrapper layer and emit a trivial `client.run(sql)` wrapper directly.
-  // Tracked for a proper fix in typesql-ddl-support (filed alongside this change).
-  const ddlFiles = queryFiles.filter((file) => isDdlStatement(file.sqlContent));
-  const nonDdlFiles = queryFiles.filter((file) => !ddlFiles.includes(file));
   const queryAnalyses = await analyzeVendoredTypesqlQueries(
     databasePath,
-    nonDdlFiles.map((query) => ({
+    queryFiles.map((query) => ({
       sqlPath: query.sqlPath,
       sqlContent: query.sqlContent,
     })),
@@ -61,7 +52,21 @@ export async function generateQueryTypesForConfig(config: SqlfuProjectConfig): P
       const wrapperPath = path.join(generatedDir, `${queryFile.relativePath}.sql.ts`);
       await fs.mkdir(path.dirname(wrapperPath), {recursive: true});
 
-      if (ddlFiles.includes(queryFile)) {
+      const analysis = queryAnalyses.find((query) => query.sqlPath === queryFile.sqlPath);
+      if (!analysis) {
+        throw new Error(`Missing vendored TypeSQL analysis for ${queryFile.sqlPath}`);
+      }
+
+      if (!analysis.ok) {
+        await fs.writeFile(wrapperPath, `//Invalid SQL\nexport {};\n`);
+        return;
+      }
+
+      // DDL / connection-control statements (create/drop/alter/pragma/vacuum/begin/...) get a
+      // trivial wrapper that just runs the SQL — no params, no result columns. The vendored
+      // typesql analyzer tags these as `queryType: 'Ddl'`; see the divergence note in
+      // src/vendor/typesql/CLAUDE.md.
+      if (analysis.descriptor.queryType === 'Ddl') {
         await fs.writeFile(
           wrapperPath,
           renderDdlWrapper({
@@ -73,46 +78,23 @@ export async function generateQueryTypesForConfig(config: SqlfuProjectConfig): P
         return;
       }
 
-      const analysis = queryAnalyses.find((query) => query.sqlPath === queryFile.sqlPath);
-      if (!analysis) {
-        throw new Error(`Missing vendored TypeSQL analysis for ${queryFile.sqlPath}`);
-      }
-
-      const contents = analysis.ok
-        ? renderQueryWrapper({
-            relativePath: queryFile.relativePath,
-            descriptor: refineDescriptor(analysis.descriptor, queryFile.sqlContent, schema),
-            validator: config.generate.validator,
-            prettyErrors: config.generate.prettyErrors,
-            sync: config.generate.sync,
-          })
-        : `//Invalid SQL\nexport {};\n`;
+      const contents = renderQueryWrapper({
+        relativePath: queryFile.relativePath,
+        descriptor: refineDescriptor(analysis.descriptor, queryFile.sqlContent, schema),
+        validator: config.generate.validator,
+        prettyErrors: config.generate.prettyErrors,
+        sync: config.generate.sync,
+      });
       await fs.writeFile(wrapperPath, contents);
     }),
   );
 
   await writeTablesFile(generatedDir, schema);
   await writeGeneratedBarrel(generatedDir, queryFiles, config.generate.importExtension);
-  await writeQueryCatalog(config, queryFiles, queryAnalyses, ddlFiles, schema);
+  await writeQueryCatalog(config, queryFiles, queryAnalyses, schema);
   if (config.migrations) {
     await writeMigrationsBundle(config);
   }
-}
-
-/**
- * True for files whose SQL is a top-level DDL / connection-control statement that typesql can't
- * meaningfully analyze for params or result columns. We generate a dead-simple `client.run(sql)`
- * wrapper for these instead of falling back to `//Invalid SQL`.
- *
- * The match is intentionally conservative — queries that *look* like DDL but return rows
- * (e.g. `create table ... returning`) aren't really SQLite; sticking to the leading keyword
- * keeps this simple and predictable.
- */
-function isDdlStatement(sqlContent: string): boolean {
-  const stripped = sqlContent.replace(/\/\*[\s\S]*?\*\//g, '').replace(/--.*$/gm, '').trim();
-  return /^(create|drop|alter|pragma|vacuum|reindex|analyze|attach|detach|begin|commit|rollback|savepoint|release)\b/i.test(
-    stripped,
-  );
 }
 
 function renderDdlWrapper(input: {relativePath: string; sql: string; sync: boolean}): string {
@@ -204,7 +186,7 @@ type GeneratedField = {
 
 type GeneratedQueryDescriptor = {
   readonly sql: string;
-  readonly queryType: 'Select' | 'Insert' | 'Update' | 'Delete' | 'Copy';
+  readonly queryType: 'Select' | 'Insert' | 'Update' | 'Delete' | 'Copy' | 'Ddl';
   readonly returning?: true;
   readonly multipleRowsResult: boolean;
   readonly columns: readonly GeneratedField[];
@@ -435,15 +417,12 @@ async function writeQueryCatalog(
   config: SqlfuProjectConfig,
   queryFiles: readonly QueryFile[],
   queryAnalyses: Awaited<ReturnType<typeof analyzeVendoredTypesqlQueries>>,
-  ddlFiles: readonly QueryFile[],
   schema: ReadonlyMap<string, RelationInfo>,
 ): Promise<void> {
   // DDL statements (e.g. `create table if not exists`) get trivial wrappers but have no
   // params / result columns / json schema — nothing to populate a form with. Leaving them out
   // of the catalog keeps UI consumers from rendering a meaningless "run" button for each one.
-  const entries: QueryCatalogEntry[] = queryFiles
-    .filter((queryFile) => !ddlFiles.includes(queryFile))
-    .map((queryFile) => {
+  const entries: QueryCatalogEntry[] = queryFiles.flatMap<QueryCatalogEntry>((queryFile) => {
     const analysis = queryAnalyses.find((query) => query.sqlPath === queryFile.sqlPath);
     if (!analysis) {
       throw new Error(`Missing vendored TypeSQL analysis for ${queryFile.sqlPath}`);
@@ -451,16 +430,23 @@ async function writeQueryCatalog(
 
     const functionName = toCamelCase(queryFile.relativePath);
     const id = queryFile.relativePath;
+    const sqlFile = path.relative(config.projectRoot, queryFile.sqlPath).split(path.sep).join('/');
 
     if (!analysis.ok) {
-      return {
+      const errorEntry: QueryCatalogEntry = {
         kind: 'error',
         id,
-        sqlFile: path.relative(config.projectRoot, queryFile.sqlPath).split(path.sep).join('/'),
+        sqlFile,
         functionName,
         sql: queryFile.sqlContent,
+        sqlFileContent: queryFile.sqlContent,
         error: analysis.error,
       };
+      return [errorEntry];
+    }
+
+    if (analysis.descriptor.queryType === 'Ddl') {
+      return [];
     }
 
     const descriptor = refineDescriptor(analysis.descriptor, queryFile.sqlContent, schema);
@@ -470,13 +456,14 @@ async function writeQueryCatalog(
       ...descriptor.parameters.map((field) => toCatalogArgument('params', field)),
     ];
 
-    return {
+    const queryEntry: QueryCatalogEntry = {
       kind: 'query',
       id,
-      sqlFile: path.relative(config.projectRoot, queryFile.sqlPath).split(path.sep).join('/'),
+      sqlFile,
       functionName,
       sql: descriptor.sql,
-      queryType: descriptor.queryType,
+      sqlFileContent: queryFile.sqlContent,
+      queryType: descriptor.queryType as Exclude<GeneratedQueryDescriptor['queryType'], 'Ddl'>,
       multipleRowsResult: descriptor.multipleRowsResult,
       resultMode: getResultMode(descriptor),
       args,
@@ -487,6 +474,7 @@ async function writeQueryCatalog(
       resultSchema: objectSchema(`${functionName} result`, getResultFields(descriptor), {fieldKind: 'result'}),
       columns,
     };
+    return [queryEntry];
   });
 
   const catalog: QueryCatalog = {
@@ -1288,6 +1276,12 @@ function getResultFields(descriptor: GeneratedQueryDescriptor): readonly Generat
       {name: 'rowsAffected', tsType: 'number', notNull: true},
       {name: 'lastInsertRowid', tsType: 'number', notNull: true},
     ];
+  }
+  // DDL / connection-control statements don't return rows and we don't synthesize
+  // the insert/update-style `rowsAffected` metadata row for them either — there's
+  // nothing meaningful to report for a `create table` or `pragma`.
+  if (descriptor.queryType === 'Ddl') {
+    return [];
   }
   return [{name: 'rowsAffected', tsType: 'number', notNull: true}];
 }

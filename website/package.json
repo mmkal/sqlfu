@@ -4,14 +4,15 @@
   "type": "module",
   "scripts": {
     "prebuild": "node scripts/sync-docs.mjs",
-    "build": "astro build && node scripts/make-portable.mjs",
+    "build": "astro build && node scripts/make-portable.mjs && node scripts/sync-ui.mjs",
     "dev": "node scripts/sync-docs.mjs && astro dev",
     "preview": "astro preview",
     "astro": "astro"
   },
-  "dependencies": {
+  "devDependencies": {
     "@astrojs/starlight": "^0.37.0",
     "astro": "^5.5.0",
+    "dedent": "^1.7.2",
     "sharp": "^0.33.5"
   }
 }

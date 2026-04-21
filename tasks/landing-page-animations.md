@@ -1,5 +1,7 @@
+---
 status: ready
 size: medium
+---
 
 # Landing-page animations
 

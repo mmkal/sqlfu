@@ -47,7 +47,7 @@ import {
 import {AppToaster} from './components/ui/toaster.js';
 import {resolveApiOrigin, resolveApiRpcUrl} from './runtime.js';
 import {checkServerVersion, classifyStartupError, type StartupFailure} from './startup-error.js';
-import {DEMO_URL, LOCAL_URL, createDemoClient, isDemoMode} from './demo/index.js';
+import {DEMO_URL, HOSTED_URL, createDemoClient, isDemoMode} from './demo/index.js';
 import {initThemeOnLoad, useThemePreference} from './theme.js';
 import './styles.css';
 
@@ -387,7 +387,7 @@ function StartupFailureScreen(input: {error: unknown}) {
               <>
                 <h2>Why am I seeing this?</h2>
                 <p>
-                  The hosted UI on <code>local.sqlfu.dev</code> tracks the latest sqlfu release. When your local
+                  The hosted UI on <code>sqlfu.dev/ui</code> tracks the latest sqlfu release. When your local
                   backend falls outside <code>{startupError.supportedRange}</code>, the RPC contracts do not line up
                   and the UI would otherwise surface cryptic 4xx or 5xx errors.
                 </p>
@@ -1244,6 +1244,7 @@ function SqlRunnerPanel(input: {relations: readonly StudioRelation[]}) {
       sqlEditorRelations={input.relations}
       sqlEditorDiagnostics={analysisQuery.data?.diagnostics}
       sqlEditorOnExecute={() => runMutation.mutate({sql: draft.sql, params: sanitizedParams})}
+      sqlEditorOnSave={() => handleSave()}
       paramsSchema={omitSchemaTitle(detectedParamsSchema)}
       paramsData={sanitizedParams}
       onSqlChange={(sql) => setDraft({...draft, sql})}
@@ -1275,7 +1276,7 @@ function QueryPanel(input: {entry: QueryCatalogEntry; relations: readonly Studio
     defaultValue: entry.id,
   });
   const [sqlDraft, setSqlDraft] = useLocalStorageState(`sqlfu-ui/query-sql/${entry.id}`, {
-    defaultValue: entry.sql,
+    defaultValue: entry.sqlFileContent,
   });
   const [renameMode, setRenameMode] = useLocalStorageState(`sqlfu-ui/query-rename-mode/${entry.id}`, {
     defaultValue: false,
@@ -1361,7 +1362,7 @@ function QueryPanel(input: {entry: QueryCatalogEntry; relations: readonly Studio
           </>
         ) : undefined
       }
-      sql={sqlEditMode ? sqlDraft : entry.sql}
+      sql={sqlEditMode ? sqlDraft : entry.sqlFileContent}
       paramsSchema={entry.kind === 'query' ? buildExecutionSchema(entry) : undefined}
       paramsData={undefined}
       sqlEditorRelations={input.relations}
@@ -1394,7 +1395,7 @@ function QueryPanel(input: {entry: QueryCatalogEntry; relations: readonly Studio
               className="button"
               type="button"
               onClick={() => {
-                setSqlDraft(entry.sql);
+                setSqlDraft(entry.sqlFileContent);
                 setSqlEditMode(false);
               }}
             >
@@ -1440,7 +1441,7 @@ function QueryPanel(input: {entry: QueryCatalogEntry; relations: readonly Studio
       emptyMessage={
         entry.kind === 'query' ? 'Submit form data to execute the query.' : 'Edit the SQL to repair this saved query.'
       }
-      runLabel="Run generated query"
+      runLabel="Run query"
       paramsCardTitle="Params"
     />
   );
@@ -1456,6 +1457,7 @@ function QueryWorkbench(input: {
   sqlEditorRelations?: readonly StudioRelation[];
   sqlEditorDiagnostics?: readonly SqlEditorDiagnostic[];
   sqlEditorOnExecute?: (value: string) => void;
+  sqlEditorOnSave?: (value: string) => void;
   paramsSchema?: RJSFSchema;
   paramsData?: Record<string, unknown>;
   readonlyMeta?: ReactNode;
@@ -1503,13 +1505,20 @@ function QueryWorkbench(input: {
                   relations={input.sqlEditorRelations ?? []}
                   diagnostics={input.sqlEditorDiagnostics}
                   onExecute={input.sqlEditorOnExecute}
+                  onSave={input.sqlEditorOnSave}
                   onChange={(value) => input.onSqlChange?.(value)}
                 />
               </label>
               {input.sqlEditorActions}
             </div>
           ) : (
-            <pre className="code-block">{input.sql}</pre>
+            <SqlCodeMirror
+              value={input.sql}
+              ariaLabel={input.sqlEditorLabel ?? 'Saved query SQL'}
+              relations={input.sqlEditorRelations ?? []}
+              readOnly
+              onChange={() => {}}
+            />
           )}
         </section>
 
@@ -2087,8 +2096,8 @@ function ModeBanner() {
     <div className="mode-banner demo">
       <strong>Demo mode</strong>
       <span>In-browser SQLite. Nothing is saved. Refresh to reset.</span>
-      <a className="mode-banner-link" href={LOCAL_URL}>
-        Back to local.sqlfu.dev
+      <a className="mode-banner-link" href={HOSTED_URL}>
+        Back to sqlfu.dev/ui
       </a>
     </div>
   );

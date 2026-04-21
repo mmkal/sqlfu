@@ -1,4 +1,4 @@
-# `local.sqlfu.dev` explainer
+# `sqlfu.dev/ui` explainer
 
 This package is the browser client for sqlfu. The intended product model is inspired by `local.drizzle.studio`, but there are two different modes in this repo and it is easy to confuse them.
 
@@ -6,7 +6,7 @@ This package is the browser client for sqlfu. The intended product model is insp
 
 The real target architecture is:
 
-- a hosted UI shell at `https://local.sqlfu.dev`
+- a hosted UI shell at `https://sqlfu.dev/ui`
 - a local sqlfu backend started by the user, typically via `npx sqlfu`
 - the hosted UI talks from that public HTTPS origin back to the user's localhost sqlfu backend
 
@@ -16,7 +16,9 @@ That is the same basic idea as `https://local.drizzle.studio`:
 2. that website's frontend JS talks to a local server on the user's machine
 3. the local server talks to the user's database and files
 
-Important: this is not a DNS trick where `local.sqlfu.dev` resolves to `127.0.0.1`. The browser loads a real hosted site first. The "local" part is the follow-up API traffic from the hosted frontend to the localhost backend.
+The hosted UI lives under the `/ui` path on the same origin as the marketing + docs site (`sqlfu.dev`). Putting everything on one origin avoids the HTTP/2 / HTTP/3 connection-coalescing bug that the previous `local.sqlfu.dev` sibling subdomain triggered — see `tasks/complete/*retire-local-subdomain*.md` (filename varies with landing date) for the history.
+
+Important: the `/ui` part is not a DNS trick. The browser loads real hosted HTML at `https://sqlfu.dev/ui/`. The "local" part is the follow-up API traffic from the hosted frontend to the localhost backend.
 
 ## Why this needs special handling
 
@@ -47,9 +49,9 @@ It starts one integrated local server that serves:
 
 This is the general-purpose harness for normal UI development and most UI tests. It is not trying to simulate the hosted/public split exactly. It is the convenient "everything local" path.
 
-### 2. `local.sqlfu.dev` simulation
+### 2. Hosted-UI simulation
 
-`pnpm local.sqlfu.dev` is the more realistic simulation.
+`pnpm hosted-sim` is the more realistic simulation.
 
 It starts:
 
@@ -65,14 +67,14 @@ while the UI itself talks to:
 
 - the separate local backend origin
 
-This is much closer to the eventual `local.sqlfu.dev` product model.
+This is much closer to the eventual `sqlfu.dev/ui` product model.
 
 In test coverage, this behavior is intentionally an extra spec layered on top of the normal harness:
 
 - `packages/ui/playwright.config.ts` still uses `test/start-server.ts`
-- `packages/ui/test/local-sqlfu-dev.spec.ts` covers the extra `ngrok` piece
+- `packages/ui/test/hosted-sim.spec.ts` covers the extra `ngrok` piece
 
-That split is deliberate. The `local.sqlfu.dev` scenario is one important integration path, not the default shape for every UI test.
+That split is deliberate. The hosted-UI scenario is one important integration path, not the default shape for every UI test.
 
 ## Package export conventions
 
@@ -100,7 +102,7 @@ Use these from Node-side code:
 If you are working on:
 
 - normal UI behavior, use the integrated harness and normal UI tests
-- hosted-frontend-to-localhost behavior, think in terms of the `local.sqlfu.dev` simulation and the separate ngrok spec
+- hosted-frontend-to-localhost behavior, think in terms of the hosted-UI simulation and the separate ngrok spec
 - localhost certs / CORS / private-network issues, those belong in `packages/sqlfu`, not in the UI package
 
 ## Demo mode (`?demo=1`)

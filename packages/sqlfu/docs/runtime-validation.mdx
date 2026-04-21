@@ -2,7 +2,7 @@ import {Tabs, TabItem} from '@astrojs/starlight/components';
 
 # Runtime validation
 
-Generated wrappers can be emitted with a validator library — [zod](https://zod.dev), [valibot](https://valibot.dev), [arktype](https://arktype.io), or [zod/mini](https://zod.dev/v4#introducing-zod-mini) — as the source of truth. Params are validated on the way in, rows are validated on the way out, and types are derived via the validator's native inference helper. One definition per thing, no drift.
+Generated wrappers can be emitted with a validator library ([zod](https://zod.dev), [valibot](https://valibot.dev), [arktype](https://arktype.io), or [zod/mini](https://zod.dev/v4#introducing-zod-mini)) as the source of truth. Params are validated on the way in, rows are validated on the way out, and types are derived via the validator's native inference helper. One definition per thing, no drift.
 
 This is an opt-in mode. By default, `sqlfu generate` emits plain TypeScript types with zero runtime validation.
 
@@ -11,9 +11,9 @@ This is an opt-in mode. By default, `sqlfu generate` emits plain TypeScript type
 The generator has always made SQL → TypeScript a compile-time guarantee. Runtime validation closes the loop:
 
 - **Bad params fail loudly at the callsite.** Mistyped booleans, missing string args, enum typos throw a readable error before the SQL driver sees them.
-- **Schema drift surfaces at the adapter boundary.** A column removed without regenerating, a newly-non-null field, a new enum variant — these become exceptions at the boundary, not silently-wrong objects reaching a React component.
+- **Schema drift surfaces at the adapter boundary.** A column removed without regenerating, a newly-non-null field, a new enum variant: these become exceptions at the boundary, not silently-wrong objects reaching a React component.
 
-The schemas are used by the generated wrapper itself, not just re-exported for consumers. That's the value-add over plain TS types — every query gets a validated request/response contract by default. The exported schemas are also usable for forms (`@rjsf`, react-hook-form), tRPC inputs, RPC wire validation, fixtures, etc. — but that's a secondary benefit.
+The schemas are used by the generated wrapper itself, not just re-exported for consumers. That's the value-add over plain TS types: every query gets a validated request/response contract by default. The exported schemas are also usable for forms (`@rjsf`, react-hook-form), tRPC inputs, RPC wire validation, fixtures, etc., but that's a secondary benefit.
 
 ## Turning it on
 
@@ -30,18 +30,18 @@ export default {
 };
 ```
 
-After toggling, re-run `sqlfu generate`. Install the validator library yourself if it isn't already a dependency — `zod` and `zod/mini` ship as the same package; `valibot` and `arktype` are separate packages.
+After toggling, re-run `sqlfu generate`. Install the validator library yourself if it isn't already a dependency. `zod` and `zod/mini` ship as the same package; `valibot` and `arktype` are separate packages.
 
 ## Picking a validator
 
-All four implement [Standard Schema](https://standardschema.dev), so sqlfu treats them interchangeably. Pick the one whose tradeoffs you already prefer — there's no "recommended" choice.
+All four implement [Standard Schema](https://standardschema.dev), so sqlfu treats them interchangeably. Pick the one whose tradeoffs you already prefer. There's no "recommended" choice.
 
-- **`'zod'`** — largest API surface and richest ecosystem of downstream integrations (tRPC, react-hook-form, @rjsf). Chainable fluent syntax (`z.string().nullable()`). Bundle cost is non-trivial on the browser side.
-- **`'valibot'`** — smallest runtime, functional composition (`v.nullable(v.string())`, `v.parse(Schema, input)`). Best choice when you're shipping the validator to the browser and want to keep the bundle lean.
-- **`'arktype'`** — TypeScript syntax as schema: `type({slug: 'string', title: 'string | null'})`. Strongest editor feedback for complex TS types, zero-runtime-cost inference. Optional fields use key-suffix `?` (`'title?': 'string'`).
-- **`'zod-mini'`** — bundle-optimised subset of zod v4. Same schema primitives as standard zod, but a function-call API (`z.parse(Schema, input)`, `z.nullable(z.string())`). Valibot-sized bundle with zod's vocabulary.
+- **`'zod'`**: largest API surface and richest ecosystem of downstream integrations (tRPC, react-hook-form, @rjsf). Chainable fluent syntax (`z.string().nullable()`). Bundle cost is non-trivial on the browser side.
+- **`'valibot'`**: smallest runtime, functional composition (`v.nullable(v.string())`, `v.parse(Schema, input)`). Best choice when you're shipping the validator to the browser and want to keep the bundle lean.
+- **`'arktype'`**: TypeScript syntax as schema: `type({slug: 'string', title: 'string | null'})`. Strongest editor feedback for complex TS types, zero-runtime-cost inference. Optional fields use key-suffix `?` (`'title?': 'string'`).
+- **`'zod-mini'`**: bundle-optimised subset of zod v4. Same schema primitives as standard zod, but a function-call API (`z.parse(Schema, input)`, `z.nullable(z.string())`). Valibot-sized bundle with zod's vocabulary.
 
-Whatever you pick, the public shape of the generated wrapper — one callable with `.Params`, `.Result`, `.sql` attached — is identical. You can switch later without touching callsites.
+Whatever you pick, the public shape of the generated wrapper is identical: one callable with `.Params`, `.Result`, `.sql` attached. You can switch later without touching callsites.
 
 ## What the generated file looks like
 
@@ -82,7 +82,7 @@ export async function findPostBySlug(client: Client, params: FindPostBySlugParam
 }
 ```
 
-Plain types only — no validator import, no runtime checks, no `Object.assign` namespace wrapper.
+Plain types only: no validator import, no runtime checks, no `Object.assign` namespace wrapper.
 
 </TabItem>
 <TabItem label="zod">
@@ -126,7 +126,7 @@ export namespace findPostBySlug {
 }
 ```
 
-Zod uses its native `safeParse` + `z.prettifyError` helper — no sqlfu runtime import needed, just a validator library.
+Zod uses its native `safeParse` + `z.prettifyError` helper. No sqlfu runtime import needed, just a validator library.
 
 </TabItem>
 <TabItem label="valibot">
@@ -172,7 +172,7 @@ export namespace findPostBySlug {
 }
 ```
 
-Valibot composes functionally — `v.nullable(v.string())`, `v.picklist([...])`. Same Standard Schema validation path as arktype and zod-mini.
+Valibot composes functionally: `v.nullable(v.string())`, `v.picklist([...])`. Same Standard Schema validation path as arktype and zod-mini.
 
 </TabItem>
 <TabItem label="arktype">
@@ -269,7 +269,7 @@ Zod-mini keeps zod's vocabulary but uses the functional `z.nullable(z.string())`
 </TabItem>
 </Tabs>
 
-The public shape — one callable, `.Params`, `.Result`, `.sql` — is identical across every validator. You can swap `generate.validator` and regenerate without touching any callsites.
+The public shape is identical across every validator: one callable, `.Params`, `.Result`, `.sql`. You can swap `generate.validator` and regenerate without touching any callsites.
 
 ## Pretty errors
 

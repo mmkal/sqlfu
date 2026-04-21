@@ -193,6 +193,11 @@ function createTsDescriptor(queryInfo: SchemaDef, client: SQLiteClient): TsDescr
 
 function mapColumns(client: SQLiteClient, queryType: SchemaDef['queryType'], columns: ColumnInfo[], returning = false) {
 
+	// sqlfu divergence: DDL has no result columns, not even metadata ones.
+	if (queryType === 'Ddl') {
+		return [];
+	}
+
 	if (!returning) {
 		const resultColumns = getInsertUpdateResult(client);
 		if (queryType === 'Insert') {

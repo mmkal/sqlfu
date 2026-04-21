@@ -17,7 +17,7 @@
   "scripts": {
     "dev": "pnpm exec tsx test/start-server.ts dev-project --dev",
     "demo": "vite --open /?demo=1",
-    "local.sqlfu.dev": "pnpm exec tsx test/local.sqlfu.dev.ts",
+    "hosted-sim": "pnpm exec tsx test/hosted-sim.ts",
     "build": "vite build",
     "test:node": "vitest run src/runtime.test.ts src/startup-error.test.ts",
     "typecheck": "tsgo -p tsconfig.json --noEmit",

@@ -44,7 +44,7 @@ If a generated wrapper looks wrong, the fix is almost always in the `.sql` sourc
 - `sqlfu sync` — push `definitions.sql` straight into the live database. Dev only; fails on semantic changes.
 - `sqlfu generate` — regenerate TypeScript wrappers for `sql/*.sql`.
 - `sqlfu check` — run all repo/database consistency checks.
-- `sqlfu` (no args) — start the local UI backend on `localhost:56081`, reachable at `https://local.sqlfu.dev`.
+- `sqlfu` (no args) — start the local UI backend on `localhost:56081`, reachable at `https://sqlfu.dev/ui`.
 
 ## Optional: auto-run `sqlfu generate` on edits
 

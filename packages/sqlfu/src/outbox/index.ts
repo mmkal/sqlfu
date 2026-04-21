@@ -2,10 +2,9 @@
  * sqlfu/outbox — a small transactional-outbox / job-queue built on any sqlfu
  * `Client` (sync or async; `tick()` is async regardless, since handlers are).
  *
- * The usual Postgres-flavoured outbox machinery (`SELECT ... FOR UPDATE SKIP
- * LOCKED`, exclusive-read sessions, pgmq) is replaced here with plain tables:
- * SQLite serialises writers for us, so "claim pending rows, mark them running,
- * release the writer" is a single `BEGIN; update; commit`.
+ * SQLite serialises writers for us, so claim-and-lease works as a plain
+ * `BEGIN; select pending; update to running; commit` — no row-locking dance
+ * needed.
  *
  * Zero Node-only dependencies: causation propagation is explicit (the handler
  * receives an `emit` helper already bound to its own job context) rather than

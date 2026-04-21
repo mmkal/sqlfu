@@ -9,7 +9,7 @@
 - **Visibility-timeout crash recovery**: if a worker dies holding a claimed job, after the VT expires the job is re-claimable by a future worker.
 - **Causation chains**: an event emitted inside a handler automatically records which job/consumer caused it.
 
-The whole thing is built on the observation that SQLite serialises writers, so you don't need `SELECT ... FOR UPDATE SKIP LOCKED` or pgmq-style session locks — a plain `begin; select pending; update to running; commit` is enough.
+The whole thing is built on the observation that SQLite serialises writers, so you don't need any kind of row-locking or work-leasing dance — a plain `begin; select pending; update to running; commit` is enough.
 
 ## Shape
 

@@ -1,5 +1,7 @@
+---
 status: needs-grilling
 size: medium
+---
 
 # Typegen casing story: snake_case vs camelCase across the generated output
 

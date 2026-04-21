@@ -17,8 +17,9 @@ It is built around a simple idea: SQL should be the source language for schema, 
   - [Diff Engine](#diff-engine)
   - [Type Generator](#type-generator)
   - [Formatter](#formatter)
+  - [Observability](#observability)
   - [UI](#ui)
-  - [Agent skill](#agent-skill)
+  - [Agent Skill](#agent-skill)
 - [Quick Start](#quick-start)
   - [Install](#install)
   - [Minimal Setup](#minimal-setup)
@@ -156,7 +157,7 @@ No peer dependencies on OpenTelemetry or Sentry. `TracerLike` is structural; hoo
 
 `sqlfu` also has a UI package for working with the project interactively. It sits on top of the same SQL-first model rather than inventing a separate one.
 
-### Agent skill
+### Agent Skill
 
 `sqlfu` ships an agent skill at [`skills/using-sqlfu`](../../skills/using-sqlfu/SKILL.md). It teaches an agent the project's source-of-truth files, the schema-change workflow, the query workflow, and the command reference, so an agent dropped into a sqlfu repo does not hand-author migrations or invent old config field names.
 

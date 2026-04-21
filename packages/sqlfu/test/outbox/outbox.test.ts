@@ -1,11 +1,11 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import {DatabaseSync} from 'node:sqlite';
 
-import {connect} from '@tursodatabase/database';
 import {expect, test} from 'vitest';
 
-import {createTursoDatabaseClient, type AsyncClient} from '../../src/client.js';
+import {createNodeSqliteClient, type Client} from '../../src/client.js';
 import {createOutbox, defineConsumer, type Outbox} from '../../src/outbox/index.js';
 
 /**
@@ -157,9 +157,9 @@ type AppEvents = {
 
 async function createTestApp() {
   const dbPath = path.join(os.tmpdir(), `sqlfu-outbox-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.db`);
-  const database = await connect(dbPath);
-  const client = createTursoDatabaseClient(database);
-  await bootstrapAppSchema(client);
+  const database = new DatabaseSync(dbPath);
+  const client = createNodeSqliteClient(database);
+  bootstrapAppSchema(client);
 
   const clock = createVirtualClock(new Date('2000-01-01T00:00:00Z').getTime());
   let nextWelcomeEmailError: string | null = null;
@@ -303,7 +303,7 @@ async function createTestApp() {
     },
     tick: () => outbox.tick(),
     async [Symbol.asyncDispose]() {
-      await database.close();
+      database.close();
       await fs.rm(dbPath, {force: true}).catch(() => {});
     },
   };
@@ -321,8 +321,8 @@ function createVirtualClock(startMs: number) {
   };
 }
 
-async function bootstrapAppSchema(client: AsyncClient) {
-  await client.raw(`
+function bootstrapAppSchema(client: Client) {
+  client.raw(`
     create table users (id integer primary key, email text not null unique);
     create table sent_emails (id integer primary key, to_addr text not null, subject text not null);
     create table slack_posts (id integer primary key, channel text not null, message text not null);

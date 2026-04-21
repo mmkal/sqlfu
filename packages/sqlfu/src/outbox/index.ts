@@ -1,6 +1,7 @@
 /**
- * sqlfu/outbox — a small transactional-outbox / job-queue built on sqlfu's
- * AsyncClient. Ported conceptually from the iterate repo's pgmq-backed outbox
+ * sqlfu/outbox — a small transactional-outbox / job-queue built on any sqlfu
+ * `Client` (sync or async; `tick()` is async regardless, since handlers are).
+ * Ported conceptually from the iterate repo's pgmq-backed outbox
  * (see `~/src/iterate/apps/os/backend/outbox/`), minus everything that was a
  * workaround for Postgres' multi-writer reality: SQLite serialises writers for
  * us, so "claim pending rows, mark them running, release the writer" can be
@@ -16,7 +17,7 @@
  * workers, and anywhere else sqlfu already runs.
  */
 
-import type {AsyncClient} from '../core/types.js';
+import type {Client} from '../core/types.js';
 
 export type TimeUnit = 's' | 'm' | 'h' | 'd';
 export type TimePeriod = `${number}${TimeUnit}`;
@@ -50,7 +51,7 @@ export type EmitInput<TEvents extends EventMap, K extends keyof TEvents> = {
 
 export type EmitOptions = {
   /** Pass a transaction client to make emit atomic with the surrounding domain write. */
-  client?: AsyncClient;
+  client?: Client;
 };
 
 export type EmitResult = {eventId: number};
@@ -110,7 +111,7 @@ export type OutboxConsumers<TEvents extends EventMap> = {
 };
 
 export type OutboxConfig<TEvents extends EventMap> = {
-  client: AsyncClient;
+  client: Client;
   consumers: OutboxConsumers<TEvents>;
   now?: () => Date;
   defaults?: OutboxDefaults;

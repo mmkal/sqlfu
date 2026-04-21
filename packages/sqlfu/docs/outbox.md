@@ -28,7 +28,7 @@ const welcomeEmail = defineConsumer<AppEvents['user:signed_up']>({
 });
 
 const outbox = createOutbox<AppEvents>({
-  client,                                 // AsyncClient from sqlfu/client
+  client,                                 // any sqlfu Client — SyncClient or AsyncClient
   consumers: {
     'user:signed_up': [welcomeEmail, /* ...more consumers */],
   },

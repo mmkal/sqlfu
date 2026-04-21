@@ -1,7 +1,6 @@
-<!--
-Error-case fixtures: `generate` should refuse to run and throw a specific message. The `### error`
-section's content is treated as a regular expression that must match the thrown error message.
--->
+Error-case fixtures: `sqlfu generate` should refuse to run and throw a specific message. The
+`### error` section's content is treated as a regular expression that must match the thrown
+error message.
 
 <details>
 <summary>rejects unknown validator values at config load</summary>

@@ -1,8 +1,6 @@
-<!--
 One test per query "shape" the generator recognizes: insert, insert-returning, update, delete,
 aggregate, user-defined function, and CTE. Shapes the analyzer can't type fall through to the
 `//Invalid SQL` wrapper — those are here too so we see them diff when the analyzer improves.
--->
 
 <details>
 <summary>snapshots insert queries</summary>

@@ -1,8 +1,6 @@
-<!--
-Fixtures for configuration knobs that shape what `generate` emits: `sync`, `importExtension`,
-tsconfig-driven `.ts`-import detection, nested query directories, and the runtime query
-catalog that drives the form UI.
--->
+Fixtures for configuration knobs that shape what `sqlfu generate` emits: `sync`,
+`importExtension`, tsconfig-driven `.ts`-import detection, nested query directories, and the
+runtime query catalog that drives the form UI.
 
 <details>
 <summary>sync: true emits SyncClient wrappers without async/await</summary>

@@ -1,12 +1,10 @@
-<!--
-Basic generate snapshot fixtures. Each `<details>` block is one test.
+Basic `sqlfu generate` snapshot fixtures. Each `<details>` block is one test.
 
 The `### input` section declares files to drop into a temp fixture root, using fenced code
 blocks whose info string carries the filename in parens — `(sqlfu.config.ts)`, `(sql/foo.sql)`,
 and so on. The `### output` section declares expected files under that same root after running
 `sqlfu generate`. The runner matches each declared output exactly; files the fixture doesn't
 mention aren't asserted on.
--->
 
 <details>
 <summary>emits a trivial wrapper for DDL-only queries</summary>

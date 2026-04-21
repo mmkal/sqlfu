@@ -1,8 +1,6 @@
-<!--
-Result-type inference fixtures: how generate derives column types from the analyzed schema,
-aliases, view columns, `is not null` narrowing, expression aliases, and `limit 1` single-row
-shape.
--->
+Result-type inference fixtures: how `sqlfu generate` derives column types from the analyzed
+schema, aliases, view columns, `is not null` narrowing, expression aliases, and `limit 1`
+single-row shape.
 
 <details>
 <summary>emits named param types and a nullable single-row result for limit 1 queries</summary>

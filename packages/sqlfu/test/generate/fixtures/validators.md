@@ -1,10 +1,8 @@
-<!--
 Validator-integration fixtures: zod, valibot, zod/mini, arktype. Runtime-behaviour tests
 (actually importing the transpiled module and calling it) stay in `generate.test.ts` — the
 fixtures here just pin the emitted source shape. We also cover `prettyErrors: false` for each,
 which changes the emitted file significantly (inline issue-throwing instead of the shared
 runtime helper), and the plain-TS default when no validator is configured.
--->
 
 <details>
 <summary>validator: zod emits zod schemas with namespace-merged exports</summary>

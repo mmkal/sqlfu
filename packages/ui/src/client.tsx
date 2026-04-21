@@ -1244,6 +1244,7 @@ function SqlRunnerPanel(input: {relations: readonly StudioRelation[]}) {
       sqlEditorRelations={input.relations}
       sqlEditorDiagnostics={analysisQuery.data?.diagnostics}
       sqlEditorOnExecute={() => runMutation.mutate({sql: draft.sql, params: sanitizedParams})}
+      sqlEditorOnSave={() => handleSave()}
       paramsSchema={omitSchemaTitle(detectedParamsSchema)}
       paramsData={sanitizedParams}
       onSqlChange={(sql) => setDraft({...draft, sql})}
@@ -1275,7 +1276,7 @@ function QueryPanel(input: {entry: QueryCatalogEntry; relations: readonly Studio
     defaultValue: entry.id,
   });
   const [sqlDraft, setSqlDraft] = useLocalStorageState(`sqlfu-ui/query-sql/${entry.id}`, {
-    defaultValue: entry.sql,
+    defaultValue: entry.sqlContent,
   });
   const [renameMode, setRenameMode] = useLocalStorageState(`sqlfu-ui/query-rename-mode/${entry.id}`, {
     defaultValue: false,
@@ -1361,7 +1362,7 @@ function QueryPanel(input: {entry: QueryCatalogEntry; relations: readonly Studio
           </>
         ) : undefined
       }
-      sql={sqlEditMode ? sqlDraft : entry.sql}
+      sql={sqlEditMode ? sqlDraft : entry.sqlContent}
       paramsSchema={entry.kind === 'query' ? buildExecutionSchema(entry) : undefined}
       paramsData={undefined}
       sqlEditorRelations={input.relations}
@@ -1394,7 +1395,7 @@ function QueryPanel(input: {entry: QueryCatalogEntry; relations: readonly Studio
               className="button"
               type="button"
               onClick={() => {
-                setSqlDraft(entry.sql);
+                setSqlDraft(entry.sqlContent);
                 setSqlEditMode(false);
               }}
             >
@@ -1440,7 +1441,7 @@ function QueryPanel(input: {entry: QueryCatalogEntry; relations: readonly Studio
       emptyMessage={
         entry.kind === 'query' ? 'Submit form data to execute the query.' : 'Edit the SQL to repair this saved query.'
       }
-      runLabel="Run generated query"
+      runLabel="Run query"
       paramsCardTitle="Params"
     />
   );
@@ -1456,6 +1457,7 @@ function QueryWorkbench(input: {
   sqlEditorRelations?: readonly StudioRelation[];
   sqlEditorDiagnostics?: readonly SqlEditorDiagnostic[];
   sqlEditorOnExecute?: (value: string) => void;
+  sqlEditorOnSave?: (value: string) => void;
   paramsSchema?: RJSFSchema;
   paramsData?: Record<string, unknown>;
   readonlyMeta?: ReactNode;
@@ -1503,13 +1505,20 @@ function QueryWorkbench(input: {
                   relations={input.sqlEditorRelations ?? []}
                   diagnostics={input.sqlEditorDiagnostics}
                   onExecute={input.sqlEditorOnExecute}
+                  onSave={input.sqlEditorOnSave}
                   onChange={(value) => input.onSqlChange?.(value)}
                 />
               </label>
               {input.sqlEditorActions}
             </div>
           ) : (
-            <pre className="code-block">{input.sql}</pre>
+            <SqlCodeMirror
+              value={input.sql}
+              ariaLabel={input.sqlEditorLabel ?? 'Saved query SQL'}
+              relations={input.sqlEditorRelations ?? []}
+              readOnly
+              onChange={() => {}}
+            />
           )}
         </section>
 

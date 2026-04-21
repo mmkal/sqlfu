@@ -1,5 +1,6 @@
 import dedent from 'dedent';
-import fs from 'node:fs/promises';
+import fs from 'node:fs';
+import fsp from 'node:fs/promises';
 import path from 'node:path';
 import {DatabaseSync} from 'node:sqlite';
 
@@ -24,11 +25,10 @@ export type FixtureRunResult =
   | {readonly kind: 'ok'; readonly outputs: Record<string, string>}
   | {readonly kind: 'error'; readonly message: string};
 
-export async function listFixtureFiles(root: string): Promise<string[]> {
-  const entries = await fs.readdir(root, {withFileTypes: true});
-  return entries
-    .filter((entry) => entry.isFile() && entry.name.endsWith('.md'))
-    .map((entry) => path.join(root, entry.name))
+export function listFixtureFiles(root: string): string[] {
+  return fs
+    .globSync('*.md', {cwd: root})
+    .map((name) => path.join(root, name))
     .sort();
 }
 
@@ -55,7 +55,7 @@ export async function runFixtureCase(fixtureCase: FixtureCase): Promise<FixtureR
     const outputs: Record<string, string> = {};
     for (const file of fixtureCase.outputFiles) {
       try {
-        outputs[file.path] = await fs.readFile(path.join(root, file.path), 'utf8');
+        outputs[file.path] = await fsp.readFile(path.join(root, file.path), 'utf8');
       } catch {
         outputs[file.path] = '<MISSING>';
       }
@@ -63,7 +63,7 @@ export async function runFixtureCase(fixtureCase: FixtureCase): Promise<FixtureR
 
     return {kind: 'ok', outputs};
   } finally {
-    await fs.rm(root, {recursive: true, force: true});
+    await fsp.rm(root, {recursive: true, force: true});
   }
 }
 

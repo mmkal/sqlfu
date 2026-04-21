@@ -1,4 +1,4 @@
-import fs from 'node:fs/promises';
+import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {describe, expect, test} from 'vitest';
@@ -7,9 +7,9 @@ import {listFixtureFiles, parseGenerateFixture, runFixtureCase} from './fixture-
 
 const fixturesDir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures');
 
-for (const fixturePath of await listFixtureFiles(fixturesDir)) {
-  describe(path.basename(fixturePath), async () => {
-    const cases = parseGenerateFixture(await fs.readFile(fixturePath, 'utf8'));
+for (const fixturePath of listFixtureFiles(fixturesDir)) {
+  describe(path.basename(fixturePath), () => {
+    const cases = parseGenerateFixture(fs.readFileSync(fixturePath, 'utf8'));
 
     for (const fixtureCase of cases) {
       test(fixtureCase.name, async () => {

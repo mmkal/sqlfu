@@ -69,6 +69,7 @@ That means `sync` is intentionally allowed to make Migration History and Live Sc
 
 | Name | Comparison | Meaning | Usually Normal? | Likely Action |
 | --- | --- | --- | --- | --- |
+| Spurious Definitions | definitions.sql self-consistency | `definitions.sql` contains statements that do not change the declared schema (e.g. `insert`, `update`, `delete`, most `pragma`s) | No | move the statements to a migration, or delete them |
 | Repo Drift | Desired Schema <> Migrations | Replaying migrations does not produce the desired current schema | Yes, during active schema work | `sqlfu draft` |
 | Pending Migrations | Migrations <> Migration History | The database has unapplied migrations | Yes | `sqlfu migrate` |
 | History Drift | Migrations <> Migration History | The database claims to have applied migrations that no longer match the known migration set | No | fix the repo first, or reconcile deliberately with `sqlfu baseline <target>` and `sqlfu goto <target>` |
@@ -221,6 +222,12 @@ It should not mutate:
 
 - Desired Schema
 - Migrations
+
+Note on data-mutating statements in migrations: `sqlfu` treats migrations as a schema program, not a data program. If a migration contains `insert`, `update`, or `delete` statements and `sqlfu goto <earlier-target>` is later used to rewind past that migration, the data written by those statements is not replayed. `goto` computes the target schema by replaying migrations into a scratch database, diffs it against the live database, and applies only the schema-level difference. Any data-only side effects a migration had the first time it ran are not recovered on a later forward replay either, because the live database only receives the schema diff, not the full statement list.
+
+If you need seed data, keep it outside migrations (for example, an explicit `seed.sql` applied by your application startup or an init script). `sqlfu` does not currently model seed data as a first-class concept.
+
+`definitions.sql` has its own, stricter constraint: it must contain only schema-affecting statements. `sqlfu check` fails with a `Spurious Definitions` mismatch if `definitions.sql` contains `insert`, `update`, `delete`, most `pragma` statements, or anything else that does not change what `sqlfu` considers the declared schema.
 
 ### `sqlfu sync`
 

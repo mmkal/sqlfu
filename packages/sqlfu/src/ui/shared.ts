@@ -7,7 +7,7 @@ export type StudioSchemaResponse = {
 };
 
 export type SchemaCheckCard = {
-  readonly key: 'repoDrift' | 'pendingMigrations' | 'historyDrift' | 'schemaDrift' | 'syncDrift';
+  readonly key: 'spuriousDefinitions' | 'repoDrift' | 'pendingMigrations' | 'historyDrift' | 'schemaDrift' | 'syncDrift';
   readonly variant: 'ok' | 'warn' | 'info';
   readonly title: string;
   readonly okTitle: string;

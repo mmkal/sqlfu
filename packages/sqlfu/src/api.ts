@@ -3,7 +3,7 @@ import type {SqlfuHost} from './core/host.js';
 import {basename, joinPath} from './core/paths.js';
 import {createDefaultInitPreview} from './core/init-preview.js';
 import {migrationNickname} from './core/naming.js';
-import {extractSchema} from './core/sqlite.js';
+import {extractSchema, splitSqlStatements} from './core/sqlite.js';
 import {
   applyMigrations,
   baselineMigrationHistory,
@@ -592,6 +592,69 @@ export async function materializeDefinitionsSchemaForContext(host: SqlfuHost, de
   });
 }
 
+// Detects statements in definitions.sql that do not contribute to the declared schema.
+// Strategy: leave-one-out. For each statement, apply every *other* statement to a fresh
+// scratch database and compare the resulting schema to the full-definitions baseline.
+// If the schemas match, the excluded statement was not load-bearing for any schema
+// object. Pure DDL statements (create/alter/drop for schema objects) are load-bearing
+// by construction; DML and most pragmas are not reflected in sqlite_schema and so get
+// flagged. A statement that fails to apply in isolation is considered load-bearing
+// (conservative: don't false-positive when leaving it out breaks other statements).
+async function findSpuriousDefinitionStatements(
+  host: SqlfuHost,
+  definitionsSql: string,
+): Promise<readonly string[]> {
+  if (!definitionsSql.trim()) {
+    return [];
+  }
+
+  const statements = splitSqlStatements(definitionsSql);
+  if (statements.length <= 1) {
+    // a single statement in definitions.sql that produces an empty schema (e.g. an insert
+    // against a table we never declared) would error when applied anyway; we only flag
+    // when we can prove leaving it out produces the same schema.
+    return [];
+  }
+
+  const baselineSchema = await materializeDefinitionsSchemaTolerant(host, statements);
+
+  const spurious: string[] = [];
+  for (let index = 0; index < statements.length; index += 1) {
+    const withoutThisOne = statements.filter((_value, otherIndex) => otherIndex !== index);
+    const candidateSchema = await materializeDefinitionsSchemaTolerant(host, withoutThisOne);
+    if (candidateSchema === null) {
+      // leaving this statement out made the rest fail to apply, so it's load-bearing
+      continue;
+    }
+    if (candidateSchema === baselineSchema) {
+      spurious.push(trimStatementForDisplay(statements[index]!));
+    }
+  }
+
+  return spurious;
+}
+
+async function materializeDefinitionsSchemaTolerant(
+  host: SqlfuHost,
+  statements: readonly string[],
+): Promise<string | null> {
+  await using database = await host.openScratchDb('materialize-definitions-leave-one-out');
+  try {
+    for (const statement of statements) {
+      await database.client.raw(statement);
+    }
+  } catch {
+    return null;
+  }
+  return extractSchema(database.client, 'main', {
+    excludedTables: schemaDriftExcludedTables,
+  });
+}
+
+function trimStatementForDisplay(statement: string): string {
+  return statement.trim().replace(/\s+/gu, ' ');
+}
+
 export async function materializeMigrationsSchemaForContext(host: SqlfuHost, migrations: readonly Migration[]) {
   await using database = await host.openScratchDb('materialize-migrations');
   await applyMigrations(database.client, {migrations});
@@ -627,6 +690,7 @@ export async function analyzeDatabase(context: SqlfuContext) {
   const migrationByName = new Map(migrations.map((migration) => [migrationName(migration), migration]));
 
   const repoDrift = await compareSchemasForContext(host, desiredSchema, migrationsSchema);
+  const spuriousDefinitionStatements = await findSpuriousDefinitionStatements(host, definitionsSql);
   const historyMismatch = await findHistoryMismatch(host, applied, migrations, migrationByName);
   const hasPendingMigrations =
     !historyMismatch && migrations.some((migration) => !appliedNames.has(migrationName(migration)));
@@ -642,6 +706,17 @@ export async function analyzeDatabase(context: SqlfuContext) {
     !repoDrift.isDifferent && !historyMismatch && migrations.length > 0 ? migrationName(migrations.at(-1)!) : null;
   const mismatches: CheckMismatch[] = [];
   const recommendations: CheckRecommendation[] = [];
+
+  if (spuriousDefinitionStatements.length > 0) {
+    mismatches.push({
+      kind: 'spuriousDefinitions',
+      title: 'Spurious Definitions',
+      summary:
+        'definitions.sql contains statements that do not affect the declared schema. ' +
+        'They will be silently discarded. Move them to a migration or delete them.',
+      details: spuriousDefinitionStatements.map((statement) => `- ${statement}`),
+    });
+  }
 
   if (historyMismatch) {
     const problemLine =
@@ -920,8 +995,14 @@ export function requireContextConfig(context: SqlfuCommandContext): SqlfuContext
 }
 
 export type CheckMismatch = {
-  readonly kind: 'repoDrift' | 'pendingMigrations' | 'historyDrift' | 'schemaDrift' | 'syncDrift';
-  readonly title: 'Repo Drift' | 'Pending Migrations' | 'History Drift' | 'Schema Drift' | 'Sync Drift';
+  readonly kind: 'repoDrift' | 'pendingMigrations' | 'historyDrift' | 'schemaDrift' | 'syncDrift' | 'spuriousDefinitions';
+  readonly title:
+    | 'Repo Drift'
+    | 'Pending Migrations'
+    | 'History Drift'
+    | 'Schema Drift'
+    | 'Sync Drift'
+    | 'Spurious Definitions';
   readonly summary: string;
   readonly details: readonly string[];
 };

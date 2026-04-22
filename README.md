@@ -166,7 +166,7 @@ The skill is self-contained: it does not depend on the `sqlfu` package itself, a
 pnpm add sqlfu
 ```
 
-For a full end-to-end walkthrough -- schema, migrations, query files, typed wrappers, and a working `client.all()` call -- see [Getting Started](https://sqlfu.dev/docs/getting-started).
+For a full end-to-end walkthrough -- schema, migrations, query files, typed wrappers, and a working generated-function call -- see [Getting Started](https://sqlfu.dev/docs/getting-started).
 
 ## Configuration
 

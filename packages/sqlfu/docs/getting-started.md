@@ -1,6 +1,6 @@
 # Getting Started
 
-This walkthrough builds a small posts app from scratch: schema in SQL, migrations drafted automatically, typed TypeScript wrappers generated from your query files. By the end you will have a working `client.all(getPostsQuery, {limit: 10})` call with full IDE types.
+This walkthrough builds a small posts app from scratch: schema in SQL, migrations drafted automatically, typed TypeScript wrappers generated from your query files. By the end you will have a working `getPosts(client, {limit: 10})` call with full IDE types.
 
 If you want to see the finished project running in your browser first, [open the demo](/ui?demo=1) -- same schema, same queries, no install.
 
@@ -112,14 +112,7 @@ Query files live next to the code that calls them. The filename is the query's i
 npx sqlfu generate
 ```
 
-sqlfu reads your `.sql` files and emits typed wrappers into `sql/.generated/`. For `get-posts.sql` you get:
-
-```ts
-// sql/.generated/get-posts.sql.ts -- generated, do not edit
-export const getPostsQuery = { ... }
-```
-
-The wrapper carries typed params (`{limit: number}`) and a typed result row (`{id: number, slug: string, title: string, body: string, published: number}`).
+sqlfu reads your `.sql` files and emits typed wrappers into `sql/.generated/`. For `get-posts.sql` you get a `getPosts` function with typed params and a typed result row attached via a namespace (`getPosts.Params`, `getPosts.Result`). The function also carries `.sql` and `.query` (including `name: "get-posts"`) as static properties used by observability hooks.
 
 Note: `generate` reads the live database schema, so `migrate` must have run first.
 
@@ -128,16 +121,16 @@ Note: `generate` reads the live database schema, so `migrate` must have run firs
 ```ts
 import {DatabaseSync} from 'node:sqlite';
 import {createNodeSqliteClient} from 'sqlfu/client';
-import {getPostsQuery} from './sql/.generated/get-posts.sql';
+import {getPosts} from './sql/.generated/get-posts.sql';
 
 const db = new DatabaseSync('./db/app.sqlite');
 const client = createNodeSqliteClient(db);
 
-const posts = client.all(getPostsQuery, {limit: 10});
+const posts = await getPosts(client, {limit: 10});
 //    ^? Array<{id: number, slug: string, title: string, body: string, published: number}>
 ```
 
-`client.all` is synchronous (no `await`). Params and result rows are fully typed. Your IDE hover shows the inferred row type directly. The `getPostsQuery.name` field (`"get-posts"`) travels with every query to OpenTelemetry spans, Sentry errors, and Datadog metrics -- see [Observability](/docs/observability).
+Params and result rows are fully typed. Your IDE hover shows the inferred row type directly. The `getPosts.query.name` field (`"get-posts"`) travels with every call to OpenTelemetry spans, Sentry errors, and Datadog metrics -- see [Observability](/docs/observability).
 
 `node:sqlite` is built into Node 22+. Using a different runtime or driver? See [Adapters](/docs/adapters) for Bun, Turso, D1, Expo, and others -- the same generated wrappers work unchanged across all of them.
 

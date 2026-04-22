@@ -25,9 +25,9 @@ Flags inline SQL template literals that duplicate a checked-in `.sql` file.
 // flagged: this SQL matches sql/get-posts.sql exactly
 const posts = client.all(sql`select id, slug from posts where published = 1`, {});
 
-// correct: use the checked-in file
-import {getPostsQuery} from './sql/.generated/get-posts.sql';
-const posts = client.all(getPostsQuery, {});
+// correct: use the generated wrapper function
+import {getPosts} from './sql/.generated/get-posts.sql';
+const posts = await getPosts(client, {limit: 10});
 ```
 
 Why: your filename is your query's identity. An inline duplicate loses the query name, the generated TypeScript types, and the observability metadata (OpenTelemetry span name, Sentry tag, etc.). The rule catches the case where you paste a query inline rather than pointing at the file.

@@ -371,7 +371,7 @@ function relationTypeName(relationName: string): string {
 
 async function writeMigrationsBundle(config: SqlfuProjectConfig): Promise<void> {
   if (!config.migrations) return;
-  const migrationsDir = config.migrations;
+  const migrationsDir = config.migrations.path;
 
   let fileNames: string[];
   try {

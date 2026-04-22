@@ -76,7 +76,7 @@ export function resolveProjectConfig(
   return {
     projectRoot: configDir,
     db: resolveConfigPathValue(configDir, fileConfig.db),
-    migrations: fileConfig.migrations && resolveConfigPathValue(configDir, fileConfig.migrations),
+    migrations: resolveMigrationsConfig(configDir, fileConfig.migrations),
     definitions: resolveConfigPathValue(configDir, fileConfig.definitions),
     queries: resolveConfigPathValue(configDir, fileConfig.queries),
     generate: {
@@ -202,7 +202,22 @@ function assertConfigShape(configPath: string, config: object): asserts config i
   }
   const migrations = (config as Record<string, unknown>).migrations;
   if (migrations !== undefined && typeof migrations !== 'string') {
-    throw new Error(`Invalid sqlfu config at ${configPath}: "migrations" must be a string if provided.`);
+    if (typeof migrations !== 'object' || migrations === null || Array.isArray(migrations)) {
+      throw new Error(
+        `Invalid sqlfu config at ${configPath}: "migrations" must be a string or ` +
+          `{ path: string; prefix: 'iso' | 'four-digit' } if provided.`,
+      );
+    }
+    const migrationsRecord = migrations as Record<string, unknown>;
+    if (typeof migrationsRecord.path !== 'string') {
+      throw new Error(`Invalid sqlfu config at ${configPath}: "migrations.path" must be a string.`);
+    }
+    if (migrationsRecord.prefix !== 'iso' && migrationsRecord.prefix !== 'four-digit') {
+      throw new Error(
+        `Invalid sqlfu config at ${configPath}: "migrations.prefix" must be 'iso' or 'four-digit'. ` +
+          `Got ${JSON.stringify(migrationsRecord.prefix)}.`,
+      );
+    }
   }
   const generate = (config as Record<string, unknown>).generate;
   if (generate !== undefined) {
@@ -252,6 +267,17 @@ function assertConfigShape(configPath: string, config: object): asserts config i
 
 function resolveConfigPathValue(configDir: string, configValue: string): string {
   return path.resolve(configDir, configValue);
+}
+
+function resolveMigrationsConfig(
+  configDir: string,
+  value: SqlfuConfig['migrations'],
+): SqlfuProjectConfig['migrations'] {
+  if (!value) return undefined;
+  if (typeof value === 'string') {
+    return {path: resolveConfigPathValue(configDir, value), prefix: 'iso'};
+  }
+  return {path: resolveConfigPathValue(configDir, value.path), prefix: value.prefix};
 }
 
 function withTrailingNewline(value: string) {

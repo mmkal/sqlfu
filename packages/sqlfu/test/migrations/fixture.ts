@@ -9,7 +9,7 @@ import {router} from '../../src/cli-router.js';
 import {createNodeSqliteClient} from '../../src/client.js';
 import {createNodeHost} from '../../src/core/node-host.js';
 import {extractSchema} from '../../src/core/sqlite.js';
-import type {Client, SqlfuProjectConfig} from '../../src/core/types.js';
+import type {Client, SqlfuMigrationPrefix, SqlfuProjectConfig} from '../../src/core/types.js';
 import {createTempFixtureRoot, dumpFixtureFs, writeFixtureFiles} from '../fs-fixture.js';
 
 type DisposableClient = {
@@ -22,14 +22,16 @@ export async function createMigrationsFixture(
   input: {
     desiredSchema?: string;
     migrations?: Record<string, string>;
+    migrationPrefix?: SqlfuMigrationPrefix;
   } = {},
 ) {
   const root = await createTempFixtureRoot(slug);
   const dbPath = path.join(root, 'dev.db');
+  const migrationPrefix: SqlfuMigrationPrefix = input.migrationPrefix ?? 'iso';
   const projectConfig: SqlfuProjectConfig = {
     projectRoot: root,
     db: dbPath,
-    migrations: path.join(root, 'migrations'),
+    migrations: {path: path.join(root, 'migrations'), prefix: migrationPrefix},
     definitions: path.join(root, 'definitions.sql'),
     queries: path.join(root, 'sql'),
     generate: {validator: null, prettyErrors: true, sync: false, importExtension: '.js'},
@@ -44,11 +46,16 @@ export async function createMigrationsFixture(
   const baseHost = await createNodeHost();
   const host = {...baseHost, now: fakeNow};
 
+  const seededFileNames: string[] = [];
+  const nextPrefix = () =>
+    getMigrationPrefix({kind: migrationPrefix, now: fakeNow(), existing: [...seededFileNames]});
+
   const migrations = Object.fromEntries(
-    Object.entries(input.migrations ?? {}).map(([name, content]) => [
-      `migrations/${getMigrationPrefix(fakeNow())}_${name}.sql`,
-      content,
-    ]),
+    Object.entries(input.migrations ?? {}).map(([name, content]) => {
+      const fileName = `${nextPrefix()}_${name}.sql`;
+      seededFileNames.push(fileName);
+      return [`migrations/${fileName}`, content];
+    }),
   );
 
   // when the test does not specify desiredSchema, default to a schema that replays the
@@ -96,7 +103,9 @@ export async function createMigrationsFixture(
       return Array.fromAsync(fs.glob('migrations/*.sql', {cwd: root})).then((files) => files.sort());
     },
     async writeMigration(name: string, content: string) {
-      await this.writeFile(`migrations/${getMigrationPrefix(fakeNow())}_${name}.sql`, content);
+      const fileName = `${nextPrefix()}_${name}.sql`;
+      seededFileNames.push(fileName);
+      await this.writeFile(`migrations/${fileName}`, content);
     },
     async dumpFs() {
       return dumpFixtureFs(root, {ignoredNames: ['dev.db', '.sqlfu']});

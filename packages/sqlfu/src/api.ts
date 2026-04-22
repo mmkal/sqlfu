@@ -1,4 +1,4 @@
-import type {Client, SqlfuProjectConfig} from './core/types.js';
+import type {Client, SqlfuMigrationPrefix, SqlfuProjectConfig} from './core/types.js';
 import type {SqlfuHost} from './core/host.js';
 import {basename, joinPath} from './core/paths.js';
 import {createDefaultInitPreview} from './core/init-preview.js';
@@ -202,7 +202,7 @@ export async function runSqlfuCommand(
 
 export async function readMigrationsFromContext(context: SqlfuContext): Promise<Migration[]> {
   if (!context.config.migrations) return [];
-  const migrationsDir = context.config.migrations;
+  const migrationsDir = context.config.migrations.path;
 
   let fileNames: string[];
   try {
@@ -267,9 +267,15 @@ export async function applyDraftSql(
   if (!context.config.migrations) {
     throw new Error('sqlfu draft requires a `migrations` directory in sqlfu.config.ts');
   }
-  const fileName = `${getMigrationPrefix(context.host.now())}_${slugify(input?.name ?? migrationNickname(body))}.sql`;
-  await context.host.fs.mkdir(context.config.migrations);
-  await context.host.fs.writeFile(joinPath(context.config.migrations, fileName), `${body.trim()}\n`);
+  const migrationsDir = context.config.migrations.path;
+  const prefix = getMigrationPrefix({
+    kind: context.config.migrations.prefix,
+    now: context.host.now(),
+    existing: migrations.map((migration) => basename(migration.path)),
+  });
+  const fileName = `${prefix}_${slugify(input?.name ?? migrationNickname(body))}.sql`;
+  await context.host.fs.mkdir(migrationsDir);
+  await context.host.fs.writeFile(joinPath(migrationsDir, fileName), `${body.trim()}\n`);
 }
 
 export async function applySyncSql(context: SqlfuContext, confirm: SqlfuCommandConfirm) {
@@ -571,8 +577,22 @@ export async function applyGotoSql(context: SqlfuContext, input: {target: string
   });
 }
 
-export function getMigrationPrefix(now: Date) {
-  return now.toISOString().replaceAll(':', '.');
+export function getMigrationPrefix(input: {kind: SqlfuMigrationPrefix; now: Date; existing: string[]}) {
+  if (input.kind === 'four-digit') {
+    return nextFourDigitPrefix(input.existing);
+  }
+  return input.now.toISOString().replaceAll(':', '.');
+}
+
+function nextFourDigitPrefix(existingFileNames: string[]) {
+  let max = -1;
+  for (const fileName of existingFileNames) {
+    const match = /^(\d{4})_/.exec(fileName);
+    if (!match) continue;
+    const n = Number.parseInt(match[1], 10);
+    if (n > max) max = n;
+  }
+  return String(max + 1).padStart(4, '0');
 }
 
 function slugify(value: string) {

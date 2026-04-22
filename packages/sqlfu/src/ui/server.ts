@@ -263,7 +263,7 @@ async function ensureDatabase(host: SqlfuHost, projectRoot: string) {
     projectRoot,
     db: dbPath,
     definitions: path.join(projectRoot, 'definitions.sql'),
-    migrations: path.join(projectRoot, 'migrations'),
+    migrations: {path: path.join(projectRoot, 'migrations'), prefix: 'iso'},
     queries: path.join(projectRoot, 'sql'),
     generate: {validator: null, prettyErrors: true, sync: false, importExtension: '.js'},
   });

@@ -881,7 +881,7 @@ async function getMigrationIntegrity(
 }
 
 function summarizeSqlite3defError(error: unknown) {
-  const message = String(error);
+  const message = error instanceof Error ? error.message : String(error);
   const line =
     message
       .split('\n')

@@ -24,6 +24,7 @@ export function SqlCodeMirror(input: {
   onExecute?: (sql: string) => void;
   onSave?: (sql: string) => void;
   readOnly?: boolean;
+  height?: string;
 }) {
   const theme = useResolvedTheme();
   const schema = buildSqlSchema(input.relations);
@@ -78,7 +79,7 @@ export function SqlCodeMirror(input: {
   return (
     <CodeMirror
       value={input.value}
-      height="16rem"
+      height={input.height ?? '16rem'}
       aria-label={input.ariaLabel}
       theme={theme}
       extensions={extensions}

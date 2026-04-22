@@ -62,22 +62,6 @@ export default [
               }
             }
           },
-          'no-dumb-error-ternary': {
-            meta: {
-              fixable: 'code',
-            },
-              create(context) {
-                return {
-                  'ConditionalExpression[test.operator="instanceof"][test.right.name="Error"][consequent.property.name="message"][alternate.callee.name="String"]': node => {
-                    context.report({
-                      node,
-                      message: "Don't use `e instanceof Error ? e.message : String(e)`, it's equivalent to `String(e)`",
-                      fix: fixer => fixer.replaceText(node, context.sourceCode.getText(node.alternate)),
-                    });
-                  }
-                }
-              }
-          },
           'no-blunder': {
             meta: {
               docs: {
@@ -113,7 +97,6 @@ export default [
   {
     rules: {
       'repolocal/no-readonly': 'error',
-      'repolocal/no-dumb-error-ternary': 'error',
       // 'repolocal/no-blunder': 'error', // fine we can leave this for now
     }
   },

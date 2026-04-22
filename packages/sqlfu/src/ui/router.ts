@@ -43,7 +43,14 @@ export type UiRouterContext = {
   host: SqlfuHost;
 };
 
-const uiBase = os.$context<UiRouterContext>();
+const uiBase = os.$context<UiRouterContext>().use(async ({next}) => {
+  try {
+    return await next();
+  } catch (error) {
+    if (error instanceof ORPCError) throw error;
+    throw toClientError(error);
+  }
+});
 const rowRecordSchema = z.record(z.string(), z.unknown());
 const tableRowKeySchema = z.discriminatedUnion('kind', [
   z.object({

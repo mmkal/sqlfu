@@ -18,3 +18,27 @@ test('demo mode runs fully in-browser', async ({page}) => {
   await expect(page.getByText('No Sync Drift')).toBeVisible();
   await expect(page.getByRole('button', {name: 'sqlfu draft'})).toBeVisible();
 });
+
+test('demo mode: clicking the same sort column 3 times (asc → desc → off) does not freeze', async ({page}) => {
+  await page.goto('http://127.0.0.1:3218/?demo=1#table/posts');
+  await expect(page.locator('.reactgrid').getByText('hello-world')).toBeVisible();
+
+  // Click 1: sort by id asc (default → SQL mode)
+  await page.getByRole('button', {name: 'Sort', exact: true}).click();
+  await page.getByRole('button', {name: 'Sort by id'}).click();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('button', {name: /^Sort — id asc/})).toBeVisible({timeout: 5000});
+
+  // Click 2: flip to desc
+  await page.getByRole('button', {name: /^Sort —/}).click();
+  await page.getByRole('button', {name: /Sort by id/}).click();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('button', {name: /^Sort — id desc/})).toBeVisible({timeout: 5000});
+
+  // Click 3: remove. In demo mode this froze the page before the fix.
+  await page.getByRole('button', {name: /^Sort —/}).click();
+  await page.getByRole('button', {name: /Sort by id/}).click();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('button', {name: 'Sort', exact: true})).toBeVisible({timeout: 5000});
+  await expect(page.locator('.reactgrid').getByText('hello-world')).toBeVisible();
+});

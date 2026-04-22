@@ -218,7 +218,7 @@ async function createBunFixture<TInstance extends object>(classDef: new (...args
     };
   } catch (error) {
     await Promise.allSettled([stopProcess(server), fs.rm(tempDir, {recursive: true, force: true})]);
-    throw new Error(formatFixtureFailure(String(error), serverLogs()));
+    throw new Error(formatFixtureFailure(error instanceof Error ? error.message : String(error), serverLogs()));
   }
 }
 
@@ -244,7 +244,7 @@ function createRpcStub<TInstance extends object>(rootUrl: string, serverLogs: ()
 
           return devalue.parse(payload.value);
         } catch (error) {
-          throw new Error(formatFixtureFailure(String(error), serverLogs()));
+          throw new Error(formatFixtureFailure(error instanceof Error ? error.message : String(error), serverLogs()));
         }
       };
     },

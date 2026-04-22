@@ -11,6 +11,9 @@ importers:
       alchemy:
         specifier: ^0.91.2
         version: 0.91.2(@opentelemetry/api@1.9.1)(@types/pg@8.15.6)(astro@5.18.1(@types/node@24.12.0)(aws4fetch@1.0.20)(lightningcss@1.32.0)(rollup@4.60.1)(sass@1.99.0)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.3))(better-sqlite3@12.9.0)(vite@7.3.2(@types/node@24.12.0)(lightningcss@1.32.0)(sass@1.99.0)(tsx@4.21.0)(yaml@2.8.3))(workerd@1.20260415.1)(wrangler@4.83.0(@cloudflare/workers-types@4.20260417.1))
+      eslint:
+        specifier: ^9.39.4
+        version: 9.39.4
       oxfmt:
         specifier: ^0.45.0
         version: 0.45.0

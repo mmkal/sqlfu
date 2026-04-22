@@ -2,7 +2,7 @@
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["typescript", "unicorn", "oxc", "react", "vitest"],
   "jsPlugins": [
-    {"name": "sqlfu", "specifier": "./packages/sqlfu/dist/lint-plugin.js"}
+    {"name": "sqlfu", "specifier": "./scripts/dogfood-lint-plugin.js"}
   ],
   "categories": {
     "correctness": "error"

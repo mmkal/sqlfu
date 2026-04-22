@@ -20,13 +20,14 @@
     "typecheck": "pnpm --filter sqlfu typecheck && pnpm --filter @sqlfu/ui typecheck",
     "generate": "pnpm --filter sqlfu generate",
     "cli": "pnpm --filter sqlfu cli",
-    "lint": "pnpm --filter sqlfu build:runtime && oxlint && tsx scripts/lint-sql-files.ts",
-    "lint:fix": "pnpm --filter sqlfu build:runtime && oxlint --fix && tsx scripts/lint-sql-files.ts --fix",
+    "lint": "oxlint && eslint '**/*.sql'",
+    "lint:fix": "oxlint --fix && eslint --fix '**/*.sql'",
     "format": "oxfmt .",
     "format:check": "oxfmt --check ."
   },
   "devDependencies": {
     "alchemy": "^0.91.2",
+    "eslint": "^9.39.4",
     "oxfmt": "^0.45.0",
     "oxlint": "^1.60.0",
     "simple-git-hooks": "^2.13.1",

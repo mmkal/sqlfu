@@ -23,7 +23,7 @@ type AppEvents = {
 };
 
 const welcomeEmail = defineConsumer<AppEvents['user:signed_up']>({
-  name: 'welcome-email',
+  name: 'welcomeEmail',
   handler: async ({payload}) => {
     await sendEmail(payload.email, 'Welcome!');
   },
@@ -61,7 +61,7 @@ Every field except `name` and `handler` is optional:
 
 ```ts
 defineConsumer<Payload, AppEvents>({
-  name: 'my-consumer',
+  name: 'myConsumer',
   when: ({payload}) => payload.shouldDispatch,        // truthy → fan-out includes this consumer
   delay: ({payload}) => '24h',                         // job's run_after
   retry: (job, error) => ({retry: true, delay: '30s', reason: String(error)}),
@@ -69,7 +69,7 @@ defineConsumer<Payload, AppEvents>({
   handler: async ({payload, eventId, job, emit}) => {
     // `emit` is pre-bound to this job's causation — any events emitted from
     // here will have `context.causedBy` pointing back to this job/consumer.
-    await emit({name: 'my-consumer:did-a-thing', payload: {/* … */}});
+    await emit({name: 'myConsumer:didAThing', payload: {/* … */}});
   },
 });
 ```

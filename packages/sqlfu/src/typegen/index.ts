@@ -98,8 +98,7 @@ export async function generateQueryTypesForConfig(config: SqlfuProjectConfig): P
 }
 
 function renderDdlWrapper(input: {relativePath: string; sql: string; sync: boolean}): string {
-  const queryName = input.relativePath;
-  const functionName = toCamelCase(queryName);
+  const functionName = toCamelCase(input.relativePath);
   const clientType = input.sync ? 'SyncClient' : 'Client';
   const maybeAsync = input.sync ? '' : 'async ';
 
@@ -107,7 +106,7 @@ function renderDdlWrapper(input: {relativePath: string; sql: string; sync: boole
     `import type {${clientType}} from 'sqlfu';`,
     ``,
     ...renderSqlConstant(input.sql),
-    `const query = { sql, args: [], name: ${JSON.stringify(queryName)} };`,
+    `const query = { sql, args: [], name: ${JSON.stringify(functionName)} };`,
     ``,
     `export const ${functionName} = Object.assign(`,
     `\t${maybeAsync}function ${functionName}(client: ${clientType}) {`,
@@ -525,8 +524,7 @@ function renderQueryWrapper(input: {
     });
   }
 
-  const queryName = input.relativePath;
-  const functionName = toCamelCase(queryName);
+  const functionName = toCamelCase(input.relativePath);
 
   const clientType = input.sync ? 'SyncClient' : 'Client';
   const maybeAsync = input.sync ? '' : 'async ';
@@ -555,7 +553,7 @@ function renderQueryWrapper(input: {
   const queryDeclaration = renderQueryDeclaration({
     factoryArgs,
     queryArgs,
-    queryName,
+    queryName: functionName,
   });
 
   const signatureReturnAnnotation = emitResultType
@@ -818,8 +816,7 @@ function renderValidatorQueryWrapper(input: {
   prettyErrors: boolean;
   sync: boolean;
 }): string {
-  const queryName = input.relativePath;
-  const functionName = toCamelCase(queryName);
+  const functionName = toCamelCase(input.relativePath);
   const {descriptor, emitter, prettyErrors, sync} = input;
   const clientType = sync ? 'SyncClient' : 'Client';
   const resultMode = getResultMode(descriptor);
@@ -882,7 +879,7 @@ function renderValidatorQueryWrapper(input: {
   const queryDeclaration = renderQueryDeclaration({
     factoryArgs,
     queryArgs: factoryArgsExpression,
-    queryName,
+    queryName: functionName,
   });
   const queryReference = buildQueryReference(hasData, hasParams, dataExpression!, paramsExpression!);
 

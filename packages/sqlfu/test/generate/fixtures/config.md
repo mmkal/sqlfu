@@ -45,7 +45,7 @@ insert into posts (slug, title) values (:slug, :title);
 import type {SyncClient} from 'sqlfu';
 
 const sql = `select id, slug, title from posts;`;
-const query = { sql, args: [], name: "list-posts" };
+const query = { sql, args: [], name: "listPosts" };
 
 export const listPosts = Object.assign(
 	function listPosts(client: SyncClient): listPosts.Result[] {
@@ -67,7 +67,7 @@ export namespace listPosts {
 import type {SyncClient} from 'sqlfu';
 
 const sql = `select id, slug, title from posts where slug = ? limit 1;`;
-const query = (params: findPost.Params) => ({ sql, args: [params.slug], name: "find-post" });
+const query = (params: findPost.Params) => ({ sql, args: [params.slug], name: "findPost" });
 
 export const findPost = Object.assign(
 	function findPost(client: SyncClient, params: findPost.Params): findPost.Result | null {
@@ -93,7 +93,7 @@ export namespace findPost {
 import type {SyncClient} from 'sqlfu';
 
 const sql = `insert into posts (slug, title) values (?, ?);`;
-const query = (params: insertPost.Params) => ({ sql, args: [params.slug, params.title], name: "insert-post" });
+const query = (params: insertPost.Params) => ({ sql, args: [params.slug, params.title], name: "insertPost" });
 
 export const insertPost = Object.assign(
 	function insertPost(client: SyncClient, params: insertPost.Params) {
@@ -149,7 +149,7 @@ export * from "./list-posts.sql.ts";
 import type {Client} from 'sqlfu';
 
 const sql = `select id, slug from posts;`;
-const query = { sql, args: [], name: "list-posts" };
+const query = { sql, args: [], name: "listPosts" };
 
 export const listPosts = Object.assign(
 	async function listPosts(client: Client): Promise<listPosts.Result[]> {
@@ -287,7 +287,7 @@ export * from "./users/list-profiles.sql.js";
 import type {Client} from 'sqlfu';
 
 const sql = `select id, name from profiles;`;
-const query = { sql, args: [], name: "users/list-profiles" };
+const query = { sql, args: [], name: "usersListProfiles" };
 
 export const usersListProfiles = Object.assign(
 	async function usersListProfiles(client: Client): Promise<usersListProfiles.Result[]> {
@@ -308,7 +308,7 @@ export namespace usersListProfiles {
 import type {Client} from 'sqlfu';
 
 const sql = `select id, total from orders;`;
-const query = { sql, args: [], name: "orders/list-orders" };
+const query = { sql, args: [], name: "ordersListOrders" };
 
 export const ordersListOrders = Object.assign(
 	async function ordersListOrders(client: Client): Promise<ordersListOrders.Result[]> {
@@ -378,7 +378,7 @@ create table if not exists drafts (id integer primary key, body text not null);
 import type {Client} from 'sqlfu';
 
 const sql = `drop table posts;`;
-const query = { sql, args: [], name: "drop-posts" };
+const query = { sql, args: [], name: "dropPosts" };
 
 export const dropPosts = Object.assign(
 	async function dropPosts(client: Client) {
@@ -392,7 +392,7 @@ export const dropPosts = Object.assign(
 import type {Client} from 'sqlfu';
 
 const sql = `alter table posts add column title text;`;
-const query = { sql, args: [], name: "alter-posts-add-title" };
+const query = { sql, args: [], name: "alterPostsAddTitle" };
 
 export const alterPostsAddTitle = Object.assign(
 	async function alterPostsAddTitle(client: Client) {
@@ -406,7 +406,7 @@ export const alterPostsAddTitle = Object.assign(
 import type {Client} from 'sqlfu';
 
 const sql = `pragma foreign_keys = on;`;
-const query = { sql, args: [], name: "enable-foreign-keys" };
+const query = { sql, args: [], name: "enableForeignKeys" };
 
 export const enableForeignKeys = Object.assign(
 	async function enableForeignKeys(client: Client) {
@@ -423,7 +423,7 @@ const sql = `
 drop table if exists posts;
 create table posts (id integer primary key, slug text not null);
 `.trim();
-const query = { sql, args: [], name: "reset-posts" };
+const query = { sql, args: [], name: "resetPosts" };
 
 export const resetPosts = Object.assign(
 	async function resetPosts(client: Client) {
@@ -442,7 +442,7 @@ const sql = `
    comment */
 create table if not exists drafts (id integer primary key, body text not null);
 `.trim();
-const query = { sql, args: [], name: "commented-create" };
+const query = { sql, args: [], name: "commentedCreate" };
 
 export const commentedCreate = Object.assign(
 	async function commentedCreate(client: Client) {

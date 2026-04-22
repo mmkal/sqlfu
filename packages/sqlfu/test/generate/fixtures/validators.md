@@ -68,7 +68,7 @@ const Result = z.object({
 	status: z.enum(["draft", "published"]),
 });
 const sql = `select id, slug, title, status from posts where slug = ? limit 1;`;
-const query = (params: findPostBySlug.Params) => ({ sql, args: [params.slug], name: "find-post-by-slug" });
+const query = (params: findPostBySlug.Params) => ({ sql, args: [params.slug], name: "findPostBySlug" });
 
 export const findPostBySlug = Object.assign(
 	async function findPostBySlug(client: Client, params: findPostBySlug.Params): Promise<findPostBySlug.Result | null> {
@@ -155,7 +155,7 @@ const Result = v.object({
 	status: v.picklist(["draft", "published"]),
 });
 const sql = `select id, slug, title, status from posts where slug = ? limit 1;`;
-const query = (params: findPostBySlug.Params) => ({ sql, args: [params.slug], name: "find-post-by-slug" });
+const query = (params: findPostBySlug.Params) => ({ sql, args: [params.slug], name: "findPostBySlug" });
 
 export const findPostBySlug = Object.assign(
 	async function findPostBySlug(client: Client, params: findPostBySlug.Params): Promise<findPostBySlug.Result | null> {
@@ -238,7 +238,7 @@ const Result = z.object({
 	title: z.nullable(z.string()),
 });
 const sql = `select id, slug, title from posts where slug = ? limit 1;`;
-const query = (params: findPostBySlug.Params) => ({ sql, args: [params.slug], name: "find-post-by-slug" });
+const query = (params: findPostBySlug.Params) => ({ sql, args: [params.slug], name: "findPostBySlug" });
 
 export const findPostBySlug = Object.assign(
 	async function findPostBySlug(client: Client, params: findPostBySlug.Params): Promise<findPostBySlug.Result | null> {
@@ -319,7 +319,7 @@ const Result = z.object({
 	slug: z.string(),
 });
 const sql = `select id, slug from posts where slug = ? limit 1;`;
-const query = (params: findPostBySlug.Params) => ({ sql, args: [params.slug], name: "find-post-by-slug" });
+const query = (params: findPostBySlug.Params) => ({ sql, args: [params.slug], name: "findPostBySlug" });
 
 export const findPostBySlug = Object.assign(
 	async function findPostBySlug(client: Client, params: findPostBySlug.Params): Promise<findPostBySlug.Result | null> {
@@ -392,7 +392,7 @@ const Result = v.object({
 	slug: v.string(),
 });
 const sql = `select id, slug from posts where slug = ? limit 1;`;
-const query = (params: findPostBySlug.Params) => ({ sql, args: [params.slug], name: "find-post-by-slug" });
+const query = (params: findPostBySlug.Params) => ({ sql, args: [params.slug], name: "findPostBySlug" });
 
 export const findPostBySlug = Object.assign(
 	async function findPostBySlug(client: Client, params: findPostBySlug.Params): Promise<findPostBySlug.Result | null> {
@@ -472,7 +472,7 @@ const Result = z.object({
 	slug: z.string(),
 });
 const sql = `select id, slug from posts where slug = ? limit 1;`;
-const query = (params: findPostBySlug.Params) => ({ sql, args: [params.slug], name: "find-post-by-slug" });
+const query = (params: findPostBySlug.Params) => ({ sql, args: [params.slug], name: "findPostBySlug" });
 
 export const findPostBySlug = Object.assign(
 	async function findPostBySlug(client: Client, params: findPostBySlug.Params): Promise<findPostBySlug.Result | null> {
@@ -559,7 +559,7 @@ const Result = type({
 	status: "\"draft\" | \"published\"",
 });
 const sql = `select id, slug, title, status from posts where slug = ? limit 1;`;
-const query = (params: findPostBySlug.Params) => ({ sql, args: [params.slug], name: "find-post-by-slug" });
+const query = (params: findPostBySlug.Params) => ({ sql, args: [params.slug], name: "findPostBySlug" });
 
 export const findPostBySlug = Object.assign(
 	async function findPostBySlug(client: Client, params: findPostBySlug.Params): Promise<findPostBySlug.Result | null> {
@@ -641,7 +641,7 @@ const Result = type({
 	slug: "string",
 });
 const sql = `select id, slug from posts where slug = ? limit 1;`;
-const query = (params: findPostBySlug.Params) => ({ sql, args: [params.slug], name: "find-post-by-slug" });
+const query = (params: findPostBySlug.Params) => ({ sql, args: [params.slug], name: "findPostBySlug" });
 
 export const findPostBySlug = Object.assign(
 	async function findPostBySlug(client: Client, params: findPostBySlug.Params): Promise<findPostBySlug.Result | null> {
@@ -719,7 +719,7 @@ const Result = v.object({
 	title: v.nullable(v.string()),
 });
 const sql = `select id, slug, title from posts limit 1;`;
-const query = { sql, args: [], name: "latest-post" };
+const query = { sql, args: [], name: "latestPost" };
 
 export const latestPost = Object.assign(
 	async function latestPost(client: Client): Promise<latestPost.Result | null> {
@@ -776,7 +776,7 @@ const Params = z.object({
 	slug: z.string(),
 });
 const sql = `insert into posts (slug) values (?);`;
-const query = (params: insertPost.Params) => ({ sql, args: [params.slug], name: "insert-post" });
+const query = (params: insertPost.Params) => ({ sql, args: [params.slug], name: "insertPost" });
 
 export const insertPost = Object.assign(
 	async function insertPost(client: Client, params: insertPost.Params) {
@@ -831,7 +831,7 @@ select id, slug from posts;
 import type {Client} from 'sqlfu';
 
 const sql = `select id, slug from posts;`;
-const query = { sql, args: [], name: "list-posts" };
+const query = { sql, args: [], name: "listPosts" };
 
 export const listPosts = Object.assign(
 	async function listPosts(client: Client): Promise<listPosts.Result[]> {

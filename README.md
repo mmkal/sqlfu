@@ -121,7 +121,7 @@ Opt in to runtime validation by setting `generate.validator` to `'arktype'`, `'v
 
 ### Observability
 
-Generated queries carry their filename to runtime as a `name` field on the emitted `SqlQuery`. That name reaches OpenTelemetry spans, Sentry errors, PostHog events, and Datadog metrics through a single `instrument()` call:
+Generated queries carry their identity to runtime as a `name` field on the emitted `SqlQuery` — the camelCase function name, matching the symbol you import (e.g. `insertMigration`). That name reaches OpenTelemetry spans, Sentry errors, PostHog events, and Datadog metrics through a single `instrument()` call:
 
 ```ts
 import {instrument} from 'sqlfu';

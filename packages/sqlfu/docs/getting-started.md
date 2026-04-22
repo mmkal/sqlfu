@@ -112,7 +112,7 @@ Query files live next to the code that calls them. The filename is the query's i
 npx sqlfu generate
 ```
 
-sqlfu reads your `.sql` files and emits typed wrappers into `sql/.generated/`. For `get-posts.sql` you get a `getPosts` function with typed params and a typed result row attached via a namespace (`getPosts.Params`, `getPosts.Result`). The function also carries `.sql` and `.query` (including `name: "get-posts"`) as static properties used by observability hooks.
+sqlfu reads your `.sql` files and emits typed wrappers into `sql/.generated/`. For `get-posts.sql` you get a `getPosts` function with typed params and a typed result row attached via a namespace (`getPosts.Params`, `getPosts.Result`). The function also carries `.sql` and `.query` (including `name: "getPosts"`) as static properties used by observability hooks.
 
 Note: `generate` reads the live database schema, so `migrate` must have run first.
 
@@ -130,7 +130,7 @@ const posts = await getPosts(client, {limit: 10});
 //    ^? Array<{id: number, slug: string, title: string, body: string, published: number}>
 ```
 
-Params and result rows are fully typed. Your IDE hover shows the inferred row type directly. The `getPosts.query.name` field (`"get-posts"`) travels with every call to OpenTelemetry spans, Sentry errors, and Datadog metrics -- see [Observability](/docs/observability).
+Params and result rows are fully typed. Your IDE hover shows the inferred row type directly. The `getPosts.query.name` field (`"getPosts"`) travels with every call to OpenTelemetry spans, Sentry errors, and Datadog metrics -- see [Observability](/docs/observability).
 
 `node:sqlite` is built into Node 22+. Using a different runtime or driver? See [Adapters](/docs/adapters) for Bun, Turso, D1, Expo, and others -- the same generated wrappers work unchanged across all of them.
 

@@ -7,7 +7,7 @@ create table if not exists sqlfu_migrations (
   applied_at text not null
 );
 `.trim();
-const query = { sql, args: [], name: "ensure-migration-table" };
+const query = { sql, args: [], name: "ensureMigrationTable" };
 
 export const ensureMigrationTable = Object.assign(
 	async function ensureMigrationTable(client: Client) {

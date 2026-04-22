@@ -46,7 +46,7 @@ export function migrationsFromBundle(bundle: MigrationBundle): Migration[] {
 export type {SqlfuMigrationsRow};
 
 function* ensureMigrationTableGen(client: Client): DualGenerator<void> {
-  yield client.run({sql: ensureMigrationTableWrapper.sql, args: [], name: 'ensure-migration-table'});
+  yield client.run(ensureMigrationTableWrapper.query);
 }
 
 export function migrationName(migration: {path: string}) {
@@ -62,11 +62,7 @@ export function readMigrationHistory(client: Client): SqlfuMigrationsRow[] | Pro
 
 function* readMigrationHistoryGen(client: Client): DualGenerator<SqlfuMigrationsRow[]> {
   yield* ensureMigrationTableGen(client);
-  return (yield client.all<SqlfuMigrationsRow>({
-    sql: selectMigrationHistoryWrapper.sql,
-    args: [],
-    name: 'select-migration-history',
-  })) as SqlfuMigrationsRow[];
+  return (yield client.all<SqlfuMigrationsRow>(selectMigrationHistoryWrapper.query)) as SqlfuMigrationsRow[];
 }
 
 type ApplyMigrationsParams = {
@@ -150,11 +146,9 @@ function* applyOneMigrationGen(
   input: {content: string; name: string; checksum: string; applied_at: string},
 ): DualGenerator<void> {
   yield client.raw(input.content);
-  yield client.run({
-    sql: insertMigrationWrapper.sql,
-    args: [input.name, input.checksum, input.applied_at],
-    name: 'insert-migration',
-  });
+  yield client.run(
+    insertMigrationWrapper.query({name: input.name, checksum: input.checksum, applied_at: input.applied_at}),
+  );
 }
 
 function* baselineMigrationHistoryGen(client: Client, params: BaselineParams): DualGenerator<void> {
@@ -171,13 +165,15 @@ function* baselineMigrationHistoryGen(client: Client, params: BaselineParams): D
 
 function* replaceMigrationHistoryGen(client: Client, migrations: Migration[]): DualGenerator<void> {
   yield* ensureMigrationTableGen(client);
-  yield client.run({sql: deleteMigrationHistoryWrapper.sql, args: [], name: 'delete-migration-history'});
+  yield client.run(deleteMigrationHistoryWrapper.query);
   for (const migration of migrations) {
-    yield client.run({
-      sql: insertMigrationWrapper.sql,
-      args: [migrationName(migration), digest(migration.content), new Date().toISOString()],
-      name: 'insert-migration',
-    });
+    yield client.run(
+      insertMigrationWrapper.query({
+        name: migrationName(migration),
+        checksum: digest(migration.content),
+        applied_at: new Date().toISOString(),
+      }),
+    );
   }
 }
 

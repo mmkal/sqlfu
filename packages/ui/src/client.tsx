@@ -1674,23 +1674,6 @@ function DataTable(input: {
     },
   );
   const pendingFocusRef = useRef<{rowId: number; columnId: string} | null>(null);
-  const rowHistoryRef = useRef<{
-    baseline: string;
-    undo: (Record<string, unknown>[])[];
-    redo: (Record<string, unknown>[])[];
-  }>({
-    baseline: '',
-    undo: [],
-    redo: [],
-  });
-  const historyBaseline = JSON.stringify(input.originalRows ?? input.rows);
-  if (rowHistoryRef.current.baseline !== historyBaseline) {
-    rowHistoryRef.current = {
-      baseline: historyBaseline,
-      undo: [],
-      redo: [],
-    };
-  }
   const computedColumnWidths = columnWidthAlgorithm({
     availableWidth: Math.max(0, containerWidth - 64),
     columns: input.columns.map((column) => ({
@@ -1785,60 +1768,13 @@ function DataTable(input: {
     );
   const showSelectedCellDiffTabs =
     selectedCellDirty && selectedOriginalValue !== 'null' && selectedOriginalValue !== '';
-  const applyUndo = () => {
-    const previousRows = rowHistoryRef.current.undo.at(-1);
-    if (!previousRows) {
-      return;
-    }
-    rowHistoryRef.current = {
-      ...rowHistoryRef.current,
-      undo: rowHistoryRef.current.undo.slice(0, -1),
-      redo: [...rowHistoryRef.current.redo, cloneTableRows(input.rows)],
-    };
-    input.onRowsChange?.(cloneTableRows(previousRows));
-  };
-  const applyRedo = () => {
-    const nextRows = rowHistoryRef.current.redo.at(-1);
-    if (!nextRows) {
-      return;
-    }
-    rowHistoryRef.current = {
-      ...rowHistoryRef.current,
-      undo: [...rowHistoryRef.current.undo, cloneTableRows(input.rows)],
-      redo: rowHistoryRef.current.redo.slice(0, -1),
-    };
-    input.onRowsChange?.(cloneTableRows(nextRows));
-  };
-
   return (
-    <div
-      className="stack"
-      onKeyDownCapture={(event) => {
-        const commandKey = process.platform === 'darwin' ? event.metaKey : event.ctrlKey;
-        if (!commandKey) {
-          return;
-        }
-        if (event.key.toLowerCase() === 'z' && event.shiftKey) {
-          event.preventDefault();
-          applyRedo();
-          return;
-        }
-        if (event.key.toLowerCase() === 'z') {
-          event.preventDefault();
-          applyUndo();
-          return;
-        }
-        if (event.key.toLowerCase() === 'y') {
-          event.preventDefault();
-          applyRedo();
-        }
-      }}
-    >
+    <div className="stack">
       {input.toolbar ? (
         <div className="data-toolbar">
           {input.toolbar}
-          <div className="data-toolbar-trailing">
-            {input.showSelectedCellDetail ? (
+          {input.showSelectedCellDetail ? (
+            <div className="data-toolbar-trailing">
               <CellDetailPopoverButton
                 selectedCell={selectedCell}
                 selectedOriginalValue={selectedOriginalValue}
@@ -1847,30 +1783,8 @@ function DataTable(input: {
                 selectedCellMode={selectedCellMode}
                 setSelectedCellMode={setSelectedCellMode}
               />
-            ) : null}
-            <div className="data-toolbar-undo-group">
-              <button
-                className="rqp-icon-button"
-                type="button"
-                aria-label="Undo cell changes"
-                disabled={!input.editable || rowHistoryRef.current.undo.length === 0}
-                onClick={applyUndo}
-                title="Undo (⌘Z)"
-              >
-                ↶
-              </button>
-              <button
-                className="rqp-icon-button"
-                type="button"
-                aria-label="Redo cell changes"
-                disabled={!input.editable || rowHistoryRef.current.redo.length === 0}
-                onClick={applyRedo}
-                title="Redo (⌘⇧Z)"
-              >
-                ↷
-              </button>
             </div>
-          </div>
+          ) : null}
         </div>
       ) : null}
       <div className="table-scroll" ref={containerRef}>
@@ -1945,11 +1859,6 @@ function DataTable(input: {
                     }
                     nextRow[change.columnId] = readGridCellValue(change.newCell);
                   }
-                  rowHistoryRef.current = {
-                    ...rowHistoryRef.current,
-                    undo: [...rowHistoryRef.current.undo, cloneTableRows(input.rows)],
-                    redo: [],
-                  };
                   input.onRowsChange?.(nextRows);
                 }
               : undefined

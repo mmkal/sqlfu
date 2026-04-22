@@ -1137,7 +1137,7 @@ function TablePanel(input: {relation: StudioRelation}) {
         <RelationQueryPanel
           relation={input.relation}
           runSql={(runInput) => orpcClient.sql.run(runInput)}
-          renderDefaultDataTable={() => (
+          renderDefaultDataTable={({toolbar}) => (
             <DataTable
               storageKey={`relation/${input.relation.name}`}
               columns={rowsQuery.data.columns}
@@ -1152,10 +1152,17 @@ function TablePanel(input: {relation: StudioRelation}) {
               onAppendRow={() => setDraftRows([...displayedRows, {...emptyRowTemplate}])}
               onDeleteRow={handleDeleteRow}
               showSelectedCellDetail
+              toolbar={toolbar}
             />
           )}
           renderSqlDataTable={(args) => (
-            <DataTable storageKey={args.storageKey} columns={args.columns} rows={args.rows} showSelectedCellDetail />
+            <DataTable
+              storageKey={args.storageKey}
+              columns={args.columns}
+              rows={args.rows}
+              showSelectedCellDetail
+              toolbar={args.toolbar}
+            />
           )}
         />
       </section>
@@ -1643,9 +1650,15 @@ function DataTable(input: {
   onAppendRow?: () => void;
   onDeleteRow?: (rowIndex: number) => void;
   showSelectedCellDetail?: boolean;
+  toolbar?: ReactNode;
 }) {
   if (input.rows.length === 0) {
-    return <p className="muted">No rows.</p>;
+    return (
+      <>
+        {input.toolbar ? <div className="data-toolbar">{input.toolbar}</div> : null}
+        <p className="muted">No rows.</p>
+      </>
+    );
   }
 
   const {ref: containerRef, width: containerWidth} = useElementWidth<HTMLDivElement>();
@@ -1836,26 +1849,33 @@ function DataTable(input: {
         }
       }}
     >
-      {input.editable ? (
-        <div className="actions">
-          <button
-            className="button"
-            type="button"
-            aria-label="Undo cell changes"
-            disabled={rowHistoryRef.current.undo.length === 0}
-            onClick={applyUndo}
-          >
-            Undo
-          </button>
-          <button
-            className="button"
-            type="button"
-            aria-label="Redo cell changes"
-            disabled={rowHistoryRef.current.redo.length === 0}
-            onClick={applyRedo}
-          >
-            Redo
-          </button>
+      {input.toolbar || input.editable ? (
+        <div className="data-toolbar">
+          {input.toolbar}
+          {input.editable ? (
+            <div className="data-toolbar-undo-group">
+              <button
+                className="rqp-icon-button"
+                type="button"
+                aria-label="Undo cell changes"
+                disabled={rowHistoryRef.current.undo.length === 0}
+                onClick={applyUndo}
+                title="Undo (⌘Z)"
+              >
+                ↶
+              </button>
+              <button
+                className="rqp-icon-button"
+                type="button"
+                aria-label="Redo cell changes"
+                disabled={rowHistoryRef.current.redo.length === 0}
+                onClick={applyRedo}
+                title="Redo (⌘⇧Z)"
+              >
+                ↷
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
       <div className="table-scroll" ref={containerRef}>

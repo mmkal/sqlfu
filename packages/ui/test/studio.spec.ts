@@ -1156,22 +1156,21 @@ async function confirmAndRunSchemaCommand(page: Page, button: Locator, confirmat
   await expect(dialog).not.toBeVisible();
 }
 
-test('relation query panel starts collapsed and exposes sort/filter/hide icons per column', async ({page}) => {
+test('relation query panel starts collapsed and exposes Filter / Sort / Columns toolbar buttons', async ({page}) => {
   await page.goto('/#table/posts');
 
   await expect(page.getByRole('heading', {name: 'posts'})).toBeVisible();
   await expect(page.getByRole('button', {name: 'Query'})).toBeVisible();
   await expect(page.getByLabel('Relation query editor')).toBeHidden();
-  for (const column of ['id', 'slug', 'title', 'body', 'published']) {
-    await expect(page.getByRole('button', {name: `Sort ${column} ascending`})).toBeVisible();
-    await expect(page.getByRole('button', {name: `Filter ${column}`})).toBeVisible();
-    await expect(page.getByRole('button', {name: `Hide ${column}`})).toBeVisible();
-  }
+  await expect(page.getByRole('button', {name: 'Filter', exact: true})).toBeVisible();
+  await expect(page.getByRole('button', {name: 'Sort', exact: true})).toBeVisible();
+  await expect(page.getByRole('button', {name: /Columns — \d+ of \d+ visible/})).toBeVisible();
 });
 
-test('clicking a sort icon opens the query accordion and adds an order by clause', async ({page}) => {
+test('picking a sort column opens the query accordion and adds an order by clause', async ({page}) => {
   await page.goto('/#table/posts');
-  await page.getByRole('button', {name: 'Sort title ascending'}).click();
+  await page.getByRole('button', {name: 'Sort', exact: true}).click();
+  await page.getByRole('button', {name: 'Sort by title'}).click();
 
   await expect(page.getByLabel('Relation query editor')).toBeVisible();
   await expect(page.getByLabel('Relation query editor')).toContainText('order by "title" asc');
@@ -1180,11 +1179,12 @@ test('clicking a sort icon opens the query accordion and adds an order by clause
 
 test('adding an equals filter writes a where clause and narrows the displayed rows', async ({page}) => {
   await page.goto('/#table/posts');
-  await expect(page.getByText('hello-world')).toBeVisible();
-  await expect(page.getByText('draft-notes')).toBeVisible();
+  await expect(page.locator('.reactgrid').getByText('hello-world')).toBeVisible();
+  await expect(page.locator('.reactgrid').getByText('draft-notes')).toBeVisible();
 
-  await page.getByRole('button', {name: 'Filter slug'}).click();
-  const popover = page.getByRole('dialog', {name: 'Filter slug'});
+  await page.getByRole('button', {name: 'Filter', exact: true}).click();
+  const popover = page.getByRole('dialog', {name: 'Filters'});
+  await popover.getByLabel('Filter column').selectOption('slug');
   await popover.getByLabel('Filter value').fill('hello-world');
   await popover.getByRole('button', {name: 'Apply'}).click();
 
@@ -1195,7 +1195,8 @@ test('adding an equals filter writes a where clause and narrows the displayed ro
 
 test('hiding a column comments it out of the select list so it can be restored', async ({page}) => {
   await page.goto('/#table/posts');
-  await page.getByRole('button', {name: 'Hide body'}).click();
+  await page.getByRole('button', {name: /Columns — \d+ of \d+ visible/}).click();
+  await page.getByRole('dialog', {name: 'Columns'}).getByLabel('Hide body').click();
 
   await expect(page.getByLabel('Relation query editor')).toContainText('/* "body" */');
   await expect(page.getByLabel('Relation query editor')).toContainText('"id", "slug", "title"');
@@ -1204,7 +1205,8 @@ test('hiding a column comments it out of the select list so it can be restored',
 test('removing the limit clause surfaces a hard error and refuses to execute', async ({page}) => {
   await page.goto('/#table/posts');
   // contribute something so we're in custom-query mode
-  await page.getByRole('button', {name: 'Sort id ascending'}).click();
+  await page.getByRole('button', {name: 'Sort', exact: true}).click();
+  await page.getByRole('button', {name: 'Sort by id'}).click();
   await expect(page.getByLabel('Relation query editor')).toContainText('limit 100');
 
   await replaceCodeMirrorText(page, 'Relation query editor', 'select * from posts');
@@ -1213,7 +1215,8 @@ test('removing the limit clause surfaces a hard error and refuses to execute', a
 
 test('custom query that no longer targets this table shows an "Open in SQL Runner" hint', async ({page}) => {
   await page.goto('/#table/posts');
-  await page.getByRole('button', {name: 'Sort id ascending'}).click();
+  await page.getByRole('button', {name: 'Sort', exact: true}).click();
+  await page.getByRole('button', {name: 'Sort by id'}).click();
 
   await replaceCodeMirrorText(
     page,

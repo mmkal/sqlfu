@@ -74,9 +74,15 @@ string.
 - [x] Docs.
       _README.md line 124, `docs/observability.md` intro + the worked example,
       and `docs/getting-started.md` lines 115 + 133 rewritten to mention the
-      camelCase function name. Ad-hoc-SQL snippets using kebab-case
-      (`'health-check'`, `'my-query'`) kept intentionally — those illustrate
-      user-authored names for non-generated queries._
+      camelCase function name. Ad-hoc-SQL snippets (`'health-check'`,
+      `'my-query'`), outbox consumer names, and test-fixture query names in
+      `test/observability/*.test.ts` + `test/outbox/outbox.test.ts` + the
+      `spanNameFor` test were ALSO converted to camelCase — even though
+      "whatever string you want" is the actual contract, mixing conventions
+      in examples and docs sends a confusing signal. Kept kebab/snake
+      casings intact for non-name identifiers (ESLint rule `'sqlfu-sql'`,
+      esbuild plugin `'sqlite-only-dialects'`, event type format
+      `'user:signed_up'`) because those are different domains._
 
 ## Out of scope
 
@@ -110,10 +116,13 @@ string.
   mirrored in the hand-written path). Collapsed the four call sites onto the
   generated factory in the same commit — see CLAUDE.md's "DELETE stuff that is
   no longer serving us" note.
-- Ad-hoc SQL examples in the docs keep kebab-case names (`'health-check'`,
-  `'my-query'`, outbox consumer names) on purpose: the camelCase convention is
-  a property of the *generator* output, not of the `name` field in general.
-  Users can pass whatever string they want for ad-hoc SQL.
+- Initially kept kebab-case ad-hoc examples (`'health-check'`, `'my-query'`,
+  outbox consumer names) on the theory that "whatever string you want" is
+  the actual contract. User pushed back: mixing conventions in examples
+  and test fixtures sends a confusing signal even if the code accepts it.
+  Changed all of them to camelCase. Non-name identifiers with existing
+  conventions (ESLint rule slugs, esbuild plugin names, event type format
+  `'user:signed_up'`) kept as-is — those are different domains.
 - Nine pre-existing test failures on origin/main (`Cause: Error:` vs `Cause:`
   stringification drift in `test/migrations/*.test.ts`,
   `test/sql-editor-diagnostic.test.ts`, `test/adapters/bun.test.ts`) are NOT

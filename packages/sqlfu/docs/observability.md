@@ -18,7 +18,7 @@ Nested directories fold into the same camelCase (`sql/users/list-profiles.sql` â
 Ad-hoc SQL (via `` client.sql`...` ``) has no name, but you can pass one explicitly:
 
 ```ts
-client.run({sql: 'select 1', args: [], name: 'health-check'});
+client.run({sql: 'select 1', args: [], name: 'healthCheck'});
 ```
 
 ## `instrument` helper
@@ -199,7 +199,7 @@ Full recipe: [`datadog.test.ts`](../test/observability/datadog.test.ts).
 **`client.raw(sql)` is not uniquely identified.** `raw` interpolates values into the SQL text, so per-call distinctness depends on parameter values rather than on a stable name. If you need named observability on dynamic SQL, assemble a `SqlQuery` directly:
 
 ```ts
-client.run({sql, args, name: 'my-query'});
+client.run({sql, args, name: 'myQuery'});
 ```
 
 **`iterate` and `transaction` pass through unchanged.** Queries issued *inside* a transaction still fire hooks because the tx client is re-instrumented on entry. Transactions themselves don't get their own spans. If you want transaction-level spans, wrap `client.transaction(...)` calls yourself using your tracer.

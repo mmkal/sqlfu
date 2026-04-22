@@ -243,7 +243,7 @@ export function generateRandomName(rng = Math.random) {
  * `client.raw()` is not uniquely identified — the raw SQL string has values
  * interpolated into it, so the hash becomes per-value. If you need named
  * observability on dynamic SQL, pass a `name` on the SqlQuery directly:
- * `client.run({ sql, args, name: 'my-query' })`.
+ * `client.run({ sql, args, name: 'myQuery' })`.
  */
 export function spanNameFor(query: SqlQuery): string {
   if (query.name) {

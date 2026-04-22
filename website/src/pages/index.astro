@@ -65,20 +65,20 @@ import '../styles/landing.css';
       </figure>
 
       <h2 class="section-title">SQL first. TypeScript second.</h2>
-      <section class="section-grid">
-        <article class="panel value-panel">
+      <section class="section-grid" id="value-panels">
+        <article class="panel value-panel" data-animation-key="schema">
           <div class="eyebrow">source of truth</div>
           <h3>Schema, migrations, queries. All <code>.sql</code>.</h3>
           <p>Your schema lives in <code>definitions.sql</code>. Migrations are ordered SQL files. Queries are <code>.sql</code> files checked in next to the code that calls them. No DSL, no runtime builder to fight.</p>
         </article>
-        <article class="panel value-panel">
+        <article class="panel value-panel" data-animation-key="generate">
           <div class="eyebrow">types, generated</div>
           <h3>TypeScript wrappers <i>from</i> your SQL</h3>
           <p>
             <code>sqlfu generate</code> reads your <code>.sql</code> files and emits typed wrappers next to them: typed params, typed rows, and a client you can call from application code. Your query names travel with them: to <a href="/docs/observability">OpenTelemetry, Sentry, Datadog, PostHog</a>, whatever.
           </p>
         </article>
-        <article class="panel value-panel">
+        <article class="panel value-panel" data-animation-key="draft">
           <div class="eyebrow">diff-driven migrations</div>
           <h3>Drafts your next migration</h3>
           <p>The native SQLite diff engine compares replayed migration history against <code>definitions.sql</code> and writes the next migration for you. You review, edit for renames or backfills, and commit.</p>
@@ -88,6 +88,93 @@ import '../styles/landing.css';
       <p class="works-with">
         Bring your own driver. sqlfu runs on top of <code>better-sqlite3</code>, <code>node:sqlite</code>, <code>bun:sqlite</code>, <code>@libsql/client</code>, <code>@tursodatabase/database</code> / <code>serverless</code> / <code>sync</code>, Cloudflare D1, Durable Objects, Expo SQLite, and <code>sqlite-wasm</code>. <a href="/docs/adapters">Full list →</a>
       </p>
+
+      {/*
+        Animations are off by default. They are enabled with `?animation=<name>`:
+
+          - `?animation=sequential` — a single large stage that plays the three
+            beats (schema → generate → draft) in sequence, replacing the
+            three-card grid. This is the main animated treatment.
+          - `?animation=a|b|c|d` — the original three-panel alternatives,
+            each card keeps its copy but its body gets swapped for the
+            matching `alt-<letter>-<key>` video.
+
+        When no `animation` param is set, the page ships the plain static
+        value panels above (same as main).
+      */}
+      <script is:inline>
+        (() => {
+          const params = new URLSearchParams(window.location.search);
+          const raw = params.get('animation');
+          if (!raw) return;
+          const name = raw.trim().toLowerCase();
+          const grid = document.getElementById('value-panels');
+          if (!grid) return;
+
+          if (name === 'sequential') {
+            // Single large stage. Replace the three-card grid wholesale.
+            const stage = document.createElement('section');
+            stage.className = 'animation-stage';
+            stage.innerHTML = `
+              <video
+                class="animation-stage-video"
+                autoplay
+                loop
+                muted
+                playsinline
+                preload="metadata"
+                poster="/assets/animations/anim-sequential.poster.jpg"
+              >
+                <source src="/assets/animations/anim-sequential.webm" type="video/webm" />
+                <source src="/assets/animations/anim-sequential.mp4" type="video/mp4" />
+              </video>
+              <img
+                class="animation-stage-fallback"
+                src="/assets/animations/anim-sequential.poster.jpg"
+                alt="sqlfu: edit schema, generate types, draft migrations."
+                loading="lazy"
+              />
+            `;
+            grid.replaceWith(stage);
+            return;
+          }
+
+          if (['a', 'b', 'c', 'd'].includes(name)) {
+            // Alternative three-card treatments: inject a `<video>` inside
+            // each value-panel, alongside the existing heading + copy.
+            for (const panel of grid.querySelectorAll('.value-panel')) {
+              const key = panel.dataset.animationKey;
+              if (!key) continue;
+              const slug = `alt-${name}-${key}`;
+              const media = document.createElement('div');
+              media.className = 'value-media';
+              media.innerHTML = `
+                <video
+                  class="value-video"
+                  autoplay
+                  loop
+                  muted
+                  playsinline
+                  preload="metadata"
+                  poster="/assets/animations/${slug}.poster.jpg"
+                >
+                  <source src="/assets/animations/${slug}.webm" type="video/webm" />
+                  <source src="/assets/animations/${slug}.mp4" type="video/mp4" />
+                </video>
+                <img
+                  class="value-video-fallback"
+                  src="/assets/animations/${slug}.poster.jpg"
+                  alt=""
+                  loading="lazy"
+                />
+              `;
+              const heading = panel.querySelector('.eyebrow');
+              if (heading) heading.after(media);
+              else panel.prepend(media);
+            }
+          }
+        })();
+      </script>
 
       <footer class="footer">
         Static docs + studio for sqlfu. The studio at <code>/ui</code> talks to your local backend when <code>npx sqlfu</code> is running.

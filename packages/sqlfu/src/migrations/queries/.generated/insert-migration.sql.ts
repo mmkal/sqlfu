@@ -1,8 +1,10 @@
 import type {Client} from 'sqlfu';
 
 const sql = `
-insert into sqlfu_migrations(name, checksum, applied_at)
-values (?, ?, ?);
+insert into
+  sqlfu_migrations (name, checksum, applied_at)
+values
+  (?, ?, ?);
 `.trim();
 const query = (params: insertMigration.Params) => ({ sql, args: [params.name, params.checksum, params.applied_at], name: "insert-migration" });
 

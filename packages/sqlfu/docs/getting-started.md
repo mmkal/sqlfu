@@ -134,6 +134,37 @@ Params and result rows are fully typed. Your IDE hover shows the inferred row ty
 
 `node:sqlite` is built into Node 22+. Using a different runtime or driver? See [Adapters](/docs/adapters) for Bun, Turso, D1, Expo, and others -- the same generated wrappers work unchanged across all of them.
 
+## Change the schema
+
+Edit `definitions.sql` and add a column:
+
+```sql
+create table posts (
+  id integer primary key autoincrement,
+  slug text not null unique,
+  title text not null,
+  body text not null,
+  excerpt text,
+  published integer not null default 0
+);
+```
+
+Then draft the migration:
+
+```sh
+npx sqlfu draft
+```
+
+The generated file will contain:
+
+```sql
+alter table posts add column excerpt text;
+```
+
+That is one line, not a full table rebuild. The diff engine compares the schema you have now (replayed from migration history) against the schema you declared in `definitions.sql`, and emits only the statements needed to close the gap. Adding a nullable column is a single `alter table` statement; SQLite supports it directly without recreating the table.
+
+Review the file, commit it, then run `npx sqlfu migrate` and `npx sqlfu generate` to update the live schema and regenerate the typed wrapper.
+
 ## Where to go next
 
 Pick the path that matches where you are:

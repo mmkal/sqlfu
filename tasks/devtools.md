@@ -7,6 +7,8 @@ size: large
 
 MVP shipped: `sqlfu/no-unnamed-inline-sql` lint rule + vscode scaffold. Round 2 (this bedtime, 2026-04-20): **expand the lint plugin** to add two more rules — formatting and query validation — and rename the export from `./eslint` to `./lint-plugin` so the module's role is clear (it targets both oxlint and eslint).
 
+**Round 3 (2026-04-22):** dogfood the `format-sql` rule on standalone `.sql` files. oxlint's `jsPlugins` only parses JS/TS, so an ESLint-style rule can't walk `.sql` files. Shipped a small companion: `sqlfu/lint-plugin` now exports `formatSqlFileContents(text)` (pure string-in/string-out), and `scripts/lint-sql-files.ts` walks the repo, reports/fixes `.sql` files that don't match the formatter, and is wired into the workspace `lint` / `lint:fix` scripts. Autofix reformatted 4 files (top-level `definitions.sql` example, internal `definitions.sql`, and 2 migration-table queries). Also surfaced a formatter flaw — see notes at bottom.
+
 **Restructure (post PR #16 review):** the lint plugin was originally shipped as a separate `@sqlfu/eslint-plugin` package. The user rejected that shape — the rule is now bundled inside the main `sqlfu` package as a single-file export. Originally at `sqlfu/eslint` with **zero runtime dependencies**; the round-2 changes introduce a runtime import of `sqlfu`'s formatter (~60 kB bundled), so the module is now more than a shim — hence the rename to `./lint-plugin`.
 
 ## Round 2 (2026-04-20)
@@ -145,6 +147,18 @@ If the scaffolding turns into an afternoon of tsconfig wrangling or CSP headache
 
 - **`.ts` imports via oxlint jsPlugins don't work in Node today.** Node's native type stripping strips types but does NOT rewrite `.js` imports to `.ts`. Our source uses NodeNext's `.js` convention (`import './formatter.js'`), so `import` of `lint-plugin.ts` fails at resolution time. Vitest's bundler handles this fine; Node + oxlint do not. Fix: point `jsPlugins` at the built `dist/lint-plugin.js`, and ensure `pnpm lint` runs `build:runtime` first so the dist plugin is up-to-date.
 - **Formatter is assertive.** `formatSql('select b from a', {style: 'sqlfu'})` returns `select b\nfrom a`, because the sqlfu default splits by clause. Short one-liners in tests (`await client.sql\`select b from a\``) will trip the rule. For now, the rule is off in test files via the `overrides` block. If the formatter later gains a "keep short queries on one line" mode, revisit that override.
+
+### Round 3 (2026-04-22)
+
+- [x] lint `.sql` files with the same formatter the `format-sql` rule uses. _Added `export function formatSqlFileContents(contents: string): string` to `packages/sqlfu/src/lint-plugin.ts` (4 new vitest cases covering reformat, no-op-on-formatted, trailing-newline preservation, empty input). The helper wraps `formatSql(..., {style: 'sqlfu'})` — same contract as the inline-template rule, so the two surfaces can never drift. Separate entry point (vs. an oxlint rule) because oxlint/ESLint only parse JS/TS._
+- [x] workspace script that walks `.sql` files and reports/fixes mismatches. _`scripts/lint-sql-files.ts`. Dry-run by default; `--fix` rewrites. Ignores `node_modules/`, `dist/`, `.generated/`, `packages/sqlfu/src/vendor/`, and the two fixture directories (`test/formatter/` and `test/schemadiff/fixtures/`) whose `.sql` files intentionally contain malformed input in `before:`/`after:` blocks._
+- [x] wire into root `lint` / `lint:fix`. _`package.json`: `lint` now runs `oxlint && tsx scripts/lint-sql-files.ts`; `lint:fix` runs `oxlint --fix && tsx scripts/lint-sql-files.ts --fix`._
+- [x] ran autofix — 4 files reformatted. _`packages/sqlfu/definitions.sql` (lower-case everything; triggers reflow), `packages/sqlfu/internal/definitions.sql` (space in `check(...)`), and both migration-table query files. Regenerated `.generated/*.sql.ts` via `pnpm --filter sqlfu build:internal-queries` so the inlined SQL constants match._
+
+### Round 3 gotchas / formatter flaws surfaced
+
+- **`create trigger ... begin ... end` reflow is ugly.** The formatter strips the `  ` indent off the trigger body, breaks `insert into target values (...)` across four lines, and leaves a stray blank line before `end`. See `packages/sqlfu/definitions.sql` in the diff. Not blocking (the file is an example + smoke-test target, not parsed by sqlfu itself), but a real formatter gap worth revisiting. Candidate fixes: either (a) detect `BEGIN ... END` and preserve original indentation inside, or (b) keep `values(...)` on the same line as `insert into ... (...)` when the tuple fits under `printWidth`.
+- **Stray top-level `packages/sqlfu/definitions.sql`** — noticed this is a bootstrap leftover. Only referenced from comment strings and example config text; nothing actually reads it. Not deleting in this PR (out of scope + worth a separate small cleanup), but someone should delete it or move it under `examples/` soon.
 
 ## Pre-existing flaws noticed (fix in-branch if trivial)
 

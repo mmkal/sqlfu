@@ -5,69 +5,69 @@
 import type {Client} from '../../core/types.js';
 
 export type SqliteInspectedDatabase = {
-  readonly tables: Record<string, SqliteInspectedTable>;
-  readonly views: Record<string, SqliteInspectedView>;
-  readonly triggers: Record<string, SqliteInspectedTrigger>;
+  tables: Record<string, SqliteInspectedTable>;
+  views: Record<string, SqliteInspectedView>;
+  triggers: Record<string, SqliteInspectedTrigger>;
 };
 
 export type SqliteInspectedTable = {
-  readonly name: string;
-  readonly createSql: string;
-  readonly columns: readonly SqliteInspectedColumn[];
-  readonly primaryKey: readonly string[];
-  readonly uniqueConstraints: readonly SqliteUniqueConstraint[];
-  readonly indexes: Record<string, SqliteInspectedIndex>;
-  readonly foreignKeys: readonly SqliteForeignKey[];
+  name: string;
+  createSql: string;
+  columns: SqliteInspectedColumn[];
+  primaryKey: string[];
+  uniqueConstraints: SqliteUniqueConstraint[];
+  indexes: Record<string, SqliteInspectedIndex>;
+  foreignKeys: SqliteForeignKey[];
 };
 
 export type SqliteInspectedColumn = {
-  readonly name: string;
-  readonly declaredType: string;
-  readonly collation: string | null;
-  readonly notNull: boolean;
-  readonly defaultSql: string | null;
-  readonly primaryKeyPosition: number;
-  readonly hidden: number;
-  readonly generated: boolean;
+  name: string;
+  declaredType: string;
+  collation: string | null;
+  notNull: boolean;
+  defaultSql: string | null;
+  primaryKeyPosition: number;
+  hidden: number;
+  generated: boolean;
 };
 
 export type SqliteUniqueConstraint = {
-  readonly columns: readonly string[];
+  columns: string[];
 };
 
 export type SqliteInspectedIndex = {
-  readonly name: string;
-  readonly createSql: string;
-  readonly unique: boolean;
-  readonly origin: string;
-  readonly columns: readonly string[];
-  readonly where: string | null;
+  name: string;
+  createSql: string;
+  unique: boolean;
+  origin: string;
+  columns: string[];
+  where: string | null;
 };
 
 export type SqliteForeignKey = {
-  readonly columns: readonly string[];
-  readonly referencedTable: string;
-  readonly referencedColumns: readonly string[];
-  readonly onUpdate: string;
-  readonly onDelete: string;
-  readonly match: string;
+  columns: string[];
+  referencedTable: string;
+  referencedColumns: string[];
+  onUpdate: string;
+  onDelete: string;
+  match: string;
 };
 
 export type SqliteInspectedView = {
-  readonly name: string;
-  readonly createSql: string;
-  readonly definition: string;
+  name: string;
+  createSql: string;
+  definition: string;
 };
 
 export type SqliteInspectedTrigger = {
-  readonly name: string;
-  readonly onName: string;
-  readonly createSql: string;
-  readonly normalizedSql: string;
+  name: string;
+  onName: string;
+  createSql: string;
+  normalizedSql: string;
 };
 
 export type DisposableClient = {
-  readonly client: Client;
+  client: Client;
   [Symbol.asyncDispose](): Promise<void>;
 };
 
@@ -81,39 +81,39 @@ export type SchemadiffOperationKind =
   | 'create-trigger';
 
 export type SchemadiffOperation = {
-  readonly id: string;
-  readonly kind: SchemadiffOperationKind;
-  readonly sql: string;
-  readonly dependencies: readonly string[];
+  id: string;
+  kind: SchemadiffOperationKind;
+  sql: string;
+  dependencies: string[];
 };
 
 export type SqliteDependencyFactKind = 'view-dependency' | 'trigger-dependency';
 
 export type SqliteDependencyFact = {
-  readonly kind: SqliteDependencyFactKind;
-  readonly ownerId: string;
-  readonly ownerName: string;
-  readonly dependsOnNames: readonly string[];
-  readonly referencedColumnNames: readonly string[];
+  kind: SqliteDependencyFactKind;
+  ownerId: string;
+  ownerName: string;
+  dependsOnNames: string[];
+  referencedColumnNames: string[];
 };
 
 export type SqliteExternalBlockerKind = 'index' | 'view' | 'trigger';
 
 export type SqliteExternalBlockerRecord = {
-  readonly kind: SqliteExternalBlockerKind;
-  readonly objectId: string;
-  readonly objectName: string;
-  readonly tableName: string;
-  readonly referencedColumnNames: readonly string[];
-  readonly dependencyNames: readonly string[];
+  kind: SqliteExternalBlockerKind;
+  objectId: string;
+  objectName: string;
+  tableName: string;
+  referencedColumnNames: string[];
+  dependencyNames: string[];
 };
 
 export type SqliteColumnDropDependencyAnalysis = {
-  readonly tableName: string;
-  readonly removedColumnNames: readonly string[];
-  readonly viewDependencyFacts: readonly SqliteDependencyFact[];
-  readonly triggerDependencyFacts: readonly SqliteDependencyFact[];
-  readonly affectedViewNames: readonly string[];
-  readonly affectedTriggerNames: readonly string[];
-  readonly externalBlockers: readonly SqliteExternalBlockerRecord[];
+  tableName: string;
+  removedColumnNames: string[];
+  viewDependencyFacts: SqliteDependencyFact[];
+  triggerDependencyFacts: SqliteDependencyFact[];
+  affectedViewNames: string[];
+  affectedTriggerNames: string[];
+  externalBlockers: SqliteExternalBlockerRecord[];
 };

@@ -242,20 +242,20 @@ function classifyTableChange(input: {
   desired: SqliteInspectedDatabase;
   baselineTable: SqliteInspectedTable;
   desiredTable: SqliteInspectedTable;
-  baselineViewDependencyFacts: readonly SqliteDependencyFact[];
-  desiredViewDependencyFacts: readonly SqliteDependencyFact[];
-  baselineTriggerDependencyFacts: readonly SqliteDependencyFact[];
-  desiredTriggerDependencyFacts: readonly SqliteDependencyFact[];
+  baselineViewDependencyFacts: SqliteDependencyFact[];
+  desiredViewDependencyFacts: SqliteDependencyFact[];
+  baselineTriggerDependencyFacts: SqliteDependencyFact[];
+  desiredTriggerDependencyFacts: SqliteDependencyFact[];
 }):
   | {kind: 'none'}
-  | {kind: 'add-columns'; columns: readonly SqliteInspectedColumn[]}
+  | {kind: 'add-columns'; columns: SqliteInspectedColumn[]}
   | {
       kind: 'drop-columns';
-      operations: readonly SchemadiffOperation[];
-      handledRemovedViewNames: readonly string[];
-      handledRemovedTriggerNames: readonly string[];
-      handledCreatedViewNames: readonly string[];
-      handledCreatedTriggerNames: readonly string[];
+      operations: SchemadiffOperation[];
+      handledRemovedViewNames: string[];
+      handledRemovedTriggerNames: string[];
+      handledCreatedViewNames: string[];
+      handledCreatedTriggerNames: string[];
     }
   | {kind: 'rebuild'} {
   const {
@@ -334,7 +334,7 @@ function canUseDirectDropColumn(input: {
   desired: SqliteInspectedDatabase;
   baselineTable: SqliteInspectedTable;
   desiredTable: SqliteInspectedTable;
-  removedColumns: readonly SqliteInspectedColumn[];
+  removedColumns: SqliteInspectedColumn[];
 }): boolean {
   const {baselineTable, desiredTable, removedColumns} = input;
 
@@ -395,17 +395,17 @@ function planDirectDropColumnOperations(input: {
   desired: SqliteInspectedDatabase;
   baselineTable: SqliteInspectedTable;
   desiredTable: SqliteInspectedTable;
-  removedColumns: readonly SqliteInspectedColumn[];
-  baselineViewDependencyFacts: readonly SqliteDependencyFact[];
-  desiredViewDependencyFacts: readonly SqliteDependencyFact[];
-  baselineTriggerDependencyFacts: readonly SqliteDependencyFact[];
-  desiredTriggerDependencyFacts: readonly SqliteDependencyFact[];
+  removedColumns: SqliteInspectedColumn[];
+  baselineViewDependencyFacts: SqliteDependencyFact[];
+  desiredViewDependencyFacts: SqliteDependencyFact[];
+  baselineTriggerDependencyFacts: SqliteDependencyFact[];
+  desiredTriggerDependencyFacts: SqliteDependencyFact[];
 }): {
-  readonly operations: readonly SchemadiffOperation[];
-  readonly handledRemovedViewNames: readonly string[];
-  readonly handledRemovedTriggerNames: readonly string[];
-  readonly handledCreatedViewNames: readonly string[];
-  readonly handledCreatedTriggerNames: readonly string[];
+  operations: SchemadiffOperation[];
+  handledRemovedViewNames: string[];
+  handledRemovedTriggerNames: string[];
+  handledCreatedViewNames: string[];
+  handledCreatedTriggerNames: string[];
 } {
   const {
     tableName,
@@ -585,7 +585,7 @@ function planDirectDropColumnOperations(input: {
   };
 }
 
-function orderOperations(operations: readonly SchemadiffOperation[]): string[] {
+function orderOperations(operations: SchemadiffOperation[]): string[] {
   const graph = new Map<string, string[]>();
   const operationsById = new Map<string, SchemadiffOperation>();
 
@@ -605,8 +605,8 @@ function orderOperations(operations: readonly SchemadiffOperation[]): string[] {
 }
 
 function transitiveViewDependents(
-  seedNames: readonly string[],
-  viewDependencyFacts: readonly SqliteDependencyFact[],
+  seedNames: string[],
+  viewDependencyFacts: SqliteDependencyFact[],
   views: Record<string, SqliteInspectedView>,
 ): string[] {
   const seeds = new Set(seedNames);
@@ -632,7 +632,7 @@ function transitiveViewDependents(
 }
 
 function orderViewsForCreate(
-  views: readonly SqliteInspectedView[],
+  views: SqliteInspectedView[],
   schema: SqliteInspectedDatabase,
 ): SqliteInspectedView[] {
   const viewNames = new Set(views.map((view) => view.name));
@@ -659,7 +659,7 @@ function orderViewsForCreate(
 }
 
 function orderViewsForDrop(
-  views: readonly SqliteInspectedView[],
+  views: SqliteInspectedView[],
   schema: SqliteInspectedDatabase,
 ): SqliteInspectedView[] {
   return [...orderViewsForCreate(views, schema)].reverse();
@@ -831,11 +831,11 @@ function splitStatementForOutput(statement: string): string[] {
   return lines;
 }
 
-function pushStatements(target: string[], source: readonly string[]) {
+function pushStatements(target: string[], source: string[]) {
   target.push(...source);
 }
 
-function arraysEqual(left: readonly string[], right: readonly string[]): boolean {
+function arraysEqual(left: string[], right: string[]): boolean {
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 

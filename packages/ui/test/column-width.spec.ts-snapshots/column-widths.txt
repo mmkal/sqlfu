@@ -1,0 +1,23 @@
+variable content gets the spare width
+availableWidth=900 totalWidth=900
+widths=applied_at:220, name:172, content:508
+| applied_at                    | name                    | content                                                           |
+|-------------------------------|-------------------------|-------------------------------------------------------------------|
+| 2026-04-14T21:38:35.004Z      | create_table_posts      | create table posts (id integer primary key, slug text not null u… |
+| 2026-04-14T21:38:35.004Z      | create_table_posts      | create table a (b text)                                           |
+
+narrow viewport keeps minimum widths and relies on scrolling
+availableWidth=240 totalWidth=332
+widths=slug:116, title:116, published:100
+| slug             | title            | published      |
+|------------------|------------------|----------------|
+| hello-world      | Hello World      | 1              |
+| draft-notes      | Draft Notes      | 0              |
+
+uniform columns share spare width evenly
+availableWidth=500 totalWidth=500
+widths=id:250, published:250
+| id                                | published                         |
+|-----------------------------------|-----------------------------------|
+| 1                                 | 0                                 |
+| 2                                 | 1                                 |

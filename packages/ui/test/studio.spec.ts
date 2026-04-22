@@ -384,6 +384,7 @@ test('schema command failures stay visible next to the failing command button', 
 test('table browser, sql runner, and generated query form work against a live fixture project', async ({page}) => {
   await page.goto('/');
 
+  await page.getByRole('link', {name: /^posts/}).click();
   await expect(page.getByRole('heading', {name: 'posts'})).toBeVisible();
   await expect(page.getByText('hello-world')).toBeVisible();
 
@@ -418,14 +419,16 @@ test('relation rows render in a sheet-style grid', async ({page}) => {
   await expect(page.locator('.reactgrid [data-cell-rowidx="1"][data-cell-colidx="2"]')).toContainText('hello-world');
 });
 
-test('clicking a relation cell shows the full cell content below the table', async ({page}) => {
+test('clicking a relation cell surfaces the cell detail popover via the toolbar Cell button', async ({page}) => {
   await page.goto('/#table/posts');
 
   await page.locator('.reactgrid [data-cell-rowidx="1"][data-cell-colidx="4"]').click();
-  const selectedCellPanel = page.locator('.selected-cell-panel');
-  await expect(selectedCellPanel).toContainText('Cell: body, row 1');
-  await expect(selectedCellPanel).toContainText('body');
-  await expect(selectedCellPanel).toContainText('First post body');
+  const cellButton = page.getByRole('button', {name: 'Cell: body, row 1'});
+  await expect(cellButton).toBeVisible();
+  await cellButton.click();
+  const dialog = page.getByRole('dialog', {name: 'Cell detail'});
+  await expect(dialog).toContainText('Cell: body, row 1');
+  await expect(dialog).toContainText('First post body');
 });
 
 test('clicking a sql runner result cell shows the full cell content below the table', async ({page}) => {
@@ -444,9 +447,11 @@ test('clicking a sql runner result cell shows the full cell content below the ta
   await page.getByRole('button', {name: 'Run SQL'}).click();
 
   await page.locator('.reactgrid [data-cell-rowidx="1"][data-cell-colidx="1"]').click();
-  const selectedCellPanel = page.locator('.selected-cell-panel');
-  await expect(selectedCellPanel).toContainText('Cell: body, row 1');
-  await expect(selectedCellPanel).toContainText('First post body');
+  const cellButton = page.getByRole('button', {name: 'Cell: body, row 1'});
+  await expect(cellButton).toBeVisible();
+  await cellButton.click();
+  const dialog = page.getByRole('dialog', {name: 'Cell detail'});
+  await expect(dialog).toContainText('First post body');
 });
 
 test('views created from the sql runner can be browsed without crashing the app', async ({page}) => {
@@ -475,9 +480,11 @@ test('clicking a saved query result cell shows the full cell content below the t
   await page.getByRole('button', {name: 'Run query'}).click();
   await page.locator('.reactgrid [data-cell-rowidx="1"][data-cell-colidx="3"]').click();
 
-  const selectedCellPanel = page.locator('.selected-cell-panel');
-  await expect(selectedCellPanel).toContainText('Cell: title, row 1');
-  await expect(selectedCellPanel).toContainText('Hello World');
+  const cellButton = page.getByRole('button', {name: 'Cell: title, row 1'});
+  await expect(cellButton).toBeVisible();
+  await cellButton.click();
+  const dialog = page.getByRole('dialog', {name: 'Cell detail'});
+  await expect(dialog).toContainText('Hello World');
 });
 
 test('relation rows can be edited and saved from the grid', async ({page}) => {
@@ -514,7 +521,7 @@ test('relation rows can be appended from the grid', async ({page}) => {
   await page.goto('/#table/posts');
 
   await page.locator('.reactgrid [data-cell-rowidx="3"][data-cell-colidx="2"]').click();
-  await expect(page.locator('.selected-cell-panel')).toContainText('Cell: slug, row 3');
+  await expect(page.getByRole('button', {name: 'Cell: slug, row 3'})).toBeVisible();
   await expect(page.locator('.reactgrid [data-cell-rowidx="3"][data-cell-colidx="2"]')).toBeVisible();
 
   const editor = page.locator('.rg-celleditor input');
@@ -523,19 +530,19 @@ test('relation rows can be appended from the grid', async ({page}) => {
   await editor.pressSequentially('brand-new-post');
   await page.keyboard.press('Tab');
 
-  await expect(page.locator('.selected-cell-panel')).toContainText('Cell: title, row 3');
+  await expect(page.getByRole('button', {name: 'Cell: title, row 3'})).toBeVisible();
   await page.keyboard.press('Enter');
   await expect(editor).toBeVisible();
   await editor.pressSequentially('Brand New Post');
   await page.keyboard.press('Tab');
 
-  await expect(page.locator('.selected-cell-panel')).toContainText('Cell: body, row 3');
+  await expect(page.getByRole('button', {name: 'Cell: body, row 3'})).toBeVisible();
   await page.keyboard.press('Enter');
   await expect(editor).toBeVisible();
   await editor.pressSequentially('Inserted from the relations grid');
   await page.keyboard.press('Tab');
 
-  await expect(page.locator('.selected-cell-panel')).toContainText('Cell: published, row 3');
+  await expect(page.getByRole('button', {name: 'Cell: published, row 3'})).toBeVisible();
   await page.keyboard.press('Enter');
   await expect(editor).toBeVisible();
   await editor.pressSequentially('0');
@@ -565,15 +572,16 @@ test('relation rows can be selected and deleted from the grid', async ({page}) =
   await expect(firstRowHeader).toContainText('🗑');
   await expect(page.locator('.reactgrid [data-cell-rowidx="1"][data-cell-colidx="2"]')).toHaveClass(/selected-row/);
 
-  page.once('dialog', (dialog) => {
-    expect(dialog.message()).toBe('are you sure you want to delete');
-    dialog.accept();
-  });
+  await firstRowHeader.getByRole('button', {name: 'Delete row 1'}).click();
+  const confirmDialog = page.getByRole('dialog');
+  await expect(confirmDialog.getByText(/Delete row from "posts"\?/)).toBeVisible();
+  await expect(confirmDialog).toContainText('delete from "posts"');
+  await expect(confirmDialog).toContainText('where "id" = 1');
   const [deleteResponse] = await Promise.all([
     page.waitForResponse(
       (response) => response.request().method() === 'POST' && response.url().includes('/api/rpc/table/delete'),
     ),
-    firstRowHeader.getByRole('button', {name: 'Delete row 1'}).click(),
+    confirmDialog.getByRole('button', {name: 'Confirm'}).click(),
   ]);
   expect(deleteResponse.ok(), await deleteResponse.text()).toBe(true);
 
@@ -588,7 +596,7 @@ test('appended rows focus the clicked cell and allow editing primary key columns
 
   await page.goto('/#table/sqlfu_migrations');
   await page.locator('.reactgrid [data-cell-rowidx="2"][data-cell-colidx="1"]').click();
-  await expect(page.locator('.selected-cell-panel')).toContainText('Cell: name, row 2');
+  await expect(page.getByRole('button', {name: 'Cell: name, row 2'})).toBeVisible();
 
   await fillGridTextCell(page, 2, 1, 'manual_migration');
 
@@ -623,33 +631,6 @@ test('relation rows can discard dirty cell changes', async ({page}) => {
   await expect(page.locator('.reactgrid [data-cell-rowidx="1"][data-cell-colidx="3"]')).not.toHaveClass(/dirty/);
 });
 
-test('relation grid supports undo and redo controls', async ({page}) => {
-  await page.goto('/#table/posts');
-
-  const titleCell = page.locator('.reactgrid [data-cell-rowidx="1"][data-cell-colidx="3"]');
-  await titleCell.click();
-  await page.keyboard.press('Enter');
-  const editor = page.locator('.rg-celleditor input');
-  await expect(editor).toBeVisible();
-  await editor.press(`${process.platform === 'darwin' ? 'Meta' : 'Control'}+A`);
-  await editor.press('Backspace');
-  await editor.pressSequentially('Hello World Undo');
-  await editor.press('Enter');
-  await page.locator('.reactgrid [data-cell-rowidx="2"][data-cell-colidx="3"]').click();
-  await titleCell.click();
-
-  await expect(titleCell).toContainText('Hello World Undo');
-  await expect(page.getByRole('button', {name: 'Save changes'})).toBeVisible();
-
-  await page.getByRole('button', {name: 'Undo'}).click();
-  await expect(titleCell).not.toContainText('Undo');
-  await expect(page.getByRole('button', {name: 'Save changes'})).toHaveCount(0);
-
-  await page.getByRole('button', {name: 'Redo'}).click();
-  await expect(titleCell).toContainText('Hello World Undo');
-  await expect(page.getByRole('button', {name: 'Save changes'})).toBeVisible();
-});
-
 test('stale relation draft state is ignored when it does not match the fetched table shape', async ({page}) => {
   await page.addInitScript(() => {
     window.localStorage.setItem(
@@ -678,21 +659,22 @@ test('dirty relation cells show original, draft, and diff modes in the cell pane
   await editor.pressSequentially('Hello World Dirty');
   await editor.press('Enter');
   await titleCell.click();
+  await page.getByRole('button', {name: 'Cell: title, row 1'}).click();
 
-  const selectedCellPanel = page.locator('.selected-cell-panel');
-  await expect(selectedCellPanel.getByRole('tab', {name: 'Diff'})).toHaveAttribute('aria-selected', 'true');
-  await expect(selectedCellPanel.getByRole('tab', {name: 'Original'})).toBeVisible();
-  await expect(selectedCellPanel.getByRole('tab', {name: 'Draft'})).toBeVisible();
-  await expect(selectedCellPanel).toContainText('Hello World');
-  await expect(selectedCellPanel).toContainText('Hello World Dirty');
+  const cellPopover = page.getByRole('dialog', {name: 'Cell detail'});
+  await expect(cellPopover.getByRole('tab', {name: 'Diff'})).toHaveAttribute('aria-selected', 'true');
+  await expect(cellPopover.getByRole('tab', {name: 'Original'})).toBeVisible();
+  await expect(cellPopover.getByRole('tab', {name: 'Draft'})).toBeVisible();
+  await expect(cellPopover).toContainText('Hello World');
+  await expect(cellPopover).toContainText('Hello World Dirty');
 
-  await selectedCellPanel.getByRole('tab', {name: 'Original'}).click();
-  await expect(selectedCellPanel.getByRole('tab', {name: 'Original'})).toHaveAttribute('aria-selected', 'true');
-  await expect(selectedCellPanel).toContainText('Hello World');
+  await cellPopover.getByRole('tab', {name: 'Original'}).click();
+  await expect(cellPopover.getByRole('tab', {name: 'Original'})).toHaveAttribute('aria-selected', 'true');
+  await expect(cellPopover).toContainText('Hello World');
 
-  await selectedCellPanel.getByRole('tab', {name: 'Draft'}).click();
-  await expect(selectedCellPanel.getByRole('tab', {name: 'Draft'})).toHaveAttribute('aria-selected', 'true');
-  await expect(selectedCellPanel).toContainText('Hello World Dirty');
+  await cellPopover.getByRole('tab', {name: 'Draft'}).click();
+  await expect(cellPopover.getByRole('tab', {name: 'Draft'})).toHaveAttribute('aria-selected', 'true');
+  await expect(cellPopover).toContainText('Hello World Dirty');
 });
 
 test('switching between saved queries does not leak form state between schemas', async ({page}) => {
@@ -1155,6 +1137,229 @@ async function confirmAndRunSchemaCommand(page: Page, button: Locator, confirmat
   await expect(dialog).not.toBeVisible();
 }
 
+test('relation toolbar exposes Filter / Sort / Columns / Query / Definition buttons', async ({page}) => {
+  await page.goto('/#table/posts');
+
+  await expect(page.getByRole('heading', {name: 'posts'})).toBeVisible();
+  await expect(page.getByRole('button', {name: 'Filter', exact: true})).toBeVisible();
+  await expect(page.getByRole('button', {name: 'Sort', exact: true})).toBeVisible();
+  await expect(page.getByRole('button', {name: /Columns — \d+ of \d+ visible/})).toBeVisible();
+  await expect(page.getByRole('button', {name: 'Query SQL'})).toBeVisible();
+  await expect(page.getByRole('button', {name: 'Table definition'})).toBeVisible();
+  // The Query editor is not mounted until the popover is opened.
+  await expect(page.getByLabel('Relation query editor')).toHaveCount(0);
+});
+
+test('opening the Query popover shows a CodeMirror with the generated SQL', async ({page}) => {
+  await page.goto('/#table/posts');
+  await page.getByRole('button', {name: 'Sort', exact: true}).click();
+  await page.getByRole('button', {name: 'Sort by title'}).click();
+
+  await page.getByRole('button', {name: 'Query SQL'}).click();
+  await expect(page.getByLabel('Relation query editor')).toBeVisible();
+  await expect(page.getByLabel('Relation query editor')).toContainText('order by "title" asc');
+  await expect(page.getByLabel('Relation query editor')).toContainText('limit 100');
+});
+
+test('multi-column sort composes clauses in the order they were added', async ({page}) => {
+  await page.goto('/#table/posts');
+
+  // First sort: published asc
+  await page.getByRole('button', {name: 'Sort', exact: true}).click();
+  await page.getByRole('button', {name: 'Sort by published'}).click();
+  await page.keyboard.press('Escape');
+  // Second sort: title asc (appended)
+  await page.getByRole('button', {name: /^Sort —/}).click();
+  await page.getByRole('button', {name: 'Sort by title'}).click();
+  await page.keyboard.press('Escape');
+
+  await page.getByRole('button', {name: 'Query SQL'}).click();
+  await expect(page.getByLabel('Relation query editor')).toContainText(
+    'order by "published" asc, "title" asc',
+  );
+});
+
+test('clicking the same sort column 3 times (asc → desc → off) does not freeze the page', async ({page}) => {
+  await page.goto('/#table/posts');
+
+  // Click 1: sort by id asc (default → SQL mode)
+  await page.getByRole('button', {name: 'Sort', exact: true}).click();
+  await page.getByRole('button', {name: 'Sort by id'}).click();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('button', {name: /^Sort — id asc/})).toBeVisible({timeout: 5000});
+
+  // Click 2: flip to desc (still SQL mode)
+  await page.getByRole('button', {name: /^Sort —/}).click();
+  await page.getByRole('button', {name: /Sort by id/}).click();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('button', {name: /^Sort — id desc/})).toBeVisible({timeout: 5000});
+
+  // Click 3: remove (SQL mode → default mode). Used to freeze on mode transition back.
+  await page.getByRole('button', {name: /^Sort —/}).click();
+  await page.getByRole('button', {name: /Sort by id/}).click();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('button', {name: 'Sort', exact: true})).toBeVisible({timeout: 5000});
+
+  // Grid should still show the seeded rows
+  await expect(page.locator('.reactgrid').getByText('hello-world')).toBeVisible();
+});
+
+test('delete confirmation cancel leaves the row re-selectable', async ({page}) => {
+  await page.goto('/#table/posts');
+
+  const firstRowHeader = page.locator('.reactgrid [data-cell-rowidx="1"][data-cell-colidx="0"]');
+  await firstRowHeader.getByRole('button', {name: 'Select row 1'}).click();
+  await expect(firstRowHeader).toContainText('🗑');
+  await firstRowHeader.getByRole('button', {name: 'Delete row 1'}).click();
+
+  // Cancel the confirmation: the row must go back to its unselected state, not stay armed.
+  await page.getByRole('dialog').getByRole('button', {name: 'Cancel'}).click();
+  await expect(firstRowHeader).toContainText('1');
+  await expect(firstRowHeader).not.toContainText('🗑');
+
+  // And we can arm + cancel + arm again without anything getting stuck.
+  await firstRowHeader.getByRole('button', {name: 'Select row 1'}).click();
+  await expect(firstRowHeader).toContainText('🗑');
+});
+
+test('failed saves surface the underlying SQL error instead of a generic internal server error', async ({page}) => {
+  await page.goto('/#table/posts');
+
+  // Append a row that will violate the UNIQUE(slug) constraint against the seeded hello-world row.
+  const appendCell = page.locator('.reactgrid [data-cell-rowidx="3"][data-cell-colidx="0"]');
+  await appendCell.scrollIntoViewIfNeeded();
+  await appendCell.click({position: {x: 8, y: 8}});
+  await fillGridTextCell(page, 3, 1, '999');
+  await fillGridTextCell(page, 3, 2, 'hello-world');
+  await fillGridTextCell(page, 3, 3, 'dup');
+  await fillGridTextCell(page, 3, 4, 'dup');
+  await fillGridTextCell(page, 3, 5, '0');
+
+  const [saveResponse] = await Promise.all([
+    page.waitForResponse(
+      (response) => response.request().method() === 'POST' && response.url().includes('/api/rpc/table/save'),
+    ),
+    page.getByRole('button', {name: 'Save changes'}).click(),
+  ]);
+  expect(saveResponse.ok()).toBe(false);
+
+  const errorView = page.locator('.code-block.error');
+  await expect(errorView).toBeVisible();
+  // The underlying SQLite error should now bubble up, not a generic "Internal server error".
+  await expect(errorView).toContainText(/unique|constraint|posts\.slug/i);
+  await expect(errorView).not.toContainText('Internal server error');
+});
+
+test('after a failed insert, the grid stays editable so the user can fix the row', async ({page}) => {
+  await page.goto('/#table/posts');
+
+  // Trigger append by clicking the "+" cell in the append row.
+  const appendCell = page.locator('.reactgrid [data-cell-rowidx="3"][data-cell-colidx="0"]');
+  await appendCell.scrollIntoViewIfNeeded();
+  await appendCell.click({position: {x: 8, y: 8}});
+
+  // Fill only id (leave NOT NULL fields blank) then try to save — server errors out.
+  await fillGridTextCell(page, 3, 1, '999');
+  await expect(page.getByRole('button', {name: 'Save changes'})).toBeVisible();
+
+  const [saveResponse] = await Promise.all([
+    page.waitForResponse(
+      (response) => response.request().method() === 'POST' && response.url().includes('/api/rpc/table/save'),
+    ),
+    page.getByRole('button', {name: 'Save changes'}).click(),
+  ]);
+  expect(saveResponse.ok()).toBe(false);
+  await expect(page.locator('.code-block.error')).toBeVisible();
+
+  // After the error the user should be able to correct the row. Click the slug cell.
+  const slugCell = page.locator('.reactgrid [data-cell-rowidx="3"][data-cell-colidx="2"]');
+  await slugCell.click({position: {x: 8, y: 8}});
+  await expect(page.getByRole('button', {name: 'Cell: slug, row 3'})).toBeVisible();
+});
+
+test('Query popover requires Apply before the query re-runs', async ({page}) => {
+  await page.goto('/#table/posts');
+  // Contribute a change so we're in SQL mode (otherwise the grid uses table.list, not our SQL).
+  await page.getByRole('button', {name: 'Sort', exact: true}).click();
+  await page.getByRole('button', {name: 'Sort by title'}).click();
+  await page.keyboard.press('Escape');
+
+  await page.getByRole('button', {name: 'Query SQL'}).click();
+  await replaceCodeMirrorText(
+    page,
+    'Relation query editor',
+    `select * from posts where slug = 'hello-world' limit 100`,
+  );
+  // Draft shows unapplied state. Grid still shows all rows.
+  await expect(page.getByText(/Unapplied changes/)).toBeVisible();
+  await expect(page.locator('.reactgrid').getByText('draft-notes')).toBeVisible();
+
+  // Apply
+  await page.getByRole('button', {name: 'Apply'}).click();
+  await expect(page.locator('.reactgrid').getByText('draft-notes')).toHaveCount(0);
+  await expect(page.locator('.reactgrid').getByText('hello-world')).toBeVisible();
+});
+
+test('Definition popover shows the relation DDL as read-only SQL', async ({page}) => {
+  await page.goto('/#table/posts');
+  await page.getByRole('button', {name: 'Table definition'}).click();
+  const editor = page.getByLabel('Relation definition editor');
+  await expect(editor).toBeVisible();
+  await expect(editor).toContainText(/create table posts/i);
+});
+
+test('adding an equals filter writes a where clause and narrows the displayed rows', async ({page}) => {
+  await page.goto('/#table/posts');
+  await expect(page.locator('.reactgrid').getByText('hello-world')).toBeVisible();
+  await expect(page.locator('.reactgrid').getByText('draft-notes')).toBeVisible();
+
+  await page.getByRole('button', {name: 'Filter', exact: true}).click();
+  const popover = page.getByRole('dialog', {name: 'Filters'});
+  await popover.getByLabel('Filter column').selectOption('slug');
+  await popover.getByLabel('Filter value').fill('hello-world');
+  await popover.getByRole('button', {name: 'Apply'}).click();
+
+  await page.getByRole('button', {name: 'Query SQL'}).click();
+  await expect(page.getByLabel('Relation query editor')).toContainText(`where "slug" = 'hello-world'`);
+  await expect(page.locator('.reactgrid').getByText('draft-notes')).toHaveCount(0);
+  await expect(page.locator('.reactgrid').getByText('hello-world')).toBeVisible();
+});
+
+test('hiding a middle column commas out inside the comment so the SQL stays valid', async ({page}) => {
+  await page.goto('/#table/posts');
+  await page.getByRole('button', {name: /Columns — \d+ of \d+ visible/}).click();
+  await page.getByRole('dialog', {name: 'Columns'}).getByLabel('Hide title').click();
+
+  await page.getByRole('button', {name: 'Query SQL'}).click();
+  await expect(page.getByLabel('Relation query editor')).toContainText('/* "title", */');
+  // Smoke-test that the generated SQL actually executes against the backend: the grid should still show rows.
+  await expect(page.locator('.reactgrid').getByText('hello-world')).toBeVisible();
+});
+
+test('removing the limit clause surfaces a hard error and refuses to execute', async ({page}) => {
+  await page.goto('/#table/posts');
+  await page.getByRole('button', {name: 'Sort', exact: true}).click();
+  await page.getByRole('button', {name: 'Sort by id'}).click();
+
+  await page.getByRole('button', {name: 'Query SQL'}).click();
+  await expect(page.getByLabel('Relation query editor')).toContainText('limit 100');
+  await replaceCodeMirrorText(page, 'Relation query editor', 'select * from posts');
+  await expect(page.getByText(/Your query must end with a/)).toBeVisible();
+  await expect(page.getByRole('button', {name: 'Apply'})).toBeDisabled();
+});
+
+test('custom query that no longer targets this table shows an "Open in SQL Runner" hint', async ({page}) => {
+  await page.goto('/#table/posts');
+  await page.getByRole('button', {name: 'Sort', exact: true}).click();
+  await page.getByRole('button', {name: 'Sort by id'}).click();
+
+  await page.getByRole('button', {name: 'Query SQL'}).click();
+  await replaceCodeMirrorText(page, 'Relation query editor', 'select name from sqlite_schema limit 100');
+
+  await expect(page.getByText(/Your query is no longer a simple/)).toBeVisible();
+  await expect(page.getByRole('link', {name: 'full SQL Runner'})).toBeVisible();
+});
+
 async function replaceCodeMirrorText(page: any, ariaLabel: string, value: string) {
   const content = page.locator(`[aria-label="${ariaLabel}"] .cm-content`);
   await content.click();
@@ -1172,7 +1377,7 @@ async function fillGridTextCell(page: any, rowIndex: number, columnIndex: number
   )?.trim();
   await cell.click({position: {x: 8, y: 8}});
   if (columnName) {
-    await expect(page.locator('.selected-cell-panel')).toContainText(`Cell: ${columnName}, row ${rowIndex}`);
+    await expect(page.getByRole('button', {name: `Cell: ${columnName}, row ${rowIndex}`})).toBeVisible();
   }
   await cell.dblclick({position: {x: 8, y: 8}});
   const editor = page.locator('.rg-celleditor input');

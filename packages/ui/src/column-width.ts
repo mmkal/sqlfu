@@ -1,14 +1,14 @@
 export type ColumnWidthInput = {
-  readonly key: string;
-  readonly header: string;
-  readonly cells: readonly string[];
+  key: string;
+  header: string;
+  cells: string[];
 };
 
 export type CalculatedColumnWidth = {
-  readonly key: string;
-  readonly minWidth: number;
-  readonly idealWidth: number;
-  readonly width: number;
+  key: string;
+  minWidth: number;
+  idealWidth: number;
+  width: number;
 };
 
 const CHAR_WIDTH_PX = 8;
@@ -17,9 +17,9 @@ const DEFAULT_MIN_WIDTH_PX = 100;
 const MAX_IDEAL_WIDTH_PX = 420;
 
 export function columnWidthAlgorithm(input: {
-  readonly availableWidth: number;
-  readonly columns: readonly ColumnWidthInput[];
-}): readonly CalculatedColumnWidth[] {
+  availableWidth: number;
+  columns: ColumnWidthInput[];
+}): CalculatedColumnWidth[] {
   if (input.columns.length === 0) {
     return [];
   }
@@ -74,7 +74,7 @@ export function measureTextWidth(value: string) {
   return Math.max(0, value.length * CHAR_WIDTH_PX + CELL_PADDING_PX);
 }
 
-function percentile(values: readonly number[], fraction: number) {
+function percentile(values: number[], fraction: number) {
   if (values.length === 0) {
     return DEFAULT_MIN_WIDTH_PX;
   }
@@ -83,7 +83,7 @@ function percentile(values: readonly number[], fraction: number) {
   return values[index] ?? DEFAULT_MIN_WIDTH_PX;
 }
 
-function sum(values: readonly number[]) {
+function sum(values: number[]) {
   return values.reduce((total, value) => total + value, 0);
 }
 
@@ -91,7 +91,7 @@ function clamp(value: number, minimum: number, maximum: number) {
   return Math.min(maximum, Math.max(minimum, value));
 }
 
-function distributeWidth(weights: readonly number[], space: number) {
+function distributeWidth(weights: number[], space: number) {
   const totalWeight = sum(weights);
   if (space <= 0 || totalWeight <= 0) {
     return weights.map(() => 0);

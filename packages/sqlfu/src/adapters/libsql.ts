@@ -3,11 +3,11 @@ import {rawSqlWithSqlSplittingSync, surroundWithBeginCommitRollbackSync} from '.
 import type {ResultRow, SqlQuery, SyncClient} from '../core/types.js';
 
 export interface LibsqlSyncStatementLike {
-  readonly reader: boolean;
-  all(...params: readonly unknown[]): unknown[];
-  run(...params: readonly unknown[]): {
-    readonly changes?: number;
-    readonly lastInsertRowid?: string | number | bigint | null;
+  reader: boolean;
+  all(...params: unknown[]): unknown[];
+  run(...params: unknown[]): {
+    changes?: number;
+    lastInsertRowid?: string | number | bigint | null;
   };
 }
 

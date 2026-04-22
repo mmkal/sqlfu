@@ -5,10 +5,10 @@ import type {ResultRow, SqlQuery, SyncClient} from '../core/types.js';
 export interface DurableObjectSqlStorageLike {
   exec<TRow extends ResultRow = ResultRow>(
     query: string,
-    ...bindings: readonly unknown[]
+    ...bindings: unknown[]
   ): {
     toArray(): TRow[];
-    readonly rowsWritten?: number;
+    rowsWritten?: number;
   };
 }
 

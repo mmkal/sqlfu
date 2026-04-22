@@ -3,18 +3,18 @@ import {rawSqlWithSqlSplittingSync, surroundWithBeginCommitRollbackSync} from '.
 import type {ResultRow, SqlQuery, SyncClient} from '../core/types.js';
 
 export interface BunSqliteStatementLike<TRow extends ResultRow = ResultRow> {
-  all(...params: readonly unknown[]): TRow[];
-  iterate(...params: readonly unknown[]): IterableIterator<TRow>;
+  all(...params: unknown[]): TRow[];
+  iterate(...params: unknown[]): IterableIterator<TRow>;
 }
 
 export interface BunSqliteDatabaseLike {
   query<TRow extends ResultRow = ResultRow>(query: string): BunSqliteStatementLike<TRow>;
   run(
     query: string,
-    params?: readonly unknown[],
+    params?: unknown[],
   ): {
-    readonly changes?: number;
-    readonly lastInsertRowid?: string | number | bigint | null;
+    changes?: number;
+    lastInsertRowid?: string | number | bigint | null;
   };
 }
 

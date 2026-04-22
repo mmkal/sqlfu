@@ -76,11 +76,11 @@ test('queries emit db_query events on success and $exception + db_query on failu
 });
 
 interface CapturedEvent {
-  readonly event: string;
-  readonly properties: Record<string, unknown>;
+  event: string;
+  properties: Record<string, unknown>;
 }
 
-function renderEvents(events: readonly CapturedEvent[]): string {
+function renderEvents(events: CapturedEvent[]): string {
   const relevantPropertyOrder = [
     'db.query.summary',
     'db.system.name',

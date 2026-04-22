@@ -3,11 +3,11 @@ import {rawSqlWithSqlSplittingSync, surroundWithBeginCommitRollbackSync} from '.
 import type {ResultRow, SqlQuery, SyncClient} from '../core/types.js';
 
 export interface NodeSqliteStatementLike<TRow extends ResultRow = ResultRow> {
-  all(...params: readonly unknown[]): ResultRow[];
-  iterate(...params: readonly unknown[]): IterableIterator<ResultRow>;
-  run(...params: readonly unknown[]): {
-    readonly changes?: number | bigint;
-    readonly lastInsertRowid?: string | number | bigint | null;
+  all(...params: unknown[]): ResultRow[];
+  iterate(...params: unknown[]): IterableIterator<ResultRow>;
+  run(...params: unknown[]): {
+    changes?: number | bigint;
+    lastInsertRowid?: string | number | bigint | null;
   };
 }
 
@@ -57,7 +57,7 @@ export function createNodeSqliteClient(database: NodeSqliteDatabaseLike): SyncCl
 
 export const createNodeSqliteDatabase = createNodeSqliteClient;
 
-function materializeRows<TRow extends ResultRow>(rows: readonly TRow[]): TRow[] {
+function materializeRows<TRow extends ResultRow>(rows: TRow[]): TRow[] {
   return rows.map(materializeRow);
 }
 

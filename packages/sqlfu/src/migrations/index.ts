@@ -70,11 +70,11 @@ function* readMigrationHistoryGen(client: Client): DualGenerator<SqlfuMigrations
 }
 
 type ApplyMigrationsParams = {
-  migrations: readonly Migration[];
+  migrations: Migration[];
 };
 
 type BaselineParams = {
-  migrations: readonly Migration[];
+  migrations: Migration[];
   target: string;
 };
 
@@ -96,10 +96,10 @@ export function baselineMigrationHistory(client: Client, params: BaselineParams)
     : driveAsync(baselineMigrationHistoryGen(client, params));
 }
 
-export function replaceMigrationHistory(client: SyncClient, migrations: readonly Migration[]): void;
-export function replaceMigrationHistory(client: AsyncClient, migrations: readonly Migration[]): Promise<void>;
-export function replaceMigrationHistory(client: Client, migrations: readonly Migration[]): void | Promise<void>;
-export function replaceMigrationHistory(client: Client, migrations: readonly Migration[]): void | Promise<void> {
+export function replaceMigrationHistory(client: SyncClient, migrations: Migration[]): void;
+export function replaceMigrationHistory(client: AsyncClient, migrations: Migration[]): Promise<void>;
+export function replaceMigrationHistory(client: Client, migrations: Migration[]): void | Promise<void>;
+export function replaceMigrationHistory(client: Client, migrations: Migration[]): void | Promise<void> {
   return client.sync
     ? driveSync(replaceMigrationHistoryGen(client, migrations))
     : driveAsync(replaceMigrationHistoryGen(client, migrations));
@@ -169,7 +169,7 @@ function* baselineMigrationHistoryGen(client: Client, params: BaselineParams): D
   });
 }
 
-function* replaceMigrationHistoryGen(client: Client, migrations: readonly Migration[]): DualGenerator<void> {
+function* replaceMigrationHistoryGen(client: Client, migrations: Migration[]): DualGenerator<void> {
   yield* ensureMigrationTableGen(client);
   yield client.run({sql: deleteMigrationHistoryWrapper.sql, args: [], name: 'delete-migration-history'});
   for (const migration of migrations) {

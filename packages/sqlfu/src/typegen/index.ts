@@ -107,13 +107,13 @@ function renderDdlWrapper(input: {relativePath: string; sql: string; sync: boole
     `import type {${clientType}} from 'sqlfu';`,
     ``,
     ...renderSqlConstant(input.sql),
+    `const query = { sql, args: [], name: ${JSON.stringify(queryName)} };`,
     ``,
     `export const ${functionName} = Object.assign(`,
     `\t${maybeAsync}function ${functionName}(client: ${clientType}) {`,
-    `\t\tconst query = { sql, args: [], name: ${JSON.stringify(queryName)} };`,
     `\t\treturn client.run(query);`,
     `\t},`,
-    `\t{ sql },`,
+    `\t{ sql, query },`,
     `);`,
     ``,
   ].join('\n');
@@ -122,18 +122,19 @@ function renderDdlWrapper(input: {relativePath: string; sql: string; sync: boole
 /**
  * Module-scoped `const sql = \`…\``, accessed externally via the Object.assign-merged
  * `whatever.sql`. Renders as a one-liner when the line fits under 80 characters,
- * otherwise splits across three lines with the SQL body on its own line.
+ * otherwise splits across three lines with the SQL body on its own line and a trailing
+ * `.trim()` so the runtime value has no leading/trailing whitespace from the indentation.
  */
 function renderSqlConstant(sql: string): string[] {
   const trimmed = normalizeSqlForTemplate(sql).join('\n').trim();
-  const oneLiner = `const sql = \`${trimmed}\``;
+  const oneLiner = `const sql = \`${trimmed}\`;`;
   if (!trimmed.includes('\n') && oneLiner.length <= 80) {
     return [oneLiner];
   }
   return [
     `const sql = \``,
     trimmed,
-    `\``,
+    `\`.trim();`,
   ];
 }
 
@@ -160,52 +161,52 @@ export async function analyzeAdHocSqlForConfig(config: SqlfuProjectConfig, sql: 
 }
 
 type DisposableClient = {
-  readonly client: Client;
+  client: Client;
   [Symbol.asyncDispose](): Promise<void>;
 };
 
 type TsColumn = {
-  readonly name: string;
-  readonly tsType: string;
-  readonly notNull: boolean;
+  name: string;
+  tsType: string;
+  notNull: boolean;
 };
 
 type RelationInfo = {
-  readonly kind: 'table' | 'view';
-  readonly name: string;
-  readonly columns: ReadonlyMap<string, TsColumn>;
-  readonly sql?: string;
+  kind: 'table' | 'view';
+  name: string;
+  columns: ReadonlyMap<string, TsColumn>;
+  sql?: string;
 };
 
 type GeneratedField = {
-  readonly name: string;
-  readonly tsType: string;
-  readonly notNull: boolean;
-  readonly optional?: boolean;
+  name: string;
+  tsType: string;
+  notNull: boolean;
+  optional?: boolean;
 };
 
 type GeneratedQueryDescriptor = {
-  readonly sql: string;
-  readonly queryType: 'Select' | 'Insert' | 'Update' | 'Delete' | 'Copy' | 'Ddl';
-  readonly returning?: true;
-  readonly multipleRowsResult: boolean;
-  readonly columns: readonly GeneratedField[];
-  readonly parameters: readonly (GeneratedField & {
-    readonly toDriver: string;
-    readonly isArray: boolean;
+  sql: string;
+  queryType: 'Select' | 'Insert' | 'Update' | 'Delete' | 'Copy' | 'Ddl';
+  returning?: true;
+  multipleRowsResult: boolean;
+  columns: GeneratedField[];
+  parameters: (GeneratedField & {
+    toDriver: string;
+    isArray: boolean;
   })[];
-  readonly data?: readonly (GeneratedField & {
-    readonly toDriver: string;
-    readonly isArray: boolean;
+  data?: (GeneratedField & {
+    toDriver: string;
+    isArray: boolean;
   })[];
 };
 
 type QueryFile = {
   /** absolute path to the .sql source file. */
-  readonly sqlPath: string;
+  sqlPath: string;
   /** path without `.sql`, relative to `config.queries`, forward slashes. E.g. `"users/list-profiles"`. */
-  readonly relativePath: string;
-  readonly sqlContent: string;
+  relativePath: string;
+  sqlContent: string;
 };
 
 async function materializeTypegenDatabase(config: SqlfuProjectConfig) {
@@ -269,7 +270,7 @@ async function openMainDevDatabase(dbPath: string): Promise<DisposableClient> {
   }
 }
 
-async function loadQueryFiles(queriesDir: string): Promise<readonly QueryFile[]> {
+async function loadQueryFiles(queriesDir: string): Promise<QueryFile[]> {
   const files: QueryFile[] = [];
 
   async function walk(currentDir: string, relativePrefix: string): Promise<void> {
@@ -310,7 +311,7 @@ async function loadQueryFiles(queriesDir: string): Promise<readonly QueryFile[]>
 
 async function writeGeneratedBarrel(
   generatedDir: string,
-  queryFiles: readonly QueryFile[],
+  queryFiles: QueryFile[],
   importExtension: '.js' | '.ts',
 ): Promise<void> {
   const lines = [
@@ -415,7 +416,7 @@ async function writeMigrationsBundle(config: SqlfuProjectConfig): Promise<void> 
 
 async function writeQueryCatalog(
   config: SqlfuProjectConfig,
-  queryFiles: readonly QueryFile[],
+  queryFiles: QueryFile[],
   queryAnalyses: Awaited<ReturnType<typeof analyzeVendoredTypesqlQueries>>,
   schema: ReadonlyMap<string, RelationInfo>,
 ): Promise<void> {
@@ -547,6 +548,16 @@ function renderQueryWrapper(input: {
   if (hasData) functionSignatureArgs.push(`data: ${dataTypeRef}`);
   if (hasParams) functionSignatureArgs.push(`params: ${paramsTypeRef}`);
 
+  const factoryArgs: string[] = [];
+  if (hasData) factoryArgs.push(`data: ${dataTypeRef}`);
+  if (hasParams) factoryArgs.push(`params: ${paramsTypeRef}`);
+  const queryReference = buildQueryReference(hasData, hasParams, 'data', 'params');
+  const queryDeclaration = renderQueryDeclaration({
+    factoryArgs,
+    queryArgs,
+    queryName,
+  });
+
   const signatureReturnAnnotation = emitResultType
     ? input.sync
       ? `: ${getReturnType(input.descriptor, resultTypeRef)}`
@@ -569,28 +580,60 @@ function renderQueryWrapper(input: {
     ? buildGeneratedImplementation({
         resultMode,
         resultType: resultTypeRef,
+        queryReference,
         sync: input.sync,
         indent: '\t\t',
       })
-    : [`\t\treturn client.run(query);`];
+    : [`\t\treturn client.run(${queryReference});`];
 
   return [
     `import type {${clientType}} from 'sqlfu';`,
     ``,
     ...renderSqlConstant(input.descriptor.sql),
+    queryDeclaration,
     ``,
     `export const ${functionName} = Object.assign(`,
     functionDeclaration,
-    `\t\tconst query = { sql, args: ${queryArgs}, name: ${JSON.stringify(queryName)} };`,
     ...implementationLines,
     `\t},`,
-    `\t{ sql },`,
+    `\t{ sql, query },`,
     `);`,
     ``,
     ...(namespaceLines.length === 0
       ? []
       : [`export namespace ${functionName} {`, ...namespaceLines, `}`, ``]),
   ].join('\n');
+}
+
+/**
+ * Top-level `query` declaration that lives alongside `sql`. When the query takes no
+ * params/data, it's a plain `SqlQuery` object; otherwise it's an arrow factory whose
+ * parameters mirror the wrapper's. The body uses `query` (object) or `query(...)` (factory).
+ */
+function renderQueryDeclaration(input: {
+  factoryArgs: string[];
+  queryArgs: string;
+  queryName: string;
+}): string {
+  const payload = `{ sql, args: ${input.queryArgs}, name: ${JSON.stringify(input.queryName)} }`;
+  if (input.factoryArgs.length === 0) {
+    return `const query = ${payload};`;
+  }
+  return `const query = (${input.factoryArgs.join(', ')}) => (${payload});`;
+}
+
+/** `query` for object form, `query(data, params)` / `query(params)` / `query(data)` for factories. */
+function buildQueryReference(
+  hasData: boolean,
+  hasParams: boolean,
+  dataVar: string,
+  paramsVar: string,
+): string {
+  if (!hasData && !hasParams) return 'query';
+  const callArgs: string[] = [];
+  if (hasData) callArgs.push(dataVar);
+  if (hasParams) callArgs.push(paramsVar);
+  return `query(${callArgs.join(', ')})`;
 }
 
 /**
@@ -609,19 +652,19 @@ function renderQueryWrapper(input: {
  * is imported from sqlfu.
  */
 type ValidatorEmitter = {
-  readonly importLine: string;
+  importLine: string;
   /** `'zod'` uses safeParse/z.prettifyError; `'standard'` uses `~standard.validate` + sqlfu helper. */
-  readonly parseFlavour: 'zod' | 'standard';
+  parseFlavour: 'zod' | 'standard';
   /**
    * Render a single `"  name: expression,"` line for a schema object. Controls both the
    * key (for validators like arktype that express optionality via `"name?"`) and the value
    * (each validator's native nullable/enum/array/etc. encoding).
    */
-  readonly renderFieldLine: (field: GeneratedField, fieldKind: 'parameter' | 'result') => string;
+  renderFieldLine: (field: GeneratedField, fieldKind: 'parameter' | 'result') => string;
   /** Build the `const Foo = object({...})` declaration lines. */
-  readonly objectSchemaDeclaration: (input: {schemaName: string; fieldLines: string[]}) => string[];
+  objectSchemaDeclaration: (input: {schemaName: string; fieldLines: string[]}) => string[];
   /** The call used in function signatures and return types to infer a TS type from a schema. */
-  readonly inferExpression: (schemaName: string) => string;
+  inferExpression: (schemaName: string) => string;
 };
 
 /** Default field-line rendering for the zod/valibot/zod-mini emitters — key is plain, value is wrapped. */
@@ -803,24 +846,45 @@ function renderValidatorQueryWrapper(input: {
     schemaDeclarations.push(...renderObjectSchemaDeclaration(emitter, 'Result', resultFields, 'result'));
   }
 
-  const sqlLines = [`const sql = \``, normalizeSqlForTemplate(descriptor.sql).join('\n').trim(), `\`;`];
+  const sqlLines = renderSqlConstant(descriptor.sql);
+
+  const dataTypeRef = `${functionName}.Data`;
+  const paramsTypeRef = `${functionName}.Params`;
+  const resultTypeRef = `${functionName}.Result`;
 
   const functionSignatureArgs: string[] = [`client: ${clientType}`];
-  if (hasData) functionSignatureArgs.push(`rawData: ${emitter.inferExpression('Data')}`);
-  if (hasParams) functionSignatureArgs.push(`rawParams: ${emitter.inferExpression('Params')}`);
+  if (hasData) functionSignatureArgs.push(`data: ${dataTypeRef}`);
+  if (hasParams) functionSignatureArgs.push(`params: ${paramsTypeRef}`);
 
   const validationLines: string[] = [];
+  let dataExpression: string | null = null;
+  let paramsExpression: string | null = null;
   if (hasData) {
-    validationLines.push(...buildInputValidationStatements(emitter, 'Data', 'rawData', 'data', prettyErrors));
+    const dataValidation = buildInputValidation(emitter, 'Data', 'data', prettyErrors);
+    validationLines.push(...dataValidation.statements);
+    dataExpression = dataValidation.expression;
   }
   if (hasParams) {
-    validationLines.push(...buildInputValidationStatements(emitter, 'Params', 'rawParams', 'params', prettyErrors));
+    const paramsValidation = buildInputValidation(emitter, 'Params', 'params', prettyErrors);
+    validationLines.push(...paramsValidation.statements);
+    paramsExpression = paramsValidation.expression;
   }
 
-  const argsExpression = buildValidatorQueryArgs(descriptor, {
+  // The top-level `query` factory's own parameters are named `data` / `params` (the natural
+  // names for the user-facing surface), so arg encoding inside it uses those same names.
+  const factoryArgs: string[] = [];
+  if (hasData) factoryArgs.push(`data: ${dataTypeRef}`);
+  if (hasParams) factoryArgs.push(`params: ${paramsTypeRef}`);
+  const factoryArgsExpression = buildValidatorQueryArgs(descriptor, {
     dataVariable: hasData ? 'data' : null,
     paramsVariable: hasParams ? 'params' : null,
   });
+  const queryDeclaration = renderQueryDeclaration({
+    factoryArgs,
+    queryArgs: factoryArgsExpression,
+    queryName,
+  });
+  const queryReference = buildQueryReference(hasData, hasParams, dataExpression!, paramsExpression!);
 
   const implementationLines = emitResultSchema
     ? buildValidatorImplementation({
@@ -828,15 +892,16 @@ function renderValidatorQueryWrapper(input: {
         resultFields,
         emitter,
         prettyErrors,
+        queryReference,
         sync,
       })
-    : [`\t\treturn client.run(query);`];
+    : [`\t\treturn client.run(${queryReference});`];
 
   const attachedProperties: string[] = [];
   if (hasData) attachedProperties.push('Data');
   if (hasParams) attachedProperties.push('Params');
   if (emitResultSchema) attachedProperties.push('Result');
-  attachedProperties.push('sql');
+  attachedProperties.push('sql', 'query');
 
   const namespaceLines: string[] = [];
   if (hasData) {
@@ -853,8 +918,8 @@ function renderValidatorQueryWrapper(input: {
 
   const signatureReturnAnnotation = emitResultSchema
     ? sync
-      ? `: ${getReturnType(descriptor, emitter.inferExpression('Result'))}`
-      : `: Promise<${getReturnType(descriptor, emitter.inferExpression('Result'))}>`
+      ? `: ${getReturnType(descriptor, resultTypeRef)}`
+      : `: Promise<${getReturnType(descriptor, resultTypeRef)}>`
     : '';
   const functionDeclaration = sync
     ? `\tfunction ${functionName}(${functionSignatureArgs.join(', ')})${signatureReturnAnnotation} {`
@@ -866,11 +931,11 @@ function renderValidatorQueryWrapper(input: {
     ``,
     ...schemaDeclarations,
     ...sqlLines,
+    queryDeclaration,
     ``,
     `export const ${functionName} = Object.assign(`,
     functionDeclaration,
     ...validationLines,
-    `\t\tconst query: SqlQuery = { sql, args: ${argsExpression}, name: ${JSON.stringify(queryName)} };`,
     ...implementationLines,
     `\t},`,
     `\t{ ${attachedProperties.join(', ')} },`,
@@ -892,15 +957,15 @@ function renderValidatorQueryWrapper(input: {
  */
 function buildRuntimeImports(emitter: ValidatorEmitter, prettyErrors: boolean, clientType: string): string {
   if (emitter.parseFlavour === 'standard' && prettyErrors) {
-    return `import {prettifyStandardSchemaError, type ${clientType}, type SqlQuery} from 'sqlfu';`;
+    return `import {type ${clientType}, prettifyStandardSchemaError} from 'sqlfu';`;
   }
-  return `import type {${clientType}, SqlQuery} from 'sqlfu';`;
+  return `import type {${clientType}} from 'sqlfu';`;
 }
 
 function renderObjectSchemaDeclaration(
   emitter: ValidatorEmitter,
   schemaName: 'Data' | 'Params' | 'Result',
-  fields: readonly GeneratedField[],
+  fields: GeneratedField[],
   fieldKind: 'parameter' | 'result',
 ): string[] {
   // see tasks/typegen-extensibility.md — future user-provided validator plugins and per-column overrides would hook in here.
@@ -946,48 +1011,61 @@ function valibotExpressionForTsType(tsType: string): string {
   return 'v.unknown()';
 }
 
+type InputValidation = {
+  /** Preamble statements to emit before the `query(...)` call (guards / throws). */
+  statements: string[];
+  /** Expression that evaluates to the validated value — fed directly to `query(...)`. */
+  expression: string;
+};
+
 /**
- * Build the statements that take a raw input (`rawParams`, `rawData`) and produce a
- * validated local (`params`, `data`). Shape depends on the validator flavour and whether
- * pretty errors are on.
+ * Build the statements that validate a wrapper input (`data`, `params`) and the expression
+ * that yields the validated value. Shape depends on the validator flavour and whether
+ * pretty errors are on:
  *
- * For the Standard Schema flavour (valibot, zod-mini) we always inline the result-guard —
- * promise-check then issues-check — so the generated file doesn't depend on a sqlfu-side
- * wrapper helper. When pretty errors are on we call sqlfu's re-exported
- * `prettifyStandardSchemaError` on the failure result; otherwise we attach `.issues` to a
- * generic `Error` and throw that.
+ *   - zod + pretty: `safeParse` guard + `parsedX.data` expression.
+ *   - zod + !pretty: no guard statements, expression is `Schema.parse(x)` itself.
+ *   - standard + either: inline promise/issues guard + `parsedXResult.value` expression.
  *
- * `indent` is the prefix for each emitted line (two tabs inside the wrapper body).
+ * The caller splices `statements` into the function body and uses `expression` directly in
+ * the `query(...)` call, so there's no single-use `validatedX` intermediate.
  */
-function buildInputValidationStatements(
+function buildInputValidation(
   emitter: ValidatorEmitter,
   schemaName: 'Data' | 'Params',
   rawVariable: string,
-  validatedVariable: string,
   prettyErrors: boolean,
   indent: string = '\t\t',
-): string[] {
+): InputValidation {
   if (emitter.parseFlavour === 'zod') {
     if (!prettyErrors) {
-      return [`${indent}const ${validatedVariable} = ${schemaName}.parse(${rawVariable});`];
+      return {
+        statements: [],
+        expression: `${schemaName}.parse(${rawVariable})`,
+      };
     }
-    return [
-      `${indent}const parsed${schemaName} = ${schemaName}.safeParse(${rawVariable});`,
-      `${indent}if (!parsed${schemaName}.success) throw new Error(z.prettifyError(parsed${schemaName}.error));`,
-      `${indent}const ${validatedVariable} = parsed${schemaName}.data;`,
-    ];
+    const parsedName = `parsed${schemaName}`;
+    return {
+      statements: [
+        `${indent}const ${parsedName} = ${schemaName}.safeParse(${rawVariable});`,
+        `${indent}if (!${parsedName}.success) throw new Error(z.prettifyError(${parsedName}.error));`,
+      ],
+      expression: `${parsedName}.data`,
+    };
   }
 
   // Standard Schema flavour (valibot, zod-mini). Inline result-guard either way.
   const resultName = `parsed${schemaName}Result`;
-  return [
-    `${indent}const ${resultName} = ${schemaName}['~standard'].validate(${rawVariable});`,
-    `${indent}if ('then' in ${resultName}) throw new Error('Unexpected async validation from ${schemaName}.');`,
-    prettyErrors
-      ? `${indent}if ('issues' in ${resultName}) throw new Error(prettifyStandardSchemaError(${resultName}) || 'Validation failed');`
-      : `${indent}if ('issues' in ${resultName}) throw Object.assign(new Error('Validation failed'), {issues: ${resultName}.issues});`,
-    `${indent}const ${validatedVariable} = ${resultName}.value;`,
-  ];
+  return {
+    statements: [
+      `${indent}const ${resultName} = ${schemaName}['~standard'].validate(${rawVariable});`,
+      `${indent}if ('then' in ${resultName}) throw new Error('Unexpected async validation from ${schemaName}.');`,
+      prettyErrors
+        ? `${indent}if ('issues' in ${resultName}) throw new Error(prettifyStandardSchemaError(${resultName}) || 'Validation failed');`
+        : `${indent}if ('issues' in ${resultName}) throw Object.assign(new Error('Validation failed'), {issues: ${resultName}.issues});`,
+    ],
+    expression: `${resultName}.value`,
+  };
 }
 
 /**
@@ -1053,13 +1131,15 @@ function buildValidatorQueryArgs(
 
 function buildValidatorImplementation(input: {
   resultMode: 'many' | 'nullableOne' | 'one' | 'metadata';
-  resultFields: readonly GeneratedField[];
+  resultFields: GeneratedField[];
   emitter: ValidatorEmitter;
   prettyErrors: boolean;
+  queryReference: string;
   sync: boolean;
 }): string[] {
-  const {emitter, prettyErrors, sync} = input;
+  const {emitter, prettyErrors, queryReference, sync} = input;
   const maybeAwait = sync ? '' : 'await ';
+  const q = queryReference;
   const rowExpr = (rowExpression: string) => rowParseExpressionOrNull(emitter, rowExpression, prettyErrors);
   const rowBlock = (rowExpression: string, indent: string) =>
     rowParseStatements(emitter, rowExpression, prettyErrors, indent);
@@ -1068,12 +1148,12 @@ function buildValidatorImplementation(input: {
     const expr = rowExpr('row');
     if (expr) {
       return [
-        `\t\tconst rows = ${maybeAwait}client.all(query);`,
+        `\t\tconst rows = ${maybeAwait}client.all(${q});`,
         `\t\treturn rows.map((row) => ${expr});`,
       ];
     }
     return [
-      `\t\tconst rows = ${maybeAwait}client.all(query);`,
+      `\t\tconst rows = ${maybeAwait}client.all(${q});`,
       `\t\treturn rows.map((row) => {`,
       ...rowBlock('row', '\t\t\t'),
       `\t\t});`,
@@ -1084,12 +1164,12 @@ function buildValidatorImplementation(input: {
     const expr = rowExpr('rows[0]');
     if (expr) {
       return [
-        `\t\tconst rows = ${maybeAwait}client.all(query);`,
+        `\t\tconst rows = ${maybeAwait}client.all(${q});`,
         `\t\treturn rows.length > 0 ? ${expr} : null;`,
       ];
     }
     return [
-      `\t\tconst rows = ${maybeAwait}client.all(query);`,
+      `\t\tconst rows = ${maybeAwait}client.all(${q});`,
       `\t\tif (rows.length === 0) return null;`,
       ...rowBlock('rows[0]', '\t\t'),
     ];
@@ -1099,12 +1179,12 @@ function buildValidatorImplementation(input: {
     const expr = rowExpr('rows[0]');
     if (expr) {
       return [
-        `\t\tconst rows = ${maybeAwait}client.all(query);`,
+        `\t\tconst rows = ${maybeAwait}client.all(${q});`,
         `\t\treturn ${expr};`,
       ];
     }
     return [
-      `\t\tconst rows = ${maybeAwait}client.all(query);`,
+      `\t\tconst rows = ${maybeAwait}client.all(${q});`,
       ...rowBlock('rows[0]', '\t\t'),
     ];
   }
@@ -1139,7 +1219,7 @@ function buildValidatorImplementation(input: {
   const resultReturnLines = metadataExpr ? [`\t\treturn ${metadataExpr};`] : rowBlock('rawResult', '\t\t');
 
   return [
-    `\t\tconst result = ${maybeAwait}client.run(query);`,
+    `\t\tconst result = ${maybeAwait}client.run(${q});`,
     ...guards,
     ...rawResultLines,
     ...resultReturnLines,
@@ -1175,7 +1255,7 @@ function getResultMode(descriptor: GeneratedQueryDescriptor): 'many' | 'nullable
  * `export type Foo = …;`. Indentation is two tabs — one for the namespace, one for the fields.
  */
 function renderObjectTypeBody(
-  fields: readonly GeneratedField[],
+  fields: GeneratedField[],
   fieldKind: 'parameter' | 'result',
 ): string {
   const lines = fields.map((field) => {
@@ -1188,7 +1268,7 @@ function renderObjectTypeBody(
 
 function objectSchema(
   title: string,
-  fields: readonly GeneratedField[],
+  fields: GeneratedField[],
   input: {
     fieldKind?: 'parameter' | 'result';
   } = {},
@@ -1253,7 +1333,7 @@ function schemaForTsType(tsType: string): JsonSchemaObject {
   return {};
 }
 
-function parseStringLiteralUnion(tsType: string): readonly string[] | undefined {
+function parseStringLiteralUnion(tsType: string): string[] | undefined {
   const parts = tsType
     .replace(/^\(/, '')
     .replace(/\)$/, '')
@@ -1267,7 +1347,7 @@ function parseStringLiteralUnion(tsType: string): readonly string[] | undefined 
   return parts.map((part) => part.slice(1, -1));
 }
 
-function getResultFields(descriptor: GeneratedQueryDescriptor): readonly GeneratedField[] {
+function getResultFields(descriptor: GeneratedQueryDescriptor): GeneratedField[] {
   if (descriptor.returning || descriptor.queryType === 'Select') {
     return descriptor.columns;
   }
@@ -1297,8 +1377,8 @@ function buildQueryArgs(descriptor: GeneratedQueryDescriptor): string {
 function toCatalogArgument(
   scope: 'data' | 'params',
   field: GeneratedField & {
-    readonly toDriver: string;
-    readonly isArray: boolean;
+    toDriver: string;
+    isArray: boolean;
   },
 ): QueryCatalogArgument {
   return {
@@ -1313,8 +1393,8 @@ function toCatalogArgument(
 }
 
 function inferDriverEncoding(field: {
-  readonly tsType: string;
-  readonly toDriver: string;
+  tsType: string;
+  toDriver: string;
 }): QueryCatalogArgument['driverEncoding'] {
   if (field.tsType === 'boolean') {
     return 'boolean-number';
@@ -1339,8 +1419,8 @@ function toCatalogField(field: GeneratedField): QueryCatalogField {
 function toDriver(
   variableName: string,
   param: GeneratedField & {
-    readonly toDriver: string;
-    readonly isArray: boolean;
+    toDriver: string;
+    isArray: boolean;
   },
 ): string {
   if (param.tsType === 'Date') {
@@ -1410,26 +1490,28 @@ function toCamelCase(value: string): string {
 function buildGeneratedImplementation(input: {
   resultMode: 'many' | 'nullableOne' | 'one';
   resultType: string;
+  queryReference: string;
   sync: boolean;
   indent: string;
 }): string[] {
   const maybeAwait = input.sync ? '' : 'await ';
   const i = input.indent;
+  const q = input.queryReference;
 
   if (input.resultMode === 'many') {
     // `many` returns the client's result directly — the outer function's Promise<T[]> / T[] return
     // type already matches client.all's return type, so there's no need to await and re-wrap.
-    return [`${i}return client.all<${input.resultType}>(query);`];
+    return [`${i}return client.all<${input.resultType}>(${q});`];
   }
 
   if (input.resultMode === 'nullableOne') {
     return [
-      `${i}const rows = ${maybeAwait}client.all<${input.resultType}>(query);`,
+      `${i}const rows = ${maybeAwait}client.all<${input.resultType}>(${q});`,
       `${i}return rows.length > 0 ? rows[0] : null;`,
     ];
   }
 
-  return [`${i}const rows = ${maybeAwait}client.all<${input.resultType}>(query);`, `${i}return rows[0];`];
+  return [`${i}const rows = ${maybeAwait}client.all<${input.resultType}>(${q});`, `${i}return rows[0];`];
 }
 
 async function loadSchema(databasePath: string): Promise<ReadonlyMap<string, RelationInfo>> {

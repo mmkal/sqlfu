@@ -102,7 +102,7 @@ export function analyzeColumnDropDependencies(input: {
 
 export function analyzeViewDependencies(
   schema: SqliteInspectedDatabase,
-): readonly (SqliteDependencyFact & {readonly referencedColumnNames: readonly string[]})[] {
+): (SqliteDependencyFact & {referencedColumnNames: string[]})[] {
   const candidateNames = [...Object.keys(schema.tables), ...Object.keys(schema.views)];
 
   return Object.values(schema.views).map((view) => {
@@ -123,8 +123,8 @@ export function analyzeViewDependencies(
 
 export function analyzeTriggerDependencies(
   schema: SqliteInspectedDatabase,
-  viewDependencyFacts: readonly (SqliteDependencyFact & {readonly referencedColumnNames: readonly string[]})[],
-): readonly (SqliteDependencyFact & {readonly referencedColumnNames: readonly string[]})[] {
+  viewDependencyFacts: (SqliteDependencyFact & {referencedColumnNames: string[]})[],
+): (SqliteDependencyFact & {referencedColumnNames: string[]})[] {
   const candidateNames = [...Object.keys(schema.tables), ...viewDependencyFacts.map((fact) => fact.ownerName)];
 
   return Object.values(schema.triggers).map((trigger) => ({
@@ -136,7 +136,7 @@ export function analyzeTriggerDependencies(
   }));
 }
 
-export function directViewDependencies(viewName: string, facts: readonly SqliteDependencyFact[]): string[] {
+export function directViewDependencies(viewName: string, facts: SqliteDependencyFact[]): string[] {
   return (
     facts
       .find((fact) => fact.ownerName === viewName)
@@ -148,7 +148,7 @@ export function directViewDependencies(viewName: string, facts: readonly SqliteD
 export function triggerSelectableNames(
   triggerName: string,
   candidateSelectableNames: ReadonlySet<string>,
-  facts: readonly SqliteDependencyFact[],
+  facts: SqliteDependencyFact[],
 ): string[] {
   const fact = facts.find((entry) => entry.ownerName === triggerName);
   if (!fact) {
@@ -161,8 +161,8 @@ export function triggerSelectableNames(
 }
 
 function expandAffectedViewNames(
-  directlyAffectedViewNames: readonly string[],
-  viewDependencyFacts: readonly SqliteDependencyFact[],
+  directlyAffectedViewNames: string[],
+  viewDependencyFacts: SqliteDependencyFact[],
 ): string[] {
   const reverseDependencies = new Map<string, string[]>();
 
@@ -197,7 +197,7 @@ function expandAffectedViewNames(
   return [...visited].sort((left, right) => left.localeCompare(right));
 }
 
-function triggerDependencyNames(trigger: SqliteInspectedTrigger, candidateNames: readonly string[]): string[] {
+function triggerDependencyNames(trigger: SqliteInspectedTrigger, candidateNames: string[]): string[] {
   const names = new Set<string>();
   names.add(trigger.onName);
 

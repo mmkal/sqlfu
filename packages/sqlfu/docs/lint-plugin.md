@@ -1,0 +1,87 @@
+# Lint Plugin
+
+sqlfu ships an ESLint plugin at `sqlfu/lint-plugin`. It enforces the SQL First model at the editor level: your query file is the source of truth, not an inline string.
+
+## Quick setup
+
+```js
+// eslint.config.js
+import sqlfu from 'sqlfu/lint-plugin';
+
+export default [
+  ...sqlfu.configs.recommended,
+];
+```
+
+The `recommended` preset does two things: runs `sqlfu/query-naming` and `sqlfu/format-sql` on TS/JS files, and enables the `sqlfu/sql` processor so `.sql` files are lintable as well.
+
+## Rules
+
+### `sqlfu/query-naming`
+
+Flags inline SQL template literals that duplicate a checked-in `.sql` file.
+
+```ts
+// flagged: this SQL matches sql/get-posts.sql exactly
+const posts = client.all(sql`select id, slug from posts where published = 1`, {});
+
+// correct: use the generated wrapper function
+import {getPosts} from './sql/.generated/get-posts.sql';
+const posts = await getPosts(client, {limit: 10});
+```
+
+Why: your filename is your query's identity. An inline duplicate loses the query name, the generated TypeScript types, and the observability metadata (OpenTelemetry span name, Sentry tag, etc.). The rule catches the case where you paste a query inline rather than pointing at the file.
+
+The rule fires on `client.all`, `client.run`, `client.iterate`, and `` client.sql`...` `` calls where the template has no interpolations and the normalized SQL matches a file under your project's `queries` directory.
+
+### `sqlfu/format-sql`
+
+Flags SQL that does not match sqlfu's formatter output, on both inline template literals and standalone `.sql` files.
+
+```sql
+-- flagged
+SELECT Id, Slug FROM Posts WHERE Published = 1
+
+-- correct (lowercase, sqlfu style)
+select id, slug from posts where published = 1
+```
+
+`eslint --fix '**/*.sql'` reformats `.sql` files in place. The same rule autofixes inline template bodies in TS/JS.
+
+## Manual configuration
+
+If you need to wire the rules individually rather than using the preset:
+
+```js
+// eslint.config.js
+import sqlfu from 'sqlfu/lint-plugin';
+
+export default [
+  {
+    plugins: {sqlfu},
+    rules: {
+      'sqlfu/query-naming': 'error',
+      'sqlfu/format-sql': 'error',
+    },
+  },
+];
+```
+
+## Options
+
+Both rules accept an optional config object:
+
+```js
+'sqlfu/query-naming': ['error', {
+  queriesDir: './sql',                          // override; defaults to value from sqlfu.config.ts
+  clientIdentifierPattern: /^(client|db)$/u,   // customize the client identifier regex
+}]
+```
+
+## The `sqlfu/sql` processor
+
+The preset includes an ESLint processor (`sqlfu/sql`) that makes `.sql` files lintable by wrapping them in a tagged template literal so ESLint's JS parser can process them. You only need to configure this separately if you are not using the preset.
+
+## Reference implementation note
+
+The `recommended` config is a reference implementation, not a locked-forever API. The stable contracts are the rule names (`sqlfu/query-naming`, `sqlfu/format-sql`) and the options schema. If your team's ESLint setup needs a different shape, copy the preset and adjust it -- you are not going off-piste.

@@ -18,10 +18,10 @@ import type {FormatOptionsWithLanguage as VendoredFormatOptionsWithLanguage} fro
 export type SqlFormatStyle = 'sqlfu' | 'upstream';
 
 export type FormatSqlOptions = Omit<VendoredFormatOptionsWithLanguage, 'language'> & {
-  readonly style?: SqlFormatStyle;
-  readonly printWidth?: number;
-  readonly inlineClauses?: boolean;
-  readonly newlineBeforeTableName?: boolean;
+  style?: SqlFormatStyle;
+  printWidth?: number;
+  inlineClauses?: boolean;
+  newlineBeforeTableName?: boolean;
 };
 
 const sqlfuDefaultOptions = {
@@ -81,7 +81,7 @@ function compactClauses(sql: string, options: {printWidth: number; newlineBefore
 
 function compactClause(
   header: string,
-  bodyLines: readonly string[],
+  bodyLines: string[],
   options: {printWidth: number; newlineBeforeTableName: boolean},
 ): string[] {
   if (bodyLines.length === 0) {

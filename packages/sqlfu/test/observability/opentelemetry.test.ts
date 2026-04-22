@@ -115,14 +115,14 @@ test('named and ad-hoc queries surface on OTel spans and error reporter fires on
 });
 
 interface CollectedSpan {
-  readonly traceId: string;
-  readonly spanId: string;
-  readonly parentSpanId: string | undefined;
-  readonly name: string;
-  readonly startTimeUnixNano: string;
-  readonly attributes: Record<string, string | number | boolean>;
-  readonly events: ReadonlyArray<{name: string; attributes: Record<string, string | number | boolean>}>;
-  readonly statusCode: number | undefined;
+  traceId: string;
+  spanId: string;
+  parentSpanId: string | undefined;
+  name: string;
+  startTimeUnixNano: string;
+  attributes: Record<string, string | number | boolean>;
+  events: ReadonlyArray<{name: string; attributes: Record<string, string | number | boolean>}>;
+  statusCode: number | undefined;
 }
 
 async function createOtelFixture() {
@@ -199,18 +199,18 @@ function flattenOtlpTraces(payload: unknown): CollectedSpan[] {
 }
 
 interface RawSpan {
-  readonly traceId: string;
-  readonly spanId: string;
-  readonly parentSpanId?: string;
-  readonly name: string;
-  readonly startTimeUnixNano: string | number;
-  readonly attributes?: readonly {key: string; value: Record<string, unknown>}[];
-  readonly events?: readonly {name: string; attributes?: readonly {key: string; value: Record<string, unknown>}[]}[];
-  readonly status?: {code?: number};
+  traceId: string;
+  spanId: string;
+  parentSpanId?: string;
+  name: string;
+  startTimeUnixNano: string | number;
+  attributes?: {key: string; value: Record<string, unknown>}[];
+  events?: {name: string; attributes?: {key: string; value: Record<string, unknown>}[]}[];
+  status?: {code?: number};
 }
 
 function flattenAttributes(
-  attributes: readonly {key: string; value: Record<string, unknown>}[],
+  attributes: {key: string; value: Record<string, unknown>}[],
 ): Record<string, string | number | boolean> {
   const result: Record<string, string | number | boolean> = {};
   for (const attribute of attributes) {
@@ -228,7 +228,7 @@ function flattenAttributes(
   return result;
 }
 
-function renderTraceTree(spans: readonly CollectedSpan[]): string {
+function renderTraceTree(spans: CollectedSpan[]): string {
   const byTrace = new Map<string, CollectedSpan[]>();
   for (const span of spans) {
     let group = byTrace.get(span.traceId);
@@ -261,13 +261,13 @@ function renderTraceTree(spans: readonly CollectedSpan[]): string {
   return lines.join('\n');
 }
 
-function findRoot(spans: readonly CollectedSpan[]): CollectedSpan {
+function findRoot(spans: CollectedSpan[]): CollectedSpan {
   return spans.find((span) => !span.parentSpanId) ?? spans[0]!;
 }
 
 function renderSubtree(
   parentId: string | undefined,
-  byParent: ReadonlyMap<string | undefined, readonly CollectedSpan[]>,
+  byParent: ReadonlyMap<string | undefined, CollectedSpan[]>,
   depth: number,
   lines: string[],
 ): void {

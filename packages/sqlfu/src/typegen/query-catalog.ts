@@ -1,82 +1,82 @@
 export type QueryCatalog = {
-  readonly generatedAt: string;
-  readonly queries: readonly QueryCatalogEntry[];
+  generatedAt: string;
+  queries: QueryCatalogEntry[];
 };
 
 export type AdHocQueryAnalysis = {
-  readonly sql: string;
+  sql: string;
   // `Ddl` covers create/drop/alter/pragma/etc. run via the UI SQL runner; the runtime
   // treats them as metadata-mode (no rows, no params).
-  readonly queryType: 'Select' | 'Insert' | 'Update' | 'Delete' | 'Copy' | 'Ddl';
-  readonly multipleRowsResult: boolean;
-  readonly resultMode: 'many' | 'nullableOne' | 'one' | 'metadata';
-  readonly args: readonly QueryCatalogArgument[];
-  readonly dataSchema?: JsonSchemaObject;
-  readonly paramsSchema?: JsonSchemaObject;
-  readonly resultSchema: JsonSchemaObject;
-  readonly columns: readonly QueryCatalogField[];
+  queryType: 'Select' | 'Insert' | 'Update' | 'Delete' | 'Copy' | 'Ddl';
+  multipleRowsResult: boolean;
+  resultMode: 'many' | 'nullableOne' | 'one' | 'metadata';
+  args: QueryCatalogArgument[];
+  dataSchema?: JsonSchemaObject;
+  paramsSchema?: JsonSchemaObject;
+  resultSchema: JsonSchemaObject;
+  columns: QueryCatalogField[];
 };
 
 export type QueryCatalogEntry =
   | {
-      readonly kind: 'query';
-      readonly id: string;
-      readonly sqlFile: string;
-      readonly functionName: string;
+      kind: 'query';
+      id: string;
+      sqlFile: string;
+      functionName: string;
       /** Runtime-ready SQL with `?` placeholders; this is what the driver executes. */
-      readonly sql: string;
+      sql: string;
       /** Original `.sql` file contents (preserves named `:param` placeholders); shown in the UI. */
-      readonly sqlFileContent: string;
-      readonly queryType: 'Select' | 'Insert' | 'Update' | 'Delete' | 'Copy';
-      readonly multipleRowsResult: boolean;
-      readonly resultMode: 'many' | 'nullableOne' | 'one' | 'metadata';
-      readonly args: readonly QueryCatalogArgument[];
-      readonly dataSchema?: JsonSchemaObject;
-      readonly paramsSchema?: JsonSchemaObject;
-      readonly resultSchema: JsonSchemaObject;
-      readonly columns: readonly QueryCatalogField[];
+      sqlFileContent: string;
+      queryType: 'Select' | 'Insert' | 'Update' | 'Delete' | 'Copy';
+      multipleRowsResult: boolean;
+      resultMode: 'many' | 'nullableOne' | 'one' | 'metadata';
+      args: QueryCatalogArgument[];
+      dataSchema?: JsonSchemaObject;
+      paramsSchema?: JsonSchemaObject;
+      resultSchema: JsonSchemaObject;
+      columns: QueryCatalogField[];
     }
   | {
-      readonly kind: 'error';
-      readonly id: string;
-      readonly sqlFile: string;
-      readonly functionName: string;
-      readonly sql: string;
-      readonly sqlFileContent: string;
-      readonly error: {
-        readonly name: string;
-        readonly description: string;
+      kind: 'error';
+      id: string;
+      sqlFile: string;
+      functionName: string;
+      sql: string;
+      sqlFileContent: string;
+      error: {
+        name: string;
+        description: string;
       };
     };
 
 export type QueryCatalogArgument = {
-  readonly scope: 'data' | 'params';
-  readonly name: string;
-  readonly tsType: string;
-  readonly notNull: boolean;
-  readonly optional: boolean;
-  readonly isArray: boolean;
-  readonly driverEncoding: 'identity' | 'boolean-number' | 'date' | 'datetime';
+  scope: 'data' | 'params';
+  name: string;
+  tsType: string;
+  notNull: boolean;
+  optional: boolean;
+  isArray: boolean;
+  driverEncoding: 'identity' | 'boolean-number' | 'date' | 'datetime';
 };
 
 export type QueryCatalogField = {
-  readonly name: string;
-  readonly tsType: string;
-  readonly notNull: boolean;
-  readonly optional: boolean;
+  name: string;
+  tsType: string;
+  notNull: boolean;
+  optional: boolean;
 };
 
 export type JsonSchema = boolean | JsonSchemaObject;
 
 export type JsonSchemaObject = {
-  readonly type?: string | readonly string[];
-  readonly title?: string;
-  readonly description?: string;
-  readonly properties?: Readonly<Record<string, JsonSchema>>;
-  readonly required?: readonly string[];
-  readonly items?: JsonSchema;
-  readonly enum?: readonly string[];
-  readonly anyOf?: readonly JsonSchema[];
-  readonly format?: string;
-  readonly additionalProperties?: boolean;
+  type?: string | string[];
+  title?: string;
+  description?: string;
+  properties?: Readonly<Record<string, JsonSchema>>;
+  required?: string[];
+  items?: JsonSchema;
+  enum?: string[];
+  anyOf?: JsonSchema[];
+  format?: string;
+  additionalProperties?: boolean;
 };

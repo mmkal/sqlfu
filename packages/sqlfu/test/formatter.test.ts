@@ -41,11 +41,11 @@ for (const fixturePath of await listFixtureFiles(fixturesDir)) {
 }
 
 type FormatterFixtureCase = {
-  readonly name: string;
-  readonly config: Record<string, unknown>;
-  readonly input: string;
-  readonly output?: string;
-  readonly error?: string;
+  name: string;
+  config: Record<string, unknown>;
+  input: string;
+  output?: string;
+  error?: string;
 };
 
 async function listFixtureFiles(fixturesDir: string): Promise<string[]> {

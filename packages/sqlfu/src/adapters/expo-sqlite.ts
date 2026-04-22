@@ -3,17 +3,17 @@ import {rawSqlWithSqlSplittingAsync, surroundWithBeginCommitRollbackAsync} from 
 import type {AsyncClient, ResultRow, SqlQuery} from '../core/types.js';
 
 export interface ExpoSqliteRunResult {
-  readonly changes?: number;
-  readonly lastInsertRowId?: string | number | bigint | null;
+  changes?: number;
+  lastInsertRowId?: string | number | bigint | null;
 }
 
 export interface ExpoSqliteDatabaseLike {
-  getAllAsync<TRow extends ResultRow = ResultRow>(source: string, params?: readonly unknown[]): Promise<TRow[]>;
+  getAllAsync<TRow extends ResultRow = ResultRow>(source: string, params?: unknown[]): Promise<TRow[]>;
   getEachAsync<TRow extends ResultRow = ResultRow>(
     source: string,
-    params?: readonly unknown[],
+    params?: unknown[],
   ): AsyncIterableIterator<TRow>;
-  runAsync(source: string, params?: readonly unknown[]): Promise<ExpoSqliteRunResult>;
+  runAsync(source: string, params?: unknown[]): Promise<ExpoSqliteRunResult>;
 }
 
 export function createExpoSqliteClient(database: ExpoSqliteDatabaseLike): AsyncClient<ExpoSqliteDatabaseLike> {

@@ -3,6 +3,13 @@ status: needs-grilling
 size: medium
 ---
 
+Below is the bot-written spec for this task. I, the human, think this:
+We should probably let people use whatever valid params they want when using `:myParam`. i.e. don't touch casing on that. Just encourage people to use camel-case with those things.
+
+Query *names* should be camel-cased, to match the function name. i.e. if you have `sql/find-posts.sql` and run `sqlfu generate` you'll get a `findPosts` function. The query should have `name: 'findPosts'` rather than `name: 'find-posts'` because then it matches the actual function's `.name` property.
+
+---
+
 # Typegen casing story: snake_case vs camelCase across the generated output
 
 ## Why this exists

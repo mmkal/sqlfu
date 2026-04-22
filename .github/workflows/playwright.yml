@@ -1,0 +1,54 @@
+name: playwright
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - run: corepack enable
+
+      # Node 22+ is required at runtime (sqlfu uses node:sqlite; see
+      # packages/sqlfu/src/core/node-host.ts).
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm --filter @sqlfu/ui exec playwright install --with-deps chromium
+
+      - name: Run Playwright tests
+        run: pnpm --filter @sqlfu/ui test
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: packages/ui/playwright-report
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Upload test-results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results
+          path: packages/ui/test-results
+          if-no-files-found: ignore
+          retention-days: 7

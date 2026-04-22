@@ -5,10 +5,10 @@ import type {AsyncClient, QueryArg, ResultRow, SqlQuery} from '../core/types.js'
 export type SqliteWasmBindValue = string | number | bigint | Uint8Array | null;
 
 export interface SqliteWasmExecOptions {
-  readonly sql: string;
-  readonly bind?: readonly SqliteWasmBindValue[] | Record<string, SqliteWasmBindValue> | undefined;
-  readonly rowMode?: 'object' | 'array';
-  readonly returnValue?: 'resultRows' | 'this';
+  sql: string;
+  bind?: SqliteWasmBindValue[] | Record<string, SqliteWasmBindValue> | undefined;
+  rowMode?: 'object' | 'array';
+  returnValue?: 'resultRows' | 'this';
 }
 
 export interface SqliteWasmDatabaseLike {
@@ -74,7 +74,7 @@ export function createSqliteWasmClient(database: SqliteWasmDatabaseLike): AsyncC
 
 export const createSqliteWasmDatabase = createSqliteWasmClient;
 
-function toPositionalBind(args: readonly QueryArg[]): readonly SqliteWasmBindValue[] | undefined {
+function toPositionalBind(args: QueryArg[]): SqliteWasmBindValue[] | undefined {
   if (args.length === 0) {
     return undefined;
   }

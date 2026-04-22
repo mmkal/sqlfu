@@ -4,7 +4,7 @@ export async function extractSchema(
   client: Client,
   schemaName = 'main',
   input: {
-    excludedTables?: readonly string[];
+    excludedTables?: string[];
   } = {},
 ): Promise<string> {
   const excludedTables = input.excludedTables ?? [];
@@ -31,34 +31,34 @@ function sqlStringLiteral(value: string) {
 }
 
 export type SqliteSchemaFingerprint = {
-  readonly tables: readonly {
-    readonly name: string;
-    readonly columns: readonly {
-      readonly name: string;
-      readonly type: string;
-      readonly notNull: boolean;
-      readonly defaultValue: string | null;
-      readonly primaryKeyPosition: number;
-      readonly hidden: number;
+  tables: {
+    name: string;
+    columns: {
+      name: string;
+      type: string;
+      notNull: boolean;
+      defaultValue: string | null;
+      primaryKeyPosition: number;
+      hidden: number;
     }[];
-    readonly indexes: readonly {
-      readonly unique: boolean;
-      readonly origin: string;
-      readonly partial: boolean;
-      readonly columns: readonly string[];
+    indexes: {
+      unique: boolean;
+      origin: string;
+      partial: boolean;
+      columns: string[];
     }[];
   }[];
-  readonly views: readonly {
-    readonly name: string;
-    readonly sql: string;
+  views: {
+    name: string;
+    sql: string;
   }[];
 };
 
 export async function inspectSchemaFingerprint(client: Client, schemaName = 'main'): Promise<SqliteSchemaFingerprint> {
   const objects = await client.all<{
-    readonly type: 'table' | 'view';
-    readonly name: string;
-    readonly sql: string | null;
+    type: 'table' | 'view';
+    name: string;
+    sql: string | null;
   }>({
     sql: `
       select type, name, sql
@@ -85,21 +85,21 @@ export async function inspectSchemaFingerprint(client: Client, schemaName = 'mai
 
     const tableNameLiteral = quoteSqlString(object.name);
     const columns = await client.all<{
-      readonly name: string;
-      readonly type: string;
-      readonly notnull: number;
-      readonly dflt_value: string | null;
-      readonly pk: number;
-      readonly hidden: number;
+      name: string;
+      type: string;
+      notnull: number;
+      dflt_value: string | null;
+      pk: number;
+      hidden: number;
     }>({
       sql: `select name, type, "notnull", dflt_value, pk, hidden from pragma_table_xinfo(${tableNameLiteral}) order by cid`,
       args: [],
     });
     const indexList = await client.all<{
-      readonly name: string;
-      readonly unique: number;
-      readonly origin: string;
-      readonly partial: number;
+      name: string;
+      unique: number;
+      origin: string;
+      partial: number;
     }>({
       sql: `select name, "unique", origin, partial from pragma_index_list(${tableNameLiteral}) order by name`,
       args: [],
@@ -108,7 +108,7 @@ export async function inspectSchemaFingerprint(client: Client, schemaName = 'mai
     const indexes = [];
     for (const index of indexList) {
       const indexNameLiteral = quoteSqlString(index.name);
-      const indexColumns = await client.all<{readonly name: string}>({
+      const indexColumns = await client.all<{name: string}>({
         sql: `select name from pragma_index_info(${indexNameLiteral}) order by seqno`,
         args: [],
       });
@@ -138,7 +138,7 @@ export async function inspectSchemaFingerprint(client: Client, schemaName = 'mai
 }
 
 export function rawSqlWithSqlSplittingSync(
-  runOne: (query: {sql: string; args: readonly QueryArg[]}) => {
+  runOne: (query: {sql: string; args: QueryArg[]}) => {
     rowsAffected?: number;
     lastInsertRowid?: string | number | bigint | null;
   },
@@ -166,7 +166,7 @@ export function rawSqlWithSqlSplittingSync(
 export async function rawSqlWithSqlSplittingAsync(
   runOne: (query: {
     sql: string;
-    args: readonly QueryArg[];
+    args: QueryArg[];
   }) => Promise<{rowsAffected?: number; lastInsertRowid?: string | number | bigint | null}>,
   sql: string,
 ) {

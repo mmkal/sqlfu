@@ -15,8 +15,8 @@ import type {
 const emptyFragment: SqlFragment = {sql: '', args: []};
 
 export class AsyncBoundRows<TRow extends ResultRow> implements SqlRowsPromise<TRow> {
-  readonly query: SqlQuery;
-  readonly #client: AsyncClient;
+  query: SqlQuery;
+  #client: AsyncClient;
 
   constructor(client: AsyncClient, query: SqlQuery) {
     this.#client = client;
@@ -46,8 +46,8 @@ export class AsyncBoundRows<TRow extends ResultRow> implements SqlRowsPromise<TR
 }
 
 export class SyncBoundRows<TRow extends ResultRow> implements SqlRowsPromise<TRow> {
-  readonly query: SqlQuery;
-  readonly #client: SyncClient;
+  query: SqlQuery;
+  #client: SyncClient;
 
   constructor(client: SyncClient, query: SqlQuery) {
     this.#client = client;
@@ -86,7 +86,7 @@ export function isSqlFragment(value: unknown): value is SqlFragment {
   );
 }
 
-export function sql(strings: TemplateStringsArray, ...values: readonly SqlValue[]): SqlQuery {
+export function sql(strings: TemplateStringsArray, ...values: SqlValue[]): SqlQuery {
   let text = '';
   const args: QueryArg[] = [];
 
@@ -115,7 +115,7 @@ export function raw(value: string): SqlFragment {
   return {sql: value, args: []};
 }
 
-export function join(values: readonly SqlValue[], separator = ', '): SqlFragment {
+export function join(values: SqlValue[], separator = ', '): SqlFragment {
   if (values.length === 0) {
     return emptyFragment;
   }
@@ -144,13 +144,13 @@ export function join(values: readonly SqlValue[], separator = ', '): SqlFragment
 export function bindSyncSql(client: SyncClient): SyncSqlTag {
   const boundSql = <TRow extends ResultRow = ResultRow>(
     strings: TemplateStringsArray,
-    ...values: readonly SqlValue[]
+    ...values: SqlValue[]
   ) => new SyncBoundRows<TRow>(client, sql(strings, ...values));
 
-  boundSql.all = <TRow extends ResultRow = ResultRow>(strings: TemplateStringsArray, ...values: readonly SqlValue[]) =>
+  boundSql.all = <TRow extends ResultRow = ResultRow>(strings: TemplateStringsArray, ...values: SqlValue[]) =>
     client.all<TRow>(sql(strings, ...values));
 
-  boundSql.run = (strings: TemplateStringsArray, ...values: readonly SqlValue[]): RunResult =>
+  boundSql.run = (strings: TemplateStringsArray, ...values: SqlValue[]): RunResult =>
     client.run(sql(strings, ...values));
 
   return boundSql;
@@ -159,13 +159,13 @@ export function bindSyncSql(client: SyncClient): SyncSqlTag {
 export function bindAsyncSql(client: AsyncClient): AsyncSqlTag {
   const boundSql = <TRow extends ResultRow = ResultRow>(
     strings: TemplateStringsArray,
-    ...values: readonly SqlValue[]
+    ...values: SqlValue[]
   ) => new AsyncBoundRows<TRow>(client, sql(strings, ...values));
 
-  boundSql.all = <TRow extends ResultRow = ResultRow>(strings: TemplateStringsArray, ...values: readonly SqlValue[]) =>
+  boundSql.all = <TRow extends ResultRow = ResultRow>(strings: TemplateStringsArray, ...values: SqlValue[]) =>
     client.all<TRow>(sql(strings, ...values));
 
-  boundSql.run = (strings: TemplateStringsArray, ...values: readonly SqlValue[]): Promise<RunResult> =>
+  boundSql.run = (strings: TemplateStringsArray, ...values: SqlValue[]): Promise<RunResult> =>
     client.run(sql(strings, ...values));
 
   return boundSql;

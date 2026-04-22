@@ -3,12 +3,12 @@ import type {Client} from './core/types.js';
 import {createOtelHook} from './otel.js';
 
 interface InstrumentFn {
-  <TClient extends Client>(client: TClient, ...hooks: readonly QueryExecutionHook[]): TClient;
-  readonly otel: typeof createOtelHook;
-  readonly onError: typeof createErrorReporterHook;
+  <TClient extends Client>(client: TClient, ...hooks: QueryExecutionHook[]): TClient;
+  otel: typeof createOtelHook;
+  onError: typeof createErrorReporterHook;
 }
 
-const instrumentImpl = <TClient extends Client>(client: TClient, ...hooks: readonly QueryExecutionHook[]): TClient =>
+const instrumentImpl = <TClient extends Client>(client: TClient, ...hooks: QueryExecutionHook[]): TClient =>
   instrumentClient(client, composeHooks(...hooks));
 
 /**

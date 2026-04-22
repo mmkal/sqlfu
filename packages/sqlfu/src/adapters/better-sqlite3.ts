@@ -3,12 +3,12 @@ import {rawSqlWithSqlSplittingSync, surroundWithBeginCommitRollbackSync} from '.
 import type {ResultRow, SqlQuery, SyncClient} from '../core/types.js';
 
 export interface BetterSqlite3StatementLike<TRow extends ResultRow = ResultRow> {
-  readonly reader: boolean;
-  all(...params: readonly unknown[]): TRow[];
-  iterate?(...params: readonly unknown[]): IterableIterator<TRow>;
-  run(...params: readonly unknown[]): {
-    readonly changes?: number;
-    readonly lastInsertRowid?: string | number | bigint | null;
+  reader: boolean;
+  all(...params: unknown[]): TRow[];
+  iterate?(...params: unknown[]): IterableIterator<TRow>;
+  run(...params: unknown[]): {
+    changes?: number;
+    lastInsertRowid?: string | number | bigint | null;
   };
 }
 

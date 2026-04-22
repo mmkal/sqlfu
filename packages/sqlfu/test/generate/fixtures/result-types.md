@@ -37,15 +37,15 @@ select id, slug, title from posts where slug = :slug limit 1;
 ```ts (sql/.generated/find-post-by-slug.sql.ts)
 import type {Client} from 'sqlfu';
 
-const sql = `select id, slug, title from posts where slug = ? limit 1;`
+const sql = `select id, slug, title from posts where slug = ? limit 1;`;
+const query = (params: findPostBySlug.Params) => ({ sql, args: [params.slug], name: "find-post-by-slug" });
 
 export const findPostBySlug = Object.assign(
 	async function findPostBySlug(client: Client, params: findPostBySlug.Params): Promise<findPostBySlug.Result | null> {
-		const query = { sql, args: [params.slug], name: "find-post-by-slug" };
-		const rows = await client.all<findPostBySlug.Result>(query);
+		const rows = await client.all<findPostBySlug.Result>(query(params));
 		return rows.length > 0 ? rows[0] : null;
 	},
-	{ sql },
+	{ sql, query },
 );
 
 export namespace findPostBySlug {
@@ -99,14 +99,14 @@ select id, body as excerpt from posts limit 5;
 ```ts (sql/.generated/find-post-preview.sql.ts)
 import type {Client} from 'sqlfu';
 
-const sql = `select id, body as excerpt from posts limit 5;`
+const sql = `select id, body as excerpt from posts limit 5;`;
+const query = { sql, args: [], name: "find-post-preview" };
 
 export const findPostPreview = Object.assign(
 	async function findPostPreview(client: Client): Promise<findPostPreview.Result[]> {
-		const query = { sql, args: [], name: "find-post-preview" };
 		return client.all<findPostPreview.Result>(query);
 	},
-	{ sql },
+	{ sql, query },
 );
 
 export namespace findPostPreview {
@@ -157,15 +157,15 @@ import type {Client} from 'sqlfu';
 
 const sql = `
 select id, published_at from posts where published_at is not null limit 1;
-`
+`.trim();
+const query = { sql, args: [], name: "find-published-post-by-slug" };
 
 export const findPublishedPostBySlug = Object.assign(
 	async function findPublishedPostBySlug(client: Client): Promise<findPublishedPostBySlug.Result | null> {
-		const query = { sql, args: [], name: "find-published-post-by-slug" };
 		const rows = await client.all<findPublishedPostBySlug.Result>(query);
 		return rows.length > 0 ? rows[0] : null;
 	},
-	{ sql },
+	{ sql, query },
 );
 
 export namespace findPublishedPostBySlug {
@@ -215,14 +215,14 @@ select id, excerpt from post_summaries;
 ```ts (sql/.generated/list-post-summaries.sql.ts)
 import type {Client} from 'sqlfu';
 
-const sql = `select id, excerpt from post_summaries;`
+const sql = `select id, excerpt from post_summaries;`;
+const query = { sql, args: [], name: "list-post-summaries" };
 
 export const listPostSummaries = Object.assign(
 	async function listPostSummaries(client: Client): Promise<listPostSummaries.Result[]> {
-		const query = { sql, args: [], name: "list-post-summaries" };
 		return client.all<listPostSummaries.Result>(query);
 	},
-	{ sql },
+	{ sql, query },
 );
 
 export namespace listPostSummaries {

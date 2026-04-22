@@ -17,9 +17,9 @@ export async function writeFixtureFiles(root: string, files: Record<string, stri
 export async function dumpFixtureFs(
   root: string,
   input: {
-    ignoredNames?: readonly string[];
-    includeGlobs?: readonly string[];
-    excludeGlobs?: readonly string[];
+    ignoredNames?: string[];
+    includeGlobs?: string[];
+    excludeGlobs?: string[];
   } = {},
 ) {
   const files = await collectFixtureFiles(root, '', new Set(input.ignoredNames ?? []));
@@ -59,7 +59,7 @@ async function collectFixtureFiles(
   return files;
 }
 
-async function renderFixtureFiles(files: readonly FixtureFile[]) {
+async function renderFixtureFiles(files: FixtureFile[]) {
   const lines: string[] = [];
   const seenDirectories = new Set<string>();
 
@@ -89,8 +89,8 @@ async function renderFixtureFiles(files: readonly FixtureFile[]) {
 function matchesGlobs(
   relativePath: string,
   input: {
-    includeGlobs?: readonly string[];
-    excludeGlobs?: readonly string[];
+    includeGlobs?: string[];
+    excludeGlobs?: string[];
   },
 ) {
   const included =
@@ -105,6 +105,6 @@ function matchesGlobs(
 }
 
 interface FixtureFile {
-  readonly relativePath: string;
-  readonly contents: string;
+  relativePath: string;
+  contents: string;
 }

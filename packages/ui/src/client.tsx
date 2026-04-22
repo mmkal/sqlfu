@@ -36,6 +36,8 @@ import type {
 import {columnWidthAlgorithm} from './column-width.js';
 import type {UiRouter} from 'sqlfu/ui/browser';
 import {SqlCodeMirror, TextCodeMirror, TextDiffCodeMirror} from './sql-codemirror.js';
+import {RelationQueryPanel} from './relation-query-panel.js';
+import * as Popover from '@radix-ui/react-popover';
 import {
   Dialog,
   DialogContent,
@@ -61,15 +63,22 @@ const queryClient = new QueryClient({
   },
   mutationCache: new MutationCache({
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : String(error));
+      toast.error(String(error));
     },
   }),
 });
 const demoMode = isDemoMode();
 const orpcClient: RouterClient<UiRouter> = demoMode
   ? createDemoClient({
+      // Invalidate only the schema-derived query namespaces. An unfiltered
+      // `queryClient.invalidateQueries()` would also hit ad-hoc useQuery calls
+      // whose queryFn itself calls `sql.run` (e.g. the Relation view's live
+      // query) — each refetch would re-trigger execAdHocSql → onSchemaChange
+      // → invalidate → refetch → … feedback loop, freezing the browser.
       onSchemaChange: () => {
-        void queryClient.invalidateQueries();
+        void queryClient.invalidateQueries({queryKey: orpc.schema.key()});
+        void queryClient.invalidateQueries({queryKey: orpc.catalog.key()});
+        void queryClient.invalidateQueries({queryKey: orpc.table.key()});
       },
     })
   : createORPCClient(
@@ -227,6 +236,10 @@ async function invalidateSchemaContent() {
 }
 
 function StartupFailureScreen(input: {error: unknown}) {
+  if (demoMode) {
+    return <DemoStartupFailureScreen error={input.error} />;
+  }
+
   const apiOrigin = resolveApiOrigin();
   const apiHost = new URL(apiOrigin).host;
   const browserName = detectBrowserName();
@@ -575,11 +588,7 @@ function Studio() {
         ) : route.kind === 'query' && selectedQuery ? (
           <QueryPanel entry={selectedQuery} relations={schemaQuery.data.relations} />
         ) : selectedTable ? (
-          <TablePanel
-            key={`${selectedTable.name}/${route.kind === 'table' ? route.page : 0}`}
-            relation={selectedTable}
-            page={route.kind === 'table' ? route.page : 0}
-          />
+          <TablePanel key={selectedTable.name} relation={selectedTable} />
         ) : (
           <EmptyState />
         )}
@@ -679,7 +688,7 @@ function SchemaPanel(input: {projectName: string; check: SchemaCheckResponse; au
     onError: (error, variables) => {
       setCommandErrors((current) => ({
         ...(current ?? {}),
-        [variables.command]: error instanceof Error ? error.message : String(error),
+        [variables.command]: String(error),
       }));
     },
   });
@@ -693,7 +702,7 @@ function SchemaPanel(input: {projectName: string; check: SchemaCheckResponse; au
   const desiredSchemaSql = desiredSchemaDraft ?? input.authorities.desiredSchemaSql;
   const desiredSchemaDirty =
     normalizeSqlDraft(desiredSchemaSql) !== normalizeSqlDraft(input.authorities.desiredSchemaSql);
-  const handleSchemaCommand = async (command: readonly [string, ...string[]]) => {
+  const handleSchemaCommand = async (command: [string, ...string[]]) => {
     await runCommandMutation.mutateAsync({command: formatSchemaCommand(command)});
   };
 
@@ -1014,16 +1023,16 @@ function MigrationDetail(input: {
   );
 }
 
-function TablePanel(input: {relation: StudioRelation; page: number}) {
+function TablePanel(input: {relation: StudioRelation}) {
   const tableListOptions = orpc.table.list.queryOptions({
     input: {
       relationName: input.relation.name,
-      page: input.page,
+      page: 0,
     },
   });
   const rowsQuery = useSuspenseQuery(tableListOptions);
-  const [draftRows, setDraftRows] = useLocalStorageState<readonly Record<string, unknown>[]>(
-    `sqlfu-ui/table-draft/${input.relation.name}/${input.page}`,
+  const [draftRows, setDraftRows] = useLocalStorageState<Record<string, unknown>[]>(
+    `sqlfu-ui/table-draft/${input.relation.name}/0`,
     {
       defaultValue: rowsQuery.data.rows,
     },
@@ -1054,7 +1063,7 @@ function TablePanel(input: {relation: StudioRelation; page: number}) {
     ...rowsQuery.data.rowKeys,
     ...displayedRows.slice(rowsQuery.data.rows.length).map((_, index) => ({
       kind: 'new' as const,
-      value: `new-${input.relation.name}-${input.page}-${index}`,
+      value: `new-${input.relation.name}-0-${index}`,
     })),
   ];
   const rowsDirty = JSON.stringify(displayedRows) !== JSON.stringify(displayedOriginalRows);
@@ -1065,25 +1074,44 @@ function TablePanel(input: {relation: StudioRelation; page: number}) {
   const handleSaveRows = () => {
     saveRowsMutation.mutate({
       relationName: input.relation.name,
-      page: input.page,
+      page: 0,
       originalRows: displayedOriginalRows.map((row) => ({...row})),
       rows: displayedRows.map((row) => ({...row})),
       rowKeys: displayedRowKeys,
     });
   };
-  const handleDeleteRow = (rowIndex: number) => {
+  const handleDeleteRow = async (rowIndex: number) => {
     const rowKey = displayedRowKeys[rowIndex];
     const originalRow = displayedOriginalRows[rowIndex];
     if (!rowKey || !originalRow) {
       return;
     }
     if (rowKey.kind === 'new') {
+      const row = displayedRows[rowIndex];
+      const columnNames = input.relation.columns.map((column) => column.name);
+      if (!row || isEmptyDraftRow(row, columnNames)) {
+        setDraftRows(displayedRows.filter((_, index) => index !== rowIndex));
+        return;
+      }
+      const result = await confirmationDialogStore.confirm({
+        title: 'Discard unsaved row?',
+        body: 'This row has values you have not saved yet. Discard them?',
+        bodyType: 'markdown',
+      });
+      if (!result.confirmed) return;
       setDraftRows(displayedRows.filter((_, index) => index !== rowIndex));
       return;
     }
+    const previewSql = buildDeleteRowPreviewSql(input.relation.name, rowKey);
+    const result = await confirmationDialogStore.confirm({
+      title: `Delete row from "${input.relation.name}"?`,
+      body: previewSql,
+      bodyType: 'sql',
+    });
+    if (!result.confirmed) return;
     deleteRowMutation.mutate({
       relationName: input.relation.name,
-      page: input.page,
+      page: 0,
       rowKey,
       originalRow,
     });
@@ -1105,87 +1133,51 @@ function TablePanel(input: {relation: StudioRelation; page: number}) {
       </header>
 
       <section className="card">
-        <div className="card-title-row">
-          <div className="card-title">Data</div>
-          <div className="pill-row">
-            <span className="pill">Page {input.page + 1}</span>
-            {rowsQuery.data.editable && rowsDirty ? (
-              <>
-                <button
-                  className="button primary"
-                  type="button"
-                  aria-label="Save changes"
-                  disabled={saveRowsMutation.isPending}
-                  onClick={handleSaveRows}
-                >
-                  {saveRowsMutation.isPending ? 'Saving…' : 'Save changes'}
-                </button>
-                <button
-                  className="button"
-                  type="button"
-                  aria-label="Discard changes"
-                  disabled={saveRowsMutation.isPending}
-                  onClick={handleDiscardRows}
-                >
-                  Discard changes
-                </button>
-              </>
-            ) : null}
-          </div>
-        </div>
         {tableMutationError ? <ErrorView error={tableMutationError} /> : null}
-        <DataTable
-          storageKey={`relation/${input.relation.name}`}
-          columns={rowsQuery.data.columns}
-          rowKeys={displayedRowKeys}
-          originalRows={displayedOriginalRows}
-          rows={displayedRows}
-          editable={rowsQuery.data.editable}
-          editableColumns={Object.fromEntries(
-            input.relation.columns.map((column) => [column.name, !column.primaryKey]),
-          )}
-          onRowsChange={setDraftRows}
-          onAppendRow={() => setDraftRows([...displayedRows, {...emptyRowTemplate}])}
-          onDeleteRow={handleDeleteRow}
-          showSelectedCellDetail
-        />
-        <div className="pager">
-          <a
-            className={input.page === 0 ? 'button disabled' : 'button'}
-            href={`#table/${encodeURIComponent(input.relation.name)}/${Math.max(0, input.page - 1)}`}
-          >
-            Previous
-          </a>
-          <a className="button" href={`#table/${encodeURIComponent(input.relation.name)}/${input.page + 1}`}>
-            Next
-          </a>
-        </div>
-      </section>
-
-      {input.relation.sql ? (
-        <details className="card relation-details">
-          <summary className="authority-card-summary" role="button">
-            <span className="card-title relation-details-title">Definition</span>
-            <span className="accordion-chevron" aria-hidden="true">
-              ▾
-            </span>
-          </summary>
-          <div className="authority-card-body">
-            <SqlCodeMirror
-              value={input.relation.sql}
-              ariaLabel="Relation definition editor"
-              relations={[input.relation]}
-              onChange={() => {}}
-              readOnly
+        <RelationQueryPanel
+          relation={input.relation}
+          runSql={(runInput) => orpcClient.sql.run(runInput)}
+          rowEditing={{
+            editable: rowsQuery.data.editable,
+            dirty: rowsDirty,
+            saving: saveRowsMutation.isPending,
+            onSave: handleSaveRows,
+            onDiscard: handleDiscardRows,
+          }}
+          renderDefaultDataTable={({toolbar}) => (
+            <DataTable
+              storageKey={`relation/${input.relation.name}`}
+              columns={rowsQuery.data.columns}
+              rowKeys={displayedRowKeys}
+              originalRows={displayedOriginalRows}
+              rows={displayedRows}
+              editable={rowsQuery.data.editable}
+              editableColumns={Object.fromEntries(
+                input.relation.columns.map((column) => [column.name, !column.primaryKey]),
+              )}
+              onRowsChange={setDraftRows}
+              onAppendRow={() => setDraftRows([...displayedRows, {...emptyRowTemplate}])}
+              onDeleteRow={handleDeleteRow}
+              showSelectedCellDetail
+              toolbar={toolbar}
             />
-          </div>
-        </details>
-      ) : null}
+          )}
+          renderSqlDataTable={(args) => (
+            <DataTable
+              storageKey={args.storageKey}
+              columns={args.columns}
+              rows={args.rows}
+              showSelectedCellDetail
+              toolbar={args.toolbar}
+            />
+          )}
+        />
+      </section>
     </section>
   );
 }
 
-function SqlRunnerPanel(input: {relations: readonly StudioRelation[]}) {
+function SqlRunnerPanel(input: {relations: StudioRelation[]}) {
   const [draft, setDraft] = useLocalStorageState<SqlRunnerDraft>('sqlfu-ui/sql-runner-draft', {
     defaultValue: {
       sql: `select name, type\nfrom sqlite_schema\nwhere name not like 'sqlite_%'\norder by type, name;`,
@@ -1263,7 +1255,7 @@ function SqlRunnerPanel(input: {relations: readonly StudioRelation[]}) {
   );
 }
 
-function QueryPanel(input: {entry: QueryCatalogEntry; relations: readonly StudioRelation[]}) {
+function QueryPanel(input: {entry: QueryCatalogEntry; relations: StudioRelation[]}) {
   const entry = input.entry;
 
   const mutation = useMutation({
@@ -1454,8 +1446,8 @@ function QueryWorkbench(input: {
   titleActions?: ReactNode;
   sql: string;
   editable?: boolean;
-  sqlEditorRelations?: readonly StudioRelation[];
-  sqlEditorDiagnostics?: readonly SqlEditorDiagnostic[];
+  sqlEditorRelations?: StudioRelation[];
+  sqlEditorDiagnostics?: SqlEditorDiagnostic[];
   sqlEditorOnExecute?: (value: string) => void;
   sqlEditorOnSave?: (value: string) => void;
   paramsSchema?: RJSFSchema;
@@ -1635,19 +1627,25 @@ const rowActionCellTemplate: reactGrid.CellTemplate<RowActionCell> = {
 
 function DataTable(input: {
   storageKey: string;
-  columns: readonly string[];
+  columns: string[];
   rowKeys?: TableRowsResponse['rowKeys'];
-  originalRows?: readonly Record<string, unknown>[];
-  rows: readonly Record<string, unknown>[];
+  originalRows?: Record<string, unknown>[];
+  rows: Record<string, unknown>[];
   editable?: boolean;
   editableColumns?: Readonly<Record<string, boolean>>;
-  onRowsChange?: (rows: readonly Record<string, unknown>[]) => void;
+  onRowsChange?: (rows: Record<string, unknown>[]) => void;
   onAppendRow?: () => void;
   onDeleteRow?: (rowIndex: number) => void;
   showSelectedCellDetail?: boolean;
+  toolbar?: ReactNode;
 }) {
-  if (input.rows.length === 0) {
-    return <p className="muted">No rows.</p>;
+  if (input.rows.length === 0 && !(input.editable && input.onAppendRow)) {
+    return (
+      <>
+        {input.toolbar ? <div className="data-toolbar">{input.toolbar}</div> : null}
+        <p className="muted">No rows.</p>
+      </>
+    );
   }
 
   const {ref: containerRef, width: containerWidth} = useElementWidth<HTMLDivElement>();
@@ -1676,23 +1674,6 @@ function DataTable(input: {
     },
   );
   const pendingFocusRef = useRef<{rowId: number; columnId: string} | null>(null);
-  const rowHistoryRef = useRef<{
-    baseline: string;
-    undo: readonly (readonly Record<string, unknown>[])[];
-    redo: readonly (readonly Record<string, unknown>[])[];
-  }>({
-    baseline: '',
-    undo: [],
-    redo: [],
-  });
-  const historyBaseline = JSON.stringify(input.originalRows ?? input.rows);
-  if (rowHistoryRef.current.baseline !== historyBaseline) {
-    rowHistoryRef.current = {
-      baseline: historyBaseline,
-      undo: [],
-      redo: [],
-    };
-  }
   const computedColumnWidths = columnWidthAlgorithm({
     availableWidth: Math.max(0, containerWidth - 64),
     columns: input.columns.map((column) => ({
@@ -1731,9 +1712,7 @@ function DataTable(input: {
           ariaLabel: selectedRowIndex === rowIndex ? `Delete row ${rowIndex + 1}` : `Select row ${rowIndex + 1}`,
           onClick: () => {
             if (selectedRowIndex === rowIndex) {
-              if (!window.confirm('are you sure you want to delete')) {
-                return;
-              }
+              // Unarm before firing so a cancelled confirmation leaves no stuck state.
               setSelectedRowIndex(null);
               input.onDeleteRow?.(rowIndex);
               return;
@@ -1789,75 +1768,23 @@ function DataTable(input: {
     );
   const showSelectedCellDiffTabs =
     selectedCellDirty && selectedOriginalValue !== 'null' && selectedOriginalValue !== '';
-  const applyUndo = () => {
-    const previousRows = rowHistoryRef.current.undo.at(-1);
-    if (!previousRows) {
-      return;
-    }
-    rowHistoryRef.current = {
-      ...rowHistoryRef.current,
-      undo: rowHistoryRef.current.undo.slice(0, -1),
-      redo: [...rowHistoryRef.current.redo, cloneTableRows(input.rows)],
-    };
-    input.onRowsChange?.(cloneTableRows(previousRows));
-  };
-  const applyRedo = () => {
-    const nextRows = rowHistoryRef.current.redo.at(-1);
-    if (!nextRows) {
-      return;
-    }
-    rowHistoryRef.current = {
-      ...rowHistoryRef.current,
-      undo: [...rowHistoryRef.current.undo, cloneTableRows(input.rows)],
-      redo: rowHistoryRef.current.redo.slice(0, -1),
-    };
-    input.onRowsChange?.(cloneTableRows(nextRows));
-  };
-
   return (
-    <div
-      className="stack"
-      onKeyDownCapture={(event) => {
-        const commandKey = process.platform === 'darwin' ? event.metaKey : event.ctrlKey;
-        if (!commandKey) {
-          return;
-        }
-        if (event.key.toLowerCase() === 'z' && event.shiftKey) {
-          event.preventDefault();
-          applyRedo();
-          return;
-        }
-        if (event.key.toLowerCase() === 'z') {
-          event.preventDefault();
-          applyUndo();
-          return;
-        }
-        if (event.key.toLowerCase() === 'y') {
-          event.preventDefault();
-          applyRedo();
-        }
-      }}
-    >
-      {input.editable ? (
-        <div className="actions">
-          <button
-            className="button"
-            type="button"
-            aria-label="Undo cell changes"
-            disabled={rowHistoryRef.current.undo.length === 0}
-            onClick={applyUndo}
-          >
-            Undo
-          </button>
-          <button
-            className="button"
-            type="button"
-            aria-label="Redo cell changes"
-            disabled={rowHistoryRef.current.redo.length === 0}
-            onClick={applyRedo}
-          >
-            Redo
-          </button>
+    <div className="stack">
+      {input.toolbar || input.showSelectedCellDetail ? (
+        <div className="data-toolbar">
+          {input.toolbar}
+          {input.showSelectedCellDetail ? (
+            <div className="data-toolbar-trailing">
+              <CellDetailPopoverButton
+                selectedCell={selectedCell}
+                selectedOriginalValue={selectedOriginalValue}
+                selectedDraftValue={selectedDraftValue}
+                showDiffTabs={showSelectedCellDiffTabs}
+                selectedCellMode={selectedCellMode}
+                setSelectedCellMode={setSelectedCellMode}
+              />
+            </div>
+          ) : null}
         </div>
       ) : null}
       <div className="table-scroll" ref={containerRef}>
@@ -1865,7 +1792,14 @@ function DataTable(input: {
           customCellTemplates={{rowAction: rowActionCellTemplate}}
           columns={gridColumns}
           rows={gridRows}
-          focusLocation={pendingFocusRef.current ?? undefined}
+          focusLocation={
+            pendingFocusRef.current &&
+            pendingFocusRef.current.rowId >= 0 &&
+            pendingFocusRef.current.rowId < input.rows.length &&
+            input.columns.includes(pendingFocusRef.current.columnId)
+              ? pendingFocusRef.current
+              : undefined
+          }
           stickyTopRows={1}
           stickyLeftColumns={1}
           enableRangeSelection
@@ -1925,11 +1859,6 @@ function DataTable(input: {
                     }
                     nextRow[change.columnId] = readGridCellValue(change.newCell);
                   }
-                  rowHistoryRef.current = {
-                    ...rowHistoryRef.current,
-                    undo: [...rowHistoryRef.current.undo, cloneTableRows(input.rows)],
-                    redo: [],
-                  };
                   input.onRowsChange?.(nextRows);
                 }
               : undefined
@@ -1937,75 +1866,109 @@ function DataTable(input: {
         />
       </div>
 
-      {input.showSelectedCellDetail &&
-      selectedCell &&
-      typeof selectedCell.rowId === 'number' &&
-      typeof selectedCell.columnId === 'string' ? (
-        <section className="selected-cell-panel">
-          <div className="card-title-row">
-            <div className="card-title">{`Cell: ${selectedCell.columnId}, row ${selectedCell.rowId + 1}`}</div>
-          </div>
-          {showSelectedCellDiffTabs ? (
-            <div className="stack">
-              <div className="cell-panel-tabs" role="tablist" aria-label="Cell versions">
-                <button
-                  className={selectedCellMode === 'diff' ? 'cell-panel-tab active' : 'cell-panel-tab'}
-                  type="button"
-                  role="tab"
-                  aria-selected={selectedCellMode === 'diff'}
-                  onClick={() => setSelectedCellMode('diff')}
-                >
-                  Diff
-                </button>
-                <button
-                  className={selectedCellMode === 'original' ? 'cell-panel-tab active' : 'cell-panel-tab'}
-                  type="button"
-                  role="tab"
-                  aria-selected={selectedCellMode === 'original'}
-                  onClick={() => setSelectedCellMode('original')}
-                >
-                  Original
-                </button>
-                <button
-                  className={selectedCellMode === 'draft' ? 'cell-panel-tab active' : 'cell-panel-tab'}
-                  type="button"
-                  role="tab"
-                  aria-selected={selectedCellMode === 'draft'}
-                  onClick={() => setSelectedCellMode('draft')}
-                >
-                  Draft
-                </button>
-              </div>
-
-              {selectedCellMode === 'original' ? (
-                <TextCodeMirror value={selectedOriginalValue} ariaLabel="Original cell value" readOnly height="12rem" />
-              ) : null}
-              {selectedCellMode === 'draft' ? (
-                <TextCodeMirror value={selectedDraftValue} ariaLabel="Draft cell value" readOnly height="12rem" />
-              ) : null}
-              {selectedCellMode === 'diff' ? (
-                <TextDiffCodeMirror
-                  original={selectedOriginalValue}
-                  draft={selectedDraftValue}
-                  ariaLabel="Diff cell value"
-                />
-              ) : null}
-            </div>
-          ) : (
-            <TextCodeMirror value={selectedDraftValue} ariaLabel="Cell value" readOnly height="12rem" />
-          )}
-        </section>
-      ) : null}
     </div>
   );
 }
 
-function cloneTableRows(rows: readonly Record<string, unknown>[]) {
-  return rows.map((row) => ({...row}));
+function CellDetailPopoverButton(input: {
+  selectedCell: {rowId: number; columnId: string} | null | undefined;
+  selectedOriginalValue: string;
+  selectedDraftValue: string;
+  showDiffTabs: boolean;
+  selectedCellMode: 'diff' | 'original' | 'draft';
+  setSelectedCellMode: (mode: 'diff' | 'original' | 'draft') => void;
+}) {
+  const cell = input.selectedCell;
+  const disabled = !cell || typeof cell.rowId !== 'number' || typeof cell.columnId !== 'string';
+  const label = disabled ? 'Cell (no selection)' : `Cell: ${cell!.columnId}, row ${cell!.rowId + 1}`;
+  return (
+    <Popover.Root>
+      <Popover.Trigger asChild>
+        <button
+          type="button"
+          className="rqp-pill-button"
+          aria-label={label}
+          disabled={disabled}
+        >
+          <span className="rqp-pill-icon" aria-hidden="true">
+            ⊡
+          </span>
+          <span>Cell</span>
+        </button>
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content className="rqp-popover rqp-popover-wide" align="end" sideOffset={6}>
+          <div className="rqp-popover-body" role="dialog" aria-label="Cell detail">
+            <div className="card-title-row">
+              <div className="card-title">{label}</div>
+            </div>
+            {input.showDiffTabs ? (
+              <div className="stack">
+                <div className="cell-panel-tabs" role="tablist" aria-label="Cell versions">
+                  <button
+                    className={input.selectedCellMode === 'diff' ? 'cell-panel-tab active' : 'cell-panel-tab'}
+                    type="button"
+                    role="tab"
+                    aria-selected={input.selectedCellMode === 'diff'}
+                    onClick={() => input.setSelectedCellMode('diff')}
+                  >
+                    Diff
+                  </button>
+                  <button
+                    className={input.selectedCellMode === 'original' ? 'cell-panel-tab active' : 'cell-panel-tab'}
+                    type="button"
+                    role="tab"
+                    aria-selected={input.selectedCellMode === 'original'}
+                    onClick={() => input.setSelectedCellMode('original')}
+                  >
+                    Original
+                  </button>
+                  <button
+                    className={input.selectedCellMode === 'draft' ? 'cell-panel-tab active' : 'cell-panel-tab'}
+                    type="button"
+                    role="tab"
+                    aria-selected={input.selectedCellMode === 'draft'}
+                    onClick={() => input.setSelectedCellMode('draft')}
+                  >
+                    Draft
+                  </button>
+                </div>
+                {input.selectedCellMode === 'original' ? (
+                  <TextCodeMirror
+                    value={input.selectedOriginalValue}
+                    ariaLabel="Original cell value"
+                    readOnly
+                    height="12rem"
+                  />
+                ) : null}
+                {input.selectedCellMode === 'draft' ? (
+                  <TextCodeMirror
+                    value={input.selectedDraftValue}
+                    ariaLabel="Draft cell value"
+                    readOnly
+                    height="12rem"
+                  />
+                ) : null}
+                {input.selectedCellMode === 'diff' ? (
+                  <TextDiffCodeMirror
+                    original={input.selectedOriginalValue}
+                    draft={input.selectedDraftValue}
+                    ariaLabel="Diff cell value"
+                  />
+                ) : null}
+              </div>
+            ) : (
+              <TextCodeMirror value={input.selectedDraftValue} ariaLabel="Cell value" readOnly height="12rem" />
+            )}
+          </div>
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
+  );
 }
 
 function isDirtyDataCell(
-  originalRows: readonly Record<string, unknown>[] | undefined,
+  originalRows: Record<string, unknown>[] | undefined,
   rowIndex: number,
   columnId: string,
   value: unknown,
@@ -2222,7 +2185,7 @@ function renderSchemaRecommendationSummary(recommendation: SchemaCheckResponse['
   return nodes;
 }
 
-function formatSchemaCommand(command: readonly [string, ...string[]]) {
+function formatSchemaCommand(command: [string, ...string[]]) {
   return ['sqlfu', ...command].join(' ');
 }
 
@@ -2251,10 +2214,43 @@ function isSameValue(left: unknown, right: unknown) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
+function isEmptyDraftRow(row: Record<string, unknown>, columnNames: string[]): boolean {
+  return columnNames.every((column) => {
+    const value = row[column];
+    return value === null || value === undefined || value === '';
+  });
+}
+
+function buildDeleteRowPreviewSql(
+  relationName: string,
+  rowKey: {kind: 'rowid'; value: number} | {kind: 'primaryKey'; values: Readonly<Record<string, unknown>>} | {kind: 'new'; value: string},
+): string {
+  const quoted = `"${relationName.replaceAll('"', '""')}"`;
+  if (rowKey.kind === 'rowid') {
+    return `delete from ${quoted}\nwhere rowid = ${rowKey.value};`;
+  }
+  if (rowKey.kind === 'primaryKey') {
+    const conditions = Object.entries(rowKey.values).map(
+      ([column, value]) =>
+        value == null
+          ? `"${column.replaceAll('"', '""')}" is null`
+          : `"${column.replaceAll('"', '""')}" = ${formatSqlLiteralPreview(value)}`,
+    );
+    return `delete from ${quoted}\nwhere ${conditions.join(' and ')};`;
+  }
+  return `-- unsaved row; nothing to delete`;
+}
+
+function formatSqlLiteralPreview(value: unknown): string {
+  if (typeof value === 'number' || typeof value === 'bigint') return String(value);
+  if (typeof value === 'boolean') return value ? '1' : '0';
+  return `'${String(value).replaceAll("'", "''")}'`;
+}
+
 function normalizeStoredTableDraft(
-  draftRows: readonly Record<string, unknown>[] | undefined,
-  fetchedRows: readonly Record<string, unknown>[],
-  columns: readonly string[],
+  draftRows: Record<string, unknown>[] | undefined,
+  fetchedRows: Record<string, unknown>[],
+  columns: string[],
 ) {
   if (!draftRows) {
     return fetchedRows;
@@ -2350,7 +2346,7 @@ function parseHash(hash: string): Route {
     return {kind: 'schema'};
   }
 
-  const [kind, first, second] = value.split('/').map(decodeURIComponent);
+  const [kind, first] = value.split('/').map(decodeURIComponent);
   if (kind === 'schema') {
     return {kind: 'schema'};
   }
@@ -2358,7 +2354,7 @@ function parseHash(hash: string): Route {
     return {kind: 'sql'};
   }
   if (kind === 'table' && first) {
-    return {kind: 'table', name: first, page: Number(second ?? '0') || 0};
+    return {kind: 'table', name: first};
   }
   if (kind === 'query' && first) {
     return {kind: 'query', id: first};
@@ -2366,14 +2362,14 @@ function parseHash(hash: string): Route {
   return {kind: 'home'};
 }
 
-function selectTable(route: Route, relations: readonly StudioRelation[]) {
+function selectTable(route: Route, relations: StudioRelation[]) {
   if (route.kind === 'table') {
     return relations.find((relation) => relation.name === route.name) ?? relations[0];
   }
   return relations[0];
 }
 
-function selectQuery(route: Route, queries: readonly QueryCatalogEntry[]) {
+function selectQuery(route: Route, queries: QueryCatalogEntry[]) {
   if (route.kind === 'query') {
     return queries.find((query) => query.id === route.id) ?? queries[0];
   }
@@ -2447,8 +2443,8 @@ function detectNamedParameters(sql: string) {
 }
 
 type SqlRunnerDraft = {
-  readonly sql: string;
-  readonly params: Record<string, unknown>;
+  sql: string;
+  params: Record<string, unknown>;
 };
 
 function slugifyPromptName(value: string) {
@@ -2488,6 +2484,74 @@ function renderVersionMismatchLede(startupError: Extract<StartupFailure, {kind: 
   );
 }
 
+// demo-mode boot can fail for reasons that have nothing to do with the localhost
+// backend (wasm init, missing browser apis, ios WebKit quirks). the generic
+// StartupFailureScreen talks about `npx sqlfu` and mkcert, which is misleading
+// here — so demo mode gets its own screen that surfaces the actual error.
+function DemoStartupFailureScreen(input: {error: unknown}) {
+  const message = String(input.error);
+  const stack = input.error instanceof Error ? input.error.stack : undefined;
+  const userAgent = typeof navigator === 'undefined' ? '' : navigator.userAgent;
+
+  return (
+    <main className="startup-shell">
+      <section className="startup-card">
+        <h1>
+          <code>sqlfu</code> demo didn&apos;t load
+        </h1>
+        <p className="startup-lede">
+          The demo runs entirely in your browser on sqlite-wasm. Something went wrong during startup — see the error
+          below.
+        </p>
+
+        <div className="startup-grid">
+          <section className="startup-section">
+            <h2>Error</h2>
+            <pre className="startup-error-pre">{message}</pre>
+            {stack ? (
+              <details>
+                <summary>Stack trace</summary>
+                <pre className="startup-error-pre">{stack}</pre>
+              </details>
+            ) : null}
+            <p>
+              User agent: <code>{userAgent}</code>
+            </p>
+            <div className="startup-actions">
+              <button className="button primary" type="button" onClick={() => window.location.reload()}>
+                Reload
+              </button>
+            </div>
+          </section>
+
+          <section className="startup-section">
+            <h2>What to try</h2>
+            <ul className="startup-steps">
+              <li>Reload the page.</li>
+              <li>
+                Open in a recent desktop Chrome, Firefox, Edge, or Safari — mobile browsers (especially iOS) may hit
+                wasm limits the desktop demo doesn&apos;t.
+              </li>
+              <li>
+                If it still fails, open an issue with the error above at{' '}
+                <a
+                  className="startup-link"
+                  href="https://github.com/mmkal/sqlfu/issues/new"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  github.com/mmkal/sqlfu/issues
+                </a>
+                .
+              </li>
+            </ul>
+          </section>
+        </div>
+      </section>
+    </main>
+  );
+}
+
 function detectBrowserName() {
   const userAgent = navigator.userAgent;
   if (/Brave/u.test(userAgent) || 'brave' in navigator) {
@@ -2519,22 +2583,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 type Route =
   | {
-      readonly kind: 'home';
+      kind: 'home';
     }
   | {
-      readonly kind: 'schema';
+      kind: 'schema';
     }
   | {
-      readonly kind: 'sql';
+      kind: 'sql';
     }
   | {
-      readonly kind: 'table';
-      readonly name: string;
-      readonly page: number;
+      kind: 'table';
+      name: string;
     }
   | {
-      readonly kind: 'query';
-      readonly id: string;
+      kind: 'query';
+      id: string;
     };
 
 createRoot(document.getElementById('root')!).render(<App />);

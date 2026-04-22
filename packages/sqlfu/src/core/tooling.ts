@@ -7,13 +7,13 @@ const require = createRequire(import.meta.url);
 
 export async function runPackageBinary(
   packageName: string,
-  args: readonly string[],
+  args: string[],
   cwd: string,
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<string> {
   const packageJsonPath = require.resolve(`${packageName}/package.json`);
   const packageJson = JSON.parse(await fs.readFile(packageJsonPath, 'utf8')) as {
-    readonly bin?: string | Record<string, string>;
+    bin?: string | Record<string, string>;
   };
 
   const binRelativePath =

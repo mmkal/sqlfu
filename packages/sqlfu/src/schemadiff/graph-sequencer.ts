@@ -12,9 +12,9 @@
 export type Graph<T> = Map<T, T[]>;
 
 export type GraphSequencerResult<T> = {
-  readonly safe: boolean;
-  readonly chunks: readonly (readonly T[])[];
-  readonly cycles: readonly (readonly T[])[];
+  safe: boolean;
+  chunks: (T[])[];
+  cycles: (T[])[];
 };
 
 export function graphSequencer<T>(graph: Graph<T>, includedNodes = [...graph.keys()]): GraphSequencerResult<T> {

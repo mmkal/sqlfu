@@ -4,5 +4,5 @@ export type {VendoredQueryAnalysis, VendoredQueryInput};
 
 export function analyzeVendoredTypesqlQueriesWithClient(
   client: unknown,
-  queries: readonly VendoredQueryInput[],
-): Promise<readonly VendoredQueryAnalysis[]>;
+  queries: VendoredQueryInput[],
+): Promise<VendoredQueryAnalysis[]>;

@@ -6,6 +6,14 @@ fenced code blocks whose info string carries the filename in parens — `(sql/fo
 that same root after running `sqlfu generate`. Each declared output is asserted exactly;
 files the fixture doesn't mention (e.g. `app.db`) aren't asserted on.
 
+To scaffold a new test quickly, give the **input** block a `data-outputs` glob list —
+`<details data-outputs="sql/.generated/**/*.ts"><summary>input</summary>…</details>` — and
+don't bother writing an output block at all. Running tests with `-u` then synthesizes the
+output block from scratch: one fence per generated file that matches the globs, sorted
+alphabetically. Subsequent `-u` runs regenerate the body — fences whose paths no longer
+match the globs get dropped, new matches get appended. Without `data-outputs`, `-u` only
+refreshes the bodies of fences the author hand-wrote.
+
 If a test doesn't include `sqlfu.config.ts` in its `input` block, the `default config` below
 is injected automatically.
 
@@ -54,14 +62,14 @@ create table if not exists sqlfu_migrations(
   checksum text not null,
   applied_at text not null
 );
-`
+`.trim();
+const query = { sql, args: [], name: "ensure-migration-table" };
 
 export const ensureMigrationTable = Object.assign(
 	async function ensureMigrationTable(client: Client) {
-		const query = { sql, args: [], name: "ensure-migration-table" };
 		return client.run(query);
 	},
-	{ sql },
+	{ sql, query },
 );
 ```
 
@@ -173,15 +181,15 @@ import type {Client} from 'sqlfu';
 
 const sql = `
 select id, slug, body as excerpt from posts where slug = ? limit 1;
-`
+`.trim();
+const query = (params: findPostBySlug.Params) => ({ sql, args: [params.slug], name: "find-post-by-slug" });
 
 export const findPostBySlug = Object.assign(
 	async function findPostBySlug(client: Client, params: findPostBySlug.Params): Promise<findPostBySlug.Result | null> {
-		const query = { sql, args: [params.slug], name: "find-post-by-slug" };
-		const rows = await client.all<findPostBySlug.Result>(query);
+		const rows = await client.all<findPostBySlug.Result>(query(params));
 		return rows.length > 0 ? rows[0] : null;
 	},
-	{ sql },
+	{ sql, query },
 );
 
 export namespace findPostBySlug {
@@ -199,14 +207,14 @@ export namespace findPostBySlug {
 ```ts (sql/.generated/list-post-summaries.sql.ts)
 import type {Client} from 'sqlfu';
 
-const sql = `select id, slug, published_at, excerpt from post_summaries;`
+const sql = `select id, slug, published_at, excerpt from post_summaries;`;
+const query = { sql, args: [], name: "list-post-summaries" };
 
 export const listPostSummaries = Object.assign(
 	async function listPostSummaries(client: Client): Promise<listPostSummaries.Result[]> {
-		const query = { sql, args: [], name: "list-post-summaries" };
 		return client.all<listPostSummaries.Result>(query);
 	},
-	{ sql },
+	{ sql, query },
 );
 
 export namespace listPostSummaries {

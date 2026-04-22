@@ -59,13 +59,13 @@ test('every query emits a timing + count metric to DogStatsD with tags', async (
 });
 
 interface StatsdPacket {
-  readonly metric: string;
-  readonly value: number;
-  readonly type: 'c' | 'ms' | 'g' | 'h';
-  readonly tags: readonly string[];
+  metric: string;
+  value: number;
+  type: 'c' | 'ms' | 'g' | 'h';
+  tags: string[];
 }
 
-function renderPackets(packets: readonly StatsdPacket[]): string {
+function renderPackets(packets: StatsdPacket[]): string {
   return packets
     .map((packet) => {
       const value = packet.metric === 'db.query.duration' ? '<ms>' : String(packet.value);

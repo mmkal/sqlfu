@@ -229,7 +229,7 @@ function createRpcStub<TInstance extends object>(rootUrl: string, serverLogs: ()
         return undefined;
       }
 
-      return async (...args: readonly unknown[]) => {
+      return async (...args: unknown[]) => {
         try {
           const response = await fetch(`${rootUrl}/__rpc__`, {
             method: 'POST',

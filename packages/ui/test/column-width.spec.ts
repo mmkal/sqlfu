@@ -68,14 +68,14 @@ test('column width algorithm snapshot', async () => {
   ] satisfies Array<{
     title: string;
     availableWidth: number;
-    columns: readonly ColumnWidthInput[];
+    columns: ColumnWidthInput[];
   }>;
 
   const output = `${scenarios.map(formatScenarioSnapshot).join('\n\n')}\n`;
   expect(output).toMatchSnapshot('column-widths.txt');
 });
 
-function formatScenarioSnapshot(input: {title: string; availableWidth: number; columns: readonly ColumnWidthInput[]}) {
+function formatScenarioSnapshot(input: {title: string; availableWidth: number; columns: ColumnWidthInput[]}) {
   const widths = columnWidthAlgorithm({
     availableWidth: input.availableWidth,
     columns: input.columns,
@@ -97,7 +97,7 @@ function formatScenarioSnapshot(input: {title: string; availableWidth: number; c
   ].join('\n');
 }
 
-function buildRows(columns: readonly ColumnWidthInput[]) {
+function buildRows(columns: ColumnWidthInput[]) {
   const rowCount = Math.max(columns[0]?.cells.length ?? 0, ...columns.map((column) => column.cells.length));
   return [
     columns.map((column) => column.header),
@@ -121,7 +121,7 @@ function pad(value: string, width: number) {
   return width > 0 ? value.padEnd(width, ' ') : value;
 }
 
-function formatMarkdownTable(rows: readonly (readonly string[])[], widths: readonly number[]) {
+function formatMarkdownTable(rows: (string[])[], widths: number[]) {
   const [header = [], ...body] = rows;
   return [
     formatMarkdownRow(header, widths),
@@ -130,7 +130,7 @@ function formatMarkdownTable(rows: readonly (readonly string[])[], widths: reado
   ];
 }
 
-function formatMarkdownRow(row: readonly string[], widths: readonly number[]) {
+function formatMarkdownRow(row: string[], widths: number[]) {
   return `|${widths.map((width, index) => formatMarkdownCell(row[index] ?? '', width)).join('|')}|`;
 }
 

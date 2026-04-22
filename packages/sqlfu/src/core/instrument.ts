@@ -4,9 +4,9 @@ import type {AsyncClient, Client, SqlQuery, SyncClient} from './types.js';
 export type QueryOperation = 'all' | 'run';
 
 export interface QueryExecutionContext {
-  readonly query: SqlQuery;
-  readonly operation: QueryOperation;
-  readonly system: string;
+  query: SqlQuery;
+  operation: QueryOperation;
+  system: string;
 }
 
 /**
@@ -24,9 +24,9 @@ export type ProcessResult = <T>(
 ) => T;
 
 export interface QueryExecutionHookArgs<TResult> {
-  readonly context: QueryExecutionContext;
-  readonly execute: () => TResult;
-  readonly processResult: ProcessResult;
+  context: QueryExecutionContext;
+  execute: () => TResult;
+  processResult: ProcessResult;
 }
 
 export type QueryExecutionHook = <TResult>(args: QueryExecutionHookArgs<TResult>) => TResult;
@@ -69,7 +69,7 @@ export function instrumentClient<TClient extends Client>(client: TClient, hook: 
  * outermost — it sees the call before any others and gets the final result
  * or error last.
  */
-export function composeHooks(...hooks: readonly QueryExecutionHook[]): QueryExecutionHook {
+export function composeHooks(...hooks: QueryExecutionHook[]): QueryExecutionHook {
   if (hooks.length === 0) {
     return ({execute}) => execute();
   }
@@ -88,8 +88,8 @@ export function composeHooks(...hooks: readonly QueryExecutionHook[]): QueryExec
 }
 
 export interface QueryErrorReport {
-  readonly context: QueryExecutionContext;
-  readonly error: unknown;
+  context: QueryExecutionContext;
+  error: unknown;
 }
 
 /**

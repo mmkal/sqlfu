@@ -13,7 +13,7 @@ import type {Client, SqlfuProjectConfig} from '../../src/core/types.js';
 import {createTempFixtureRoot, dumpFixtureFs, writeFixtureFiles} from '../fs-fixture.js';
 
 type DisposableClient = {
-  readonly client: Client;
+  client: Client;
   [Symbol.asyncDispose](): Promise<void>;
 };
 
@@ -114,7 +114,7 @@ export async function createMigrationsFixture(
   };
 }
 
-async function replayMigrationsSchema(migrationContents: readonly string[]): Promise<string> {
+async function replayMigrationsSchema(migrationContents: string[]): Promise<string> {
   if (migrationContents.length === 0) {
     return '';
   }

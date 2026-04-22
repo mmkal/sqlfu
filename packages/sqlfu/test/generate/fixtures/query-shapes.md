@@ -37,14 +37,14 @@ insert into posts (slug) values (:slug);
 ```ts (sql/.generated/insert-post.sql.ts)
 import type {Client} from 'sqlfu';
 
-const sql = `insert into posts (slug) values (?);`
+const sql = `insert into posts (slug) values (?);`;
+const query = (params: insertPost.Params) => ({ sql, args: [params.slug], name: "insert-post" });
 
 export const insertPost = Object.assign(
 	async function insertPost(client: Client, params: insertPost.Params) {
-		const query = { sql, args: [params.slug], name: "insert-post" };
-		return client.run(query);
+		return client.run(query(params));
 	},
-	{ sql },
+	{ sql, query },
 );
 
 export namespace insertPost {
@@ -92,15 +92,15 @@ insert into users (name, email) values (:fullName, :emailAddress) returning *;
 ```ts (sql/.generated/add-user.sql.ts)
 import type {Client} from 'sqlfu';
 
-const sql = `insert into users (name, email) values (?, ?) returning *;`
+const sql = `insert into users (name, email) values (?, ?) returning *;`;
+const query = (params: addUser.Params) => ({ sql, args: [params.fullName, params.emailAddress], name: "add-user" });
 
 export const addUser = Object.assign(
 	async function addUser(client: Client, params: addUser.Params): Promise<addUser.Result> {
-		const query = { sql, args: [params.fullName, params.emailAddress], name: "add-user" };
-		const rows = await client.all<addUser.Result>(query);
+		const rows = await client.all<addUser.Result>(query(params));
 		return rows[0];
 	},
-	{ sql },
+	{ sql, query },
 );
 
 export namespace addUser {
@@ -155,14 +155,14 @@ update posts set slug = :slug where id = :id;
 ```ts (sql/.generated/update-post.sql.ts)
 import type {Client} from 'sqlfu';
 
-const sql = `update posts set slug = ? where id = ?;`
+const sql = `update posts set slug = ? where id = ?;`;
+const query = (data: updatePost.Data, params: updatePost.Params) => ({ sql, args: [data.slug, params.id], name: "update-post" });
 
 export const updatePost = Object.assign(
 	async function updatePost(client: Client, data: updatePost.Data, params: updatePost.Params) {
-		const query = { sql, args: [data.slug, params.id], name: "update-post" };
-		return client.run(query);
+		return client.run(query(data, params));
 	},
-	{ sql },
+	{ sql, query },
 );
 
 export namespace updatePost {
@@ -213,14 +213,14 @@ delete from posts where id = :id;
 ```ts (sql/.generated/delete-post.sql.ts)
 import type {Client} from 'sqlfu';
 
-const sql = `delete from posts where id = ?;`
+const sql = `delete from posts where id = ?;`;
+const query = (params: deletePost.Params) => ({ sql, args: [params.id], name: "delete-post" });
 
 export const deletePost = Object.assign(
 	async function deletePost(client: Client, params: deletePost.Params) {
-		const query = { sql, args: [params.id], name: "delete-post" };
-		return client.run(query);
+		return client.run(query(params));
 	},
-	{ sql },
+	{ sql, query },
 );
 
 export namespace deletePost {
@@ -268,15 +268,15 @@ select count(*) as total from posts;
 ```ts (sql/.generated/count-posts.sql.ts)
 import type {Client} from 'sqlfu';
 
-const sql = `select count(*) as total from posts;`
+const sql = `select count(*) as total from posts;`;
+const query = { sql, args: [], name: "count-posts" };
 
 export const countPosts = Object.assign(
 	async function countPosts(client: Client): Promise<countPosts.Result | null> {
-		const query = { sql, args: [], name: "count-posts" };
 		const rows = await client.all<countPosts.Result>(query);
 		return rows.length > 0 ? rows[0] : null;
 	},
-	{ sql },
+	{ sql, query },
 );
 
 export namespace countPosts {

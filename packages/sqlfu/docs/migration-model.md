@@ -1,12 +1,14 @@
 # sqlfu Migration Model
 
+>tl;dr: if you don't want to remember a bunch of commands, just run `sqlfu check`. It will say "all good" or give you a recommend action.
+
 This document describes the current migration model in plain English.
 
-The important thing is not just which files and tables exist. The important thing is which concepts are authoritative, and what it means when they disagree.
+"What's the state of my database" is an ambiguous question, with many different answers. How do you *expect* your database to look? How do your migration files imply your database *should* look? How do your *applied* migrations imply it should look? How does it *actually* look? What does it mean when these questions have conflicting answers?
 
 ## The Four Authorities
 
-`sqlfu` has four important migration-related authorities.
+`sqlfu` has four important migration-related "authorities".
 
 | Name | Meaning | Current Representation |
 | --- | --- | --- |
@@ -451,6 +453,17 @@ This behavior is not a separate system. It is the same four-authority model the 
 - If that relationship holds, a migration failure is a retry. If it does not, the database has to be reconciled with the existing tools (`sqlfu goto`, `sqlfu baseline`, or a manual fix) before `sqlfu migrate` will run again.
 
 `sqlfu` does not invent a repair command for failed migrations. It reuses the tools the model already has.
+
+## When a Migration Fails
+
+`sqlfu migrate` starts from a trusted migration-history prefix. Before applying anything, it checks that the database's live schema still matches what the recorded migration history implies. If it does not, `sqlfu migrate` refuses to proceed and points at the reconciliation it would take to move forward.
+
+If a migration fails partway through, `sqlfu migrate` reruns that same check against the post-failure database state. There are two possible outcomes:
+
+- The failed migration rolled back cleanly. The error explicitly says the database is still healthy for `migrate`. Fix the migration and run `sqlfu migrate` again.
+- The failed migration left the live schema out of sync with recorded history. The error says reconciliation is required and lists the same recommendation-style diagnostics `sqlfu check` would produce. Use `sqlfu goto <target>` or `sqlfu baseline <target>` to reconcile before retrying.
+
+No row is ever written to `sqlfu_migrations` for a failed migration. That table only ever contains migrations `sqlfu` trusts to have fully applied.
 
 ## Non-Goals
 

@@ -3,8 +3,8 @@ import type {QueryCatalogEntry} from 'sqlfu/browser';
 import type {DemoVfs} from './vfs.js';
 
 export type QueryCatalog = {
-  readonly generatedAt: string;
-  readonly queries: readonly QueryCatalogEntry[];
+  generatedAt: string;
+  queries: QueryCatalogEntry[];
 };
 
 export function buildQueryCatalog(vfs: DemoVfs): QueryCatalog {

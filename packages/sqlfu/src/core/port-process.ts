@@ -7,9 +7,9 @@ export interface ListeningProcess {
 
 export class PortInUseError extends Error {
   port: number;
-  processes: readonly ListeningProcess[];
+  processes: ListeningProcess[];
 
-  constructor(port: number, processes: readonly ListeningProcess[]) {
+  constructor(port: number, processes: ListeningProcess[]) {
     super(formatPortInUseMessage(port, processes));
     this.name = 'PortInUseError';
     this.port = port;
@@ -17,7 +17,7 @@ export class PortInUseError extends Error {
   }
 }
 
-export async function getListeningProcesses(port: number): Promise<readonly ListeningProcess[]> {
+export async function getListeningProcesses(port: number): Promise<ListeningProcess[]> {
   const output = await runLsof(['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-Fpc']);
   const processes: ListeningProcess[] = [];
   let current: Partial<ListeningProcess> = {};
@@ -53,7 +53,7 @@ export async function getListeningProcesses(port: number): Promise<readonly List
   return processes;
 }
 
-export async function stopProcessesListeningOnPort(port: number): Promise<readonly ListeningProcess[]> {
+export async function stopProcessesListeningOnPort(port: number): Promise<ListeningProcess[]> {
   const processes = await getListeningProcesses(port);
 
   for (const listener of processes) {
@@ -67,7 +67,7 @@ export async function stopProcessesListeningOnPort(port: number): Promise<readon
   return processes;
 }
 
-export function formatPortInUseMessage(port: number, processes: readonly ListeningProcess[]): string {
+export function formatPortInUseMessage(port: number, processes: ListeningProcess[]): string {
   const listenerSummary =
     processes.length > 0
       ? ` Listener${processes.length === 1 ? '' : 's'}: ${processes.map(formatProcessLabel).join(', ')}.`
@@ -99,7 +99,7 @@ function sleep(ms: number) {
   });
 }
 
-async function runLsof(args: readonly string[]) {
+async function runLsof(args: string[]) {
   try {
     return await new Promise<string>((resolve, reject) => {
       childProcess.execFile('lsof', args, (error, stdout) => {

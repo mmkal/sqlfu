@@ -13,16 +13,23 @@ const repositoryBaseUrl = normalizeRepositoryUrl(readGit(['remote', 'get-url', '
 
 const docs = [
   {
+    slug: 'getting-started',
+    title: 'Getting Started',
+    sourcePath: path.join(repoRoot, 'packages', 'sqlfu', 'docs', 'getting-started.md'),
+    description: 'End-to-end walkthrough: schema, migrations, query files, typed wrappers, and a working client.all() call.',
+  },
+  {
     slug: 'sqlfu',
-    title: 'sqlfu',
+    title: 'Overview',
     sourcePath: path.join(repoRoot, 'packages', 'sqlfu', 'README.md'),
     description: 'Overview, quick start, CLI model, and core concepts.',
   },
   {
-    slug: 'schema-diff-model',
-    title: 'Schema Diff Model',
-    sourcePath: path.join(repoRoot, 'packages', 'sqlfu', 'docs', 'schema-diff-model.md'),
-    description: 'How sqlfu models SQLite schema diffing and migration planning.',
+    slug: 'adapters',
+    title: 'Adapters',
+    sourcePath: path.join(repoRoot, 'packages', 'sqlfu', 'docs', 'adapters.md'),
+    description:
+      'Drivers sqlfu supports out of the box: better-sqlite3, libsql, Turso Cloud, Cloudflare D1, Durable Objects, Expo, sqlite-wasm, and more.',
   },
   {
     slug: 'migration-model',
@@ -48,6 +55,32 @@ const docs = [
     title: 'UI',
     sourcePath: path.join(repoRoot, 'packages', 'ui', 'README.md'),
     description: 'The browser client and how it relates to the local backend server.',
+  },
+  {
+    slug: 'dynamic-queries',
+    title: 'Dynamic queries',
+    sourcePath: path.join(repoRoot, 'packages', 'sqlfu', 'docs', 'dynamic-queries.md'),
+    description:
+      'How to handle optional filters and other runtime-composition shapes in a SQL-first project — with IS NULL patterns, JSON lists, and honest advice on when to reach for a query builder instead.',
+  },
+  {
+    slug: 'outbox',
+    title: 'Outbox',
+    sourcePath: path.join(repoRoot, 'packages', 'sqlfu', 'docs', 'outbox.md'),
+    description:
+      'Transactional-outbox / job-queue built on sqlfu. Fan-out, retry, delayed dispatch, crash recovery, causation chains.',
+  },
+  {
+    slug: 'schema-diff-model',
+    title: 'Schema Diff Model',
+    sourcePath: path.join(repoRoot, 'packages', 'sqlfu', 'docs', 'schema-diff-model.md'),
+    description: 'How sqlfu models SQLite schema diffing and migration planning.',
+  },
+  {
+    slug: 'lint-plugin',
+    title: 'Lint Plugin',
+    sourcePath: path.join(repoRoot, 'packages', 'sqlfu', 'docs', 'lint-plugin.md'),
+    description: 'ESLint rules for enforcing the SQL First model: query-naming and format-sql.',
   },
 ];
 

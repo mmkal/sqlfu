@@ -124,8 +124,18 @@ Agreed during the `named-and-loved-queries` PR to defer because:
 - **Legacy `summarizeSqlite3defError` in `api.ts` untouched.** It is redundant for `SqlfuError` inputs (just returns `.message`), but still guards non-db errors in the same code paths. Deleting it would turn into an unrelated refactor.
 - **libsql sync's `null` parameter quirk.** The libsql sync driver throws `TypeError: failed to downcast any to object` when a `null` is bound positionally, before SQLite sees the statement. The not-null test uses a literal `NULL` in SQL rather than a bound parameter to exercise the actual SQLite constraint — the binding-layer error is a different (upstream) problem.
 
+## UI-side companion cleanup
+
+While working on the Relations view we hit a related-but-shallower papercut: the oRPC backend was swallowing every SQLite error into a generic `"Internal server error"` because handlers threw plain `Error` instances and oRPC only preserves `ORPCError`. The quick fix was a one-liner middleware on `uiBase` in `packages/sqlfu/src/ui/router.ts` (see the `.use(async ({next}) => { ... })` block) that rewraps any non-`ORPCError` via `toClientError`. It works, but it's ugly on two axes:
+
+- The `toClientError` helper blanket-classifies everything as `BAD_REQUEST` with `message: String(error)`. That's fine for surfacing the message but loses the real taxonomy — `UNIQUE constraint failed` should be `constraint:unique`, not `BAD_REQUEST`.
+- Some server-side call sites still do their own `throw toClientError(error)` (e.g. `sql.run`, `schema.command`); the middleware makes those redundant. Should collapse.
+
+When we do the real taxonomy work here, tear that middleware out and replace it with something that maps a `SqlfuError` → an oRPC error whose `code`/`data` reflect the actual kind. Then the UI can render `constraint:unique` differently from `syntax`, etc.
+
 ## References
 
+- Existing PR: https://github.com/mmkal/sqlfu/pull/13 — `core: SqlfuError taxonomy + stack-quality guard`. Opened from this task but I wasn't happy with the implementation — revisit before merging. Specifically the adapter-mapping shape and how much of the "kind" discrimination leaks out to the public type felt off.
 - SQLite error codes: https://www.sqlite.org/rescode.html
 - Postgres SQLSTATE: https://www.postgresql.org/docs/current/errcodes-appendix.html
 - D1 error shape: https://developers.cloudflare.com/d1/observability/debug-d1/

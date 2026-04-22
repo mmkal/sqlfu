@@ -29,9 +29,9 @@ export async function inspectSqliteSchema(client: Client, schemaName = 'main'): 
   await assertNoUnsupportedSchemaFeatures(client, schemaName);
 
   const objects = await client.all<{
-    readonly type: 'table' | 'view';
-    readonly name: string;
-    readonly sql: string | null;
+    type: 'table' | 'view';
+    name: string;
+    sql: string | null;
   }>({
     sql: `
       select type, name, sql
@@ -60,34 +60,34 @@ export async function inspectSqliteSchema(client: Client, schemaName = 'main'): 
 
     const tableNameLiteral = quoteSqlString(object.name);
     const columns = await client.all<{
-      readonly name: string;
-      readonly type: string;
-      readonly notnull: number;
-      readonly dflt_value: string | null;
-      readonly pk: number;
-      readonly hidden: number;
+      name: string;
+      type: string;
+      notnull: number;
+      dflt_value: string | null;
+      pk: number;
+      hidden: number;
     }>({
       sql: `select name, type, "notnull", dflt_value, pk, hidden from pragma_table_xinfo(${tableNameLiteral}) order by cid`,
       args: [],
     });
     const indexList = await client.all<{
-      readonly name: string;
-      readonly unique: number;
-      readonly origin: string;
-      readonly partial: number;
+      name: string;
+      unique: number;
+      origin: string;
+      partial: number;
     }>({
       sql: `select name, "unique", origin, partial from pragma_index_list(${tableNameLiteral}) order by name`,
       args: [],
     });
     const foreignKeyRows = await client.all<{
-      readonly id: number;
-      readonly seq: number;
-      readonly table: string;
-      readonly from: string;
-      readonly to: string | null;
-      readonly on_update: string;
-      readonly on_delete: string;
-      readonly match: string;
+      id: number;
+      seq: number;
+      table: string;
+      from: string;
+      to: string | null;
+      on_update: string;
+      on_delete: string;
+      match: string;
     }>({
       sql: `select id, seq, "table", "from", "to", on_update, on_delete, match from pragma_foreign_key_list(${tableNameLiteral}) order by id, seq`,
       args: [],
@@ -101,15 +101,15 @@ export async function inspectSqliteSchema(client: Client, schemaName = 'main'): 
     for (const index of indexList) {
       const indexNameLiteral = quoteSqlString(index.name);
       const indexColumns = await client.all<{
-        readonly seqno: number;
-        readonly cid: number;
-        readonly name: string | null;
-        readonly key: number;
+        seqno: number;
+        cid: number;
+        name: string | null;
+        key: number;
       }>({
         sql: `select seqno, cid, name, key from pragma_index_xinfo(${indexNameLiteral}) where key = 1 order by seqno`,
         args: [],
       });
-      const createSqlRow = await client.all<{readonly sql: string | null}>({
+      const createSqlRow = await client.all<{sql: string | null}>({
         sql: `select sql from ${schemaName}.sqlite_schema where type = 'index' and name = ${indexNameLiteral}`,
         args: [],
       });
@@ -155,9 +155,9 @@ export async function inspectSqliteSchema(client: Client, schemaName = 'main'): 
   }
 
   const triggerRows = await client.all<{
-    readonly name: string;
-    readonly tbl_name: string;
-    readonly sql: string | null;
+    name: string;
+    tbl_name: string;
+    sql: string | null;
   }>({
     sql: `
       select name, tbl_name, sql
@@ -184,9 +184,9 @@ export async function inspectSqliteSchema(client: Client, schemaName = 'main'): 
 
 async function assertNoUnsupportedSchemaFeatures(client: Client, schemaName: string): Promise<void> {
   const unsupportedSqlRows = await client.all<{
-    readonly type: string;
-    readonly name: string;
-    readonly sql: string | null;
+    type: string;
+    name: string;
+    sql: string | null;
   }>({
     sql: `
       select type, name, sql
@@ -237,17 +237,17 @@ function extractTableColumnCollations(createSql: string): Map<string, string> {
 }
 
 function groupForeignKeys(
-  rows: readonly {
-    readonly id: number;
-    readonly seq: number;
-    readonly table: string;
-    readonly from: string;
-    readonly to: string | null;
-    readonly on_update: string;
-    readonly on_delete: string;
-    readonly match: string;
+  rows: {
+    id: number;
+    seq: number;
+    table: string;
+    from: string;
+    to: string | null;
+    on_update: string;
+    on_delete: string;
+    match: string;
   }[],
-): readonly SqliteForeignKey[] {
+): SqliteForeignKey[] {
   const grouped = new Map<number, SqliteForeignKey & {columns: string[]; referencedColumns: string[]}>();
 
   for (const row of rows) {
@@ -278,8 +278,8 @@ function groupForeignKeys(
 }
 
 function sortUniqueConstraints(
-  uniqueConstraints: readonly SqliteUniqueConstraint[],
-): readonly SqliteUniqueConstraint[] {
+  uniqueConstraints: SqliteUniqueConstraint[],
+): SqliteUniqueConstraint[] {
   return [...uniqueConstraints].sort((left, right) =>
     left.columns.join('\u0000').localeCompare(right.columns.join('\u0000')),
   );

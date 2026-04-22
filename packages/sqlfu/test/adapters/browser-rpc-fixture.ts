@@ -11,28 +11,28 @@ import {ensureBuilt, packageRoot} from './ensure-built.js';
 export type ExecaProcess = ReturnType<typeof execa>;
 
 export interface RenderHostContext {
-  readonly root: string;
-  readonly port: number;
-  readonly url: string;
-  readonly classDefString: string;
-  readonly className: string;
-  readonly methodNames: readonly string[];
+  root: string;
+  port: number;
+  url: string;
+  classDefString: string;
+  className: string;
+  methodNames: string[];
 }
 
 export interface RenderedHost {
-  readonly serverLogs: () => string;
+  serverLogs: () => string;
   [Symbol.asyncDispose](): Promise<void>;
 }
 
 export interface BrowserRpcFixtureOptions<TInstance extends object> {
-  readonly classDef: new (...args: any[]) => TInstance;
+  classDef: new (...args: any[]) => TInstance;
   renderHost(context: RenderHostContext): Promise<RenderedHost>;
-  readonly bootTimeoutMs?: number;
-  readonly rpcTimeoutMs?: number;
+  bootTimeoutMs?: number;
+  rpcTimeoutMs?: number;
 }
 
 export interface BrowserRpcFixture<TInstance extends object> {
-  readonly stub: TInstance;
+  stub: TInstance;
   [Symbol.asyncDispose](): Promise<void>;
 }
 
@@ -85,14 +85,14 @@ export async function createBrowserRpcFixture<TInstance extends object>(
     };
   } catch (error) {
     await Promise.allSettled([host[Symbol.asyncDispose](), fs.rm(root, {recursive: true, force: true})]);
-    throw new Error(formatFixtureFailure(error instanceof Error ? error.message : String(error), serverLogs(), []));
+    throw new Error(formatFixtureFailure(String(error), serverLogs(), []));
   }
 }
 
 function createBrowserRpcStub<TInstance extends object>(
   page: Page,
   serverLogs: () => string,
-  browserLogs: () => readonly string[],
+  browserLogs: () => string[],
   rpcTimeoutMs: number,
 ) {
   let nextRequestId = 1;
@@ -103,7 +103,7 @@ function createBrowserRpcStub<TInstance extends object>(
         return undefined;
       }
 
-      return async (...args: readonly unknown[]) => {
+      return async (...args: unknown[]) => {
         const requestId = nextRequestId++;
 
         try {
@@ -140,7 +140,7 @@ function createBrowserRpcStub<TInstance extends object>(
           return payload.value;
         } catch (error) {
           throw new Error(
-            formatFixtureFailure(error instanceof Error ? error.message : String(error), serverLogs(), browserLogs()),
+            formatFixtureFailure(String(error), serverLogs(), browserLogs()),
           );
         }
       };
@@ -151,7 +151,7 @@ function createBrowserRpcStub<TInstance extends object>(
 async function waitForFixtureBoot(
   page: Page,
   serverLogs: () => string,
-  browserLogs: () => readonly string[],
+  browserLogs: () => string[],
   timeoutMs: number,
 ): Promise<void> {
   try {
@@ -172,7 +172,7 @@ async function waitForFixtureBoot(
     }
   } catch (error) {
     throw new Error(
-      formatFixtureFailure(error instanceof Error ? error.message : String(error), serverLogs(), browserLogs()),
+      formatFixtureFailure(String(error), serverLogs(), browserLogs()),
     );
   }
 }
@@ -183,7 +183,7 @@ async function ensurePlaywrightBrowserInstalled(): Promise<void> {
     await browser.close();
     return;
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = String(error);
     if (!/executable doesn't exist|please run the following command/i.test(message)) {
       throw error;
     }
@@ -261,7 +261,7 @@ function capturePageOutput(page: Page) {
   return () => entries;
 }
 
-function formatFixtureFailure(message: string, serverLogs: string, browserLogs: readonly string[]): string {
+function formatFixtureFailure(message: string, serverLogs: string, browserLogs: string[]): string {
   return [
     message,
     '',
@@ -295,7 +295,7 @@ export async function stopProcess(child: ExecaProcess): Promise<void> {
 
 export async function runCommand(
   command: string,
-  args: readonly string[],
+  args: string[],
   cwd: string,
   extraEnv: NodeJS.ProcessEnv = {},
 ): Promise<void> {

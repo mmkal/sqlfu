@@ -3,7 +3,7 @@
  * non-empty line so SQL and other multi-line strings can be indented in
  * source without that indentation landing in the runtime value.
  */
-export function dedent(strings: TemplateStringsArray, ...values: readonly unknown[]): string {
+export function dedent(strings: TemplateStringsArray, ...values: unknown[]): string {
   const raw = strings.reduce<string>((accumulator, part, index) => {
     const value = index < values.length ? String(values[index]) : '';
     return accumulator + part + value;

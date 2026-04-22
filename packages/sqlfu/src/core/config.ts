@@ -88,10 +88,10 @@ export function resolveProjectConfig(
   };
 }
 
-const validValidators: readonly SqlfuValidator[] = ['arktype', 'valibot', 'zod', 'zod-mini'];
+const validValidators: SqlfuValidator[] = ['arktype', 'valibot', 'zod', 'zod-mini'];
 
 type TsconfigPreferences = {
-  readonly prefersTsImportExtensions?: boolean;
+  prefersTsImportExtensions?: boolean;
 };
 
 async function resolveConfigPath(cwd: string): Promise<string | undefined> {
@@ -260,13 +260,13 @@ function withTrailingNewline(value: string) {
 
 export type LoadedSqlfuProject =
   | {
-      readonly initialized: true;
-      readonly projectRoot: string;
-      readonly configPath: string;
-      readonly config: SqlfuProjectConfig;
+      initialized: true;
+      projectRoot: string;
+      configPath: string;
+      config: SqlfuProjectConfig;
     }
   | {
-      readonly initialized: false;
-      readonly projectRoot: string;
-      readonly configPath: string;
+      initialized: false;
+      projectRoot: string;
+      configPath: string;
     };

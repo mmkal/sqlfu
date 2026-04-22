@@ -5,12 +5,12 @@ import {createNodeHost} from '../../src/core/node-host.js';
 import {diffSchemaSql} from '../../src/schemadiff/index.js';
 
 export type SchemadiffFixtureCase = {
-  readonly name: string;
-  readonly config: Record<string, unknown>;
-  readonly baselineSql: string;
-  readonly desiredSql: string;
-  readonly output?: string;
-  readonly error?: string;
+  name: string;
+  config: Record<string, unknown>;
+  baselineSql: string;
+  desiredSql: string;
+  output?: string;
+  error?: string;
 };
 
 let sharedHostPromise: ReturnType<typeof createNodeHost> | undefined;
@@ -170,7 +170,7 @@ async function rewriteRegion(name: string, body: string, defaultConfig: Record<s
       baselineSql,
       '-- desired:',
       desiredSql,
-      `-- error: ${JSON.stringify(error instanceof Error ? error.message : String(error))}`,
+      `-- error: ${JSON.stringify(String(error))}`,
       '-- #endregion',
     ].join('\n');
   }

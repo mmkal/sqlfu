@@ -8,53 +8,53 @@
  */
 
 export type GeneratedField = {
-  readonly name: string;
-  readonly tsType: string;
-  readonly notNull: boolean;
-  readonly optional?: boolean;
+  name: string;
+  tsType: string;
+  notNull: boolean;
+  optional?: boolean;
 };
 
 export type GeneratedQueryDescriptor = {
-  readonly sql: string;
-  readonly queryType: 'Select' | 'Insert' | 'Update' | 'Delete' | 'Copy' | 'Ddl';
-  readonly returning?: true;
-  readonly multipleRowsResult: boolean;
-  readonly columns: readonly GeneratedField[];
-  readonly parameters: readonly (GeneratedField & {
-    readonly toDriver: string;
-    readonly isArray: boolean;
+  sql: string;
+  queryType: 'Select' | 'Insert' | 'Update' | 'Delete' | 'Copy' | 'Ddl';
+  returning?: true;
+  multipleRowsResult: boolean;
+  columns: GeneratedField[];
+  parameters: (GeneratedField & {
+    toDriver: string;
+    isArray: boolean;
   })[];
-  readonly data?: readonly (GeneratedField & {
-    readonly toDriver: string;
-    readonly isArray: boolean;
+  data?: (GeneratedField & {
+    toDriver: string;
+    isArray: boolean;
   })[];
 };
 
 export type VendoredQueryInput = {
-  readonly sqlPath: string;
-  readonly sqlContent: string;
+  sqlPath: string;
+  sqlContent: string;
 };
 
 export type VendoredQueryAnalysis =
   | {
-      readonly sqlPath: string;
-      readonly ok: true;
-      readonly descriptor: GeneratedQueryDescriptor;
+      sqlPath: string;
+      ok: true;
+      descriptor: GeneratedQueryDescriptor;
     }
   | {
-      readonly sqlPath: string;
-      readonly ok: false;
-      readonly error: {
-        readonly name: string;
-        readonly description: string;
+      sqlPath: string;
+      ok: false;
+      error: {
+        name: string;
+        description: string;
       };
     };
 
 type VendoredTypesqlModule = {
   analyzeSqliteQueries(
     databaseUri: string,
-    queries: readonly VendoredQueryInput[],
-  ): Promise<readonly VendoredQueryAnalysis[]>;
+    queries: VendoredQueryInput[],
+  ): Promise<VendoredQueryAnalysis[]>;
 };
 
 async function loadVendoredTypesql(): Promise<VendoredTypesqlModule> {
@@ -65,8 +65,8 @@ async function loadVendoredTypesql(): Promise<VendoredTypesqlModule> {
 
 export async function analyzeVendoredTypesqlQueries(
   databasePath: string,
-  queries: readonly VendoredQueryInput[],
-): Promise<readonly VendoredQueryAnalysis[]> {
+  queries: VendoredQueryInput[],
+): Promise<VendoredQueryAnalysis[]> {
   const {analyzeSqliteQueries} = await loadVendoredTypesql();
   return analyzeSqliteQueries(databasePath, queries);
 }

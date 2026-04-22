@@ -44,14 +44,14 @@ insert into posts (slug, title) values (:slug, :title);
 ```ts (sql/.generated/list-posts.sql.ts)
 import type {SyncClient} from 'sqlfu';
 
-const sql = `select id, slug, title from posts;`
+const sql = `select id, slug, title from posts;`;
+const query = { sql, args: [], name: "list-posts" };
 
 export const listPosts = Object.assign(
 	function listPosts(client: SyncClient): listPosts.Result[] {
-		const query = { sql, args: [], name: "list-posts" };
 		return client.all<listPosts.Result>(query);
 	},
-	{ sql },
+	{ sql, query },
 );
 
 export namespace listPosts {
@@ -66,15 +66,15 @@ export namespace listPosts {
 ```ts (sql/.generated/find-post.sql.ts)
 import type {SyncClient} from 'sqlfu';
 
-const sql = `select id, slug, title from posts where slug = ? limit 1;`
+const sql = `select id, slug, title from posts where slug = ? limit 1;`;
+const query = (params: findPost.Params) => ({ sql, args: [params.slug], name: "find-post" });
 
 export const findPost = Object.assign(
 	function findPost(client: SyncClient, params: findPost.Params): findPost.Result | null {
-		const query = { sql, args: [params.slug], name: "find-post" };
-		const rows = client.all<findPost.Result>(query);
+		const rows = client.all<findPost.Result>(query(params));
 		return rows.length > 0 ? rows[0] : null;
 	},
-	{ sql },
+	{ sql, query },
 );
 
 export namespace findPost {
@@ -92,14 +92,14 @@ export namespace findPost {
 ```ts (sql/.generated/insert-post.sql.ts)
 import type {SyncClient} from 'sqlfu';
 
-const sql = `insert into posts (slug, title) values (?, ?);`
+const sql = `insert into posts (slug, title) values (?, ?);`;
+const query = (params: insertPost.Params) => ({ sql, args: [params.slug, params.title], name: "insert-post" });
 
 export const insertPost = Object.assign(
 	function insertPost(client: SyncClient, params: insertPost.Params) {
-		const query = { sql, args: [params.slug, params.title], name: "insert-post" };
-		return client.run(query);
+		return client.run(query(params));
 	},
-	{ sql },
+	{ sql, query },
 );
 
 export namespace insertPost {
@@ -148,14 +148,14 @@ export * from "./list-posts.sql.ts";
 ```ts (sql/.generated/list-posts.sql.ts)
 import type {Client} from 'sqlfu';
 
-const sql = `select id, slug from posts;`
+const sql = `select id, slug from posts;`;
+const query = { sql, args: [], name: "list-posts" };
 
 export const listPosts = Object.assign(
 	async function listPosts(client: Client): Promise<listPosts.Result[]> {
-		const query = { sql, args: [], name: "list-posts" };
 		return client.all<listPosts.Result>(query);
 	},
-	{ sql },
+	{ sql, query },
 );
 
 export namespace listPosts {
@@ -286,14 +286,14 @@ export * from "./users/list-profiles.sql.js";
 ```ts (sql/.generated/users/list-profiles.sql.ts)
 import type {Client} from 'sqlfu';
 
-const sql = `select id, name from profiles;`
+const sql = `select id, name from profiles;`;
+const query = { sql, args: [], name: "users/list-profiles" };
 
 export const usersListProfiles = Object.assign(
 	async function usersListProfiles(client: Client): Promise<usersListProfiles.Result[]> {
-		const query = { sql, args: [], name: "users/list-profiles" };
 		return client.all<usersListProfiles.Result>(query);
 	},
-	{ sql },
+	{ sql, query },
 );
 
 export namespace usersListProfiles {
@@ -307,14 +307,14 @@ export namespace usersListProfiles {
 ```ts (sql/.generated/orders/list-orders.sql.ts)
 import type {Client} from 'sqlfu';
 
-const sql = `select id, total from orders;`
+const sql = `select id, total from orders;`;
+const query = { sql, args: [], name: "orders/list-orders" };
 
 export const ordersListOrders = Object.assign(
 	async function ordersListOrders(client: Client): Promise<ordersListOrders.Result[]> {
-		const query = { sql, args: [], name: "orders/list-orders" };
 		return client.all<ordersListOrders.Result>(query);
 	},
-	{ sql },
+	{ sql, query },
 );
 
 export namespace ordersListOrders {
@@ -377,42 +377,42 @@ create table if not exists drafts (id integer primary key, body text not null);
 ```ts (sql/.generated/drop-posts.sql.ts)
 import type {Client} from 'sqlfu';
 
-const sql = `drop table posts;`
+const sql = `drop table posts;`;
+const query = { sql, args: [], name: "drop-posts" };
 
 export const dropPosts = Object.assign(
 	async function dropPosts(client: Client) {
-		const query = { sql, args: [], name: "drop-posts" };
 		return client.run(query);
 	},
-	{ sql },
+	{ sql, query },
 );
 ```
 
 ```ts (sql/.generated/alter-posts-add-title.sql.ts)
 import type {Client} from 'sqlfu';
 
-const sql = `alter table posts add column title text;`
+const sql = `alter table posts add column title text;`;
+const query = { sql, args: [], name: "alter-posts-add-title" };
 
 export const alterPostsAddTitle = Object.assign(
 	async function alterPostsAddTitle(client: Client) {
-		const query = { sql, args: [], name: "alter-posts-add-title" };
 		return client.run(query);
 	},
-	{ sql },
+	{ sql, query },
 );
 ```
 
 ```ts (sql/.generated/enable-foreign-keys.sql.ts)
 import type {Client} from 'sqlfu';
 
-const sql = `pragma foreign_keys = on;`
+const sql = `pragma foreign_keys = on;`;
+const query = { sql, args: [], name: "enable-foreign-keys" };
 
 export const enableForeignKeys = Object.assign(
 	async function enableForeignKeys(client: Client) {
-		const query = { sql, args: [], name: "enable-foreign-keys" };
 		return client.run(query);
 	},
-	{ sql },
+	{ sql, query },
 );
 ```
 
@@ -422,14 +422,14 @@ import type {Client} from 'sqlfu';
 const sql = `
 drop table if exists posts;
 create table posts (id integer primary key, slug text not null);
-`
+`.trim();
+const query = { sql, args: [], name: "reset-posts" };
 
 export const resetPosts = Object.assign(
 	async function resetPosts(client: Client) {
-		const query = { sql, args: [], name: "reset-posts" };
 		return client.run(query);
 	},
-	{ sql },
+	{ sql, query },
 );
 ```
 
@@ -441,14 +441,14 @@ const sql = `
 /* multi-line
    comment */
 create table if not exists drafts (id integer primary key, body text not null);
-`
+`.trim();
+const query = { sql, args: [], name: "commented-create" };
 
 export const commentedCreate = Object.assign(
 	async function commentedCreate(client: Client) {
-		const query = { sql, args: [], name: "commented-create" };
 		return client.run(query);
 	},
-	{ sql },
+	{ sql, query },
 );
 ```
 

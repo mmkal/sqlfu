@@ -6,11 +6,11 @@ import type {AsyncClient, ResultRow, SqlQuery} from '../core/types.js';
 
 export interface LibsqlClientLike {
   execute<TRow extends ResultRow = ResultRow>(
-    statement: string | {sql: string; args?: readonly unknown[]},
+    statement: string | {sql: string; args?: unknown[]},
   ): Promise<{
-    readonly rows: TRow[];
-    readonly rowsAffected?: number;
-    readonly lastInsertRowid?: string | number | bigint | null;
+    rows: TRow[];
+    rowsAffected?: number;
+    lastInsertRowid?: string | number | bigint | null;
   }>;
 }
 
@@ -83,7 +83,7 @@ export function createLibsqlClient(client: LibsqlClientLike, options: LibsqlClie
 
 export const createLibsqlDatabase = createLibsqlClient;
 
-function toStatement(query: SqlQuery): {readonly sql: string; readonly args: readonly unknown[]} {
+function toStatement(query: SqlQuery): {sql: string; args: unknown[]} {
   return {
     sql: query.sql,
     args: [...query.args],

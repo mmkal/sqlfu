@@ -16,8 +16,8 @@ const sourceDir = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.resolve(sourceDir, '..', '..');
 
 type ProjectResolver = (request: {
-  readonly host: string;
-  readonly projectHeader?: string;
+  host: string;
+  projectHeader?: string;
 }) => Promise<ResolvedUiProject>;
 
 type UiAssetOptions = {
@@ -218,13 +218,29 @@ async function ensureProjectConfig(input: {
   templateRoot: string;
 }) {
   const projectRoot = path.join(input.projectsRoot, input.projectName);
-  await ensureProjectFiles({
-    projectRoot,
-    projectsRoot: input.projectsRoot,
-    templateRoot: input.templateRoot,
+  // Concurrent first-request callers for the same project must share a single
+  // initialization or they race the template copy and the seed insert —
+  // a second caller that arrives between `fs.cp` starting and the seed
+  // finishing otherwise sees a half-populated project.
+  await dedupeInit(projectRoot, async () => {
+    await ensureProjectFiles({
+      projectRoot,
+      projectsRoot: input.projectsRoot,
+      templateRoot: input.templateRoot,
+    });
+    await ensureDatabase(input.host, projectRoot);
   });
-  await ensureDatabase(input.host, projectRoot);
   return await loadProjectStateFrom(projectRoot);
+}
+
+const projectInitLocks = new Map<string, Promise<void>>();
+
+function dedupeInit(key: string, fn: () => Promise<void>) {
+  const existing = projectInitLocks.get(key);
+  if (existing) return existing;
+  const pending = fn().finally(() => projectInitLocks.delete(key));
+  projectInitLocks.set(key, pending);
+  return pending;
 }
 
 async function ensureProjectFiles(input: {projectRoot: string; projectsRoot: string; templateRoot: string}) {
@@ -261,7 +277,7 @@ async function ensureDatabase(host: SqlfuHost, projectRoot: string) {
     `);
   } catch (error) {
     console.warn(
-      `sqlfu/ui could not initialize ${path.basename(projectRoot)} from definitions.sql: ${error instanceof Error ? error.message : String(error)}`,
+      `sqlfu/ui could not initialize ${path.basename(projectRoot)} from definitions.sql: ${String(error)}`,
     );
   }
 }
@@ -283,10 +299,10 @@ async function importConfigFile(configPath: string) {
   }
 
   return config as {
-    readonly db: string;
-    readonly migrations: string;
-    readonly definitions: string;
-    readonly queries: string;
+    db: string;
+    migrations: string;
+    definitions: string;
+    queries: string;
   };
 }
 
@@ -555,7 +571,7 @@ function renderServerHomePage(project: ResolvedUiProject) {
 }
 
 function renderErrorPage(error: unknown) {
-  const message = escapeHtml(error instanceof Error ? error.message : String(error));
+  const message = escapeHtml(String(error));
   return [
     '<!doctype html>',
     '<html lang="en">',
@@ -609,7 +625,7 @@ function headerValue(value: string | string[] | undefined) {
 }
 
 function apiError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
+  const message = String(error);
   return new Response(message, {
     status: 400,
     headers: {

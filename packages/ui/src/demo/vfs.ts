@@ -4,9 +4,9 @@ export type VirtualFile = {
 };
 
 export type DemoVfsSnapshot = {
-  readonly definitions: string;
-  readonly migrations: readonly VirtualFile[];
-  readonly queries: readonly VirtualFile[];
+  definitions: string;
+  migrations: VirtualFile[];
+  queries: VirtualFile[];
 };
 
 const INITIAL_DEFINITIONS = `create table posts (

@@ -19,11 +19,12 @@ export function SqlCodeMirror(input: {
   value: string;
   onChange: (value: string) => void;
   ariaLabel: string;
-  relations: readonly StudioRelation[];
-  diagnostics?: readonly SqlEditorDiagnostic[];
+  relations: StudioRelation[];
+  diagnostics?: SqlEditorDiagnostic[];
   onExecute?: (sql: string) => void;
   onSave?: (sql: string) => void;
   readOnly?: boolean;
+  height?: string;
 }) {
   const theme = useResolvedTheme();
   const schema = buildSqlSchema(input.relations);
@@ -59,11 +60,7 @@ export function SqlCodeMirror(input: {
     Prec.highest(
       keymap.of([
         {
-          key: 'Cmd-Enter',
-          run: executeKeymapHandler,
-        },
-        {
-          win: 'Ctrl-Enter',
+          key: 'Mod-Enter',
           run: executeKeymapHandler,
         },
         {
@@ -82,7 +79,7 @@ export function SqlCodeMirror(input: {
   return (
     <CodeMirror
       value={input.value}
-      height="16rem"
+      height={input.height ?? '16rem'}
       aria-label={input.ariaLabel}
       theme={theme}
       extensions={extensions}
@@ -138,7 +135,7 @@ export function TextDiffCodeMirror(input: {original: string; draft: string; aria
   );
 }
 
-function buildSqlSchema(relations: readonly StudioRelation[]): SQLNamespace {
+function buildSqlSchema(relations: StudioRelation[]): SQLNamespace {
   return Object.fromEntries(
     relations.map((relation) => [
       relation.name,

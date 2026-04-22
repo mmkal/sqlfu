@@ -28,7 +28,7 @@ export function createDemoClient(input: {onSchemaChange: () => void}): RouterCli
 
 export {buildDemoConfig};
 
-function lazyRouterClientProxy<T>(target: Promise<unknown>, segments: readonly string[]): T {
+function lazyRouterClientProxy<T>(target: Promise<unknown>, segments: string[]): T {
   const fn = () => {};
   return new Proxy(fn, {
     get(_, prop) {

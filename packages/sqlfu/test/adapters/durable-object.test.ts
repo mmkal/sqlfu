@@ -262,7 +262,7 @@ function createRpcStub<TInstance extends object>(stub: DurableObjectFetchStub) {
         return undefined;
       }
 
-      return async (...args: readonly unknown[]) => {
+      return async (...args: unknown[]) => {
         const response = await stub.fetch('http://do/__rpc__', {
           method: 'POST',
           headers: {'content-type': 'application/json'},

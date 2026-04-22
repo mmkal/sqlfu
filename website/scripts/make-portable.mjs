@@ -28,7 +28,7 @@ async function rewriteFile(filePath) {
   const html = await fs.readFile(filePath, 'utf8');
   const depth = path.relative(distRoot, path.dirname(filePath)).split(path.sep).filter(Boolean).length;
   const prefix = depth === 0 ? './' : '../'.repeat(depth);
-  const rewritten = html.replaceAll(/((?:href|src)=")(\/)([^"/][^"]*|)"/g, (_match, attr, _slash, rest) => {
+  const rewritten = html.replaceAll(/((?:href|src|poster)=")(\/)([^"/][^"]*|)"/g, (_match, attr, _slash, rest) => {
     return `${attr}${prefix}${rest}"`;
   });
   await fs.writeFile(filePath, rewritten);

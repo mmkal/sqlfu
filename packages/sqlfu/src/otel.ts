@@ -28,7 +28,7 @@ export interface SpanLike {
  * `QueryExecutionHook` is a stable contract; `createOtelHook` is one way
  * to satisfy it, not the only way.
  */
-export function createOtelHook(options: {readonly tracer: TracerLike}): QueryExecutionHook {
+export function createOtelHook(options: {tracer: TracerLike}): QueryExecutionHook {
   // OTel's SpanStatusCode: UNSET = 0, OK = 1, ERROR = 2. Inlined so the
   // library doesn't need to import from @opentelemetry/api.
   const OTEL_STATUS_OK = 1;
@@ -53,7 +53,7 @@ export function createOtelHook(options: {readonly tracer: TracerLike}): QueryExe
         },
         (error) => {
           span.recordException(error);
-          span.setStatus({code: OTEL_STATUS_ERROR, message: error instanceof Error ? error.message : String(error)});
+          span.setStatus({code: OTEL_STATUS_ERROR, message: String(error)});
           span.end();
           throw error;
         },

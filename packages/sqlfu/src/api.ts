@@ -15,9 +15,9 @@ import {
 import {diffSchemaSql} from './schemadiff/index.js';
 import {inspectSqliteSchemaSql, schemasEqual} from './schemadiff/sqlite/index.js';
 
-const schemaDriftExcludedTables = ['sqlfu_migrations'] as const;
+const schemaDriftExcludedTables = (['sqlfu_migrations'] as const).slice();
 
-export async function getCheckMismatches(context: SqlfuContext): Promise<readonly CheckMismatch[]> {
+export async function getCheckMismatches(context: SqlfuContext): Promise<CheckMismatch[]> {
   const analysis = await analyzeDatabase(context);
   return analysis.mismatches;
 }
@@ -117,10 +117,10 @@ export async function getMigrationResultantSchema(
 }
 
 export type SqlfuCommandConfirmParams = {
-  readonly title: string;
-  readonly body: string;
-  readonly bodyType?: 'markdown' | 'sql' | 'typescript';
-  readonly editable?: boolean;
+  title: string;
+  body: string;
+  bodyType?: 'markdown' | 'sql' | 'typescript';
+  editable?: boolean;
 };
 
 export type SqlfuCommandConfirm = (params: SqlfuCommandConfirmParams) => Promise<string | null>;
@@ -385,7 +385,7 @@ async function analyzeMigrateHealth(context: SqlfuContext, existingClient?: Clie
 
 async function analyzeMigrateHealthWithClient(
   context: SqlfuContext,
-  migrations: readonly Migration[],
+  migrations: Migration[],
   client: Client,
 ): Promise<MigrateHealthAnalysis> {
   const applied = await readMigrationHistory(client);
@@ -516,8 +516,8 @@ function formatMigrateFailure(params: {failedName: string; cause: string; postFa
 }
 
 type MigrateHealthAnalysis = {
-  readonly blockers: readonly CheckMismatch[];
-  readonly recommendations: readonly CheckRecommendation[];
+  blockers: CheckMismatch[];
+  recommendations: CheckRecommendation[];
 };
 
 export async function applyBaselineSql(context: SqlfuContext, input: {target: string}, confirm: SqlfuCommandConfirm) {
@@ -592,7 +592,7 @@ export async function materializeDefinitionsSchemaForContext(host: SqlfuHost, de
   });
 }
 
-export async function materializeMigrationsSchemaForContext(host: SqlfuHost, migrations: readonly Migration[]) {
+export async function materializeMigrationsSchemaForContext(host: SqlfuHost, migrations: Migration[]) {
   await using database = await host.openScratchDb('materialize-migrations');
   await applyMigrations(database.client, {migrations});
   return await extractSchema(database.client, 'main', {
@@ -600,7 +600,7 @@ export async function materializeMigrationsSchemaForContext(host: SqlfuHost, mig
   });
 }
 
-function getMigrationsThroughTarget(migrations: readonly Migration[], target: string) {
+function getMigrationsThroughTarget(migrations: Migration[], target: string) {
   const targetIndex = migrations.findIndex((migration) => migrationName(migration) === target);
   if (targetIndex === -1) {
     throw new Error(`migration ${target} not found`);
@@ -797,8 +797,8 @@ export async function analyzeDatabase(context: SqlfuContext) {
 
 async function findHistoryMismatch(
   host: SqlfuHost,
-  applied: readonly {name: string; checksum: string}[],
-  migrations: readonly Migration[],
+  applied: {name: string; checksum: string}[],
+  migrations: Migration[],
   migrationByName: ReadonlyMap<string, Migration>,
 ) {
   for (const historical of applied) {
@@ -823,7 +823,7 @@ async function findHistoryMismatch(
   return null;
 }
 
-async function findRecommendedTarget(host: SqlfuHost, migrations: readonly Migration[], liveSchema: string) {
+async function findRecommendedTarget(host: SqlfuHost, migrations: Migration[], liveSchema: string) {
   for (let index = 0; index < migrations.length; index += 1) {
     const candidate = migrations.slice(0, index + 1);
     let candidateSchema: string;
@@ -892,20 +892,20 @@ function summarizeSqlite3defError(error: unknown) {
 }
 
 export interface SqlfuContext {
-  readonly config: SqlfuProjectConfig;
-  readonly host: SqlfuHost;
+  config: SqlfuProjectConfig;
+  host: SqlfuHost;
 }
 
 export interface SqlfuCommandContext {
-  readonly projectRoot: string;
-  readonly config?: SqlfuProjectConfig;
-  readonly host: SqlfuHost;
+  projectRoot: string;
+  config?: SqlfuProjectConfig;
+  host: SqlfuHost;
 }
 
 export interface SqlfuRouterContext extends SqlfuContext {}
 
 export interface SqlfuCommandRouterContext extends SqlfuCommandContext {
-  readonly confirm: SqlfuCommandConfirm;
+  confirm: SqlfuCommandConfirm;
 }
 
 export function requireContextConfig(context: SqlfuCommandContext): SqlfuContext {
@@ -920,14 +920,14 @@ export function requireContextConfig(context: SqlfuCommandContext): SqlfuContext
 }
 
 export type CheckMismatch = {
-  readonly kind: 'repoDrift' | 'pendingMigrations' | 'historyDrift' | 'schemaDrift' | 'syncDrift';
-  readonly title: 'Repo Drift' | 'Pending Migrations' | 'History Drift' | 'Schema Drift' | 'Sync Drift';
-  readonly summary: string;
-  readonly details: readonly string[];
+  kind: 'repoDrift' | 'pendingMigrations' | 'historyDrift' | 'schemaDrift' | 'syncDrift';
+  title: 'Repo Drift' | 'Pending Migrations' | 'History Drift' | 'Schema Drift' | 'Sync Drift';
+  summary: string;
+  details: string[];
 };
 
 export type CheckRecommendation = {
-  readonly kind:
+  kind:
     | 'draft'
     | 'migrate'
     | 'baseline'
@@ -935,14 +935,14 @@ export type CheckRecommendation = {
     | 'sync'
     | 'restoreMissingMigration'
     | 'restoreOriginalMigration';
-  readonly command?: readonly [string, ...string[]];
-  readonly label: string;
-  readonly rationale?: string;
+  command?: [string, ...string[]];
+  label: string;
+  rationale?: string;
 };
 
 export type CheckAnalysis = {
-  readonly mismatches: readonly CheckMismatch[];
-  readonly recommendations: readonly CheckRecommendation[];
+  mismatches: CheckMismatch[];
+  recommendations: CheckRecommendation[];
 };
 
 function addRecommendation(target: CheckRecommendation[], recommendation: CheckRecommendation) {
@@ -959,7 +959,7 @@ function addRecommendation(target: CheckRecommendation[], recommendation: CheckR
   target.push(recommendation);
 }
 
-function withRecommendationExplainers(recommendations: readonly CheckRecommendation[]): readonly CheckRecommendation[] {
+function withRecommendationExplainers(recommendations: CheckRecommendation[]): CheckRecommendation[] {
   if (recommendations.length < 2) {
     return recommendations;
   }
@@ -1015,6 +1015,6 @@ function formatRecommendationText(recommendation: CheckRecommendation) {
   return recommendation.rationale ? `${sentence}. (${recommendation.rationale})` : `${sentence}.`;
 }
 
-function formatRecommendationCommand(command: readonly [string, ...string[]]) {
+function formatRecommendationCommand(command: [string, ...string[]]) {
   return ['sqlfu', ...command].join(' ');
 }

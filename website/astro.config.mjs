@@ -12,7 +12,7 @@ export default defineConfig({
     format: 'file',
   },
   redirects: {
-    '/docs': '/docs/sqlfu',
+    '/docs': '/docs/getting-started',
   },
   integrations: [
     starlight({
@@ -23,15 +23,13 @@ export default defineConfig({
         PageTitle: './src/starlight-overrides/PageTitle.astro',
       },
       sidebar: [
-        {label: 'sqlfu', slug: 'docs/sqlfu'},
+        {label: 'Getting Started', slug: 'docs/getting-started'},
+        {label: 'Overview', slug: 'docs/sqlfu'},
         {label: 'Adapters', slug: 'docs/adapters'},
-        {label: 'Dynamic queries', slug: 'docs/dynamic-queries'},
-        {label: 'Schema Diff Model', slug: 'docs/schema-diff-model'},
         {label: 'Migration Model', slug: 'docs/migration-model'},
-        {label: 'Observability', slug: 'docs/observability'},
-        {label: 'Outbox', slug: 'docs/outbox'},
         {label: 'Runtime validation', slug: 'docs/runtime-validation'},
-        {label: 'UI', slug: 'docs/ui'},
+        {label: 'Dynamic queries', slug: 'docs/dynamic-queries'},
+        {label: 'Outbox', slug: 'docs/outbox'},
         {
           label: 'Generate examples',
           items: [
@@ -44,6 +42,10 @@ export default defineConfig({
             {label: 'Validators', slug: 'docs/examples/validators'},
           ],
         },
+        {label: 'Observability', slug: 'docs/observability'},
+        {label: 'UI', slug: 'docs/ui'},
+        {label: 'Lint Plugin', slug: 'docs/lint-plugin'},
+        {label: 'Schema Diff Model', slug: 'docs/schema-diff-model'},
       ],
       social: [{icon: 'github', label: 'GitHub', href: 'https://github.com/mmkal/sqlfu'}],
     }),

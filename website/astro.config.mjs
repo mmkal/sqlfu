@@ -29,7 +29,7 @@ export default defineConfig({
         {label: 'Migration Model', slug: 'docs/migration-model'},
         {label: 'Runtime validation', slug: 'docs/runtime-validation'},
         {label: 'Dynamic queries', slug: 'docs/dynamic-queries'},
-        {label: 'Outbox', slug: 'docs/outbox'}, // supplied by PR #41; conflicts expected on this line
+        // {label: 'Outbox', slug: 'docs/outbox'}, // uncomment after PR #41 (outbox) lands
         {
           label: 'Generate examples',
           items: [

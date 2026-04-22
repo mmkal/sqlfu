@@ -1,12 +1,14 @@
 # sqlfu Migration Model
 
+>tl;dr: if you don't want to remember a bunch of commands, just run `sqlfu check`. It will say "all good" or give you a recommend action.
+
 This document describes the current migration model in plain English.
 
-The important thing is not just which files and tables exist. The important thing is which concepts are authoritative, and what it means when they disagree.
+"What's the state of my database" is an ambiguous question, with many different answers. How do you *expect* your database to look? How do your migration files imply your database *should* look? How do your *applied* migrations imply it should look? How does it *actually* look? What does it mean when these questions have conflicting answers?
 
 ## The Four Authorities
 
-`sqlfu` has four important migration-related authorities.
+`sqlfu` has four important migration-related "authorities".
 
 | Name | Meaning | Current Representation |
 | --- | --- | --- |

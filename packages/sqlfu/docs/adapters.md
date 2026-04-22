@@ -48,17 +48,7 @@ Every factory takes the underlying driver's database/connection object as its si
 
 ## Local and embedded
 
-### `better-sqlite3` (Node)
-
-```ts
-import Database from 'better-sqlite3';
-import {createBetterSqlite3Client} from 'sqlfu/client';
-
-const db = new Database('app.db');
-const client = createBetterSqlite3Client(db);
-```
-
-### `node:sqlite` (Node ≥ 22)
+### `node:sqlite` (Node)
 
 ```ts
 import {DatabaseSync} from 'node:sqlite';
@@ -76,6 +66,16 @@ import {createBunClient} from 'sqlfu/client';
 
 const db = new Database('app.db');
 const client = createBunClient(db);
+```
+
+### `better-sqlite3` (Node)
+
+```ts
+import Database from 'better-sqlite3';
+import {createBetterSqlite3Client} from 'sqlfu/client';
+
+const db = new Database('app.db');
+const client = createBetterSqlite3Client(db);
 ```
 
 ### `libsql` (native embedded)
@@ -213,6 +213,8 @@ A few rules of thumb:
 - **You're on Bun**: `bun:sqlite`.
 - **You're on Node ≥ 22 and want no extra deps**: `node:sqlite`.
 - **Mobile / browser**: Expo SQLite or `sqlite-wasm`.
+
+And probably the best thing: you don't have to choose *one*. You can define separate entrypoints for your local, test and production environments and write your application logic using the shared sqlfu `Client` interface, then pass around two different clients, and they'll behave in the same way.
 
 ## Writing a custom adapter
 

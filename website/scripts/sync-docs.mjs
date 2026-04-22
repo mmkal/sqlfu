@@ -13,8 +13,14 @@ const repositoryBaseUrl = normalizeRepositoryUrl(readGit(['remote', 'get-url', '
 
 const docs = [
   {
+    slug: 'getting-started',
+    title: 'Getting Started',
+    sourcePath: path.join(repoRoot, 'packages', 'sqlfu', 'docs', 'getting-started.md'),
+    description: 'End-to-end walkthrough: schema, migrations, query files, typed wrappers, and a working client.all() call.',
+  },
+  {
     slug: 'sqlfu',
-    title: 'sqlfu',
+    title: 'Overview',
     sourcePath: path.join(repoRoot, 'packages', 'sqlfu', 'README.md'),
     description: 'Overview, quick start, CLI model, and core concepts.',
   },
@@ -57,11 +63,19 @@ const docs = [
     description:
       'How to handle optional filters and other runtime-composition shapes in a SQL-first project — with IS NULL patterns, JSON lists, and honest advice on when to reach for a query builder instead.',
   },
+  // outbox entry belongs here (after dynamic-queries, before schema-diff-model).
+  // It is supplied by PR #41 (branch: outbox). Conflict expected on merge.
   {
     slug: 'schema-diff-model',
     title: 'Schema Diff Model',
     sourcePath: path.join(repoRoot, 'packages', 'sqlfu', 'docs', 'schema-diff-model.md'),
     description: 'How sqlfu models SQLite schema diffing and migration planning.',
+  },
+  {
+    slug: 'lint-plugin',
+    title: 'Lint Plugin',
+    sourcePath: path.join(repoRoot, 'packages', 'sqlfu', 'docs', 'lint-plugin.md'),
+    description: 'ESLint rules for enforcing the SQL First model: query-naming and format-sql.',
   },
 ];
 

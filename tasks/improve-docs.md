@@ -71,7 +71,22 @@ For the next pass:
 
 - **Authority Mismatches table still has two rows with the same `Comparison` text** (`Pending Migrations` and `History Drift` both compare `Migrations <> Migration History`). The column header doesn't make clear that what distinguishes them is "unapplied new migrations" vs "applied migrations no longer exist / differ". Could be solved by restructuring the table, or by adding a single clarifying footnote, or by splitting the column into `Comparison` + `Direction` (what's new / what's missing).
 - **`docs/observability.md` and `README.md` Observability section both claim "without extra configuration per destination".** The README says this more carefully ("through a single `instrument()` call"). Worth tightening the observability page's lede to match rather than making a broader claim.
-- **No docs page for `sqlfu init`.** It's mentioned in the README's Quick Start as a two-line "just run this" instruction, but the doc doesn't say what it actually does. Given `init` writes `sqlfu.config.ts`, `definitions.sql`, `migrations/`, `sql/`, the skill fetch, etc., a one-page "init" reference or a "Project layout" section in the main sqlfu docs page would be useful. Tentpole-adjacent but currently absent.
 - **`docs/schema-diff-model.md` has a stray "So the short answer is" sentence** at line 153 that reads as a carry-over from an earlier draft where "is the engine at `src/schemadiff/sqlite/`?" was the framing question. In the current structure it lands awkwardly mid-"Where The Code Lives". Small rewrite job, not urgent.
 - **`packages/sqlfu/README.md` Limitations list** says "SQLite view typing is still imperfect in TypeSQL" and "some expressions still need the sqlfu post-pass to get better generated result types". Those are two ways of saying the same thing (the post-pass exists because TypeSQL misses some SQLite cases, view typing is one of them). Fold them into one bullet.
 - **Product/docs question**: the migration-model doc says `sqlfu check` "may also recommend a target migration when it can prove that the Live Schema exactly matches some replayed migration prefix", with a multi-step replay procedure. That's presented aspirationally ("may", "should"). Worth confirming this is implemented today and either dropping the aspirational voice or flagging as a TODO.
+
+## 2026-04-22 onboarding pass
+
+Status: in progress. Task file at `tasks/improve-docs-onboarding-pass.md`. Branch: `improve-docs-onboarding-pass`.
+
+Scope is the new-user onboarding flow: new Getting Started page (narrative walkthrough), new Lint Plugin page, README surgery, sidebar reorder, landing page CTA/demo/footer, `/docs` redirect. Full decision tree resolved via grill-me interview.
+
+Executive decisions made (with rationale):
+
+- `sqlfu init` folds into Getting Started only; not a standalone docs destination.
+- Outbox deferred entirely: module not implemented; blog drafts that link to `/docs/outbox` flagged for author but not modified (gitignored).
+- `generate` ordering bug (README shows `generate` before `migrate` but `generate` needs live DB) is a product gap, not a docs fix. Separate task `tasks/generate-preflight.md` with problem statement only.
+- Formatter stays in README (surface too small for its own page).
+- Schema Diff Model moved to last in sidebar (deep-theory, not how-to-use).
+- Runtime validation moved up in sidebar (early-decision feature, high-value for tRPC/forms apps).
+- Demo is fully self-contained (sqlite-wasm, no backend needed); landing page footer and button copy updated to communicate this.

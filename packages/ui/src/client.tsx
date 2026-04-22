@@ -69,8 +69,15 @@ const queryClient = new QueryClient({
 const demoMode = isDemoMode();
 const orpcClient: RouterClient<UiRouter> = demoMode
   ? createDemoClient({
+      // Invalidate only the schema-derived query namespaces. An unfiltered
+      // `queryClient.invalidateQueries()` would also hit ad-hoc useQuery calls
+      // whose queryFn itself calls `sql.run` (e.g. the Relation view's live
+      // query) — each refetch would re-trigger execAdHocSql → onSchemaChange
+      // → invalidate → refetch → … feedback loop, freezing the browser.
       onSchemaChange: () => {
-        void queryClient.invalidateQueries();
+        void queryClient.invalidateQueries({queryKey: orpc.schema.key()});
+        void queryClient.invalidateQueries({queryKey: orpc.catalog.key()});
+        void queryClient.invalidateQueries({queryKey: orpc.table.key()});
       },
     })
   : createORPCClient(

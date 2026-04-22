@@ -1199,6 +1199,31 @@ test('multi-column sort composes clauses in the order they were added', async ({
   );
 });
 
+test('clicking the same sort column 3 times (asc → desc → off) does not freeze the page', async ({page}) => {
+  await page.goto('/#table/posts');
+
+  // Click 1: sort by id asc (default → SQL mode)
+  await page.getByRole('button', {name: 'Sort', exact: true}).click();
+  await page.getByRole('button', {name: 'Sort by id'}).click();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('button', {name: /^Sort — id asc/})).toBeVisible({timeout: 5000});
+
+  // Click 2: flip to desc (still SQL mode)
+  await page.getByRole('button', {name: /^Sort —/}).click();
+  await page.getByRole('button', {name: /Sort by id/}).click();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('button', {name: /^Sort — id desc/})).toBeVisible({timeout: 5000});
+
+  // Click 3: remove (SQL mode → default mode). Used to freeze on mode transition back.
+  await page.getByRole('button', {name: /^Sort —/}).click();
+  await page.getByRole('button', {name: /Sort by id/}).click();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('button', {name: 'Sort', exact: true})).toBeVisible({timeout: 5000});
+
+  // Grid should still show the seeded rows
+  await expect(page.locator('.reactgrid').getByText('hello-world')).toBeVisible();
+});
+
 test('delete confirmation cancel leaves the row re-selectable', async ({page}) => {
   await page.goto('/#table/posts');
 

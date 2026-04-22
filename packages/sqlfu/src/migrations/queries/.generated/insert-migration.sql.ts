@@ -3,14 +3,14 @@ import type {Client} from 'sqlfu';
 const sql = `
 insert into sqlfu_migrations(name, checksum, applied_at)
 values (?, ?, ?);
-`
+`.trim();
+const query = (params: insertMigration.Params) => ({ sql, args: [params.name, params.checksum, params.applied_at], name: "insert-migration" });
 
 export const insertMigration = Object.assign(
 	async function insertMigration(client: Client, params: insertMigration.Params) {
-		const query = { sql, args: [params.name, params.checksum, params.applied_at], name: "insert-migration" };
-		return client.run(query);
+		return client.run(query(params));
 	},
-	{ sql },
+	{ sql, query },
 );
 
 export namespace insertMigration {

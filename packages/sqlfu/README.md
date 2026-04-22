@@ -99,7 +99,15 @@ Those pieces give `sqlfu` enough information to answer the important questions:
 
 `sqlfu` includes a lightweight client layer for executing SQL directly. It is meant to work with checked-in SQL rather than replace it with a query builder.
 
-Runtime adapters can be imported from `sqlfu/client`, for example `createExpoSqliteClient`, `createLibsqlClient`, or `createD1Client`.
+sqlfu doesn't ship its own database driver. Instead, `sqlfu/client` exports a thin adapter for each SQLite-compatible driver out there, so you can bring whichever one fits your runtime — local file, embedded engine, HTTP-over-sqlite, edge worker — and get the same typed client surface on top:
+
+- **Local / embedded**: `better-sqlite3`, `node:sqlite`, `bun:sqlite`, `libsql`, `@tursodatabase/database`
+- **Remote / cloud**: `@libsql/client` (Turso Cloud), `@tursodatabase/serverless`, `@tursodatabase/sync`, Cloudflare D1, Cloudflare Durable Objects
+- **Mobile / browser**: Expo SQLite, `@sqlite.org/sqlite-wasm`
+
+Each one is a ~50-line adapter file — see [docs/adapters.md](./docs/adapters.md) for the full table, copy-paste snippets, and guidance on which to pick. The same generated wrappers run against any of them unchanged.
+
+One thing sqlfu goes out of its way to preserve: **sync stays sync**. A client built on top of a synchronous driver (`better-sqlite3`, `node:sqlite`, Durable Objects) is itself synchronous — no spurious `async` creeping up your call stack. Generated query wrappers follow the same rule. See [sync stays sync](./docs/adapters.md#sync-stays-sync) for the details.
 
 ### Migrator
 

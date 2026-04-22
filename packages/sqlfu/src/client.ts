@@ -21,3 +21,5 @@ export * from './adapters/node-sqlite.js';
 export * from './adapters/durable-object.js';
 export * from './adapters/expo-sqlite.js';
 export * from './adapters/sqlite-wasm.js';
+export * from './adapters/turso-database.js';
+export * from './adapters/turso-serverless.js';

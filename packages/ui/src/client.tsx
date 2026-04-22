@@ -227,6 +227,10 @@ async function invalidateSchemaContent() {
 }
 
 function StartupFailureScreen(input: {error: unknown}) {
+  if (demoMode) {
+    return <DemoStartupFailureScreen error={input.error} />;
+  }
+
   const apiOrigin = resolveApiOrigin();
   const apiHost = new URL(apiOrigin).host;
   const browserName = detectBrowserName();
@@ -2485,6 +2489,74 @@ function renderVersionMismatchLede(startupError: Extract<StartupFailure, {kind: 
       Your local backend does not satisfy <code>{startupError.supportedRange}</code> (it pre-dates the version-reporting
       RPC field). Upgrading will fix the mismatch.
     </>
+  );
+}
+
+// demo-mode boot can fail for reasons that have nothing to do with the localhost
+// backend (wasm init, missing browser apis, ios WebKit quirks). the generic
+// StartupFailureScreen talks about `npx sqlfu` and mkcert, which is misleading
+// here — so demo mode gets its own screen that surfaces the actual error.
+function DemoStartupFailureScreen(input: {error: unknown}) {
+  const message = input.error instanceof Error ? input.error.message : String(input.error);
+  const stack = input.error instanceof Error ? input.error.stack : undefined;
+  const userAgent = typeof navigator === 'undefined' ? '' : navigator.userAgent;
+
+  return (
+    <main className="startup-shell">
+      <section className="startup-card">
+        <h1>
+          <code>sqlfu</code> demo didn&apos;t load
+        </h1>
+        <p className="startup-lede">
+          The demo runs entirely in your browser on sqlite-wasm. Something went wrong during startup — see the error
+          below.
+        </p>
+
+        <div className="startup-grid">
+          <section className="startup-section">
+            <h2>Error</h2>
+            <pre className="startup-error-pre">{message}</pre>
+            {stack ? (
+              <details>
+                <summary>Stack trace</summary>
+                <pre className="startup-error-pre">{stack}</pre>
+              </details>
+            ) : null}
+            <p>
+              User agent: <code>{userAgent}</code>
+            </p>
+            <div className="startup-actions">
+              <button className="button primary" type="button" onClick={() => window.location.reload()}>
+                Reload
+              </button>
+            </div>
+          </section>
+
+          <section className="startup-section">
+            <h2>What to try</h2>
+            <ul className="startup-steps">
+              <li>Reload the page.</li>
+              <li>
+                Open in a recent desktop Chrome, Firefox, Edge, or Safari — mobile browsers (especially iOS) may hit
+                wasm limits the desktop demo doesn&apos;t.
+              </li>
+              <li>
+                If it still fails, open an issue with the error above at{' '}
+                <a
+                  className="startup-link"
+                  href="https://github.com/mmkal/sqlfu/issues/new"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  github.com/mmkal/sqlfu/issues
+                </a>
+                .
+              </li>
+            </ul>
+          </section>
+        </div>
+      </section>
+    </main>
   );
 }
 

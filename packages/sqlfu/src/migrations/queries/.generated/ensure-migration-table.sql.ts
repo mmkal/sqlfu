@@ -6,12 +6,12 @@ create table if not exists sqlfu_migrations(
   checksum text not null,
   applied_at text not null
 );
-`
+`.trim();
+const query = { sql, args: [], name: "ensure-migration-table" };
 
 export const ensureMigrationTable = Object.assign(
 	async function ensureMigrationTable(client: Client) {
-		const query = { sql, args: [], name: "ensure-migration-table" };
 		return client.run(query);
 	},
-	{ sql },
+	{ sql, query },
 );

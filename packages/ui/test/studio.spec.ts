@@ -384,6 +384,7 @@ test('schema command failures stay visible next to the failing command button', 
 test('table browser, sql runner, and generated query form work against a live fixture project', async ({page}) => {
   await page.goto('/');
 
+  await page.getByRole('link', {name: /^posts/}).click();
   await expect(page.getByRole('heading', {name: 'posts'})).toBeVisible();
   await expect(page.getByText('hello-world')).toBeVisible();
 

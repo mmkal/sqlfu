@@ -247,7 +247,7 @@ test('formatSqlFileContents: leaves empty / whitespace-only input alone', () => 
   expect(formatSqlFileContents('\n\n')).toBe('\n\n');
 });
 
-test('format-sql-file: processor autofixes an unformatted .sql file (whole-file replacement)', async () => {
+test('format-sql (sql files): processor autofixes an unformatted .sql file (whole-file replacement)', async () => {
   await using project = await setupProject({
     'sql/list-users.sql': 'SELECT * FROM users WHERE id=1;\n',
   });
@@ -264,7 +264,7 @@ test('format-sql-file: processor autofixes an unformatted .sql file (whole-file 
   expect(result.output).not.toMatch(/SELECT|FROM|WHERE/);
 });
 
-test('format-sql-file: processor without --fix reports a single message per unformatted file', async () => {
+test('format-sql (sql files): processor without --fix reports a single message per unformatted file', async () => {
   await using project = await setupProject({
     'sql/list-users.sql': 'SELECT * FROM users WHERE id=1;\n',
   });
@@ -280,12 +280,12 @@ test('format-sql-file: processor without --fix reports a single message per unfo
 
   expect(result.messages).toHaveLength(1);
   expect(result.messages[0]).toMatchObject({
-    ruleId: 'sqlfu/format-sql-file',
+    ruleId: 'sqlfu/format-sql',
     message: expect.stringContaining('not formatted'),
   });
 });
 
-test('format-sql-file: processor is a no-op on already-formatted .sql files', async () => {
+test('format-sql (sql files): processor is a no-op on already-formatted .sql files', async () => {
   await using project = await setupProject({
     'sql/list-users.sql': 'select id, name\nfrom users\norder by name;\n',
   });
@@ -297,7 +297,7 @@ test('format-sql-file: processor is a no-op on already-formatted .sql files', as
   expect(result.output).toBeUndefined();
 });
 
-test('format-sql-file: processor handles SQL containing backticks and ${} without corruption', async () => {
+test('format-sql (sql files): processor handles SQL containing backticks and ${} without corruption', async () => {
   // Backticks and ${ inside SQL would trip the wrapper template literal if
   // the processor didn't escape them. This test asserts the escape survives
   // preprocess → lint → postprocess round-trip without mangling the SQL.

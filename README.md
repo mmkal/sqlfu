@@ -170,8 +170,7 @@ No peer dependencies on OpenTelemetry or Sentry. `TracerLike` is structural; hoo
 `sqlfu` ships a lint plugin as a sub-export (`sqlfu/lint-plugin`). It runs under ESLint (flat config) on both TS/JS source (inline SQL templates) and standalone `.sql` files (via an ESLint processor):
 
 - **`sqlfu/query-naming`** — enforces that SQL reaching the client has a name. Today it flags inline SQL passed to `client.all` / `client.run` / `client.iterate` / `` client.sql`...` `` when the normalized text matches a checked-in `.sql` file under your project's `queries` directory. sqlfu's model is `SQL First`: your filename is your query's identity, so an inline duplicate loses the name, generated types, and observability metadata. The rule name is neutral by design — expect it to grow to cover other "unnamed query" cases later.
-- **`sqlfu/format-sql`** — flags inline SQL template literals whose text does not match sqlfu's formatter output. Offers an autofix that rewrites the template body to the formatted SQL.
-- **`sqlfu/format-sql-file`** (+ `sqlfu/sql-file` processor) — same formatter applied to whole `.sql` files on disk. Ships as an ESLint processor so `eslint --fix '**/*.sql'` reformats the files in place.
+- **`sqlfu/format-sql`** — flags SQL that does not match sqlfu's formatter output. Covers both inline SQL template literals (in TS/JS) and whole `.sql` files on disk (via the `sqlfu/sql` processor). `eslint --fix '**/*.sql'` reformats files in place; the same rule autofixes inline template bodies.
 
 Wire it into ESLint flat config:
 

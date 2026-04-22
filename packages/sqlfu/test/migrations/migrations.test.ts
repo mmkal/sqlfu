@@ -606,8 +606,8 @@ describe('goto', () => {
     await fixture.api.goto({target: '2026-04-10T01.00.00.000Z_add_person_name_idx'});
 
     expect(await extractSchema(fixture.db, 'main', {excludedTables: ['sqlfu_migrations']})).toMatchInlineSnapshot(`
-      "create index person_name_idx on person(name);
-      create table person(name text);"
+      "create table person(name text);
+      create index person_name_idx on person(name);"
     `);
     expect(await fixture.db.sql`select name from person order by name`).toMatchObject([{name: 'alice'}]);
   });

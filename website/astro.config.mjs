@@ -25,6 +25,7 @@ export default defineConfig({
       sidebar: [
         {label: 'sqlfu', slug: 'docs/sqlfu'},
         {label: 'Adapters', slug: 'docs/adapters'},
+        {label: 'Dynamic queries', slug: 'docs/dynamic-queries'},
         {label: 'Schema Diff Model', slug: 'docs/schema-diff-model'},
         {label: 'Migration Model', slug: 'docs/migration-model'},
         {label: 'Observability', slug: 'docs/observability'},

@@ -26,12 +26,6 @@ const docs = [
       'Drivers sqlfu supports out of the box: better-sqlite3, libsql, Turso Cloud, Cloudflare D1, Durable Objects, Expo, sqlite-wasm, and more.',
   },
   {
-    slug: 'schema-diff-model',
-    title: 'Schema Diff Model',
-    sourcePath: path.join(repoRoot, 'packages', 'sqlfu', 'docs', 'schema-diff-model.md'),
-    description: 'How sqlfu models SQLite schema diffing and migration planning.',
-  },
-  {
     slug: 'migration-model',
     title: 'Migration Model',
     sourcePath: path.join(repoRoot, 'packages', 'sqlfu', 'docs', 'migration-model.md'),
@@ -55,6 +49,19 @@ const docs = [
     title: 'UI',
     sourcePath: path.join(repoRoot, 'packages', 'ui', 'README.md'),
     description: 'The browser client and how it relates to the local backend server.',
+  },
+  {
+    slug: 'dynamic-queries',
+    title: 'Dynamic queries',
+    sourcePath: path.join(repoRoot, 'packages', 'sqlfu', 'docs', 'dynamic-queries.md'),
+    description:
+      'How to handle optional filters and other runtime-composition shapes in a SQL-first project — with IS NULL patterns, JSON lists, and honest advice on when to reach for a query builder instead.',
+  },
+  {
+    slug: 'schema-diff-model',
+    title: 'Schema Diff Model',
+    sourcePath: path.join(repoRoot, 'packages', 'sqlfu', 'docs', 'schema-diff-model.md'),
+    description: 'How sqlfu models SQLite schema diffing and migration planning.',
   },
 ];
 

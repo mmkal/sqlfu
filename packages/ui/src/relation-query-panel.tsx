@@ -140,6 +140,10 @@ export function RelationQueryPanel(input: RelationQueryPanelProps) {
       onColumnToggle={handleColumnToggle}
       onColumnsShowAll={handleColumnsShowAll}
       onSqlApply={handleSqlApply}
+      onPrev={handlePrev}
+      onNext={handleNext}
+      onLimitChange={handleLimitChange}
+      onReset={handleReset}
     />
   );
 
@@ -164,32 +168,6 @@ export function RelationQueryPanel(input: RelationQueryPanelProps) {
       ) : (
         input.renderSqlDataTable({rows, columns, storageKey, toolbar})
       )}
-
-      <div className="rqp-footer">
-        <span className="rqp-footer-summary">
-          {isDefault ? 'Showing default rows' : `Rows ${safeState.offset + 1}–${safeState.offset + safeState.limit}`}
-        </span>
-        <div className="rqp-footer-pager">
-          <button
-            type="button"
-            className="rqp-icon-button"
-            aria-label="Previous page"
-            disabled={safeState.offset === 0}
-            onClick={handlePrev}
-          >
-            ←
-          </button>
-          <button type="button" className="rqp-icon-button" aria-label="Next page" onClick={handleNext}>
-            →
-          </button>
-          <PerPageMenu value={safeState.limit} onChange={handleLimitChange} />
-          {!isDefault ? (
-            <button type="button" className="rqp-pill-button" aria-label="Reset query to default" onClick={handleReset}>
-              Reset
-            </button>
-          ) : null}
-        </div>
-      </div>
     </div>
   );
 }
@@ -213,6 +191,10 @@ function RelationToolbar(input: {
   onColumnToggle: (column: string) => void;
   onColumnsShowAll: () => void;
   onSqlApply: (value: string) => void;
+  onPrev: () => void;
+  onNext: () => void;
+  onLimitChange: (value: number) => void;
+  onReset: () => void;
 }) {
   const sortLabel = (() => {
     if (input.state.sorts.length === 0) return null;
@@ -362,9 +344,10 @@ function RelationToolbar(input: {
         </Popover.Portal>
       </Popover.Root>
 
+      <span className="rqp-toolbar-spacer" />
+
       {input.rowEditing?.editable && dirty ? (
         <>
-          <span className="rqp-toolbar-spacer" />
           <button
             type="button"
             className="rqp-pill-button primary"
@@ -383,8 +366,37 @@ function RelationToolbar(input: {
           >
             Discard
           </button>
+          <span className="rqp-toolbar-divider" aria-hidden="true" />
         </>
       ) : null}
+
+      <button
+        type="button"
+        className="rqp-icon-button"
+        aria-label="Previous page"
+        disabled={input.state.offset === 0}
+        onClick={input.onPrev}
+      >
+        ←
+      </button>
+      <button
+        type="button"
+        className="rqp-icon-button"
+        aria-label="Next page"
+        onClick={input.onNext}
+      >
+        →
+      </button>
+      <PerPageMenu value={input.state.limit} onChange={input.onLimitChange} />
+      <button
+        type="button"
+        className="rqp-pill-button"
+        aria-label="Reset query to default"
+        disabled={input.isDefault}
+        onClick={input.onReset}
+      >
+        Reset
+      </button>
     </div>
   );
 }

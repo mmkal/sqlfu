@@ -1,7 +1,7 @@
 import type {SqlEditorDiagnostic} from '../ui/shared.js';
 
 export function toSqlEditorDiagnostic(sql: string, error: unknown): SqlEditorDiagnostic {
-  const message = String(error);
+  const message = error instanceof Error ? error.message : String(error);
   const explicitLocation = locateExplicitPosition(sql, message);
   if (explicitLocation) return {...explicitLocation, message};
 
@@ -16,7 +16,7 @@ export function toSqlEditorDiagnostic(sql: string, error: unknown): SqlEditorDia
 }
 
 export function isInternalUnsupportedSqlAnalysisError(error: unknown) {
-  const message = String(error);
+  const message = error instanceof Error ? error.message : String(error);
   // The analyzer signals "I can't handle this statement kind" via one of a few
   // specific messages. Match on shape, not text equality — the hand-rolled
   // parser's `parseSqlToShim` prefix carries the offending keyword in the

@@ -97,7 +97,9 @@ export async function createBrowserHost(input: {
           rowMode: 'object',
           returnValue: 'resultRows',
         }) as ResultRow[];
-        input.onSchemaChange();
+        // SELECTs don't mutate the db; skip the schema-change broadcast. The
+        // RelationQueryPanel's useQuery subscribes to this same endpoint, so
+        // an invalidateQueries() here would re-fire the query and loop.
         return {mode: 'rows', rows};
       }
       db.exec({sql: sqlText, bind: bindings as never});

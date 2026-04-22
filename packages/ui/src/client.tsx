@@ -37,6 +37,7 @@ import {columnWidthAlgorithm} from './column-width.js';
 import type {UiRouter} from 'sqlfu/ui/browser';
 import {SqlCodeMirror, TextCodeMirror, TextDiffCodeMirror} from './sql-codemirror.js';
 import {RelationQueryPanel} from './relation-query-panel.js';
+import * as Popover from '@radix-ui/react-popover';
 import {
   Dialog,
   DialogContent,
@@ -69,8 +70,15 @@ const queryClient = new QueryClient({
 const demoMode = isDemoMode();
 const orpcClient: RouterClient<UiRouter> = demoMode
   ? createDemoClient({
+      // Invalidate only the schema-derived query namespaces. An unfiltered
+      // `queryClient.invalidateQueries()` would also hit ad-hoc useQuery calls
+      // whose queryFn itself calls `sql.run` (e.g. the Relation view's live
+      // query) — each refetch would re-trigger execAdHocSql → onSchemaChange
+      // → invalidate → refetch → … feedback loop, freezing the browser.
       onSchemaChange: () => {
-        void queryClient.invalidateQueries();
+        void queryClient.invalidateQueries({queryKey: orpc.schema.key()});
+        void queryClient.invalidateQueries({queryKey: orpc.catalog.key()});
+        void queryClient.invalidateQueries({queryKey: orpc.table.key()});
       },
     })
   : createORPCClient(
@@ -1666,23 +1674,6 @@ function DataTable(input: {
     },
   );
   const pendingFocusRef = useRef<{rowId: number; columnId: string} | null>(null);
-  const rowHistoryRef = useRef<{
-    baseline: string;
-    undo: (Record<string, unknown>[])[];
-    redo: (Record<string, unknown>[])[];
-  }>({
-    baseline: '',
-    undo: [],
-    redo: [],
-  });
-  const historyBaseline = JSON.stringify(input.originalRows ?? input.rows);
-  if (rowHistoryRef.current.baseline !== historyBaseline) {
-    rowHistoryRef.current = {
-      baseline: historyBaseline,
-      undo: [],
-      redo: [],
-    };
-  }
   const computedColumnWidths = columnWidthAlgorithm({
     availableWidth: Math.max(0, containerWidth - 64),
     columns: input.columns.map((column) => ({
@@ -1777,80 +1768,21 @@ function DataTable(input: {
     );
   const showSelectedCellDiffTabs =
     selectedCellDirty && selectedOriginalValue !== 'null' && selectedOriginalValue !== '';
-  const applyUndo = () => {
-    const previousRows = rowHistoryRef.current.undo.at(-1);
-    if (!previousRows) {
-      return;
-    }
-    rowHistoryRef.current = {
-      ...rowHistoryRef.current,
-      undo: rowHistoryRef.current.undo.slice(0, -1),
-      redo: [...rowHistoryRef.current.redo, cloneTableRows(input.rows)],
-    };
-    input.onRowsChange?.(cloneTableRows(previousRows));
-  };
-  const applyRedo = () => {
-    const nextRows = rowHistoryRef.current.redo.at(-1);
-    if (!nextRows) {
-      return;
-    }
-    rowHistoryRef.current = {
-      ...rowHistoryRef.current,
-      undo: [...rowHistoryRef.current.undo, cloneTableRows(input.rows)],
-      redo: rowHistoryRef.current.redo.slice(0, -1),
-    };
-    input.onRowsChange?.(cloneTableRows(nextRows));
-  };
-
   return (
-    <div
-      className="stack"
-      onKeyDownCapture={(event) => {
-        const commandKey = process.platform === 'darwin' ? event.metaKey : event.ctrlKey;
-        if (!commandKey) {
-          return;
-        }
-        if (event.key.toLowerCase() === 'z' && event.shiftKey) {
-          event.preventDefault();
-          applyRedo();
-          return;
-        }
-        if (event.key.toLowerCase() === 'z') {
-          event.preventDefault();
-          applyUndo();
-          return;
-        }
-        if (event.key.toLowerCase() === 'y') {
-          event.preventDefault();
-          applyRedo();
-        }
-      }}
-    >
-      {input.toolbar || input.editable ? (
+    <div className="stack">
+      {input.toolbar || input.showSelectedCellDetail ? (
         <div className="data-toolbar">
           {input.toolbar}
-          {input.editable ? (
-            <div className="data-toolbar-undo-group">
-              <button
-                className="rqp-icon-button"
-                type="button"
-                aria-label="Undo cell changes"
-                disabled={rowHistoryRef.current.undo.length === 0}
-                onClick={applyUndo}
-                title="Undo (⌘Z)"
-              >
-                ↶
-              </button>
-              <button
-                className="rqp-icon-button"
-                type="button"
-                aria-label="Redo cell changes"
-                disabled={rowHistoryRef.current.redo.length === 0}
-                onClick={applyRedo}
-                title="Redo (⌘⇧Z)"
-              >
-                ↷
-              </button>
+          {input.showSelectedCellDetail ? (
+            <div className="data-toolbar-trailing">
+              <CellDetailPopoverButton
+                selectedCell={selectedCell}
+                selectedOriginalValue={selectedOriginalValue}
+                selectedDraftValue={selectedDraftValue}
+                showDiffTabs={showSelectedCellDiffTabs}
+                selectedCellMode={selectedCellMode}
+                setSelectedCellMode={setSelectedCellMode}
+              />
             </div>
           ) : null}
         </div>
@@ -1927,11 +1859,6 @@ function DataTable(input: {
                     }
                     nextRow[change.columnId] = readGridCellValue(change.newCell);
                   }
-                  rowHistoryRef.current = {
-                    ...rowHistoryRef.current,
-                    undo: [...rowHistoryRef.current.undo, cloneTableRows(input.rows)],
-                    redo: [],
-                  };
                   input.onRowsChange?.(nextRows);
                 }
               : undefined
@@ -1939,71 +1866,105 @@ function DataTable(input: {
         />
       </div>
 
-      {input.showSelectedCellDetail &&
-      selectedCell &&
-      typeof selectedCell.rowId === 'number' &&
-      typeof selectedCell.columnId === 'string' ? (
-        <section className="selected-cell-panel">
-          <div className="card-title-row">
-            <div className="card-title">{`Cell: ${selectedCell.columnId}, row ${selectedCell.rowId + 1}`}</div>
-          </div>
-          {showSelectedCellDiffTabs ? (
-            <div className="stack">
-              <div className="cell-panel-tabs" role="tablist" aria-label="Cell versions">
-                <button
-                  className={selectedCellMode === 'diff' ? 'cell-panel-tab active' : 'cell-panel-tab'}
-                  type="button"
-                  role="tab"
-                  aria-selected={selectedCellMode === 'diff'}
-                  onClick={() => setSelectedCellMode('diff')}
-                >
-                  Diff
-                </button>
-                <button
-                  className={selectedCellMode === 'original' ? 'cell-panel-tab active' : 'cell-panel-tab'}
-                  type="button"
-                  role="tab"
-                  aria-selected={selectedCellMode === 'original'}
-                  onClick={() => setSelectedCellMode('original')}
-                >
-                  Original
-                </button>
-                <button
-                  className={selectedCellMode === 'draft' ? 'cell-panel-tab active' : 'cell-panel-tab'}
-                  type="button"
-                  role="tab"
-                  aria-selected={selectedCellMode === 'draft'}
-                  onClick={() => setSelectedCellMode('draft')}
-                >
-                  Draft
-                </button>
-              </div>
-
-              {selectedCellMode === 'original' ? (
-                <TextCodeMirror value={selectedOriginalValue} ariaLabel="Original cell value" readOnly height="12rem" />
-              ) : null}
-              {selectedCellMode === 'draft' ? (
-                <TextCodeMirror value={selectedDraftValue} ariaLabel="Draft cell value" readOnly height="12rem" />
-              ) : null}
-              {selectedCellMode === 'diff' ? (
-                <TextDiffCodeMirror
-                  original={selectedOriginalValue}
-                  draft={selectedDraftValue}
-                  ariaLabel="Diff cell value"
-                />
-              ) : null}
-            </div>
-          ) : (
-            <TextCodeMirror value={selectedDraftValue} ariaLabel="Cell value" readOnly height="12rem" />
-          )}
-        </section>
-      ) : null}
     </div>
   );
 }
 
-function cloneTableRows(rows: Record<string, unknown>[]) {
-  return rows.map((row) => ({...row}));
+function CellDetailPopoverButton(input: {
+  selectedCell: {rowId: number; columnId: string} | null | undefined;
+  selectedOriginalValue: string;
+  selectedDraftValue: string;
+  showDiffTabs: boolean;
+  selectedCellMode: 'diff' | 'original' | 'draft';
+  setSelectedCellMode: (mode: 'diff' | 'original' | 'draft') => void;
+}) {
+  const cell = input.selectedCell;
+  const disabled = !cell || typeof cell.rowId !== 'number' || typeof cell.columnId !== 'string';
+  const label = disabled ? 'Cell (no selection)' : `Cell: ${cell!.columnId}, row ${cell!.rowId + 1}`;
+  return (
+    <Popover.Root>
+      <Popover.Trigger asChild>
+        <button
+          type="button"
+          className="rqp-pill-button"
+          aria-label={label}
+          disabled={disabled}
+        >
+          <span className="rqp-pill-icon" aria-hidden="true">
+            ⊡
+          </span>
+          <span>Cell</span>
+        </button>
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content className="rqp-popover rqp-popover-wide" align="end" sideOffset={6}>
+          <div className="rqp-popover-body" role="dialog" aria-label="Cell detail">
+            <div className="card-title-row">
+              <div className="card-title">{label}</div>
+            </div>
+            {input.showDiffTabs ? (
+              <div className="stack">
+                <div className="cell-panel-tabs" role="tablist" aria-label="Cell versions">
+                  <button
+                    className={input.selectedCellMode === 'diff' ? 'cell-panel-tab active' : 'cell-panel-tab'}
+                    type="button"
+                    role="tab"
+                    aria-selected={input.selectedCellMode === 'diff'}
+                    onClick={() => input.setSelectedCellMode('diff')}
+                  >
+                    Diff
+                  </button>
+                  <button
+                    className={input.selectedCellMode === 'original' ? 'cell-panel-tab active' : 'cell-panel-tab'}
+                    type="button"
+                    role="tab"
+                    aria-selected={input.selectedCellMode === 'original'}
+                    onClick={() => input.setSelectedCellMode('original')}
+                  >
+                    Original
+                  </button>
+                  <button
+                    className={input.selectedCellMode === 'draft' ? 'cell-panel-tab active' : 'cell-panel-tab'}
+                    type="button"
+                    role="tab"
+                    aria-selected={input.selectedCellMode === 'draft'}
+                    onClick={() => input.setSelectedCellMode('draft')}
+                  >
+                    Draft
+                  </button>
+                </div>
+                {input.selectedCellMode === 'original' ? (
+                  <TextCodeMirror
+                    value={input.selectedOriginalValue}
+                    ariaLabel="Original cell value"
+                    readOnly
+                    height="12rem"
+                  />
+                ) : null}
+                {input.selectedCellMode === 'draft' ? (
+                  <TextCodeMirror
+                    value={input.selectedDraftValue}
+                    ariaLabel="Draft cell value"
+                    readOnly
+                    height="12rem"
+                  />
+                ) : null}
+                {input.selectedCellMode === 'diff' ? (
+                  <TextDiffCodeMirror
+                    original={input.selectedOriginalValue}
+                    draft={input.selectedDraftValue}
+                    ariaLabel="Diff cell value"
+                  />
+                ) : null}
+              </div>
+            ) : (
+              <TextCodeMirror value={input.selectedDraftValue} ariaLabel="Cell value" readOnly height="12rem" />
+            )}
+          </div>
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
+  );
 }
 
 function isDirtyDataCell(

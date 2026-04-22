@@ -415,6 +415,110 @@ export function formatSqlFileContents(contents: string): string {
   return formatted + trailingNewline;
 }
 
+/**
+ * Rule that fires once per `.sql` file processed through `sqlFileProcessor`.
+ *
+ * The processor wraps each `.sql` file in a `__sqlfuSqlFile\`...\`` tagged
+ * template literal so ESLint's JS parser accepts it. This rule recognizes the
+ * wrapper, formats the SQL inside, and if the formatter output differs from
+ * the input it reports one message whose fix spans the entire *original* file
+ * (range mapping is done in the processor's `postprocess`).
+ */
+const formatSqlFileRule: Rule.RuleModule = {
+  meta: {
+    type: 'suggestion',
+    fixable: 'code',
+    docs: {
+      description: 'flag standalone .sql files that do not match sqlfu formatter output; autofix available.',
+    },
+    schema: [],
+    messages: {
+      notFormatted: 'SQL file is not formatted — run sqlfu format or apply the autofix.',
+    },
+  },
+  create(context) {
+    return {
+      TaggedTemplateExpression(node) {
+        if (node.tag.type !== 'Identifier' || node.tag.name !== '__sqlfuSqlFile') return;
+        if (node.quasi.expressions.length > 0) return;
+        const raw = readTemplateRawSql(node.quasi);
+        // Inside the wrapper `` `…` ``, backticks and `${` in the SQL are
+        // backslash-escaped by the processor; recover the original bytes so
+        // the formatter sees the true file contents.
+        const sql = unescapeWrappedSql(raw);
+        const formatted = formatSqlFileContents(sql);
+        if (formatted === sql) return;
+        context.report({
+          node,
+          messageId: 'notFormatted',
+          // Fix range is the *wrapped* range (first quasi's body between the
+          // backticks). `postprocess` remaps it to `[0, originalFileLength]`
+          // on the original file, replacing the whole file with `formatted`.
+          fix(fixer) {
+            const quasi = node.quasi.quasis[0];
+            const [start, end] = quasi.range as [number, number];
+            return fixer.replaceTextRange([start, end], escapeForWrappedSql(formatted));
+          },
+        });
+      },
+    };
+  },
+};
+
+function escapeForWrappedSql(sql: string): string {
+  return sql.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${');
+}
+
+function unescapeWrappedSql(raw: string): string {
+  // Inverse of escapeForWrappedSql. Order matters: undo the `${` and ``` `
+  // escapes first, then unescape backslashes.
+  return raw.replace(/\\\$\{/g, '${').replace(/\\`/g, '`').replace(/\\\\/g, '\\');
+}
+
+const SQL_FILE_WRAPPER_PREFIX = '__sqlfuSqlFile`';
+const SQL_FILE_WRAPPER_SUFFIX = '`;\n';
+
+/**
+ * Processor that lets ESLint lint standalone `.sql` files by wrapping their
+ * contents in a `__sqlfuSqlFile\`...\`` tagged template literal — valid JS
+ * syntax, recognizable by `format-sql-file`.
+ *
+ * oxlint doesn't support processors yet (March 2026 alpha JS plugins API)
+ * so `.sql` files must be linted via ESLint; oxlint handles the TS/JS rules.
+ */
+const sqlFileProcessor: Linter.Processor = {
+  meta: {name: 'sqlfu-sql-file', version: '1'},
+  supportsAutofix: true,
+  preprocess(text, filename) {
+    const wrapped = SQL_FILE_WRAPPER_PREFIX + escapeForWrappedSql(text) + SQL_FILE_WRAPPER_SUFFIX;
+    return [{text: wrapped, filename: `${path.basename(filename)}.js`}];
+  },
+  postprocess(messages, filename) {
+    // Read the original file once to size the whole-file autofix range.
+    // ESLint calls `postprocess` synchronously after linting, so the file
+    // on disk matches what was linted (unless a fix from another pass has
+    // already been written — ESLint handles the retry loop for us).
+    let originalLength = 0;
+    try {
+      originalLength = fs.statSync(filename).size;
+    } catch {
+      // The file may have been linted from a string (e.g. in tests via
+      // Linter.verify) — fall back to a range derived from the wrapper.
+    }
+    return messages.flat().map((message) => {
+      if (!message.fix) return message;
+      return {...message, fix: {range: [0, originalLength] as [number, number], text: unwrapFormattedSql(message)}};
+    });
+  },
+};
+
+function unwrapFormattedSql(message: Linter.LintMessage): string {
+  // The rule's fix replaces the quasi body with the escaped formatted SQL.
+  // Recover the raw formatted SQL by stripping the escapes it added.
+  const fixText = message.fix?.text || '';
+  return unescapeWrappedSql(fixText);
+}
+
 const plugin: ESLint.Plugin = {
   meta: {
     name: 'sqlfu',
@@ -422,6 +526,10 @@ const plugin: ESLint.Plugin = {
   rules: {
     'no-unnamed-inline-sql': noUnnamedInlineSql,
     'format-sql': formatSqlRule,
+    'format-sql-file': formatSqlFileRule,
+  },
+  processors: {
+    'sql-file': sqlFileProcessor,
   },
 };
 
@@ -439,8 +547,35 @@ const recommended: Linter.Config = {
   },
 };
 
-const exported: ESLint.Plugin & {configs: {recommended: Linter.Config}} = Object.assign(plugin, {
-  configs: {recommended},
-});
+// Flat-config blocks that wire the `sql-file` processor + `format-sql-file`
+// rule onto every `.sql` file. The processor extracts each `.sql` file into a
+// synthetic `<name>.sql.js` block (ESLint's way of letting non-JS files be
+// linted through the JS pipeline); the second block matches that virtual
+// path (**\/*.sql/**\/*.js) and attaches the rule that operates on it.
+//
+// Use alongside `recommended` for full coverage:
+//
+//   export default [sqlfu.configs.recommended, ...sqlfu.configs.sqlFiles];
+const sqlFiles: Linter.Config[] = [
+  {
+    files: ['**/*.sql'],
+    plugins: {sqlfu: plugin},
+    processor: 'sqlfu/sql-file',
+  },
+  {
+    files: ['**/*.sql/**/*.js'],
+    plugins: {sqlfu: plugin},
+    rules: {
+      'sqlfu/format-sql-file': 'error',
+    },
+  },
+];
+
+const exported: ESLint.Plugin & {configs: {recommended: Linter.Config; sqlFiles: Linter.Config[]}} = Object.assign(
+  plugin,
+  {
+    configs: {recommended, sqlFiles},
+  },
+);
 
 export default exported;

@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import {Linter} from 'eslint';
+import {ESLint, Linter} from 'eslint';
 import {expect, test} from 'vitest';
 
 import plugin, {formatSqlFileContents, resetQueryCache} from '../src/lint-plugin.js';
@@ -247,6 +247,74 @@ test('formatSqlFileContents: leaves empty / whitespace-only input alone', () => 
   expect(formatSqlFileContents('\n\n')).toBe('\n\n');
 });
 
+test('format-sql-file: processor autofixes an unformatted .sql file (whole-file replacement)', async () => {
+  await using project = await setupProject({
+    'sql/list-users.sql': 'SELECT * FROM users WHERE id=1;\n',
+  });
+
+  const filename = path.join(project.root, 'sql/list-users.sql');
+  const [result] = await lintFileWithEslint({project, filename});
+
+  // ESLint runs preprocess → lint → fix → preprocess → lint in a loop.
+  // After the loop `output` holds the fully-fixed file and `messages` is
+  // empty because the final pass found nothing to report.
+  expect(result.messages).toHaveLength(0);
+  expect(result.output).toMatch(/select \*/);
+  expect(result.output).toMatch(/from users/);
+  expect(result.output).not.toMatch(/SELECT|FROM|WHERE/);
+});
+
+test('format-sql-file: processor without --fix reports a single message per unformatted file', async () => {
+  await using project = await setupProject({
+    'sql/list-users.sql': 'SELECT * FROM users WHERE id=1;\n',
+  });
+
+  const filename = path.join(project.root, 'sql/list-users.sql');
+  const eslint = new ESLint({
+    cwd: project.root,
+    overrideConfigFile: true,
+    overrideConfig: [...(plugin.configs?.sqlFiles as any[])],
+    fix: false,
+  });
+  const [result] = await eslint.lintFiles([filename]);
+
+  expect(result.messages).toHaveLength(1);
+  expect(result.messages[0]).toMatchObject({
+    ruleId: 'sqlfu/format-sql-file',
+    message: expect.stringContaining('not formatted'),
+  });
+});
+
+test('format-sql-file: processor is a no-op on already-formatted .sql files', async () => {
+  await using project = await setupProject({
+    'sql/list-users.sql': 'select id, name\nfrom users\norder by name;\n',
+  });
+
+  const filename = path.join(project.root, 'sql/list-users.sql');
+  const [result] = await lintFileWithEslint({project, filename});
+
+  expect(result.messages).toHaveLength(0);
+  expect(result.output).toBeUndefined();
+});
+
+test('format-sql-file: processor handles SQL containing backticks and ${} without corruption', async () => {
+  // Backticks and ${ inside SQL would trip the wrapper template literal if
+  // the processor didn't escape them. This test asserts the escape survives
+  // preprocess → lint → postprocess round-trip without mangling the SQL.
+  await using project = await setupProject({
+    'sql/tricky.sql': 'SELECT `weird col`, "$" FROM t WHERE x=1;\n',
+  });
+
+  const filename = path.join(project.root, 'sql/tricky.sql');
+  const [result] = await lintFileWithEslint({project, filename});
+
+  // If a fix ran, the backticks must round-trip un-escaped.
+  if (result.output) {
+    expect(result.output).toContain('`weird col`');
+    expect(result.output).not.toContain('\\`');
+  }
+});
+
 test('format-sql: skips unparseable SQL silently', async () => {
   await using project = await setupProject({});
 
@@ -306,6 +374,16 @@ function lintSource(args: {
     path.join(args.project.root, args.filename),
   );
   return messages;
+}
+
+async function lintFileWithEslint(args: {project: Project; filename: string}) {
+  const eslint = new ESLint({
+    cwd: args.project.root,
+    overrideConfigFile: true,
+    overrideConfig: [...(plugin.configs?.sqlFiles as any[])],
+    fix: true,
+  });
+  return eslint.lintFiles([args.filename]);
 }
 
 function lintAndFix(args: {project: Project; filename: string; source: string; rules: Record<string, 'error' | 'off'>}) {

@@ -17,9 +17,9 @@ It is built around a simple idea: SQL should be the source language for schema, 
   - [Diff Engine](#diff-engine)
   - [Type Generator](#type-generator)
   - [Formatter](#formatter)
-  - [Observability](#observability)
   - [UI](#ui)
-  - [Agent Skill](#agent-skill)
+  - [ESLint rule](#eslint-rule)
+  - [Agent skill](#agent-skill)
 - [Quick Start](#quick-start)
   - [Install](#install)
   - [Minimal Setup](#minimal-setup)
@@ -165,7 +165,42 @@ No peer dependencies on OpenTelemetry or Sentry. `TracerLike` is structural; hoo
 
 `sqlfu` also has a UI package for working with the project interactively. It sits on top of the same SQL-first model rather than inventing a separate one.
 
-### Agent Skill
+### Lint plugin
+
+`sqlfu` ships a lint plugin as a sub-export (`sqlfu/lint-plugin`). It runs under ESLint (flat config) on both TS/JS source (inline SQL templates) and standalone `.sql` files (via an ESLint processor):
+
+- **`sqlfu/query-naming`** — enforces that SQL reaching the client has a name. Today it flags inline SQL passed to `client.all` / `client.run` / `client.iterate` / `` client.sql`...` `` when the normalized text matches a checked-in `.sql` file under your project's `queries` directory. sqlfu's model is `SQL First`: your filename is your query's identity, so an inline duplicate loses the name, generated types, and observability metadata. The rule name is neutral by design — expect it to grow to cover other "unnamed query" cases later.
+- **`sqlfu/format-sql`** — flags SQL that does not match sqlfu's formatter output. Covers both inline SQL template literals (in TS/JS) and whole `.sql` files on disk (via the `sqlfu/sql` processor). `eslint --fix '**/*.sql'` reformats files in place; the same rule autofixes inline template bodies.
+
+Wire it into ESLint flat config:
+
+```js
+// eslint.config.js
+import sqlfu from 'sqlfu/lint-plugin';
+
+export default [
+  ...sqlfu.configs.recommended, // inline-SQL rules on TS/JS + format-sql on .sql files (via the sql processor)
+];
+```
+
+Or wire the rules manually:
+
+```js
+// eslint.config.js
+import sqlfu from 'sqlfu/lint-plugin';
+
+export default [
+  {
+    plugins: {sqlfu},
+    rules: {
+      'sqlfu/query-naming': 'error',
+      'sqlfu/format-sql': 'error',
+    },
+  },
+];
+```
+
+### Agent skill
 
 `sqlfu` ships an agent skill at [`skills/using-sqlfu`](../../skills/using-sqlfu/SKILL.md). It teaches an agent the project's source-of-truth files, the schema-change workflow, the query workflow, and the command reference, so an agent dropped into a sqlfu repo does not hand-author migrations or invent old config field names.
 

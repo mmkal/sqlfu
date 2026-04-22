@@ -20,17 +20,18 @@
     "typecheck": "pnpm --filter sqlfu typecheck && pnpm --filter @sqlfu/ui typecheck",
     "generate": "pnpm --filter sqlfu generate",
     "cli": "pnpm --filter sqlfu cli",
-    "lint": "oxlint",
-    "lint:fix": "oxlint --fix",
+    "lint": "eslint .",
+    "lint:fix": "eslint --fix .",
     "format": "oxfmt .",
     "format:check": "oxfmt --check ."
   },
   "devDependencies": {
     "alchemy": "^0.91.2",
+    "eslint": "^9.39.4",
     "oxfmt": "^0.45.0",
-    "oxlint": "^1.60.0",
     "simple-git-hooks": "^2.13.1",
-    "tsx": "^4.21.0"
+    "tsx": "^4.21.0",
+    "typescript-eslint": "^8.59.0"
   },
   "simple-git-hooks": {
     "pre-commit": "pnpm sync:root-readme:pre-commit"

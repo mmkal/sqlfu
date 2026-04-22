@@ -1,42 +1,41 @@
-CREATE TABLE posts (
-  id INTEGER PRIMARY KEY,
-  slug TEXT NOT NULL UNIQUE,
-  title TEXT NOT NULL,
-  body TEXT NOT NULL,
-  published_at TEXT,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+create table posts (
+  id integer primary key,
+  slug text not null unique,
+  title text not null,
+  body text not null,
+  published_at text,
+  created_at text not null default current_timestamp,
+  updated_at text not null default current_timestamp
 );
 
-CREATE TABLE post_events (
-  id INTEGER PRIMARY KEY,
-  post_id INTEGER NOT NULL,
-  kind TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (post_id) REFERENCES posts(id)
+create table post_events (
+  id integer primary key,
+  post_id integer not null,
+  kind text not null,
+  created_at text not null default current_timestamp,
+  foreign key (post_id) references posts (id)
 );
 
-CREATE VIEW post_summaries AS
-SELECT
-  id,
-  slug,
-  title,
-  published_at,
-  substr(body, 1, 160) AS excerpt
-FROM posts;
+create view post_summaries as
+select id, slug, title, published_at, substr(body, 1, 160) as excerpt
+from posts;
 
-CREATE VIRTUAL TABLE posts_fts USING fts5(
-  title,
-  body
-);
+create virtual table posts_fts using fts5 (title, body);
 
-CREATE TRIGGER posts_ai AFTER INSERT ON posts BEGIN
-  INSERT INTO post_events (post_id, kind)
-  VALUES (new.id, 'created');
-END;
+create trigger posts_ai after insert on posts begin
+insert into
+  post_events (post_id, kind)
+values
+  (new.id, 'created');
 
-CREATE TRIGGER posts_publish_au AFTER UPDATE OF published_at ON posts
-WHEN old.published_at IS NULL AND new.published_at IS NOT NULL BEGIN
-  INSERT INTO post_events (post_id, kind)
-  VALUES (new.id, 'published');
-END;
+end;
+
+create trigger posts_publish_au after
+update of published_at on posts when old.published_at is null
+and new.published_at is not null begin
+insert into
+  post_events (post_id, kind)
+values
+  (new.id, 'published');
+
+end;

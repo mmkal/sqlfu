@@ -19,6 +19,7 @@
     "./client": "./src/client.ts",
     "./api": "./src/api.ts",
     "./cli": "./src/cli.ts",
+    "./lint-plugin": "./src/lint-plugin.ts",
     "./ui": {
       "browser": "./src/ui/browser.ts",
       "default": "./src/ui/index.ts"
@@ -46,6 +47,10 @@
       "./cli": {
         "types": "./dist/cli.d.ts",
         "default": "./dist/cli.js"
+      },
+      "./lint-plugin": {
+        "types": "./dist/lint-plugin.d.ts",
+        "default": "./dist/lint-plugin.js"
       },
       "./ui": {
         "types": "./dist/ui/index.d.ts",
@@ -97,6 +102,8 @@
     "@tursodatabase/database": "^0.5.3",
     "@tursodatabase/serverless": "^1.1.0",
     "@tursodatabase/sync": "^0.5.3",
+    "@types/eslint": "^9.6.1",
+    "@types/estree": "^1.0.8",
     "@types/node": "^24.5.2",
     "@typescript/native-preview": "^7.0.0-dev.20260414.1",
     "arktype": "^2.2.0",
@@ -105,6 +112,7 @@
     "devalue": "^5.7.1",
     "dotenv": "^17.4.2",
     "esbuild": "^0.25.0",
+    "eslint": "^9.36.0",
     "execa": "^9.6.1",
     "hono": "^4.12.14",
     "hot-shots": "^14.3.1",

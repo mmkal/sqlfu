@@ -16,7 +16,6 @@ import {test, expect} from 'vitest';
 // TypeScript doesn't descend into the vendored typesql tree (which has
 // upstream loose types). See `packages/sqlfu/CLAUDE.md` for background.
 const shimModSpec = new URL('../../src/vendor/typesql/sqlite-query-analyzer/antlr-shim.js', import.meta.url).href;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const shim: any = await import(shimModSpec);
 const wrapSqlStmt = shim.wrapSqlStmt;
 const shimParseResult = shim.shimParseResult;

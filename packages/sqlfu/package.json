@@ -20,6 +20,7 @@
     "./api": "./src/api.ts",
     "./cli": "./src/cli.ts",
     "./lint-plugin": "./src/lint-plugin.ts",
+    "./outbox": "./src/outbox/index.ts",
     "./ui": {
       "browser": "./src/ui/browser.ts",
       "default": "./src/ui/index.ts"
@@ -51,6 +52,10 @@
       "./lint-plugin": {
         "types": "./dist/lint-plugin.d.ts",
         "default": "./dist/lint-plugin.js"
+      },
+      "./outbox": {
+        "types": "./dist/outbox/index.d.ts",
+        "default": "./dist/outbox/index.js"
       },
       "./ui": {
         "types": "./dist/ui/index.d.ts",

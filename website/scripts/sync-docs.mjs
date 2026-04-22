@@ -63,8 +63,13 @@ const docs = [
     description:
       'How to handle optional filters and other runtime-composition shapes in a SQL-first project — with IS NULL patterns, JSON lists, and honest advice on when to reach for a query builder instead.',
   },
-  // outbox entry belongs here (after dynamic-queries, before schema-diff-model).
-  // It is supplied by PR #41 (branch: outbox). Conflict expected on merge.
+  {
+    slug: 'outbox',
+    title: 'Outbox',
+    sourcePath: path.join(repoRoot, 'packages', 'sqlfu', 'docs', 'outbox.md'),
+    description:
+      'Transactional-outbox / job-queue built on sqlfu. Fan-out, retry, delayed dispatch, crash recovery, causation chains.',
+  },
   {
     slug: 'schema-diff-model',
     title: 'Schema Diff Model',

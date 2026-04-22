@@ -83,14 +83,10 @@
     "zod": "^4.3.6"
   },
   "peerDependencies": {
-    "@sqlfu/ui": "workspace:*",
-    "eslint": ">=8"
+    "@sqlfu/ui": "workspace:*"
   },
   "peerDependenciesMeta": {
     "@sqlfu/ui": {
-      "optional": true
-    },
-    "eslint": {
       "optional": true
     }
   },

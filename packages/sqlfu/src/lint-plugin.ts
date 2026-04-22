@@ -260,10 +260,6 @@ const queryNaming: Rule.RuleModule = {
         additionalProperties: false,
       },
     ],
-    messages: {
-      useNamed:
-        "inline SQL matches '{{relativePath}}'. Import '{{functionName}}' from the generated wrapper so the query keeps its name, types, and observability metadata.",
-    },
   },
   create(context) {
     const options = (context.options[0] || {}) as {
@@ -292,11 +288,7 @@ const queryNaming: Rule.RuleModule = {
         if (!match) return;
         context.report({
           node: template,
-          messageId: 'useNamed',
-          data: {
-            relativePath: match.relativePath,
-            functionName: match.functionName,
-          },
+          message: `inline SQL matches '${match.relativePath}'. Import '${match.functionName}' from the generated wrapper so the query keeps its name, types, and observability metadata.`,
         });
       },
     });

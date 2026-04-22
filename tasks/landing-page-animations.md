@@ -5,22 +5,38 @@ size: medium
 
 ## Status
 
-In progress on branch `landing-page-animations`. Scaffold + animations 1-3
-built, alternatives A-D scaffolded. Animation 1 rendered to mp4/webm and
-wired into the landing page. Alternatives live behind
-`?animation_alternative=a|b|c|d`.
+Pivoted (2026-04-22): three-parallel-cards was too small to read, so the
+default animated treatment is now a SINGLE large stage that plays the
+three beats in sequence. The default landing page ships NO animations —
+they are opt-in behind `?animation=<name>`.
 
 What's done:
+- Default landing page restored to the original static three-card value
+  panels (same as main). No `<video>` tags in the default HTML —
+  production-safe.
+- Query param renamed: `animation_alternative` → `animation`. Pre-alpha,
+  no backwards-compat shim.
+- New default sequential animation at `?animation=sequential` —
+  `website/animations/src/anim-sequential.tsx`, rendered to
+  `website/public/assets/animations/anim-sequential.{mp4,webm,poster.jpg}`
+  (2.2 MB mp4 / 936 KB webm / 66 KB poster).
+- Alternative three-panel treatments kept: `?animation=a|b|c|d` still
+  works, injecting `<video>` into each value-panel on the fly.
 - Remotion 4.0.448 project under `website/animations/`
-- Animations 1-3 composed
-- Alternatives A-D composed (some are stubs, clearly labeled)
-- Landing page wired: `<video>` per panel with prefers-reduced-motion CSS
-- Real fixtures: `sqlfu generate` output for animation 2, `sqlfu draft` SQL for animation 3
+- Real fixtures: `sqlfu generate` output for beat 2, `sqlfu draft` SQL
+  for beat 3 (no typing animation on either; both are generator output
+  and appear fully formed).
 
-What's pending (see "Implementation notes" at the bottom):
-- Pacing review with user (could not render + eyeball solo at bedtime)
-- Final render of all 7 animations (animation 1 rendered; others WIP)
-- Lighthouse / mobile eyeball
+What's pending:
+- Pacing review with user — `anim-sequential` is one 28s composition,
+  watchable at `?animation=sequential`. Rendered stills in
+  `/tmp/ignoreme-anim-sequential-f*.jpg` during iteration.
+- Lighthouse / mobile eyeball — not blocking, default page ships no
+  video so the default perf score is unaffected.
+- Decide whether to keep the alt-A/B/C/D compositions long-term. They
+  are still callable but no longer the default treatment; if you don't
+  want to review them, we can delete `alternatives.tsx` + the
+  `alt-*-*.{mp4,webm,poster.jpg}` assets in a follow-up.
 
 ## Goal
 
@@ -130,7 +146,7 @@ still review and commit — this is a drafting tool, not magic.
 
 ## Alternatives
 
-It's very likely that you won't be able to use the above beat sheets to produce anything good. After you're done, come up with at least four alternative combinations of cards. There can of course be overlap, but if there's anything you think I *might* prefer as a combination-of-cards, the best way for me to figure that out is to SEE IT! So, after you're done with Animations 1-3, do the alternatives, and make the alternatives available via a query param or something (no need for a link or button, but make it so if I know about them I can do `animation_alternative=a` or `animation_alternative=b` or `animation_alternative=c` or `animation_alternative=d`).
+It's very likely that you won't be able to use the above beat sheets to produce anything good. After you're done, come up with at least four alternative combinations of cards. There can of course be overlap, but if there's anything you think I *might* prefer as a combination-of-cards, the best way for me to figure that out is to SEE IT! So, after you're done with Animations 1-3, do the alternatives, and make the alternatives available via a query param or something (no need for a link or button, but make it so if I know about them I can do `animation=a` or `animation=b` or `animation=c` or `animation=d`).
 
 ## Copy direction for the cards
 
@@ -199,10 +215,20 @@ doing the heavy lifting.
 - [x] Alternative D for animations 1-3 _Playful springs / bouncy motion, rendered (but note: ~2 MB mp4 each because of continuous motion)._
 - [ ] Review pacing end-to-end with the user before rendering finals — pacing is where these clips live or die. _Cannot self-review for pacing overnight; flagged in PR body as the #1 thing to eyeball._
 - [x] Render webm + mp4 + poster frame for each. _All 15 compositions rendered to `website/src/assets/animations/`._
-- [x] Wire three `<video>` panels into `renderLandingPage` in `website/build.mjs`; update the headings/copy per the direction above. _Headings tightened to "Schema lives in SQL.", "Types follow SQL.", "Migrations draft themselves."_
-- [x] `prefers-reduced-motion` fallback verified. _CSS swaps `.value-video` for `.value-video-fallback` at the poster frame; rendered poster is the final held frame, not a blank leader._
-- [ ] Eyeball on mobile — ensure videos don't blow past the card width and that autoplay works on iOS Safari (requires `playsinline` and `muted`). _Videos emit `playsinline muted autoplay loop preload=metadata`, poster set — but haven't actually loaded on-device._
-- [ ] Lighthouse quick check — we don't want these clips tanking the landing page's perf score. _Deferred; see "Implementation notes" for weights._
+- [x] ~~Wire three `<video>` panels into `renderLandingPage` in `website/build.mjs`; update the headings/copy per the direction above.~~ _Superseded by 2026-04-22 pivot: default landing page is the original static three-card layout with no videos. Videos only inject when `?animation=<name>` is set (see `website/src/pages/index.astro`). Original headings restored; no build.mjs any more since the website was migrated to Astro — the landing lives at `website/src/pages/index.astro`._
+- [x] `prefers-reduced-motion` fallback verified. _CSS covers both `.value-media .value-video` (three-card alternatives) and `.animation-stage .animation-stage-video` (sequential full-stage); in both cases the poster img fades in and the video is hidden when the user prefers reduced motion._
+- [ ] Eyeball on mobile — ensure the sequential stage reads on a narrow viewport and that autoplay works on iOS Safari (requires `playsinline` and `muted`). _Both are set on the injected `<video>` tag; default landing page has no video so there is nothing to eyeball on mobile for the default experience._
+- [ ] Lighthouse quick check — deferred; default landing page ships no video so the default perf score is unaffected.
+
+**Pivot (2026-04-22): hide animations behind query param, build sequential default**
+
+- [x] Restore default landing page to the original static three-card value panels (same as main). _`website/src/pages/index.astro` diff vs. main is now additive only — `data-animation-key` attributes, CSS for animation surfaces, and the `?animation=` activation script._
+- [x] Rename query param `animation_alternative` → `animation`. _Done in the script and in this task file. Pre-alpha, no shim._
+- [x] Build a single-stage sequential composition that plays all three beats end-to-end. _`website/animations/src/anim-sequential.tsx`, registered in `src/Root.tsx` as `anim-sequential`, rendered to `anim-sequential.{mp4,webm,poster.jpg}`. Duration 28s at 30fps, 1280x720._
+- [x] Wire `?animation=sequential` to the new single-stage composition. _The inline script on the landing page replaces the three-card grid wholesale with a `.animation-stage` section when the param matches._
+- [x] Keep `?animation=a|b|c|d` working against the original alternatives. _Same script injects a `.value-media` inside each value-panel with the matching `alt-<letter>-<key>` video sources._
+- [x] Verify default landing page has no `<video>` elements (only in JS template strings). _Built HTML checked: the 3 `<video` matches in `dist/index.html` all live inside the `<script>` tag; the rendered DOM has none until the script runs with the right param._
+- [ ] Decide whether to keep or drop alt-A/B/C/D long-term. _Still callable but no longer the default treatment; if you want them gone, delete `alternatives.tsx` + the matching assets in a follow-up._
 
 ## Open questions (resolved during implementation)
 
@@ -256,12 +282,13 @@ doing the heavy lifting.
 
 Worked in worktree `landing-page-animations` on 2026-04-19 at night.
 
-**What was actually rendered:** All 15 compositions were rendered to
+**What was actually rendered:** All compositions were rendered to
 mp4 + webm + poster jpg and checked in under
-`website/src/assets/animations/`. File sizes:
+`website/public/assets/animations/`. File sizes:
 
 | composition | mp4 | webm |
 |-|-|-|
+| anim-sequential (default) | 2.2 MB | 936 KB |
 | anim-1-schema | 545 KB | 122 KB |
 | anim-2-generate | ~830 KB | ~340 KB |
 | anim-3-draft | 639 KB | 210 KB |
@@ -272,7 +299,7 @@ mp4 + webm + poster jpg and checked in under
 
 The alt-D ("playful") set is oversized because of continuous sinusoidal
 motion. Don't ship those as default — they're behind the
-`?animation_alternative=d` query param so they only ever load when
+`?animation=d` query param so they only ever load when
 specifically requested.
 
 **Fixtures provenance:**
@@ -295,6 +322,50 @@ Both were captured on 2026-04-19 on current main commit; see
   user-supplied code.
 - Alt-D's spring motion renders huge; drop frame rate, use CBR, or
   prune motion if we ever pick it.
+
+### 2026-04-22 pivot log
+
+Resumed in the same worktree on 2026-04-22. Two asks, both delivered:
+
+1. **Hide animations behind a query param.** The default landing page
+   now ships the original static three-card value panels (same as
+   main). No `<video>` tags in the default HTML; the `?animation=...`
+   inline script is the only thing that injects them. Verified by
+   building `website` and `curl`-ing `/` vs. `/?animation=sequential`
+   — identical HTML, the difference is entirely client-side.
+2. **Sequential animation as the new default animated treatment.** One
+   `1280x720` Remotion composition that plays all three beats in
+   sequence on a single stage (28s total). The key rule: **no typing
+   animation for generator output**. The `.sql.ts` file in beat 2 and
+   the `add_email.sql` migration in beat 3 both fade in fully formed,
+   which honestly reflects how `sqlfu generate` / `sqlfu draft`
+   actually produce them. Only the human-authored `.sql` edits in
+   beats 1 and 3 get a typing animation.
+
+**Naming decision:** called the new default `sequential`. Considered
+`main` / `story` / `tour`; `sequential` reads as descriptive rather
+than promotional, and pairs naturally with the single-letter
+alternatives (`?animation=sequential` vs. `?animation=a`).
+
+**Fate of alt-A/B/C/D:** kept, still callable via `?animation=a|b|c|d`.
+They are no longer the default treatment, so reviewing them is
+lower-priority — if you don't want to spend time on them, delete
+`alternatives.tsx` + the `alt-*-*.*` assets in a follow-up. The
+three-card alternatives layout is also kept as-is in case you prefer
+one of them over the sequential stage.
+
+**Files touched in the pivot:**
+- `website/src/pages/index.astro` — revert to static value panels +
+  add `?animation=` activation script.
+- `website/src/styles/landing.css` — additive rules for
+  `.animation-stage` (sequential) alongside existing `.value-media`
+  (alternatives). Both get prefers-reduced-motion fallbacks.
+- `website/animations/src/anim-sequential.tsx` — new composition.
+- `website/animations/src/Root.tsx` — register `anim-sequential`.
+- `website/animations/scripts/sample-stills.ts` — small iteration
+  helper that renders a comp at specific frames to `/tmp/ignoreme-*`.
+- `website/public/assets/animations/anim-sequential.{mp4,webm,poster.jpg}`
+  — rendered output.
 
 ### References worth looking at
 

@@ -631,33 +631,6 @@ test('relation rows can discard dirty cell changes', async ({page}) => {
   await expect(page.locator('.reactgrid [data-cell-rowidx="1"][data-cell-colidx="3"]')).not.toHaveClass(/dirty/);
 });
 
-test('relation grid supports undo and redo controls', async ({page}) => {
-  await page.goto('/#table/posts');
-
-  const titleCell = page.locator('.reactgrid [data-cell-rowidx="1"][data-cell-colidx="3"]');
-  await titleCell.click();
-  await page.keyboard.press('Enter');
-  const editor = page.locator('.rg-celleditor input');
-  await expect(editor).toBeVisible();
-  await editor.press(`${process.platform === 'darwin' ? 'Meta' : 'Control'}+A`);
-  await editor.press('Backspace');
-  await editor.pressSequentially('Hello World Undo');
-  await editor.press('Enter');
-  await page.locator('.reactgrid [data-cell-rowidx="2"][data-cell-colidx="3"]').click();
-  await titleCell.click();
-
-  await expect(titleCell).toContainText('Hello World Undo');
-  await expect(page.getByRole('button', {name: 'Save changes'})).toBeVisible();
-
-  await page.getByRole('button', {name: 'Undo'}).click();
-  await expect(titleCell).not.toContainText('Undo');
-  await expect(page.getByRole('button', {name: 'Save changes'})).toHaveCount(0);
-
-  await page.getByRole('button', {name: 'Redo'}).click();
-  await expect(titleCell).toContainText('Hello World Undo');
-  await expect(page.getByRole('button', {name: 'Save changes'})).toBeVisible();
-});
-
 test('stale relation draft state is ignored when it does not match the fetched table shape', async ({page}) => {
   await page.addInitScript(() => {
     window.localStorage.setItem(

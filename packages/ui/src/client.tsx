@@ -1770,7 +1770,7 @@ function DataTable(input: {
     selectedCellDirty && selectedOriginalValue !== 'null' && selectedOriginalValue !== '';
   return (
     <div className="stack">
-      {input.toolbar ? (
+      {input.toolbar || input.showSelectedCellDetail ? (
         <div className="data-toolbar">
           {input.toolbar}
           {input.showSelectedCellDetail ? (
@@ -1965,10 +1965,6 @@ function CellDetailPopoverButton(input: {
       </Popover.Portal>
     </Popover.Root>
   );
-}
-
-function cloneTableRows(rows: Record<string, unknown>[]) {
-  return rows.map((row) => ({...row}));
 }
 
 function isDirtyDataCell(

@@ -8,10 +8,34 @@ test('default state produces a plain select-star with default limit', () => {
   expect(buildRelationQuery(state)).toBe(`select *\nfrom "posts"\nlimit ${DEFAULT_LIMIT}`);
 });
 
-test('hidden columns get commented out in the select list to keep recovery easy', () => {
+test('hidden trailing column gets commented out without a trailing comma', () => {
   const state = {...defaultRelationQueryState({tableName: 'posts', allColumns}), hiddenColumns: ['body']};
   expect(buildRelationQuery(state)).toBe(
     `select "id", "slug", "title", /* "body" */\nfrom "posts"\nlimit ${DEFAULT_LIMIT}`,
+  );
+});
+
+test('hidden middle column tucks its comma inside the comment so the SQL stays valid', () => {
+  const state = {...defaultRelationQueryState({tableName: 'posts', allColumns}), hiddenColumns: ['title']};
+  expect(buildRelationQuery(state)).toBe(
+    `select "id", "slug", /* "title", */ "body"\nfrom "posts"\nlimit ${DEFAULT_LIMIT}`,
+  );
+});
+
+test('hidden leading column still produces valid SQL', () => {
+  const state = {...defaultRelationQueryState({tableName: 'posts', allColumns}), hiddenColumns: ['id']};
+  expect(buildRelationQuery(state)).toBe(
+    `select /* "id", */ "slug", "title", "body"\nfrom "posts"\nlimit ${DEFAULT_LIMIT}`,
+  );
+});
+
+test('multiple adjacent hidden columns keep commas tucked inside their comments', () => {
+  const state = {
+    ...defaultRelationQueryState({tableName: 'posts', allColumns}),
+    hiddenColumns: ['slug', 'title'],
+  };
+  expect(buildRelationQuery(state)).toBe(
+    `select "id", /* "slug", */ /* "title", */ "body"\nfrom "posts"\nlimit ${DEFAULT_LIMIT}`,
   );
 });
 
@@ -135,6 +159,21 @@ test('column names with special characters are quoted safely in select and filte
   };
   expect(buildRelationQuery(state)).toBe(
     `select "weird""col", /* "ok" */\nfrom "t"\nwhere "weird""col" = 'v'\nlimit ${DEFAULT_LIMIT}`,
+  );
+});
+
+test('combined clauses with a hidden middle column stays syntactically valid', () => {
+  const state = {
+    tableName: 'posts',
+    allColumns,
+    hiddenColumns: ['title'],
+    filters: [{column: 'slug', operator: 'like' as const, value: 'hello%'}],
+    sort: {column: 'id', direction: 'desc' as const},
+    limit: 25,
+    offset: 0,
+  };
+  expect(buildRelationQuery(state)).toBe(
+    `select "id", "slug", /* "title", */ "body"\nfrom "posts"\nwhere "slug" like 'hello%'\norder by "id" desc\nlimit 25`,
   );
 });
 

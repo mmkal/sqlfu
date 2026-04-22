@@ -93,9 +93,17 @@ function buildSelectClause(state: RelationQueryState): string {
     return '*';
   }
   const hidden = new Set(state.hiddenColumns);
+  const lastIndex = state.allColumns.length - 1;
   return state.allColumns
-    .map((col) => (hidden.has(col) ? `/* ${quoteIdent(col)} */` : quoteIdent(col)))
-    .join(', ');
+    .map((col, index) => {
+      const isLast = index === lastIndex;
+      const ident = quoteIdent(col);
+      if (hidden.has(col)) {
+        return isLast ? `/* ${ident} */` : `/* ${ident}, */`;
+      }
+      return isLast ? ident : `${ident},`;
+    })
+    .join(' ');
 }
 
 function buildFilterClause(filter: RelationQueryFilter): string {

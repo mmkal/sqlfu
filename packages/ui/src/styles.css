@@ -1371,9 +1371,22 @@ form textarea {
 
 .rqp-toolbar {
   display: flex;
+  flex: 1;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.4rem;
+}
+
+.rqp-toolbar-divider {
+  display: inline-block;
+  width: 1px;
+  height: 1.25rem;
+  background: var(--line);
+  margin: 0 0.15rem;
+}
+
+.rqp-toolbar-spacer {
+  flex: 1 1 auto;
 }
 
 .rqp-pill-button {
@@ -1501,6 +1514,11 @@ form textarea {
 .rqp-popover-compact {
   min-width: 7rem;
   padding: 0.25rem;
+}
+
+.rqp-popover-wide {
+  min-width: 32rem;
+  max-width: min(48rem, calc(100vw - 2rem));
 }
 
 @keyframes rqp-popover-in {
@@ -1742,11 +1760,7 @@ form textarea {
   gap: 0.35rem;
 }
 
-/* Query editor accordion */
-
-.rqp-query-details {
-  margin-top: 0.25rem;
-}
+/* Query popover body */
 
 .rqp-query-body {
   display: flex;

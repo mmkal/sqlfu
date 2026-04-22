@@ -23,9 +23,18 @@ export type RelationQuerySqlResult = {
   mode?: string;
 };
 
+export type RelationRowEditing = {
+  editable: boolean;
+  dirty: boolean;
+  saving: boolean;
+  onSave: () => void;
+  onDiscard: () => void;
+};
+
 export type RelationQueryPanelProps = {
   relation: StudioRelation;
   runSql: (input: {sql: string}) => Promise<RelationQuerySqlResult>;
+  rowEditing?: RelationRowEditing;
   renderDefaultDataTable: (input: {toolbar: React.ReactNode}) => React.ReactNode;
   renderSqlDataTable: (input: {
     rows: Record<string, unknown>[];
@@ -46,10 +55,6 @@ export function RelationQueryPanel(input: RelationQueryPanelProps) {
   const [customSql, setCustomSql] = useLocalStorageState<string | null>(
     `sqlfu-ui/relation-query-custom/${relation.name}`,
     {defaultValue: null},
-  );
-  const [accordionOpen, setAccordionOpen] = useLocalStorageState<boolean>(
-    `sqlfu-ui/relation-query-open/${relation.name}`,
-    {defaultValue: false},
   );
 
   const safeState = reconcileState(state, relation.name, allColumns);
@@ -75,10 +80,9 @@ export function RelationQueryPanel(input: RelationQueryPanelProps) {
   const mutate = (updater: (previous: RelationQueryState) => RelationQueryState) => {
     if (!isStructured) setCustomSql(null);
     setState((previous) => updater(reconcileState(previous, relation.name, allColumns)));
-    if (!accordionOpen) setAccordionOpen(true);
   };
 
-  const handleSortClick = (column: string) => {
+  const handleSortToggle = (column: string) => {
     mutate((s) => {
       const current = s.sort?.column === column ? s.sort.direction : null;
       const next = current === null ? 'asc' : current === 'asc' ? 'desc' : null;
@@ -128,19 +132,25 @@ export function RelationQueryPanel(input: RelationQueryPanelProps) {
 
   const toolbar = (
     <RelationToolbar
+      relation={relation}
       allColumns={allColumns}
       state={safeState}
       isStructured={isStructured}
       isDefault={isDefault}
       activeFilterCount={activeFilterCount}
       visibleColumnCount={visibleColumnCount}
-      onSortToggle={handleSortClick}
+      effectiveSql={effectiveSql}
+      limitError={limitError}
+      simpleShapeMatch={simpleShapeMatch}
+      rowEditing={input.rowEditing}
+      onSortToggle={handleSortToggle}
       onSortClear={handleSortClear}
       onFilterApply={handleFilterApply}
       onFilterRemove={handleFilterRemove}
       onFilterClearAll={handleFilterClearAll}
       onColumnToggle={handleColumnToggle}
       onColumnsShowAll={handleColumnsShowAll}
+      onSqlChange={handleSqlChange}
     />
   );
 
@@ -154,12 +164,12 @@ export function RelationQueryPanel(input: RelationQueryPanelProps) {
         input.renderDefaultDataTable({toolbar})
       ) : runQuery.error ? (
         <>
-          <div className="rqp-standalone-toolbar">{toolbar}</div>
+          <div className="data-toolbar">{toolbar}</div>
           <div className="error-view">{String((runQuery.error as Error).message ?? runQuery.error)}</div>
         </>
       ) : runQuery.isFetching && rows.length === 0 ? (
         <>
-          <div className="rqp-standalone-toolbar">{toolbar}</div>
+          <div className="data-toolbar">{toolbar}</div>
           <p className="muted">Loading…</p>
         </>
       ) : (
@@ -191,49 +201,22 @@ export function RelationQueryPanel(input: RelationQueryPanelProps) {
           ) : null}
         </div>
       </div>
-
-      <details
-        className="card relation-details rqp-query-details"
-        open={accordionOpen || !isDefault}
-        onToggle={(event) => setAccordionOpen(event.currentTarget.open)}
-      >
-        <summary className="authority-card-summary" role="button">
-          <span className="card-title relation-details-title">Query</span>
-          <span className="accordion-chevron" aria-hidden="true">
-            ▾
-          </span>
-        </summary>
-        <div className="authority-card-body rqp-query-body">
-          <SqlCodeMirror
-            value={effectiveSql}
-            ariaLabel="Relation query editor"
-            relations={[relation]}
-            onChange={handleSqlChange}
-            height="7rem"
-          />
-          <div className="rqp-query-message" aria-live="polite">
-            {limitError ? (
-              <div className="error-view rqp-query-message-inner">{limitError}</div>
-            ) : !isStructured && !simpleShapeMatch ? (
-              <div className="info-callout rqp-query-message-inner">
-                Your query is no longer a simple <code>select … from {relation.name}</code>. Consider opening it in the{' '}
-                <a href="#sql">full SQL Runner</a> for more control.
-              </div>
-            ) : null}
-          </div>
-        </div>
-      </details>
     </div>
   );
 }
 
 function RelationToolbar(input: {
+  relation: StudioRelation;
   allColumns: string[];
   state: RelationQueryState;
   isStructured: boolean;
   isDefault: boolean;
   activeFilterCount: number;
   visibleColumnCount: number;
+  effectiveSql: string;
+  limitError: string | null;
+  simpleShapeMatch: boolean;
+  rowEditing: RelationRowEditing | undefined;
   onSortToggle: (column: string) => void;
   onSortClear: () => void;
   onFilterApply: (filter: RelationQueryFilter) => void;
@@ -241,8 +224,10 @@ function RelationToolbar(input: {
   onFilterClearAll: () => void;
   onColumnToggle: (column: string) => void;
   onColumnsShowAll: () => void;
+  onSqlChange: (value: string) => void;
 }) {
   const sortLabel = input.state.sort ? `${input.state.sort.column} ${input.state.sort.direction}` : null;
+  const dirty = input.rowEditing?.dirty ?? false;
   return (
     <div className="rqp-toolbar" role="toolbar" aria-label="Relation query toolbar">
       <Popover.Root>
@@ -326,6 +311,100 @@ function RelationToolbar(input: {
           </Popover.Content>
         </Popover.Portal>
       </Popover.Root>
+
+      <span className="rqp-toolbar-divider" aria-hidden="true" />
+
+      <Popover.Root>
+        <Popover.Trigger asChild>
+          <button
+            type="button"
+            className={`rqp-pill-button${!input.isDefault ? ' is-active' : ''}`}
+            aria-label="Query SQL"
+          >
+            <span className="rqp-pill-icon" aria-hidden="true">
+              ⟨⟩
+            </span>
+            <span>Query</span>
+          </button>
+        </Popover.Trigger>
+        <Popover.Portal>
+          <Popover.Content className="rqp-popover rqp-popover-wide" align="start" sideOffset={6}>
+            <div className="rqp-query-body">
+              <SqlCodeMirror
+                value={input.effectiveSql}
+                ariaLabel="Relation query editor"
+                relations={[input.relation]}
+                onChange={input.onSqlChange}
+                height="7rem"
+              />
+              <div className="rqp-query-message" aria-live="polite">
+                {input.limitError ? (
+                  <div className="error-view rqp-query-message-inner">{input.limitError}</div>
+                ) : !input.isStructured && !input.simpleShapeMatch ? (
+                  <div className="info-callout rqp-query-message-inner">
+                    Your query is no longer a simple <code>select … from {input.relation.name}</code>. Consider opening
+                    it in the <a href="#sql">full SQL Runner</a> for more control.
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </Popover.Content>
+        </Popover.Portal>
+      </Popover.Root>
+
+      <span className="rqp-toolbar-divider" aria-hidden="true" />
+
+      <Popover.Root>
+        <Popover.Trigger asChild>
+          <button
+            type="button"
+            className="rqp-pill-button"
+            aria-label="Table definition"
+            disabled={!input.relation.sql}
+          >
+            <span className="rqp-pill-icon" aria-hidden="true">
+              📐
+            </span>
+            <span>Definition</span>
+          </button>
+        </Popover.Trigger>
+        <Popover.Portal>
+          <Popover.Content className="rqp-popover rqp-popover-wide" align="start" sideOffset={6}>
+            <SqlCodeMirror
+              value={input.relation.sql ?? ''}
+              ariaLabel="Relation definition editor"
+              relations={[input.relation]}
+              onChange={() => {}}
+              readOnly
+              height="12rem"
+            />
+          </Popover.Content>
+        </Popover.Portal>
+      </Popover.Root>
+
+      {input.rowEditing?.editable && dirty ? (
+        <>
+          <span className="rqp-toolbar-spacer" />
+          <button
+            type="button"
+            className="rqp-pill-button primary"
+            onClick={input.rowEditing.onSave}
+            disabled={input.rowEditing.saving}
+            aria-label="Save changes"
+          >
+            {input.rowEditing.saving ? 'Saving…' : 'Save changes'}
+          </button>
+          <button
+            type="button"
+            className="rqp-pill-button"
+            onClick={input.rowEditing.onDiscard}
+            disabled={input.rowEditing.saving}
+            aria-label="Discard changes"
+          >
+            Discard
+          </button>
+        </>
+      ) : null}
     </div>
   );
 }
@@ -343,9 +422,11 @@ function FilterManager(input: {
   const requiresValue = operatorTakesValue(draftOperator);
   const applyDraft = () => {
     if (!draftColumn) return;
-    input.onApply(requiresValue
-      ? {column: draftColumn, operator: draftOperator, value: draftValue}
-      : {column: draftColumn, operator: draftOperator});
+    input.onApply(
+      requiresValue
+        ? {column: draftColumn, operator: draftOperator, value: draftValue}
+        : {column: draftColumn, operator: draftOperator},
+    );
     setDraftValue('');
   };
   return (
@@ -357,7 +438,9 @@ function FilterManager(input: {
               <code className="rqp-filter-summary">
                 <span className="rqp-filter-column">{filter.column}</span>
                 <span className="rqp-filter-op">{filter.operator}</span>
-                {operatorTakesValue(filter.operator) ? <span className="rqp-filter-value">{filter.value || '∅'}</span> : null}
+                {operatorTakesValue(filter.operator) ? (
+                  <span className="rqp-filter-value">{filter.value || '∅'}</span>
+                ) : null}
               </code>
               <button
                 type="button"
@@ -378,7 +461,11 @@ function FilterManager(input: {
       )}
       <div className="rqp-divider" />
       <div className="rqp-filter-draft">
-        <select aria-label="Filter column" value={draftColumn} onChange={(event) => setDraftColumn(event.currentTarget.value)}>
+        <select
+          aria-label="Filter column"
+          value={draftColumn}
+          onChange={(event) => setDraftColumn(event.currentTarget.value)}
+        >
           {input.allColumns.map((column) => (
             <option key={column} value={column}>
               {column}

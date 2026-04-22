@@ -1106,37 +1106,17 @@ function TablePanel(input: {relation: StudioRelation}) {
       </header>
 
       <section className="card">
-        <div className="card-title-row">
-          <div className="card-title">Data</div>
-          <div className="pill-row">
-            {rowsQuery.data.editable && rowsDirty ? (
-              <>
-                <button
-                  className="button primary"
-                  type="button"
-                  aria-label="Save changes"
-                  disabled={saveRowsMutation.isPending}
-                  onClick={handleSaveRows}
-                >
-                  {saveRowsMutation.isPending ? 'Saving…' : 'Save changes'}
-                </button>
-                <button
-                  className="button"
-                  type="button"
-                  aria-label="Discard changes"
-                  disabled={saveRowsMutation.isPending}
-                  onClick={handleDiscardRows}
-                >
-                  Discard changes
-                </button>
-              </>
-            ) : null}
-          </div>
-        </div>
         {tableMutationError ? <ErrorView error={tableMutationError} /> : null}
         <RelationQueryPanel
           relation={input.relation}
           runSql={(runInput) => orpcClient.sql.run(runInput)}
+          rowEditing={{
+            editable: rowsQuery.data.editable,
+            dirty: rowsDirty,
+            saving: saveRowsMutation.isPending,
+            onSave: handleSaveRows,
+            onDiscard: handleDiscardRows,
+          }}
           renderDefaultDataTable={({toolbar}) => (
             <DataTable
               storageKey={`relation/${input.relation.name}`}
@@ -1166,26 +1146,6 @@ function TablePanel(input: {relation: StudioRelation}) {
           )}
         />
       </section>
-
-      {input.relation.sql ? (
-        <details className="card relation-details">
-          <summary className="authority-card-summary" role="button">
-            <span className="card-title relation-details-title">Definition</span>
-            <span className="accordion-chevron" aria-hidden="true">
-              ▾
-            </span>
-          </summary>
-          <div className="authority-card-body">
-            <SqlCodeMirror
-              value={input.relation.sql}
-              ariaLabel="Relation definition editor"
-              relations={[input.relation]}
-              onChange={() => {}}
-              readOnly
-            />
-          </div>
-        </details>
-      ) : null}
     </section>
   );
 }
@@ -1652,7 +1612,7 @@ function DataTable(input: {
   showSelectedCellDetail?: boolean;
   toolbar?: ReactNode;
 }) {
-  if (input.rows.length === 0) {
+  if (input.rows.length === 0 && !(input.editable && input.onAppendRow)) {
     return (
       <>
         {input.toolbar ? <div className="data-toolbar">{input.toolbar}</div> : null}

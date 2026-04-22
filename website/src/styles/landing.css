@@ -89,14 +89,17 @@ a {
   text-transform: uppercase;
   color: var(--accent);
   text-decoration: none;
+  line-height: 1;
 }
 
 .nav {
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
   gap: 0.8rem;
   font-family: ui-sans-serif, system-ui, sans-serif;
   font-size: 0.95rem;
+  line-height: 1;
 }
 
 .nav a {
@@ -293,7 +296,7 @@ a {
 }
 
 .hero-solo h1 {
-  font-size: clamp(3.2rem, 9vw, 6rem);
+  font-size: clamp(3.2rem, 9vw, 5rem);
 }
 
 .hero-solo .lede {
@@ -310,6 +313,20 @@ a {
   color: var(--muted);
   font-family: ui-sans-serif, system-ui, sans-serif;
   font-size: 0.95rem;
+}
+
+.works-with {
+  margin: 2rem auto 0;
+  max-width: 58rem;
+  text-align: center;
+  color: var(--muted);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.works-with code {
+  font-size: 0.85em;
 }
 
 @media (max-width: 900px) {

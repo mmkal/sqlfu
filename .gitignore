@@ -8,3 +8,4 @@ packages/sqlfu/.typesql
 *.tsbuildinfo
 tmp
 .claude/*.lock
+.env

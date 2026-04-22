@@ -66,6 +66,15 @@ importers:
       '@sqlite.org/sqlite-wasm':
         specifier: 3.51.2-build9
         version: 3.51.2-build9
+      '@tursodatabase/database':
+        specifier: ^0.5.3
+        version: 0.5.3
+      '@tursodatabase/serverless':
+        specifier: ^1.1.0
+        version: 1.1.0
+      '@tursodatabase/sync':
+        specifier: ^0.5.3
+        version: 0.5.3
       '@types/eslint':
         specifier: ^9.6.1
         version: 9.6.1
@@ -90,6 +99,9 @@ importers:
       devalue:
         specifier: ^5.7.1
         version: 5.7.1
+      dotenv:
+        specifier: ^17.4.2
+        version: 17.4.2
       esbuild:
         specifier: ^0.25.0
         version: 0.25.12
@@ -3031,6 +3043,68 @@ packages:
   '@ts-morph/common@0.28.1':
     resolution: {integrity: sha512-W74iWf7ILp1ZKNYXY5qbddNaml7e9Sedv5lvU1V8lftlitkc9Pq1A+jlH23ltDgWYeZFFEqGCD1Ies9hqu3O+g==}
 
+  '@tursodatabase/database-common@0.5.3':
+    resolution: {integrity: sha512-DqcHkvp17zGj2q+94ex+x9UR4iDcdv2mOgAsIJ8wcH23ehCu+UZ/848QUME0gO6pqstEhEX5xt3hCr+efVwOxQ==}
+
+  '@tursodatabase/database-darwin-arm64@0.5.3':
+    resolution: {integrity: sha512-qMrzByOBn0okPt/wlPAyp095aYf/2CiyZDjr5KvzZ5uFtCIMJGyC88Ay4zQyqzYSW0HFioW5UFSPorFLWMBfJA==}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@tursodatabase/database-linux-arm64-gnu@0.5.3':
+    resolution: {integrity: sha512-leZwGy4VDpr523ir7nyHCzFbUaLjVXTE/mcgqZ5ijofLQGyIJG1jae/adVMvzJgIU3OB+cVFKnsfLlEw2P7zeg==}
+    cpu: [arm64]
+    os: [linux]
+    libc: [glibc]
+
+  '@tursodatabase/database-linux-x64-gnu@0.5.3':
+    resolution: {integrity: sha512-jWIXtUd2zZL2ahpeo7Mm/NU/y41wkfVrjDmkg6sZD1Dw8Wsul4SGUgouDH435Prwb1ntJAE3QkYd/+lIanVhbQ==}
+    cpu: [x64]
+    os: [linux]
+    libc: [glibc]
+
+  '@tursodatabase/database-win32-x64-msvc@0.5.3':
+    resolution: {integrity: sha512-Blyt6fvmmbiPxO/HNRzmDjyvVqmBpD7hTjV77t+QNCMdI6aNqFN9x5MEjNMelxHon0RXXesXK92jMWJyTvqUPQ==}
+    cpu: [x64]
+    os: [win32]
+
+  '@tursodatabase/database@0.5.3':
+    resolution: {integrity: sha512-Dd9x+oKKkfNPDbBtoCO4QMzBwkNNpQET4wQPt72Yy4bZ1old2gUNjrUzEi17JSSAVpdtCbSaFmeKpsxb/Ie+fw==}
+
+  '@tursodatabase/serverless@0.2.4':
+    resolution: {integrity: sha512-kqf3FINvTGx8N1iH/4e1Dkbr/om5q9qitshzvljtQXwZFQIsVP/mDE76mGg9U2dg/ElOZKFKtT1VXDgd39Dr1w==}
+
+  '@tursodatabase/serverless@1.1.0':
+    resolution: {integrity: sha512-A3YfAmXX5n3BLrND8k2p8UIu7NKOsszUkevjACUOEFAi3TD0nq7eTi3bEJcet2LUY5uBN/eKabxZUm637DBapQ==}
+
+  '@tursodatabase/sync-common@0.5.3':
+    resolution: {integrity: sha512-+rDnDEHqh4z9yY0Dv9g7Nyg7u05fUwjLQcCPb2Rl6VNdjwahy61wAmZeija5PS6ire/EQjm0dswZQga86SGqeQ==}
+
+  '@tursodatabase/sync-darwin-arm64@0.5.3':
+    resolution: {integrity: sha512-zKJ/IesjByxI/vy6Ky7llQbJyd2D1uU2P6eIV5rwmFdesC+oeAYXudH7WjMyP7Pr0btDBNg4QuLzMm4t0LqGPQ==}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@tursodatabase/sync-linux-arm64-gnu@0.5.3':
+    resolution: {integrity: sha512-NgHnmPpuuIzyVhDL/dyJmvYMp9a5U3Bzh6M1+4uoTbefXqeYG9dZU07TGCByvYIM8PPdbwV2hLtHARyEmp2gEQ==}
+    cpu: [arm64]
+    os: [linux]
+    libc: [glibc]
+
+  '@tursodatabase/sync-linux-x64-gnu@0.5.3':
+    resolution: {integrity: sha512-aQOaBoSu6LdCOU8DmNJ3cWozJfzRvrjHM849idBjRSPAb+fT5G4wMsZaoAjrGQTCqRmseXx7Lcdasz0kiiYBCA==}
+    cpu: [x64]
+    os: [linux]
+    libc: [glibc]
+
+  '@tursodatabase/sync-win32-x64-msvc@0.5.3':
+    resolution: {integrity: sha512-FX14HgdlPezYmUVdq/r9L64+aX8CUpugSz/vVrZb3VD8W1LleGQKkJkMt2qRmZvmNDHLtV1CnbPbV5RPVMTUjw==}
+    cpu: [x64]
+    os: [win32]
+
+  '@tursodatabase/sync@0.5.3':
+    resolution: {integrity: sha512-h0bS+PzSw8RHq/HxXUv+AtL2rFmY+iVLG9QOxX61ANTc4GJk9RwrFXgLg0+JHjgw29zP9Gc1saM/FMby/9bqYA==}
+
   '@types/babel__core@7.20.5':
     resolution: {integrity: sha512-qoQprZvz5wQFJwMDqeseRXWv3rqMvhgpbXFfVyWhbx9X47POIA6i/+dXefEmZKoAgOaTdaIgNSMqMIU61yRyzA==}
 
@@ -3722,6 +3796,10 @@ packages:
 
   domutils@3.2.2:
     resolution: {integrity: sha512-6kZKyUajlDuqlHKVX1w7gyslj9MPIXzIFiz/rGu35uC1wMi+kMhQwGhl4lt9unC9Vb9INnY9Z3/ZA3+FhASLaw==}
+
+  dotenv@17.4.2:
+    resolution: {integrity: sha512-nI4U3TottKAcAD9LLud4Cb7b2QztQMUEfHbvhTH09bqXTxnSie8WnjPALV/WMCrJZ6UV/qHJ6L03OqO3LcdYZw==}
+    engines: {node: '>=12'}
 
   drizzle-orm@0.45.2:
     resolution: {integrity: sha512-kY0BSaTNYWnoDMVoyY8uxmyHjpJW1geOmBMdSSicKo9CIIWkSxMIj2rkeSR51b8KAPB7m+qysjuHme5nKP+E5Q==}
@@ -8855,6 +8933,60 @@ snapshots:
       path-browserify: 1.0.1
       tinyglobby: 0.2.15
 
+  '@tursodatabase/database-common@0.5.3': {}
+
+  '@tursodatabase/database-darwin-arm64@0.5.3':
+    optional: true
+
+  '@tursodatabase/database-linux-arm64-gnu@0.5.3':
+    optional: true
+
+  '@tursodatabase/database-linux-x64-gnu@0.5.3':
+    optional: true
+
+  '@tursodatabase/database-win32-x64-msvc@0.5.3':
+    optional: true
+
+  '@tursodatabase/database@0.5.3':
+    dependencies:
+      '@tursodatabase/database-common': 0.5.3
+    optionalDependencies:
+      '@tursodatabase/database-darwin-arm64': 0.5.3
+      '@tursodatabase/database-linux-arm64-gnu': 0.5.3
+      '@tursodatabase/database-linux-x64-gnu': 0.5.3
+      '@tursodatabase/database-win32-x64-msvc': 0.5.3
+
+  '@tursodatabase/serverless@0.2.4': {}
+
+  '@tursodatabase/serverless@1.1.0': {}
+
+  '@tursodatabase/sync-common@0.5.3':
+    dependencies:
+      '@tursodatabase/database-common': 0.5.3
+      '@tursodatabase/serverless': 0.2.4
+
+  '@tursodatabase/sync-darwin-arm64@0.5.3':
+    optional: true
+
+  '@tursodatabase/sync-linux-arm64-gnu@0.5.3':
+    optional: true
+
+  '@tursodatabase/sync-linux-x64-gnu@0.5.3':
+    optional: true
+
+  '@tursodatabase/sync-win32-x64-msvc@0.5.3':
+    optional: true
+
+  '@tursodatabase/sync@0.5.3':
+    dependencies:
+      '@tursodatabase/database-common': 0.5.3
+      '@tursodatabase/sync-common': 0.5.3
+    optionalDependencies:
+      '@tursodatabase/sync-darwin-arm64': 0.5.3
+      '@tursodatabase/sync-linux-arm64-gnu': 0.5.3
+      '@tursodatabase/sync-linux-x64-gnu': 0.5.3
+      '@tursodatabase/sync-win32-x64-msvc': 0.5.3
+
   '@types/babel__core@7.20.5':
     dependencies:
       '@babel/parser': 7.29.2
@@ -9634,6 +9766,8 @@ snapshots:
       dom-serializer: 2.0.0
       domelementtype: 2.3.0
       domhandler: 5.0.3
+
+  dotenv@17.4.2: {}
 
   drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260417.1)(@opentelemetry/api@1.9.1)(@types/pg@8.15.6)(better-sqlite3@12.9.0):
     optionalDependencies:

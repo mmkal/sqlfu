@@ -55,7 +55,7 @@ select id, slug, title, status from posts where slug = :slug limit 1;
 <summary>output</summary>
 
 ```ts (sql/.generated/find-post-by-slug.sql.ts)
-import type {Client, SqlQuery} from 'sqlfu';
+import type {Client} from 'sqlfu';
 import {z} from 'zod';
 
 const Params = z.object({
@@ -67,23 +67,20 @@ const Result = z.object({
 	title: z.string().nullable(),
 	status: z.enum(["draft", "published"]),
 });
-const sql = `
-select id, slug, title, status from posts where slug = ? limit 1;
-`;
+const sql = `select id, slug, title, status from posts where slug = ? limit 1;`;
+const query = (params: findPostBySlug.Params) => ({ sql, args: [params.slug], name: "find-post-by-slug" });
 
 export const findPostBySlug = Object.assign(
-	async function findPostBySlug(client: Client, rawParams: z.infer<typeof Params>): Promise<z.infer<typeof Result> | null> {
-		const parsedParams = Params.safeParse(rawParams);
+	async function findPostBySlug(client: Client, params: findPostBySlug.Params): Promise<findPostBySlug.Result | null> {
+		const parsedParams = Params.safeParse(params);
 		if (!parsedParams.success) throw new Error(z.prettifyError(parsedParams.error));
-		const params = parsedParams.data;
-		const query: SqlQuery = { sql, args: [params.slug], name: "find-post-by-slug" };
-		const rows = await client.all(query);
+		const rows = await client.all(query(parsedParams.data));
 		if (rows.length === 0) return null;
 		const parsed = Result.safeParse(rows[0]);
 		if (!parsed.success) throw new Error(z.prettifyError(parsed.error));
 		return parsed.data;
 	},
-	{ Params, Result, sql },
+	{ Params, Result, sql, query },
 );
 
 export namespace findPostBySlug {
@@ -145,7 +142,7 @@ select id, slug, title, status from posts where slug = :slug limit 1;
 <summary>output</summary>
 
 ```ts (sql/.generated/find-post-by-slug.sql.ts)
-import {prettifyStandardSchemaError, type Client, type SqlQuery} from 'sqlfu';
+import {type Client, prettifyStandardSchemaError} from 'sqlfu';
 import * as v from 'valibot';
 
 const Params = v.object({
@@ -157,25 +154,22 @@ const Result = v.object({
 	title: v.nullable(v.string()),
 	status: v.picklist(["draft", "published"]),
 });
-const sql = `
-select id, slug, title, status from posts where slug = ? limit 1;
-`;
+const sql = `select id, slug, title, status from posts where slug = ? limit 1;`;
+const query = (params: findPostBySlug.Params) => ({ sql, args: [params.slug], name: "find-post-by-slug" });
 
 export const findPostBySlug = Object.assign(
-	async function findPostBySlug(client: Client, rawParams: v.InferOutput<typeof Params>): Promise<v.InferOutput<typeof Result> | null> {
-		const parsedParamsResult = Params['~standard'].validate(rawParams);
+	async function findPostBySlug(client: Client, params: findPostBySlug.Params): Promise<findPostBySlug.Result | null> {
+		const parsedParamsResult = Params['~standard'].validate(params);
 		if ('then' in parsedParamsResult) throw new Error('Unexpected async validation from Params.');
 		if ('issues' in parsedParamsResult) throw new Error(prettifyStandardSchemaError(parsedParamsResult) || 'Validation failed');
-		const params = parsedParamsResult.value;
-		const query: SqlQuery = { sql, args: [params.slug], name: "find-post-by-slug" };
-		const rows = await client.all(query);
+		const rows = await client.all(query(parsedParamsResult.value));
 		if (rows.length === 0) return null;
 		const parsed = Result['~standard'].validate(rows[0]);
 		if ('then' in parsed) throw new Error('Unexpected async validation from Result.');
 		if ('issues' in parsed) throw new Error(prettifyStandardSchemaError(parsed) || 'Validation failed');
 		return parsed.value;
 	},
-	{ Params, Result, sql },
+	{ Params, Result, sql, query },
 );
 
 export namespace findPostBySlug {
@@ -232,7 +226,7 @@ select id, slug, title from posts where slug = :slug limit 1;
 <summary>output</summary>
 
 ```ts (sql/.generated/find-post-by-slug.sql.ts)
-import {prettifyStandardSchemaError, type Client, type SqlQuery} from 'sqlfu';
+import {type Client, prettifyStandardSchemaError} from 'sqlfu';
 import * as z from 'zod/mini';
 
 const Params = z.object({
@@ -243,25 +237,22 @@ const Result = z.object({
 	slug: z.string(),
 	title: z.nullable(z.string()),
 });
-const sql = `
-select id, slug, title from posts where slug = ? limit 1;
-`;
+const sql = `select id, slug, title from posts where slug = ? limit 1;`;
+const query = (params: findPostBySlug.Params) => ({ sql, args: [params.slug], name: "find-post-by-slug" });
 
 export const findPostBySlug = Object.assign(
-	async function findPostBySlug(client: Client, rawParams: z.infer<typeof Params>): Promise<z.infer<typeof Result> | null> {
-		const parsedParamsResult = Params['~standard'].validate(rawParams);
+	async function findPostBySlug(client: Client, params: findPostBySlug.Params): Promise<findPostBySlug.Result | null> {
+		const parsedParamsResult = Params['~standard'].validate(params);
 		if ('then' in parsedParamsResult) throw new Error('Unexpected async validation from Params.');
 		if ('issues' in parsedParamsResult) throw new Error(prettifyStandardSchemaError(parsedParamsResult) || 'Validation failed');
-		const params = parsedParamsResult.value;
-		const query: SqlQuery = { sql, args: [params.slug], name: "find-post-by-slug" };
-		const rows = await client.all(query);
+		const rows = await client.all(query(parsedParamsResult.value));
 		if (rows.length === 0) return null;
 		const parsed = Result['~standard'].validate(rows[0]);
 		if ('then' in parsed) throw new Error('Unexpected async validation from Result.');
 		if ('issues' in parsed) throw new Error(prettifyStandardSchemaError(parsed) || 'Validation failed');
 		return parsed.value;
 	},
-	{ Params, Result, sql },
+	{ Params, Result, sql, query },
 );
 
 export namespace findPostBySlug {
@@ -317,7 +308,7 @@ select id, slug from posts where slug = :slug limit 1;
 <summary>output</summary>
 
 ```ts (sql/.generated/find-post-by-slug.sql.ts)
-import type {Client, SqlQuery} from 'sqlfu';
+import type {Client} from 'sqlfu';
 import {z} from 'zod';
 
 const Params = z.object({
@@ -327,18 +318,15 @@ const Result = z.object({
 	id: z.number(),
 	slug: z.string(),
 });
-const sql = `
-select id, slug from posts where slug = ? limit 1;
-`;
+const sql = `select id, slug from posts where slug = ? limit 1;`;
+const query = (params: findPostBySlug.Params) => ({ sql, args: [params.slug], name: "find-post-by-slug" });
 
 export const findPostBySlug = Object.assign(
-	async function findPostBySlug(client: Client, rawParams: z.infer<typeof Params>): Promise<z.infer<typeof Result> | null> {
-		const params = Params.parse(rawParams);
-		const query: SqlQuery = { sql, args: [params.slug], name: "find-post-by-slug" };
-		const rows = await client.all(query);
+	async function findPostBySlug(client: Client, params: findPostBySlug.Params): Promise<findPostBySlug.Result | null> {
+		const rows = await client.all(query(Params.parse(params)));
 		return rows.length > 0 ? Result.parse(rows[0]) : null;
 	},
-	{ Params, Result, sql },
+	{ Params, Result, sql, query },
 );
 
 export namespace findPostBySlug {
@@ -393,7 +381,7 @@ select id, slug from posts where slug = :slug limit 1;
 <summary>output</summary>
 
 ```ts (sql/.generated/find-post-by-slug.sql.ts)
-import type {Client, SqlQuery} from 'sqlfu';
+import type {Client} from 'sqlfu';
 import * as v from 'valibot';
 
 const Params = v.object({
@@ -403,25 +391,22 @@ const Result = v.object({
 	id: v.number(),
 	slug: v.string(),
 });
-const sql = `
-select id, slug from posts where slug = ? limit 1;
-`;
+const sql = `select id, slug from posts where slug = ? limit 1;`;
+const query = (params: findPostBySlug.Params) => ({ sql, args: [params.slug], name: "find-post-by-slug" });
 
 export const findPostBySlug = Object.assign(
-	async function findPostBySlug(client: Client, rawParams: v.InferOutput<typeof Params>): Promise<v.InferOutput<typeof Result> | null> {
-		const parsedParamsResult = Params['~standard'].validate(rawParams);
+	async function findPostBySlug(client: Client, params: findPostBySlug.Params): Promise<findPostBySlug.Result | null> {
+		const parsedParamsResult = Params['~standard'].validate(params);
 		if ('then' in parsedParamsResult) throw new Error('Unexpected async validation from Params.');
 		if ('issues' in parsedParamsResult) throw Object.assign(new Error('Validation failed'), {issues: parsedParamsResult.issues});
-		const params = parsedParamsResult.value;
-		const query: SqlQuery = { sql, args: [params.slug], name: "find-post-by-slug" };
-		const rows = await client.all(query);
+		const rows = await client.all(query(parsedParamsResult.value));
 		if (rows.length === 0) return null;
 		const parsed = Result['~standard'].validate(rows[0]);
 		if ('then' in parsed) throw new Error('Unexpected async validation from Result.');
 		if ('issues' in parsed) throw Object.assign(new Error('Validation failed'), {issues: parsed.issues});
 		return parsed.value;
 	},
-	{ Params, Result, sql },
+	{ Params, Result, sql, query },
 );
 
 export namespace findPostBySlug {
@@ -476,7 +461,7 @@ select id, slug from posts where slug = :slug limit 1;
 <summary>output</summary>
 
 ```ts (sql/.generated/find-post-by-slug.sql.ts)
-import type {Client, SqlQuery} from 'sqlfu';
+import type {Client} from 'sqlfu';
 import * as z from 'zod/mini';
 
 const Params = z.object({
@@ -486,25 +471,22 @@ const Result = z.object({
 	id: z.number(),
 	slug: z.string(),
 });
-const sql = `
-select id, slug from posts where slug = ? limit 1;
-`;
+const sql = `select id, slug from posts where slug = ? limit 1;`;
+const query = (params: findPostBySlug.Params) => ({ sql, args: [params.slug], name: "find-post-by-slug" });
 
 export const findPostBySlug = Object.assign(
-	async function findPostBySlug(client: Client, rawParams: z.infer<typeof Params>): Promise<z.infer<typeof Result> | null> {
-		const parsedParamsResult = Params['~standard'].validate(rawParams);
+	async function findPostBySlug(client: Client, params: findPostBySlug.Params): Promise<findPostBySlug.Result | null> {
+		const parsedParamsResult = Params['~standard'].validate(params);
 		if ('then' in parsedParamsResult) throw new Error('Unexpected async validation from Params.');
 		if ('issues' in parsedParamsResult) throw Object.assign(new Error('Validation failed'), {issues: parsedParamsResult.issues});
-		const params = parsedParamsResult.value;
-		const query: SqlQuery = { sql, args: [params.slug], name: "find-post-by-slug" };
-		const rows = await client.all(query);
+		const rows = await client.all(query(parsedParamsResult.value));
 		if (rows.length === 0) return null;
 		const parsed = Result['~standard'].validate(rows[0]);
 		if ('then' in parsed) throw new Error('Unexpected async validation from Result.');
 		if ('issues' in parsed) throw Object.assign(new Error('Validation failed'), {issues: parsed.issues});
 		return parsed.value;
 	},
-	{ Params, Result, sql },
+	{ Params, Result, sql, query },
 );
 
 export namespace findPostBySlug {
@@ -564,7 +546,7 @@ select id, slug, title, status from posts where slug = :slug limit 1;
 <summary>output</summary>
 
 ```ts (sql/.generated/find-post-by-slug.sql.ts)
-import {prettifyStandardSchemaError, type Client, type SqlQuery} from 'sqlfu';
+import {type Client, prettifyStandardSchemaError} from 'sqlfu';
 import {type} from 'arktype';
 
 const Params = type({
@@ -576,25 +558,22 @@ const Result = type({
 	title: "string | null",
 	status: "\"draft\" | \"published\"",
 });
-const sql = `
-select id, slug, title, status from posts where slug = ? limit 1;
-`;
+const sql = `select id, slug, title, status from posts where slug = ? limit 1;`;
+const query = (params: findPostBySlug.Params) => ({ sql, args: [params.slug], name: "find-post-by-slug" });
 
 export const findPostBySlug = Object.assign(
-	async function findPostBySlug(client: Client, rawParams: typeof Params.infer): Promise<typeof Result.infer | null> {
-		const parsedParamsResult = Params['~standard'].validate(rawParams);
+	async function findPostBySlug(client: Client, params: findPostBySlug.Params): Promise<findPostBySlug.Result | null> {
+		const parsedParamsResult = Params['~standard'].validate(params);
 		if ('then' in parsedParamsResult) throw new Error('Unexpected async validation from Params.');
 		if ('issues' in parsedParamsResult) throw new Error(prettifyStandardSchemaError(parsedParamsResult) || 'Validation failed');
-		const params = parsedParamsResult.value;
-		const query: SqlQuery = { sql, args: [params.slug], name: "find-post-by-slug" };
-		const rows = await client.all(query);
+		const rows = await client.all(query(parsedParamsResult.value));
 		if (rows.length === 0) return null;
 		const parsed = Result['~standard'].validate(rows[0]);
 		if ('then' in parsed) throw new Error('Unexpected async validation from Result.');
 		if ('issues' in parsed) throw new Error(prettifyStandardSchemaError(parsed) || 'Validation failed');
 		return parsed.value;
 	},
-	{ Params, Result, sql },
+	{ Params, Result, sql, query },
 );
 
 export namespace findPostBySlug {
@@ -651,7 +630,7 @@ select id, slug from posts where slug = :slug limit 1;
 <summary>output</summary>
 
 ```ts (sql/.generated/find-post-by-slug.sql.ts)
-import type {Client, SqlQuery} from 'sqlfu';
+import type {Client} from 'sqlfu';
 import {type} from 'arktype';
 
 const Params = type({
@@ -661,25 +640,22 @@ const Result = type({
 	id: "number",
 	slug: "string",
 });
-const sql = `
-select id, slug from posts where slug = ? limit 1;
-`;
+const sql = `select id, slug from posts where slug = ? limit 1;`;
+const query = (params: findPostBySlug.Params) => ({ sql, args: [params.slug], name: "find-post-by-slug" });
 
 export const findPostBySlug = Object.assign(
-	async function findPostBySlug(client: Client, rawParams: typeof Params.infer): Promise<typeof Result.infer | null> {
-		const parsedParamsResult = Params['~standard'].validate(rawParams);
+	async function findPostBySlug(client: Client, params: findPostBySlug.Params): Promise<findPostBySlug.Result | null> {
+		const parsedParamsResult = Params['~standard'].validate(params);
 		if ('then' in parsedParamsResult) throw new Error('Unexpected async validation from Params.');
 		if ('issues' in parsedParamsResult) throw Object.assign(new Error('Validation failed'), {issues: parsedParamsResult.issues});
-		const params = parsedParamsResult.value;
-		const query: SqlQuery = { sql, args: [params.slug], name: "find-post-by-slug" };
-		const rows = await client.all(query);
+		const rows = await client.all(query(parsedParamsResult.value));
 		if (rows.length === 0) return null;
 		const parsed = Result['~standard'].validate(rows[0]);
 		if ('then' in parsed) throw new Error('Unexpected async validation from Result.');
 		if ('issues' in parsed) throw Object.assign(new Error('Validation failed'), {issues: parsed.issues});
 		return parsed.value;
 	},
-	{ Params, Result, sql },
+	{ Params, Result, sql, query },
 );
 
 export namespace findPostBySlug {
@@ -701,6 +677,65 @@ export type PostsRow = {
 	id: number;
 	slug: string;
 };
+```
+
+</details>
+
+## validator: valibot emits a Result schema with no Params when the query takes no args
+
+<details data-outputs="sql/.generated/latest-post.sql.ts">
+<summary>input</summary>
+
+```sql (definitions.sql)
+create table posts (id integer primary key, slug text not null, title text);
+```
+
+```ts (sqlfu.config.ts)
+export default {
+  db: './app.db',
+  migrations: './migrations',
+  definitions: './definitions.sql',
+  queries: './sql',
+  generate: {validator: 'valibot'},
+};
+```
+
+```sql (sql/latest-post.sql)
+select id, slug, title from posts limit 1;
+```
+
+</details>
+
+<details>
+<summary>output</summary>
+
+```ts (sql/.generated/latest-post.sql.ts)
+import {type Client, prettifyStandardSchemaError} from 'sqlfu';
+import * as v from 'valibot';
+
+const Result = v.object({
+	id: v.number(),
+	slug: v.string(),
+	title: v.nullable(v.string()),
+});
+const sql = `select id, slug, title from posts limit 1;`;
+const query = { sql, args: [], name: "latest-post" };
+
+export const latestPost = Object.assign(
+	async function latestPost(client: Client): Promise<latestPost.Result | null> {
+		const rows = await client.all(query);
+		if (rows.length === 0) return null;
+		const parsed = Result['~standard'].validate(rows[0]);
+		if ('then' in parsed) throw new Error('Unexpected async validation from Result.');
+		if ('issues' in parsed) throw new Error(prettifyStandardSchemaError(parsed) || 'Validation failed');
+		return parsed.value;
+	},
+	{ Result, sql, query },
+);
+
+export namespace latestPost {
+	export type Result = v.InferOutput<typeof latestPost.Result>;
+}
 ```
 
 </details>
@@ -734,25 +769,22 @@ insert into posts (slug) values (:slug);
 <summary>output</summary>
 
 ```ts (sql/.generated/insert-post.sql.ts)
-import type {Client, SqlQuery} from 'sqlfu';
+import type {Client} from 'sqlfu';
 import {z} from 'zod';
 
 const Params = z.object({
 	slug: z.string(),
 });
-const sql = `
-insert into posts (slug) values (?);
-`;
+const sql = `insert into posts (slug) values (?);`;
+const query = (params: insertPost.Params) => ({ sql, args: [params.slug], name: "insert-post" });
 
 export const insertPost = Object.assign(
-	async function insertPost(client: Client, rawParams: z.infer<typeof Params>) {
-		const parsedParams = Params.safeParse(rawParams);
+	async function insertPost(client: Client, params: insertPost.Params) {
+		const parsedParams = Params.safeParse(params);
 		if (!parsedParams.success) throw new Error(z.prettifyError(parsedParams.error));
-		const params = parsedParams.data;
-		const query: SqlQuery = { sql, args: [params.slug], name: "insert-post" };
-		return client.run(query);
+		return client.run(query(parsedParams.data));
 	},
-	{ Params, sql },
+	{ Params, sql, query },
 );
 
 export namespace insertPost {
@@ -798,14 +830,14 @@ select id, slug from posts;
 ```ts (sql/.generated/list-posts.sql.ts)
 import type {Client} from 'sqlfu';
 
-const sql = `select id, slug from posts;`
+const sql = `select id, slug from posts;`;
+const query = { sql, args: [], name: "list-posts" };
 
 export const listPosts = Object.assign(
 	async function listPosts(client: Client): Promise<listPosts.Result[]> {
-		const query = { sql, args: [], name: "list-posts" };
 		return client.all<listPosts.Result>(query);
 	},
-	{ sql },
+	{ sql, query },
 );
 
 export namespace listPosts {

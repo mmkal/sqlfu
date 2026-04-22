@@ -179,8 +179,7 @@ Wire it into ESLint flat config:
 import sqlfu from 'sqlfu/lint-plugin';
 
 export default [
-  sqlfu.configs.recommended,       // both inline-SQL rules on TS/JS
-  ...sqlfu.configs.sqlFiles,       // format-sql on .sql files (via the sql processor)
+  ...sqlfu.configs.recommended, // inline-SQL rules on TS/JS + format-sql on .sql files (via the sql processor)
 ];
 ```
 

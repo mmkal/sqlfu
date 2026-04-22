@@ -1,11 +1,18 @@
 /**
  * ESLint config for this repo.
  *
- * ESLint is the sole linter — it runs sqlfu's own lint-plugin rules on both
- * TS/JS source (inline SQL templates) and standalone `.sql` files (via the
- * plugin's `sql-file` processor). oxfmt handles formatting; TypeScript handles
- * type errors. We don't layer generic lint rules on top — keep the lint loop
- * fast and focused on sqlfu-specific checks.
+ * Dogfoods the sqlfu lint plugin: all rule wiring lives in
+ * `sqlfu.configs.recommended` (inline-SQL rules + `.sql` file processor +
+ * test-file override). What we add on top here is repo-specific:
+ *
+ *   - Ignore globs for build/generated output and fixture files that
+ *     intentionally contain malformed SQL.
+ *   - A typescript-eslint parser block so ESLint can read our `.ts` / `.tsx`
+ *     source. The plugin stays parser-agnostic; configuring one is the user's
+ *     choice (typescript-eslint is the overwhelmingly common pick).
+ *
+ * oxfmt handles formatting; TypeScript handles type errors. No generic lint
+ * rules layered on top — lint is scoped to sqlfu-specific checks.
  */
 
 import tseslint from 'typescript-eslint';
@@ -33,27 +40,6 @@ export default [
       parser: tseslint.parser,
       parserOptions: {ecmaVersion: 2022, sourceType: 'module'},
     },
-    plugins: {sqlfu},
-    rules: {
-      'sqlfu/query-naming': 'error',
-      'sqlfu/format-sql': 'error',
-    },
   },
-  {
-    files: ['**/*.{js,jsx,mjs,cjs}'],
-    plugins: {sqlfu},
-    rules: {
-      'sqlfu/query-naming': 'error',
-      'sqlfu/format-sql': 'error',
-    },
-  },
-  {
-    // Test files often keep inline SQL compact for readability; the formatter
-    // would reflow `select b from a` to two lines. Leave them alone.
-    files: ['**/*.test.{ts,tsx,js,jsx}', '**/test/**', '**/tests/**'],
-    rules: {
-      'sqlfu/format-sql': 'off',
-    },
-  },
-  ...sqlfu.configs.sqlFiles,
+  ...sqlfu.configs.recommended,
 ];

@@ -238,7 +238,7 @@ test('formatSqlFileContents: leaves empty / whitespace-only input alone', () => 
 //
 // RuleTester can't drive processors — it talks to the rule directly on the
 // raw JS source — so we keep one end-to-end test per processor behavior we
-// care about, driving the full `ESLint` class through `configs.sqlFiles`.
+// care about, driving the full `ESLint` class through `configs.recommended`.
 // ---------------------------------------------------------------------------
 
 test('format-sql (sql processor): autofixes an unformatted .sql file (whole-file replacement)', async () => {
@@ -351,7 +351,7 @@ async function lintSqlFile(project: AsyncProject, relativePath: string, {fix}: {
   const eslint = new ESLint({
     cwd: project.root,
     overrideConfigFile: true,
-    overrideConfig: [...(plugin.configs?.sqlFiles as any[])],
+    overrideConfig: [...(plugin.configs?.recommended as any[])],
     fix,
   });
   return eslint.lintFiles([path.join(project.root, relativePath)]);

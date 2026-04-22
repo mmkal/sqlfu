@@ -21,7 +21,7 @@ import type * as ESTree from 'estree';
  * Or via the preset:
  *
  *   import sqlfu from 'sqlfu/lint-plugin';
- *   export default [sqlfu.configs.recommended];
+ *   export default [...sqlfu.configs.recommended];
  */
 
 const CLIENT_METHODS = new Set(['all', 'run', 'iterate']);
@@ -498,29 +498,42 @@ const plugin: ESLint.Plugin = {
 };
 
 /**
- * Flat-config preset that enables every rule in this plugin at `error`.
+ * Flat-config preset that enables every rule in this plugin plus the `.sql`
+ * file processor. Spread it into an ESLint flat config array and you get the
+ * full sqlfu lint experience — inline SQL rules on TS/JS files, whole-file
+ * formatting on `.sql` files, and a test-file override that leaves compact
+ * inline SQL alone.
  *
  *   import sqlfu from 'sqlfu/lint-plugin';
- *   export default [sqlfu.configs.recommended];
+ *   export default [...sqlfu.configs.recommended];
+ *
+ * Users who want to parse TypeScript source need to add their own parser
+ * block (typescript-eslint) — that's an orthogonal concern and not something
+ * this plugin wants an opinion on.
+ *
+ * The `.sql` processor extracts each `.sql` file into a synthetic
+ * `<name>.sql.js` block; the matching `**\/*.sql/**\/*.js` config block is
+ * where the rule actually runs. Both blocks are required — a single block
+ * can't do it — which is why this preset has to be an array rather than a
+ * single config object.
  */
-const recommended: Linter.Config = {
-  plugins: {sqlfu: plugin},
-  rules: {
-    'sqlfu/query-naming': 'error',
-    'sqlfu/format-sql': 'error',
+const recommended: Linter.Config[] = [
+  {
+    files: ['**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}'],
+    plugins: {sqlfu: plugin},
+    rules: {
+      'sqlfu/query-naming': 'error',
+      'sqlfu/format-sql': 'error',
+    },
   },
-};
-
-// Flat-config blocks that wire the `sql` processor + `format-sql` rule onto
-// every `.sql` file. The processor extracts each `.sql` file into a synthetic
-// `<name>.sql.js` block (ESLint's way of letting non-JS files be linted
-// through the JS pipeline); the second block matches that virtual path
-// (**\/*.sql/**\/*.js) and attaches the rule that operates on it.
-//
-// Use alongside `recommended` for full coverage:
-//
-//   export default [sqlfu.configs.recommended, ...sqlfu.configs.sqlFiles];
-const sqlFiles: Linter.Config[] = [
+  {
+    // Test files often keep inline SQL compact for readability; the formatter
+    // reflows `select b from a` to two lines. Leave them alone.
+    files: ['**/*.test.{ts,tsx,js,jsx,mts,cts,mjs,cjs}', '**/test/**', '**/tests/**'],
+    rules: {
+      'sqlfu/format-sql': 'off',
+    },
+  },
   {
     files: ['**/*.sql'],
     plugins: {sqlfu: plugin},
@@ -535,11 +548,8 @@ const sqlFiles: Linter.Config[] = [
   },
 ];
 
-const exported: ESLint.Plugin & {configs: {recommended: Linter.Config; sqlFiles: Linter.Config[]}} = Object.assign(
-  plugin,
-  {
-    configs: {recommended, sqlFiles},
-  },
-);
+const exported: ESLint.Plugin & {configs: {recommended: Linter.Config[]}} = Object.assign(plugin, {
+  configs: {recommended},
+});
 
 export default exported;

@@ -7,9 +7,10 @@
     "url": "https://github.com/mmkal/sqlfu.git"
   },
   "bin": {
-    "sqlfu": "./dist/cli.js"
+    "sqlfu": "./bin/sqlfu.js"
   },
   "files": [
+    "bin",
     "dist"
   ],
   "type": "module",

@@ -1018,3 +1018,17 @@ function formatRecommendationText(recommendation: CheckRecommendation) {
 function formatRecommendationCommand(command: [string, ...string[]]) {
   return ['sqlfu', ...command].join(' ');
 }
+
+// sqlfu/api is the heavy tier: "all the smart stuff" per the design
+// grill. Re-export the public surfaces of schemadiff, typegen, and the
+// SQL formatter so consumers writing CI scripts / editor integrations /
+// custom tooling can reach them without deep-importing.
+
+export {diffSchemaSql} from './schemadiff/index.js';
+export {inspectSqliteSchemaSql, schemasEqual} from './schemadiff/sqlite/index.js';
+export type {SqliteInspectedDatabase} from './schemadiff/sqlite/types.js';
+
+export {generateQueryTypes, generateQueryTypesForConfig, analyzeAdHocSqlForConfig} from './typegen/index.js';
+
+export {formatSql} from './formatter.js';
+export type {FormatSqlOptions, SqlFormatStyle} from './formatter.js';

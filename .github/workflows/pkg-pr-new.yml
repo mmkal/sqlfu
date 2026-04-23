@@ -31,4 +31,9 @@ jobs:
         run: pnpm --filter sqlfu build
 
       - name: Publish preview package
-        run: pnpm dlx pkg-pr-new publish ./packages/sqlfu
+        # --pnpm so pkg-pr-new packs with `pnpm pack` instead of `npm pack`.
+        # npm pack does not substitute `publishConfig.exports` into `exports`;
+        # pnpm pack does. Without this, consumers of the preview tarball see
+        # `exports` pointing at the source `./src/*.ts` paths (which aren't
+        # in `files`) and get ERR_MODULE_NOT_FOUND.
+        run: pnpm dlx pkg-pr-new publish --pnpm ./packages/sqlfu

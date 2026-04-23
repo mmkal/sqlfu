@@ -18,11 +18,7 @@ import type {SqlfuHost} from '../host.js';
 import {excludeReservedSqliteObjects, extractSchema} from '../sqlite-text.js';
 import {createBunClient, createNodeSqliteClient} from '../index.js';
 import {migrationName, readMigrationHistory, type Migration} from '../migrations/index.js';
-import {
-  materializeDefinitionsSchemaForContext,
-  materializeMigrationsSchemaForContext,
-  readMigrationsFromContext,
-} from '../api.js';
+import {materializeDefinitionsSchemaFor, readMigrationFiles} from '../materialize.js';
 
 export type {
   AdHocQueryAnalysis,
@@ -266,7 +262,7 @@ async function readDefinitionsAsSchemaSql(config: SqlfuProjectConfig, host: Sqlf
     }
     throw error;
   }
-  return materializeDefinitionsSchemaForContext(host, definitionsSql);
+  return materializeDefinitionsSchemaFor(host, definitionsSql);
 }
 
 async function replayMigrationFilesAsSchemaSql(config: SqlfuProjectConfig, host: SqlfuHost): Promise<string> {
@@ -275,8 +271,11 @@ async function replayMigrationFilesAsSchemaSql(config: SqlfuProjectConfig, host:
       "sqlfu generate with authority 'migrations' needs a `migrations` directory configured in sqlfu.config.ts.",
     );
   }
-  const migrations = await readMigrationsFromContext({config, host});
-  return materializeMigrationsSchemaForContext(host, migrations);
+  const migrations = await readMigrationFiles(host, config);
+  // Concatenate into one SQL blob and replay raw. Going through `materializeMigrationsSchemaFor`
+  // would apply through `applyMigrations`, which creates the `sqlfu_migrations` bookkeeping
+  // table — noise for typegen, which wants the user's schema reflected as-is.
+  return materializeDefinitionsSchemaFor(host, migrations.map((migration) => migration.content).join('\n'));
 }
 
 async function replayMigrationHistoryAsSchemaSql(config: SqlfuProjectConfig, host: SqlfuHost): Promise<string> {
@@ -288,7 +287,7 @@ async function replayMigrationHistoryAsSchemaSql(config: SqlfuProjectConfig, hos
   await using live = await openLiveDb(config.db, 'migration_history');
   const history = await Promise.resolve(readMigrationHistory(live.client));
 
-  const migrations = await readMigrationsFromContext({config, host});
+  const migrations = await readMigrationFiles(host, config);
   const byName = new Map(migrations.map((migration) => [migrationName(migration), migration]));
   const matched: Migration[] = [];
   for (const row of history) {
@@ -302,14 +301,14 @@ async function replayMigrationHistoryAsSchemaSql(config: SqlfuProjectConfig, hos
     matched.push(file);
   }
 
-  return materializeMigrationsSchemaForContext(host, matched);
+  return materializeDefinitionsSchemaFor(host, matched.map((migration) => migration.content).join('\n'));
 }
 
 async function readLiveSchema(db: SqlfuProjectConfig['db']): Promise<string> {
   await using source = await openLiveDb(db, 'live_schema');
   // Exclude sqlfu's bookkeeping table from the live schema — it's noise, not something the
-  // user wrote. The other authorities go through materializeMigrationsSchemaForContext /
-  // materializeDefinitionsSchemaForContext, which already apply the same exclusion.
+  // user wrote. The other authorities replay raw SQL into an empty scratch DB so no bookkeeping
+  // is created in the first place.
   return extractSchema(source.client, 'main', {excludedTables: ['sqlfu_migrations']});
 }
 

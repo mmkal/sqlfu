@@ -185,7 +185,8 @@ function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
 
 export async function generateCatalogForProject(projectRoot: string) {
   const config = await loadProjectConfigFrom(projectRoot);
-  await generateQueryTypesForConfig(config);
+  const host = await createNodeHost();
+  await generateQueryTypesForConfig(config, host);
 }
 
 function createFixedProjectResolver(projectRoot: string): ProjectResolver {

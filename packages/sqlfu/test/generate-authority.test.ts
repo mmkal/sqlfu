@@ -16,7 +16,7 @@ test("authority 'desired_schema' is the default — generate reads definitions.s
     omitDb: true,
   });
 
-  await generateQueryTypesForConfig(fixture.config);
+  await generateQueryTypesForConfig(fixture.config, fixture.host);
 
   expect(fixture.factoryInvocations()).toBe(0);
   expect(await fixture.typegenDbTables()).toEqual(['person']);
@@ -33,7 +33,7 @@ test("authority 'migrations' replays migration files into a scratch DB, no live 
     },
   });
 
-  await generateQueryTypesForConfig(fixture.config);
+  await generateQueryTypesForConfig(fixture.config, fixture.host);
 
   expect(fixture.factoryInvocations()).toBe(0);
   expect(await fixture.typegenDbTables()).toEqual(['person', 'pet']);
@@ -51,7 +51,7 @@ test("authority 'live_schema' opens the factory-provided DB and extracts its sch
   await applyMigrateSql({config: fixture.config, host: fixture.host}, autoAcceptConfirm);
 
   const invocationsAfterMigrate = fixture.factoryInvocations();
-  await generateQueryTypesForConfig(fixture.config);
+  await generateQueryTypesForConfig(fixture.config, fixture.host);
 
   expect(fixture.factoryInvocations()).toBeGreaterThan(invocationsAfterMigrate);
   expect(await fixture.typegenDbTables()).toEqual(['person']);
@@ -69,14 +69,14 @@ test("authority 'migration_history' replays only applied migrations recorded in 
 
   await applyMigrateSql({config: fixture.config, host: fixture.host}, autoAcceptConfirm);
 
-  await generateQueryTypesForConfig(fixture.config);
+  await generateQueryTypesForConfig(fixture.config, fixture.host);
   expect(await fixture.typegenDbTables()).toEqual(['person', 'pet']);
 
   // delete the second migration file so it's no longer on disk but is still in sqlfu_migrations
   const fs = await import('node:fs/promises');
   await fs.rm(path.join(fixture.root, 'migrations', '02_add_pets.sql'));
 
-  await expect(generateQueryTypesForConfig(fixture.config)).rejects.toThrow(
+  await expect(generateQueryTypesForConfig(fixture.config, fixture.host)).rejects.toThrow(
     /recorded migration "02_add_pets" is missing/,
   );
 });
@@ -89,7 +89,7 @@ test("authority 'live_schema' without a `db` throws a clear error at generate ti
     migrations: {},
   });
 
-  await expect(generateQueryTypesForConfig(fixture.config)).rejects.toThrow(
+  await expect(generateQueryTypesForConfig(fixture.config, fixture.host)).rejects.toThrow(
     /needs a live database.*`db` is not set/,
   );
 });

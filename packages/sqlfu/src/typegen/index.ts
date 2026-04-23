@@ -12,10 +12,17 @@ import type {
   QueryCatalogField,
 } from './query-catalog.js';
 import {loadProjectConfig} from '../node/config.js';
+import {createNodeHost} from '../node/host.js';
 import type {Client, SqlfuProjectConfig, SqlfuValidator} from '../types.js';
+import type {SqlfuHost} from '../host.js';
 import {excludeReservedSqliteObjects, extractSchema} from '../sqlite-text.js';
 import {createBunClient, createNodeSqliteClient} from '../index.js';
 import {migrationName, readMigrationHistory, type Migration} from '../migrations/index.js';
+import {
+  materializeDefinitionsSchemaForContext,
+  materializeMigrationsSchemaForContext,
+  readMigrationsFromContext,
+} from '../api.js';
 
 export type {
   AdHocQueryAnalysis,
@@ -29,11 +36,12 @@ export type {
 
 export async function generateQueryTypes(): Promise<void> {
   const config = await loadProjectConfig();
-  await generateQueryTypesForConfig(config);
+  const host = await createNodeHost();
+  await generateQueryTypesForConfig(config, host);
 }
 
-export async function generateQueryTypesForConfig(config: SqlfuProjectConfig): Promise<void> {
-  const databasePath = await materializeTypegenDatabase(config);
+export async function generateQueryTypesForConfig(config: SqlfuProjectConfig, host: SqlfuHost): Promise<void> {
+  const databasePath = await materializeTypegenDatabase(config, host);
   const schema = await loadSchema(databasePath);
   const queryFiles = await loadQueryFiles(config.queries);
 
@@ -138,8 +146,12 @@ function renderSqlConstant(sql: string): string[] {
   ];
 }
 
-export async function analyzeAdHocSqlForConfig(config: SqlfuProjectConfig, sql: string): Promise<AdHocQueryAnalysis> {
-  const databasePath = await materializeTypegenDatabase(config);
+export async function analyzeAdHocSqlForConfig(
+  config: SqlfuProjectConfig,
+  host: SqlfuHost,
+  sql: string,
+): Promise<AdHocQueryAnalysis> {
+  const databasePath = await materializeTypegenDatabase(config, host);
   const schema = await loadSchema(databasePath);
   const [analysis] = await analyzeVendoredTypesqlQueries(databasePath, [
     {
@@ -209,9 +221,9 @@ type QueryFile = {
   sqlContent: string;
 };
 
-async function materializeTypegenDatabase(config: SqlfuProjectConfig) {
+async function materializeTypegenDatabase(config: SqlfuProjectConfig, host: SqlfuHost) {
   const tempDbPath = path.join(config.projectRoot, '.sqlfu', 'typegen.db');
-  const schemaSql = await readSchemaForAuthority(config);
+  const schemaSql = await readSchemaForAuthority(config, host);
 
   await fs.mkdir(path.dirname(tempDbPath), {recursive: true});
   await fs.rm(tempDbPath, {force: true});
@@ -224,15 +236,15 @@ async function materializeTypegenDatabase(config: SqlfuProjectConfig) {
   return tempDbPath;
 }
 
-async function readSchemaForAuthority(config: SqlfuProjectConfig): Promise<string> {
+async function readSchemaForAuthority(config: SqlfuProjectConfig, host: SqlfuHost): Promise<string> {
   const authority = config.generate.authority;
   switch (authority) {
     case 'desired_schema':
-      return readDefinitionsAsSchemaSql(config.definitions);
+      return readDefinitionsAsSchemaSql(config, host);
     case 'migrations':
-      return replayMigrationFilesAsSchemaSql(config);
+      return replayMigrationFilesAsSchemaSql(config, host);
     case 'migration_history':
-      return replayMigrationHistoryAsSchemaSql(config);
+      return replayMigrationHistoryAsSchemaSql(config, host);
     case 'live_schema':
       return readLiveSchema(config.db);
     default: {
@@ -242,30 +254,32 @@ async function readSchemaForAuthority(config: SqlfuProjectConfig): Promise<strin
   }
 }
 
-async function readDefinitionsAsSchemaSql(definitionsPath: string): Promise<string> {
+async function readDefinitionsAsSchemaSql(config: SqlfuProjectConfig, host: SqlfuHost): Promise<string> {
+  let definitionsSql: string;
   try {
-    return await fs.readFile(definitionsPath, 'utf8');
+    definitionsSql = await host.fs.readFile(config.definitions);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
       throw new Error(
-        `sqlfu generate with authority 'desired_schema' needs ${definitionsPath}, but the file was not found.`,
+        `sqlfu generate with authority 'desired_schema' needs ${config.definitions}, but the file was not found.`,
       );
     }
     throw error;
   }
+  return materializeDefinitionsSchemaForContext(host, definitionsSql);
 }
 
-async function replayMigrationFilesAsSchemaSql(config: SqlfuProjectConfig): Promise<string> {
+async function replayMigrationFilesAsSchemaSql(config: SqlfuProjectConfig, host: SqlfuHost): Promise<string> {
   if (!config.migrations) {
     throw new Error(
       "sqlfu generate with authority 'migrations' needs a `migrations` directory configured in sqlfu.config.ts.",
     );
   }
-  const files = await readMigrationFiles(config.migrations.path);
-  return replayAndExtractSchema(files);
+  const migrations = await readMigrationsFromContext({config, host});
+  return materializeMigrationsSchemaForContext(host, migrations);
 }
 
-async function replayMigrationHistoryAsSchemaSql(config: SqlfuProjectConfig): Promise<string> {
+async function replayMigrationHistoryAsSchemaSql(config: SqlfuProjectConfig, host: SqlfuHost): Promise<string> {
   if (!config.migrations) {
     throw new Error(
       "sqlfu generate with authority 'migration_history' needs a `migrations` directory configured in sqlfu.config.ts.",
@@ -274,8 +288,8 @@ async function replayMigrationHistoryAsSchemaSql(config: SqlfuProjectConfig): Pr
   await using live = await openLiveDb(config.db, 'migration_history');
   const history = await Promise.resolve(readMigrationHistory(live.client));
 
-  const files = await readMigrationFiles(config.migrations.path);
-  const byName = new Map(files.map((file) => [migrationName(file), file]));
+  const migrations = await readMigrationsFromContext({config, host});
+  const byName = new Map(migrations.map((migration) => [migrationName(migration), migration]));
   const matched: Migration[] = [];
   for (const row of history) {
     const file = byName.get(row.name);
@@ -288,15 +302,14 @@ async function replayMigrationHistoryAsSchemaSql(config: SqlfuProjectConfig): Pr
     matched.push(file);
   }
 
-  return replayAndExtractSchema(matched);
+  return materializeMigrationsSchemaForContext(host, matched);
 }
 
 async function readLiveSchema(db: SqlfuProjectConfig['db']): Promise<string> {
   await using source = await openLiveDb(db, 'live_schema');
   // Exclude sqlfu's bookkeeping table from the live schema — it's noise, not something the
-  // user wrote. The other authorities replay user-provided SQL verbatim, so extraction there
-  // should reflect whatever that SQL actually created (sqlfu's internal typegen, for
-  // example, deliberately references `sqlfu_migrations` in its definitions.sql).
+  // user wrote. The other authorities go through materializeMigrationsSchemaForContext /
+  // materializeDefinitionsSchemaForContext, which already apply the same exclusion.
   return extractSchema(source.client, 'main', {excludedTables: ['sqlfu_migrations']});
 }
 
@@ -313,30 +326,6 @@ async function openLiveDb(
     return db();
   }
   return openMainDevDatabase(db);
-}
-
-async function replayAndExtractSchema(files: Migration[]): Promise<string> {
-  await using scratch = await openMainDevDatabase(':memory:');
-  for (const file of files) {
-    await scratch.client.raw(file.content);
-  }
-  return extractSchema(scratch.client);
-}
-
-async function readMigrationFiles(migrationsDir: string): Promise<Migration[]> {
-  let fileNames: string[];
-  try {
-    fileNames = (await fs.readdir(migrationsDir)).filter((name) => name.endsWith('.sql')).sort();
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
-    throw error;
-  }
-  return Promise.all(
-    fileNames.map(async (name) => {
-      const filePath = path.join(migrationsDir, name);
-      return {path: filePath, content: await fs.readFile(filePath, 'utf8')};
-    }),
-  );
 }
 
 async function openMainDevDatabase(dbPath: string): Promise<DisposableClient> {

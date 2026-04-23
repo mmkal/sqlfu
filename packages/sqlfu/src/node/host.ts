@@ -94,7 +94,7 @@ export async function createNodeHost(): Promise<SqlfuHost> {
   const {DatabaseSync} = await loadNodeSqliteModule();
   const scratchRoot = path.join(os.tmpdir(), 'sqlfu-scratch');
 
-  return {
+  const host: SqlfuHost = {
     fs: nodeFs,
     openDb: (config) => openConfigDb(config.db),
     execAdHocSql: async (client, sql, params): Promise<AdHocSqlResult> => {
@@ -134,7 +134,56 @@ export async function createNodeHost(): Promise<SqlfuHost> {
     now: () => new Date(),
     uuid: () => randomUUID(),
     logger: console,
-    catalog: nodeCatalog,
+    // Assigned below so catalog methods can close over the fully-constructed host.
+    catalog: null as unknown as HostCatalog,
+  };
+  host.catalog = createNodeCatalog(host);
+  return host;
+}
+
+function createNodeCatalog(host: SqlfuHost): HostCatalog {
+  return {
+    async load(config): Promise<QueryCatalog> {
+      // Catalog load is best-effort: the UI's schema page calls this on every render, and the
+      // user has a separate "Schema Check" surface that shows real schema errors. If typegen
+      // can't build a catalog right now (broken definitions.sql, unreadable migrations, etc.),
+      // serve the last good catalog — or an empty one if none exists yet — instead of
+      // throwing. The CLI path (`sqlfu generate`) still throws, because there the user asked
+      // explicitly for types.
+      try {
+        await generateQueryTypesForConfig(config, host);
+      } catch (error) {
+        console.warn(`sqlfu/ui: catalog regeneration skipped — ${String(error)}`);
+      }
+      const catalogPath = path.join(config.projectRoot, '.sqlfu', 'query-catalog.json');
+      try {
+        return JSON.parse(await fs.readFile(catalogPath, 'utf8')) as QueryCatalog;
+      } catch {
+        return {generatedAt: new Date(0).toISOString(), queries: []};
+      }
+    },
+    async refresh(config) {
+      try {
+        await generateQueryTypesForConfig(config, host);
+      } catch (error) {
+        console.warn(`sqlfu/ui: catalog regeneration skipped — ${String(error)}`);
+      }
+    },
+    async analyzeSql(config, sql) {
+      if (!sql.trim()) return {};
+      try {
+        const analysis = await analyzeAdHocSqlForConfig(config, host, sql);
+        return {
+          paramsSchema: analysis.paramsSchema,
+          diagnostics: [],
+        };
+      } catch (error) {
+        if (isInternalUnsupportedSqlAnalysisError(error)) return {};
+        return {
+          diagnostics: [toSqlEditorDiagnostic(sql, error)],
+        };
+      }
+    },
   };
 }
 
@@ -168,52 +217,6 @@ const nodeFs: HostFs = {
   },
 };
 
-const nodeCatalog: HostCatalog = {
-  async load(config): Promise<QueryCatalog> {
-    // Catalog load is best-effort: the UI's schema page calls this on every render, and the
-    // user has a separate "Schema Check" surface that shows real schema errors. If typegen
-    // can't build a catalog right now (broken definitions.sql, unreadable migrations, etc.),
-    // serve the last good catalog — or an empty one if none exists yet — instead of
-    // throwing. The CLI path (`sqlfu generate`) still throws, because there the user asked
-    // explicitly for types.
-    try {
-      await generateQueryTypesForConfig(config);
-    } catch (error) {
-      console.warn(`sqlfu/ui: catalog regeneration skipped — ${String(error)}`);
-    }
-    const catalogPath = path.join(config.projectRoot, '.sqlfu', 'query-catalog.json');
-    try {
-      return JSON.parse(await fs.readFile(catalogPath, 'utf8')) as QueryCatalog;
-    } catch {
-      return {generatedAt: new Date(0).toISOString(), queries: []};
-    }
-  },
-  async refresh(config) {
-    // Same contract as `load`: don't bring the UI down on a typegen failure — the user
-    // lands on a surface (schema check, sync, generate) that surfaces the real error
-    // directly.
-    try {
-      await generateQueryTypesForConfig(config);
-    } catch (error) {
-      console.warn(`sqlfu/ui: catalog regeneration skipped — ${String(error)}`);
-    }
-  },
-  async analyzeSql(config, sql) {
-    if (!sql.trim()) return {};
-    try {
-      const analysis = await analyzeAdHocSqlForConfig(config, sql);
-      return {
-        paramsSchema: analysis.paramsSchema,
-        diagnostics: [],
-      };
-    } catch (error) {
-      if (isInternalUnsupportedSqlAnalysisError(error)) return {};
-      return {
-        diagnostics: [toSqlEditorDiagnostic(sql, error)],
-      };
-    }
-  },
-};
 
 type NodeSqliteDatabase = InstanceType<typeof DatabaseSync>;
 

@@ -6,7 +6,7 @@ import {createRouterClient} from '@orpc/server';
 
 import {getMigrationPrefix} from '../../src/api.js';
 import {router} from '../../src/node/cli-router.js';
-import {createNodeSqliteClient} from '../../src/client.js';
+import {createNodeSqliteClient} from '../../src/index.js';
 import {createNodeHost} from '../../src/node/host.js';
 import {extractSchema} from '../../src/sqlite-text.js';
 import type {Client, SqlfuProjectConfig} from '../../src/types.js';

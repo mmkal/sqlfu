@@ -2,7 +2,7 @@ import {DatabaseSync} from 'node:sqlite';
 
 import {expect, test} from 'vitest';
 
-import {createNodeSqliteClient} from '../../src/client.js';
+import {createNodeSqliteClient} from '../../src/index.js';
 
 test('createNodeSqliteClient works with a real node:sqlite database', async () => {
   using fixture = createNodeSqliteFixture(new DatabaseSync(':memory:'));

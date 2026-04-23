@@ -5,7 +5,7 @@ import {gunzipSync} from 'node:zlib';
 import {PostHog} from 'posthog-node';
 import {expect, test} from 'vitest';
 
-import {createNodeSqliteClient, instrument} from '../../src/client.js';
+import {createNodeSqliteClient, instrument} from '../../src/index.js';
 
 // Recipe: emit a PostHog event per query (success + failure) and capture
 // errors as PostHog exceptions — all in one hook.

@@ -2,7 +2,7 @@
 
 `sqlfu` doesn't ship its own database driver. It sits on top of whichever SQLite-compatible client you already use — local file, embedded engine, edge runtime, or a real remote database — and gives you the same typed client surface on top.
 
-This page lists every adapter that ships in `sqlfu/client` today, with a copy-paste snippet for each.
+This page lists every adapter that ships in `sqlfu` today, with a copy-paste snippet for each.
 
 If you already know which driver you want to use, jump to the section below. If you're picking from scratch, see [Choosing an adapter](#choosing-an-adapter) at the bottom.
 
@@ -52,7 +52,7 @@ Every factory takes the underlying driver's database/connection object as its si
 
 ```ts
 import {DatabaseSync} from 'node:sqlite';
-import {createNodeSqliteClient} from 'sqlfu/client';
+import {createNodeSqliteClient} from 'sqlfu';
 
 const db = new DatabaseSync('app.db');
 const client = createNodeSqliteClient(db);
@@ -62,7 +62,7 @@ const client = createNodeSqliteClient(db);
 
 ```ts
 import {Database} from 'bun:sqlite';
-import {createBunClient} from 'sqlfu/client';
+import {createBunClient} from 'sqlfu';
 
 const db = new Database('app.db');
 const client = createBunClient(db);
@@ -72,7 +72,7 @@ const client = createBunClient(db);
 
 ```ts
 import Database from 'better-sqlite3';
-import {createBetterSqlite3Client} from 'sqlfu/client';
+import {createBetterSqlite3Client} from 'sqlfu';
 
 const db = new Database('app.db');
 const client = createBetterSqlite3Client(db);
@@ -82,7 +82,7 @@ const client = createBetterSqlite3Client(db);
 
 ```ts
 import Database from 'libsql';
-import {createLibsqlSyncClient} from 'sqlfu/client';
+import {createLibsqlSyncClient} from 'sqlfu';
 
 const db = new Database('app.db');
 const client = createLibsqlSyncClient(db);
@@ -94,7 +94,7 @@ The new Turso-built engine, with native bindings. Same API shape as `@tursodatab
 
 ```ts
 import {connect} from '@tursodatabase/database';
-import {createTursoDatabaseClient} from 'sqlfu/client';
+import {createTursoDatabaseClient} from 'sqlfu';
 
 const db = await connect('app.db'); // or ':memory:'
 const client = createTursoDatabaseClient(db);
@@ -106,7 +106,7 @@ const client = createTursoDatabaseClient(db);
 
 ```ts
 import {createClient} from '@libsql/client';
-import {createLibsqlClient} from 'sqlfu/client';
+import {createLibsqlClient} from 'sqlfu';
 
 const raw = createClient({
   url: process.env.TURSO_DATABASE_URL!, // libsql://...
@@ -121,7 +121,7 @@ The same adapter works against a local file when `url` is `file:app.db`.
 
 ```ts
 import {connect} from '@tursodatabase/serverless';
-import {createTursoServerlessClient} from 'sqlfu/client';
+import {createTursoServerlessClient} from 'sqlfu';
 
 const conn = connect({
   url: process.env.TURSO_DATABASE_URL!,
@@ -138,7 +138,7 @@ Same adapter as `@tursodatabase/database`; the difference is at the driver level
 
 ```ts
 import {connect} from '@tursodatabase/sync';
-import {createTursoDatabaseClient} from 'sqlfu/client';
+import {createTursoDatabaseClient} from 'sqlfu';
 
 const db = await connect({
   path: 'local.db',
@@ -156,7 +156,7 @@ await db.pull();
 ### Cloudflare D1
 
 ```ts
-import {createD1Client} from 'sqlfu/client';
+import {createD1Client} from 'sqlfu';
 
 export default {
   async fetch(_req, env: {DB: D1Database}) {
@@ -169,7 +169,7 @@ export default {
 ### Cloudflare Durable Object (per-DO SQLite)
 
 ```ts
-import {createDurableObjectClient} from 'sqlfu/client';
+import {createDurableObjectClient} from 'sqlfu';
 
 export class Counter {
   client;
@@ -185,7 +185,7 @@ export class Counter {
 
 ```ts
 import * as SQLite from 'expo-sqlite';
-import {createExpoSqliteClient} from 'sqlfu/client';
+import {createExpoSqliteClient} from 'sqlfu';
 
 const db = await SQLite.openDatabaseAsync('app.db');
 const client = createExpoSqliteClient(db);
@@ -195,7 +195,7 @@ const client = createExpoSqliteClient(db);
 
 ```ts
 import sqlite3InitModule from '@sqlite.org/sqlite-wasm';
-import {createSqliteWasmClient} from 'sqlfu/client';
+import {createSqliteWasmClient} from 'sqlfu';
 
 const sqlite3 = await sqlite3InitModule();
 const db = new sqlite3.oo1.DB('file:app.db?vfs=opfs');

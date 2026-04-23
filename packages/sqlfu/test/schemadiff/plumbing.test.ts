@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {DatabaseSync} from 'node:sqlite';
 
-import {createNodeSqliteClient} from '../../src/client.js';
+import {createNodeSqliteClient} from '../../src/index.js';
 import {createNodeHost, createAsyncNodeSqliteClient} from '../../src/node/host.js';
 import {extractSchema} from '../../src/sqlite-text.js';
 import {applyMigrations} from '../../src/migrations/index.js';

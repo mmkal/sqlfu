@@ -5,7 +5,7 @@ import path from 'node:path';
 import {createClient} from '@libsql/client';
 import {expect, test} from 'vitest';
 
-import {createLibsqlClient} from '../../src/client.js';
+import {createLibsqlClient} from '../../src/index.js';
 
 test('createLibsqlClient works with a real @libsql/client database', async () => {
   await using fixture = await createLibsqlFixture(createClient({url: getTmpDbUrl()}));

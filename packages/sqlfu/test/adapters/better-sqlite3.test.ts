@@ -1,7 +1,7 @@
 import BetterSqlite3 from 'better-sqlite3';
 import {expect, test} from 'vitest';
 
-import {createBetterSqlite3Client} from '../../src/client.js';
+import {createBetterSqlite3Client} from '../../src/index.js';
 
 test('createBetterSqlite3Client works with a real better-sqlite3 database', async () => {
   using fixture = createBetterSqlite3Fixture(new BetterSqlite3(':memory:'));

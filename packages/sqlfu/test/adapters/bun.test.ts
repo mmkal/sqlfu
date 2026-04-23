@@ -10,7 +10,7 @@ import {execa} from 'execa';
 import {expect, test} from 'vitest';
 
 const packageRoot = path.resolve(path.dirname(import.meta.filename), '../..');
-declare const createBunClient: typeof import('../../src/client.ts').createBunClient;
+declare const createBunClient: typeof import('../../src/index.ts').createBunClient;
 type ExecaProcess = ReturnType<typeof execa>;
 
 test('createBunClient works with a real bun:sqlite database in a bun subprocess', async () => {

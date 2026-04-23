@@ -14,7 +14,7 @@ import type {
 import {loadProjectConfig} from '../node/config.js';
 import type {Client, SqlfuProjectConfig, SqlfuValidator} from '../types.js';
 import {extractSchema} from '../sqlite-text.js';
-import {createBunClient, createNodeSqliteClient} from '../client.js';
+import {createBunClient, createNodeSqliteClient} from '../index.js';
 
 export type {
   AdHocQueryAnalysis,

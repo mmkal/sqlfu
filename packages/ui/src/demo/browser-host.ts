@@ -1,4 +1,4 @@
-import {createSqliteWasmClient} from 'sqlfu/client';
+import {createSqliteWasmClient} from 'sqlfu';
 import {
   analyzeVendoredTypesqlQueriesWithClient,
   isInternalUnsupportedSqlAnalysisError,

@@ -6,7 +6,7 @@ import {DatabaseSync} from 'node:sqlite';
 import {fileURLToPath} from 'node:url';
 import {Project, ts} from 'ts-morph';
 
-import {createNodeSqliteClient} from '../../src/client.js';
+import {createNodeSqliteClient} from '../../src/index.js';
 import {generateQueryTypes} from '../../src/typegen/index.js';
 import {createTempFixtureRoot, withTrailingNewline, writeFixtureFiles} from '../fs-fixture.js';
 
@@ -152,7 +152,6 @@ async function ensureTypecheckProject(): Promise<Project> {
       allowImportingTsExtensions: true,
       paths: {
         sqlfu: [path.join(packageRoot, 'src', 'index.ts')],
-        'sqlfu/client': [path.join(packageRoot, 'src', 'client.ts')],
         'better-sqlite3': [path.join(packageRoot, 'node_modules', 'better-sqlite3')],
         zod: [path.join(packageRoot, 'node_modules', 'zod')],
         'zod/mini': [path.join(packageRoot, 'node_modules', 'zod', 'mini')],

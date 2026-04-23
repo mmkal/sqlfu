@@ -17,8 +17,8 @@ import {
 
 const test = baseTest.skipIf(!process.env.EXPO_TEST);
 
-declare const createExpoSqliteClient: typeof import('../../src/client.js').createExpoSqliteClient;
-declare const sql: typeof import('../../src/client.js').sql;
+declare const createExpoSqliteClient: typeof import('../../src/index.js').createExpoSqliteClient;
+declare const sql: typeof import('../../src/index.js').sql;
 
 test('createExpoSqliteClient works in a real expo web app', {timeout: 180_000}, async () => {
   await using fixture = await createExpoWebFixture(

@@ -2,7 +2,7 @@ import * as Sentry from '@sentry/node';
 import {DatabaseSync} from 'node:sqlite';
 import {expect, test} from 'vitest';
 
-import {createNodeSqliteClient, instrument} from '../../src/client.js';
+import {createNodeSqliteClient, instrument} from '../../src/index.js';
 
 // Recipe: forward query errors to Sentry.
 //

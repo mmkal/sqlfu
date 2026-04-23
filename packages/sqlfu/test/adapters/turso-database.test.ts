@@ -5,7 +5,7 @@ import path from 'node:path';
 import {connect} from '@tursodatabase/database';
 import {expect, test} from 'vitest';
 
-import {createTursoDatabaseClient} from '../../src/client.js';
+import {createTursoDatabaseClient} from '../../src/index.js';
 
 test('createTursoDatabaseClient works with a real @tursodatabase/database database', async () => {
   await using fixture = await createFixture();

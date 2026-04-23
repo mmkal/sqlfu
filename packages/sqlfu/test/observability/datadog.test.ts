@@ -4,7 +4,7 @@ import type {AddressInfo} from 'node:net';
 import {DatabaseSync} from 'node:sqlite';
 import {expect, test} from 'vitest';
 
-import {createNodeSqliteClient, instrument} from '../../src/client.js';
+import {createNodeSqliteClient, instrument} from '../../src/index.js';
 
 // Recipe: emit per-query metrics to Datadog via DogStatsD (hot-shots).
 //

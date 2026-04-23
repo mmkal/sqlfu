@@ -5,7 +5,7 @@ import {DatabaseSync} from 'node:sqlite';
 
 import {expect, test} from 'vitest';
 
-import {createNodeSqliteClient, type Client} from '../../src/client.js';
+import {createNodeSqliteClient, type Client} from '../../src/index.js';
 import {createOutbox, defineConsumer, type Outbox} from '../../src/outbox/index.js';
 
 /**

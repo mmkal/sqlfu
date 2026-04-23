@@ -6,7 +6,7 @@ import {pathToFileURL} from 'node:url';
 import {ts} from 'ts-morph';
 import {expect, test} from 'vitest';
 
-import {createNodeSqliteClient} from '../../src/client.js';
+import {createNodeSqliteClient} from '../../src/index.js';
 import {applyMigrations, migrationsFromBundle, type MigrationBundle} from '../../src/migrations/index.js';
 import {generateQueryTypes} from '../../src/typegen/index.js';
 import {createTempFixtureRoot, writeFixtureFiles, dumpFixtureFs} from '../fs-fixture.js';

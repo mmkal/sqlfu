@@ -8,7 +8,7 @@ import type {AddressInfo} from 'node:net';
 import {DatabaseSync} from 'node:sqlite';
 import {expect, test} from 'vitest';
 
-import {createNodeSqliteClient, instrument, type SqlQuery} from '../../src/client.js';
+import {createNodeSqliteClient, instrument, type SqlQuery} from '../../src/index.js';
 
 // This recipe covers any backend that accepts OTLP over HTTP: OpenTelemetry
 // collectors, Honeycomb, Grafana Tempo, New Relic, and Datadog (point the

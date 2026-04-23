@@ -120,7 +120,7 @@ Note: `generate` reads the live database schema, so `migrate` must have run firs
 
 ```ts
 import {DatabaseSync} from 'node:sqlite';
-import {createNodeSqliteClient} from 'sqlfu/client';
+import {createNodeSqliteClient} from 'sqlfu';
 import {getPosts} from './sql/.generated/get-posts.sql';
 
 const db = new DatabaseSync('./db/app.sqlite');

@@ -1,7 +1,7 @@
 import Database, {type Database as LibsqlDatabase} from 'libsql';
 import {expect, test} from 'vitest';
 
-import {createLibsqlSyncClient} from '../../src/client.js';
+import {createLibsqlSyncClient} from '../../src/index.js';
 
 test('createLibsqlSyncClient works with a real libsql database', async () => {
   using fixture = createLibsqlFixture(new Database(':memory:'));

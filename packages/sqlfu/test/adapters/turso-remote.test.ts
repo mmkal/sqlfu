@@ -9,8 +9,8 @@ import {connect as connectServerless} from '@tursodatabase/serverless';
 import {connect as connectSync} from '@tursodatabase/sync';
 import {describe, expect, test} from 'vitest';
 
-import {createLibsqlClient, createTursoDatabaseClient, createTursoServerlessClient} from '../../src/client.js';
-import type {AsyncClient} from '../../src/client.js';
+import {createLibsqlClient, createTursoDatabaseClient, createTursoServerlessClient} from '../../src/index.js';
+import type {AsyncClient} from '../../src/index.js';
 
 const TURSO_URL = process.env.TURSO_TEST_DB_URL;
 const TURSO_TOKEN = process.env.TURSO_TEST_DB_TOKEN;

@@ -1,12 +1,42 @@
-// important thing to maintain: the main index.ts export for the sqlfu package must be "light". it can only import runtime-safe stuff:
-// - client
-// - adapters (but rule for adapters: must be dependency free - no importing any actual modules like '@libsql/client' or 'bun:sqlite' - only sqlfu-owned XyzDatabaseLike *types*. users must pass in instances
-// conforming to these types)
-// - config/* (but rule for *config*: same as above! that should probably go as far as also meaning no node: imports. we are currently in violation and have a bunch of node: stuff in there)
-// - types are fine
-//
-// this means we're overdue a refactor, but for now, just eliminate stuff from index.ts
+// The sqlfu root export. Strict-tier: zero node:* imports, zero bare
+// specifiers in the runtime graph of dist/index.js. Enforced by
+// test/import-surface.test.ts. If you're reaching for node:*, or for a
+// vendor bundle like the formatter or typegen, the right home is
+// sqlfu/api (heavy tier) or sqlfu/analyze (zero-node:* + vendor OK).
 
-export * from './client.js';
-export * from './config.js';
+export * from './sql.js';
+export * from './types.js';
+export * from './naming.js';
+export * from './util.js';
+export * from './instrument.js';
+export type {
+  ProcessResult,
+  QueryErrorReport,
+  QueryExecutionContext,
+  QueryExecutionHook,
+  QueryExecutionHookArgs,
+  QueryOperation,
+} from './instrument.js';
+export type {SpanLike, TracerLike} from './otel.js';
+export * from './adapters/d1.js';
+export * from './adapters/libsql.js';
+export * from './adapters/libsql-client.js';
+export * from './adapters/bun.js';
+export * from './adapters/better-sqlite3.js';
+export * from './adapters/node-sqlite.js';
+export * from './adapters/durable-object.js';
+export * from './adapters/expo-sqlite.js';
+export * from './adapters/sqlite-wasm.js';
+export * from './adapters/turso-database.js';
+export * from './adapters/turso-serverless.js';
+
+export {defineConfig} from './config.js';
+
+// The "just-run-the-sql-bro" migrator: enough to apply migrations from a
+// bundle at Cloudflare Worker / Bun boot. History-reconciliation helpers
+// (baseline, replace, readHistory, drift helpers) stay internal to
+// sqlfu/api — workers don't reconcile, they just apply.
+export {applyMigrations, migrationsFromBundle} from './migrations/index.js';
+export type {Migration, MigrationBundle} from './migrations/index.js';
+
 export {prettifyStandardSchemaError} from './vendor/standard-schema/errors.js';

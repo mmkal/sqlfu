@@ -15,6 +15,7 @@ import {loadProjectConfig} from '../node/config.js';
 import type {Client, SqlfuProjectConfig, SqlfuValidator} from '../types.js';
 import {extractSchema} from '../sqlite-text.js';
 import {createBunClient, createNodeSqliteClient} from '../index.js';
+import {migrationName, readMigrationHistory, type Migration} from '../migrations/index.js';
 
 export type {
   AdHocQueryAnalysis,
@@ -210,7 +211,7 @@ type QueryFile = {
 
 async function materializeTypegenDatabase(config: SqlfuProjectConfig) {
   const tempDbPath = path.join(config.projectRoot, '.sqlfu', 'typegen.db');
-  const schemaSql = await readSchemaFromConfigDb(config.db);
+  const schemaSql = await readSchemaForAuthority(config);
 
   await fs.mkdir(path.dirname(tempDbPath), {recursive: true});
   await fs.rm(tempDbPath, {force: true});
@@ -223,17 +224,113 @@ async function materializeTypegenDatabase(config: SqlfuProjectConfig) {
   return tempDbPath;
 }
 
-async function readSchemaFromConfigDb(db: SqlfuProjectConfig['db']): Promise<string> {
-  if (typeof db === 'function') {
-    await using source = await db();
-    return extractSchema(source.client);
+async function readSchemaForAuthority(config: SqlfuProjectConfig): Promise<string> {
+  const authority = config.generate.authority;
+  if (authority === 'desired_schema') return readDefinitionsAsSchemaSql(config.definitions);
+  if (authority === 'migrations') return replayMigrationFilesAsSchemaSql(config);
+  if (authority === 'migration_history') return replayMigrationHistoryAsSchemaSql(config);
+  return readLiveSchema(config.db);
+}
+
+async function readDefinitionsAsSchemaSql(definitionsPath: string): Promise<string> {
+  try {
+    return await fs.readFile(definitionsPath, 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      throw new Error(
+        `sqlfu generate with authority 'desired_schema' needs ${definitionsPath}, but the file was not found.`,
+      );
+    }
+    throw error;
   }
-  await using source = await openMainDevDatabase(db);
-  return extractSchema(source.client);
+}
+
+async function replayMigrationFilesAsSchemaSql(config: SqlfuProjectConfig): Promise<string> {
+  if (!config.migrations) {
+    throw new Error(
+      "sqlfu generate with authority 'migrations' needs a `migrations` directory configured in sqlfu.config.ts.",
+    );
+  }
+  const files = await readMigrationFiles(config.migrations.path);
+  return replayAndExtractSchema(files);
+}
+
+async function replayMigrationHistoryAsSchemaSql(config: SqlfuProjectConfig): Promise<string> {
+  if (!config.migrations) {
+    throw new Error(
+      "sqlfu generate with authority 'migration_history' needs a `migrations` directory configured in sqlfu.config.ts.",
+    );
+  }
+  await using live = await openLiveDb(config.db, 'migration_history');
+  const history = await Promise.resolve(readMigrationHistory(live.client));
+
+  const files = await readMigrationFiles(config.migrations.path);
+  const byName = new Map(files.map((file) => [migrationName(file), file]));
+  const matched: Migration[] = [];
+  for (const row of history) {
+    const file = byName.get(row.name);
+    if (!file) {
+      throw new Error(
+        `sqlfu generate with authority 'migration_history': recorded migration "${row.name}" is missing from ${config.migrations.path}. ` +
+          `Restore it from version control, or switch \`generate.authority\` to 'desired_schema' / 'migrations'.`,
+      );
+    }
+    matched.push(file);
+  }
+
+  return replayAndExtractSchema(matched);
+}
+
+async function readLiveSchema(db: SqlfuProjectConfig['db']): Promise<string> {
+  await using source = await openLiveDb(db, 'live_schema');
+  return extractSchema(source.client, 'main', {excludedTables: [SQLFU_MIGRATIONS_TABLE]});
+}
+
+async function openLiveDb(
+  db: SqlfuProjectConfig['db'],
+  authority: 'migration_history' | 'live_schema',
+): Promise<DisposableClient> {
+  if (db == null) {
+    throw new Error(
+      `sqlfu generate with authority '${authority}' needs a live database, but \`db\` is not set in sqlfu.config.ts.`,
+    );
+  }
+  if (typeof db === 'function') {
+    return db();
+  }
+  return openMainDevDatabase(db);
+}
+
+const SQLFU_MIGRATIONS_TABLE = 'sqlfu_migrations';
+
+async function replayAndExtractSchema(files: Migration[]): Promise<string> {
+  await using scratch = await openMainDevDatabase(':memory:');
+  for (const file of files) {
+    await scratch.client.raw(file.content);
+  }
+  return extractSchema(scratch.client, 'main', {excludedTables: [SQLFU_MIGRATIONS_TABLE]});
+}
+
+async function readMigrationFiles(migrationsDir: string): Promise<Migration[]> {
+  let fileNames: string[];
+  try {
+    fileNames = (await fs.readdir(migrationsDir)).filter((name) => name.endsWith('.sql')).sort();
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw error;
+  }
+  return Promise.all(
+    fileNames.map(async (name) => {
+      const filePath = path.join(migrationsDir, name);
+      return {path: filePath, content: await fs.readFile(filePath, 'utf8')};
+    }),
+  );
 }
 
 async function openMainDevDatabase(dbPath: string): Promise<DisposableClient> {
-  await fs.mkdir(path.dirname(dbPath), {recursive: true});
+  if (dbPath !== ':memory:') {
+    await fs.mkdir(path.dirname(dbPath), {recursive: true});
+  }
   const runtime = 'Bun' in globalThis ? 'bun' : 'node';
 
   if (runtime === 'bun') {

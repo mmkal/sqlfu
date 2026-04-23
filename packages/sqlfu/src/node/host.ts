@@ -49,8 +49,18 @@ function isNodeSqliteExperimentalWarning(warning: string | Error, args: unknown[
  * or a user-provided factory if it's a function. The factory is invoked on every
  * call; users memoize inside the factory if they want to share an expensive
  * resource across sqlfu commands.
+ *
+ * Throws a named, actionable error when `db` is undefined — projects on
+ * `generate.authority: 'desired_schema'` can run `sqlfu generate` without a
+ * DB, but anything that reads/writes the real database needs one.
  */
 export async function openConfigDb(db: SqlfuProjectConfig['db']): Promise<DisposableAsyncClient> {
+  if (db == null) {
+    throw new Error(
+      'sqlfu: this command needs a database, but `db` is not set in sqlfu.config.ts. ' +
+        'Add `db: "./app.sqlite"` (local sqlite) or `db: () => openMyRemoteClient()` (factory) and rerun.',
+    );
+  }
   if (typeof db === 'function') return await db();
   return openLocalSqliteFile(db);
 }

@@ -269,7 +269,7 @@ async function ensureDatabase(host: SqlfuHost, projectRoot: string) {
     definitions: path.join(projectRoot, 'definitions.sql'),
     migrations: {path: path.join(projectRoot, 'migrations'), prefix: 'iso'},
     queries: path.join(projectRoot, 'sql'),
-    generate: {validator: null, prettyErrors: true, sync: false, importExtension: '.js'},
+    generate: {validator: null, prettyErrors: true, sync: false, importExtension: '.js', authority: 'desired_schema'},
   });
   try {
     const definitionsSql = await fs.readFile(path.join(projectRoot, 'definitions.sql'), 'utf8');
@@ -607,7 +607,8 @@ function escapeHtml(value: string) {
 
 function describeConfigDb(db: SqlfuProjectConfig['db']): string {
   if (typeof db === 'string') return db;
-  return '(factory)';
+  if (typeof db === 'function') return '(factory)';
+  return '(not configured)';
 }
 
 function getServerPort(server: http.Server) {

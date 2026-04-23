@@ -4,8 +4,8 @@ import {expect, test} from 'vitest';
 
 import {applyMigrateSql, autoAcceptConfirm, getCheckMismatches} from '../src/api.js';
 import {createBetterSqlite3Client} from '../src/index.js';
-import {createNodeHost} from '../src/node/host.js';
-import type {DisposableAsyncClient, SqlfuDbFactory, SqlfuProjectConfig} from '../src/types.js';
+import {createNodeHost, openLocalSqliteFile} from '../src/node/host.js';
+import type {SqlfuDbFactory, SqlfuProjectConfig} from '../src/types.js';
 import {createTempFixtureRoot, writeFixtureFiles} from './fs-fixture.js';
 
 test('config.db can be a factory — migrate and check operate on the factory-produced client', async () => {
@@ -52,14 +52,14 @@ async function createFactoryFixture(
 
   let invocations = 0;
   let disposals = 0;
-  const db: SqlfuDbFactory = async (): Promise<DisposableAsyncClient> => {
+  const db: SqlfuDbFactory = async () => {
     invocations += 1;
-    const database = new BetterSqlite3(dbPath);
+    const inner = await openLocalSqliteFile(dbPath);
     return {
-      client: createBetterSqlite3Client(database),
+      client: inner.client,
       async [Symbol.asyncDispose]() {
         disposals += 1;
-        database.close();
+        await inner[Symbol.asyncDispose]();
       },
     };
   };
@@ -70,7 +70,7 @@ async function createFactoryFixture(
     migrations: {path: path.join(root, 'migrations'), prefix: 'iso'},
     definitions: path.join(root, 'definitions.sql'),
     queries: path.join(root, 'sql'),
-    generate: {validator: null, prettyErrors: true, sync: false, importExtension: '.js'},
+    generate: {validator: null, prettyErrors: true, sync: false, importExtension: '.js', authority: 'desired_schema'},
   };
 
   const host = await createNodeHost();

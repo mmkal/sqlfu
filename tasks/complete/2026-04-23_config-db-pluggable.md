@@ -7,14 +7,26 @@ size: large
 
 ## High-level status
 
-Done, pending review. Scope: **the callback form only** — `config.db`
-accepts a factory returning a `DisposableAsyncClient`; string form kept
-as sugar for opening a local sqlite file. Every command that touches the
-DB (`migrate`, `check`, `sync`, `goto`, `baseline`, `generate`, the UI)
-goes through the new `openConfigDb` dispatcher. Typegen still opens the
-real DB for schema extraction (the "typegen doesn't need a DB" half
-waits on `generate-self-contained`). Integration test added; full
-vitest suite passes.
+Scope expanded after a mid-PR grill: shipping just the factory form
+without the typegen fix would expose a new slow path — every
+`sqlfu generate` spinning up Miniflare / opening the live DB just to
+read a schema that's already on disk in `definitions.sql`. So this PR
+now folds in `tasks/generate-self-contained.md` and ships both halves:
+
+1. **Pluggable `db`.** `config.db` accepts `string | SqlfuDbFactory |
+   undefined`. Commands that need the DB flow through
+   `openConfigDb(config.db)`; undefined throws a clear error only at
+   call time, so projects whose `generate` doesn't need a live DB can
+   omit `db` entirely.
+2. **`generate.authority` knob.** New `authority` option on the
+   `generate` config block, default `desired_schema`. Four values:
+   `desired_schema` (read `definitions.sql` directly), `migrations`
+   (replay `migrations/*.sql`), `migration_history` (read
+   `sqlfu_migrations` from the live DB, replay the matching files —
+   throws on dangling pointers), `live_schema` (old behaviour; extract
+   from live DB).
+
+Both halves done. Tests, README, cleanup landed. Pending review.
 
 ## The problem
 
@@ -142,10 +154,37 @@ resolved below.
 - [x] Update `packages/sqlfu/README.md` with a "Pluggable `db`" section
   and a miniflare/D1 example.
 
+### Part 2 — `generate.authority`
+
+- [x] Add `SqlfuAuthority` union type to `src/types.ts`.
+- [x] Add optional `authority?: SqlfuAuthority` to
+  `SqlfuGenerateConfig`; resolves to `'desired_schema'` by default in
+  `SqlfuProjectConfig.generate.authority`.
+- [x] Make `SqlfuConfig.db` / `SqlfuProjectConfig.db` optional.
+  `assertConfigShape` / `resolveProjectConfig` updated.
+- [x] `openConfigDb` throws a named, actionable error when `db` is
+  missing: _"this command needs a database, but `db` is not set in
+  sqlfu.config.ts. Add `db: …` and rerun."_
+- [x] Refactor typegen: `materializeTypegenDatabase` dispatches through
+  `readSchemaForAuthority(config)` which fans out to
+  `readDefinitionsAsSchemaSql`, `replayMigrationFilesAsSchemaSql`,
+  `replayMigrationHistoryAsSchemaSql`, or `readLiveSchema`. All paths
+  exclude `sqlfu_migrations` from the extracted schema (pre-existing
+  mini-bug: typegen used to leak the bookkeeping table into generated
+  types if the user had run `sqlfu migrate` first).
+- [x] `describeConfigDb` renders `"(not configured)"` for undefined.
+- [x] New `test/generate-authority.test.ts`: one test per authority,
+  plus a "dangling migration_history pointer throws" test, plus an
+  "omitting db with `desired_schema` is fine" test, plus a
+  "`live_schema` without db throws at generate time" test. 5 tests, all
+  passing.
+- [x] README updated: optional-field split, new "`generate.authority`"
+  section, command-reference note ("generate reads definitions.sql by
+  default").
+- [x] Deleted `tasks/generate-self-contained.md` (superseded).
+
 ## Out of scope (explicit non-goals for this PR)
 
-- The `authority` knob proposed in `generate-self-contained.md`. Typegen
-  still calls the real DB to read the schema.
 - UI readonly / confirm-before-destructive guardrails when `db` points at
   a remote.
 - Concurrency / multi-process sqlite stress tests (miniflare + sqlfu

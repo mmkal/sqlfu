@@ -50,7 +50,7 @@ export function buildDemoConfig(): SqlfuProjectConfig {
     definitions: `${DEMO_PROJECT_ROOT}/definitions.sql`,
     migrations: {path: `${DEMO_PROJECT_ROOT}/migrations`, prefix: 'iso'},
     queries: `${DEMO_PROJECT_ROOT}/sql`,
-    generate: {validator: null, prettyErrors: true, sync: false, importExtension: '.js'},
+    generate: {validator: null, prettyErrors: true, sync: false, importExtension: '.js', authority: 'desired_schema'},
   };
 }
 

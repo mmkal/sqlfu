@@ -72,7 +72,7 @@ You should still get strong TypeScript output from SQL: generated wrappers, type
 ## Core Concepts
 
 - `definitions.sql`
-  The desired schema now.
+  The desired schema now. Tables, views, triggers, and — if you want them — copy-paste id generators (ULID, KSUID, nanoid, cuid2-shaped) live here alongside your schema. See [docs/id-helpers.md](packages/sqlfu/docs/id-helpers.md).
 - `migrations/`
   The ordered history of schema changes.
 - `sql/`
@@ -121,7 +121,7 @@ Opt in to runtime validation by setting `generate.validator` to `'arktype'`, `'v
 
 ### Observability
 
-Generated queries carry their filename to runtime as a `name` field on the emitted `SqlQuery`. That name reaches OpenTelemetry spans, Sentry errors, PostHog events, and Datadog metrics through a single `instrument()` call:
+Generated queries carry their identity to runtime as a `name` field on the emitted `SqlQuery` — the camelCase function name, matching the symbol you import (e.g. `insertMigration`). That name reaches OpenTelemetry spans, Sentry errors, PostHog events, and Datadog metrics through a single `instrument()` call:
 
 ```ts
 import {instrument} from 'sqlfu';
@@ -135,6 +135,25 @@ const client = instrument(baseClient,
 ```
 
 No peer dependencies on OpenTelemetry or Sentry. `TracerLike` is structural; hook consumers bring their own SDK. Copy-pasteable recipes live in [Observability](https://sqlfu.dev/docs/observability).
+
+### Typed errors
+
+Every adapter throws `SqlfuError` with a normalized `.kind` discriminator — `'unique_violation'`, `'missing_table'`, `'syntax'`, `'transient'`, etc. — so application code branches on the outcome instead of string-matching the driver's message.
+
+```ts
+import {SqlfuError} from 'sqlfu';
+
+try {
+  await client.run(createUser);
+} catch (error) {
+  if (error instanceof SqlfuError && error.kind === 'unique_violation') {
+    return response.status(409).json({error: 'email already taken'});
+  }
+  throw error;
+}
+```
+
+The driver error is preserved byte-identical on `.cause`; `.query` and `.system` come along so error reporters can tag events without a parallel `QueryExecutionContext`. Kind names are SQLSTATE-aligned, so the day a postgres adapter lands the mapping is a direct lookup rather than a second vocabulary to remember. Full kind list, handler recipes, Sentry-tagging example: [Errors](https://sqlfu.dev/docs/errors).
 
 ### Outbox
 

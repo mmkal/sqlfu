@@ -39,7 +39,7 @@ test('query errors forward to Sentry with db.query.summary as a tag', async () =
     sqlfuClient.all({
       sql: 'select * from nonexistent_table',
       args: [],
-      name: 'find-missing',
+      name: 'findMissing',
     }),
   ).toThrow(/no such table/);
 
@@ -47,7 +47,7 @@ test('query errors forward to Sentry with db.query.summary as a tag', async () =
   expect(events).toHaveLength(1);
   expect(events[0]).toMatchObject({
     tags: {
-      'db.query.summary': 'find-missing',
+      'db.query.summary': 'findMissing',
       'db.system.name': 'sqlite',
     },
     extra: {

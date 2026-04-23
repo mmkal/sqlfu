@@ -63,7 +63,7 @@ create table if not exists sqlfu_migrations(
   applied_at text not null
 );
 `.trim();
-const query = { sql, args: [], name: "ensure-migration-table" };
+const query = { sql, args: [], name: "ensureMigrationTable" };
 
 export const ensureMigrationTable = Object.assign(
 	async function ensureMigrationTable(client: Client) {
@@ -182,7 +182,7 @@ import type {Client} from 'sqlfu';
 const sql = `
 select id, slug, body as excerpt from posts where slug = ? limit 1;
 `.trim();
-const query = (params: findPostBySlug.Params) => ({ sql, args: [params.slug], name: "find-post-by-slug" });
+const query = (params: findPostBySlug.Params) => ({ sql, args: [params.slug], name: "findPostBySlug" });
 
 export const findPostBySlug = Object.assign(
 	async function findPostBySlug(client: Client, params: findPostBySlug.Params): Promise<findPostBySlug.Result | null> {
@@ -208,7 +208,7 @@ export namespace findPostBySlug {
 import type {Client} from 'sqlfu';
 
 const sql = `select id, slug, published_at, excerpt from post_summaries;`;
-const query = { sql, args: [], name: "list-post-summaries" };
+const query = { sql, args: [], name: "listPostSummaries" };
 
 export const listPostSummaries = Object.assign(
 	async function listPostSummaries(client: Client): Promise<listPostSummaries.Result[]> {

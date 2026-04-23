@@ -1,3 +1,4 @@
+import {wrapAsyncClientErrors} from '../adapter-errors.js';
 import {bindAsyncSql} from '../sql.js';
 import {rawSqlWithSqlSplittingAsync, surroundWithBeginCommitRollbackAsync} from '../sqlite-text.js';
 import type {AsyncClient, ResultRow, SqlQuery} from '../types.js';
@@ -56,7 +57,7 @@ export function createLibsqlClient(client: LibsqlClientLike): AsyncClient<Libsql
 
   queryClient.sql = bindAsyncSql(queryClient);
 
-  return queryClient;
+  return wrapAsyncClientErrors(queryClient);
 }
 
 export const createLibsqlDatabase = createLibsqlClient;

@@ -15,6 +15,12 @@ import {createNodeSqliteClient, instrument, type SqlQuery} from '../../src/index
 // `OTLPTraceExporter` url at Datadog's intake URL and add the API key
 // header). The hook wiring below is identical for every destination — only
 // the exporter's URL and headers change.
+//
+// Stack-quality (i.e. `error.stack` still pointing at the user's call site
+// after the adapter wraps with `SqlfuError`) is not asserted here — the
+// test dispatches through a real HTTP server and the call-site frame
+// doesn't survive transport. The direct adapter sweep in `errors.test.ts`
+// is the real stack-quality guard.
 test('named and ad-hoc queries surface on OTel spans and error reporter fires on failure', async () => {
   await using otel = await createOtelFixture();
   const errorReports: Array<{queryName: string | undefined; error: unknown}> = [];
@@ -37,12 +43,12 @@ test('named and ad-hoc queries surface on OTel spans and error reporter fires on
   const listProfilesQuery: SqlQuery = {
     sql: 'select id, name from profiles order by id',
     args: [],
-    name: 'list-profiles',
+    name: 'listProfiles',
   };
   const brokenQuery: SqlQuery = {
     sql: 'select * from nonexistent_table',
     args: [],
-    name: 'broken-query',
+    name: 'brokenQuery',
   };
 
   const app = new Hono();
@@ -90,8 +96,8 @@ test('named and ad-hoc queries surface on OTel spans and error reporter fires on
 
   expect(await otel.renderTrace()).toMatchInlineSnapshot(`
     "GET /profiles
-      list-profiles
-        db.query.summary=list-profiles
+      listProfiles
+        db.query.summary=listProfiles
         db.query.text=select id, name from profiles order by id
         db.system.name=sqlite
         status=OK
@@ -101,8 +107,8 @@ test('named and ad-hoc queries surface on OTel spans and error reporter fires on
         db.system.name=sqlite
         status=OK
     GET /broken
-      broken-query
-        db.query.summary=broken-query
+      brokenQuery
+        db.query.summary=brokenQuery
         db.query.text=select * from nonexistent_table
         db.system.name=sqlite
         exception: no such table: nonexistent_table
@@ -110,7 +116,7 @@ test('named and ad-hoc queries surface on OTel spans and error reporter fires on
   `);
 
   expect(errorReports).toHaveLength(1);
-  expect(errorReports[0]!.queryName).toBe('broken-query');
+  expect(errorReports[0]!.queryName).toBe('brokenQuery');
   expect((errorReports[0]!.error as Error).message).toContain('no such table: nonexistent_table');
 });
 

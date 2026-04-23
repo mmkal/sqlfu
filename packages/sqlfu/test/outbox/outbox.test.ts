@@ -38,18 +38,18 @@ test('fan-out: one event creates one job per matching consumer', async () => {
 
   const jobs = await app.listJobs();
   expect(jobs.map((j) => j.consumer_name).sort()).toEqual(
-    ['onboarding-reminder', 'slack-admin-notify', 'test-domain-welcome', 'welcome-email'].sort(),
+    ['onboardingReminder', 'slackAdminNotify', 'testDomainWelcome', 'welcomeEmail'].sort(),
   );
   for (const job of jobs) expect(job.status).toBe('pending');
 });
 
 test('`when` filter skips consumers whose predicate is falsy', async () => {
   await using app = await createTestApp();
-  await app.signUp('ada@example.com'); // NOT @test.com — `test-domain-welcome` should not fan out
+  await app.signUp('ada@example.com'); // NOT @test.com — `testDomainWelcome` should not fan out
 
   const consumers = (await app.listJobs()).map((j) => j.consumer_name).sort();
-  expect(consumers).toEqual(['onboarding-reminder', 'slack-admin-notify', 'welcome-email'].sort());
-  expect(consumers).not.toContain('test-domain-welcome');
+  expect(consumers).toEqual(['onboardingReminder', 'slackAdminNotify', 'welcomeEmail'].sort());
+  expect(consumers).not.toContain('testDomainWelcome');
 });
 
 test('retries a transient failure and eventually succeeds', async () => {
@@ -57,19 +57,19 @@ test('retries a transient failure and eventually succeeds', async () => {
   app.makeNextWelcomeEmailFail('smtp down');
   await app.signUp('ada@sqlfu.dev');
 
-  // first tick: welcome-email attempt 1 fails and gets scheduled for retry
+  // first tick: welcomeEmail attempt 1 fails and gets scheduled for retry
   await app.tick();
-  const welcomeAfterFirst = await app.findJob('welcome-email');
+  const welcomeAfterFirst = await app.findJob('welcomeEmail');
   expect(welcomeAfterFirst).toMatchObject({status: 'pending', attempt: 1, last_error: expect.stringContaining('smtp')});
 
   // still too soon — retry backoff hasn't elapsed
   await app.tick();
-  expect(await app.findJob('welcome-email')).toMatchObject({status: 'pending', attempt: 1});
+  expect(await app.findJob('welcomeEmail')).toMatchObject({status: 'pending', attempt: 1});
 
   // advance past the retry delay — tick re-runs and succeeds
   app.clock.advance(5000);
   await app.tick();
-  expect(await app.findJob('welcome-email')).toMatchObject({status: 'success', attempt: 2});
+  expect(await app.findJob('welcomeEmail')).toMatchObject({status: 'success', attempt: 2});
   expect(await app.listSentEmails()).toContainEqual(expect.objectContaining({to: 'ada@sqlfu.dev'}));
 });
 
@@ -84,7 +84,7 @@ test('permanent failure after retries lands in status=failed', async () => {
     app.clock.advance(10_000);
   }
 
-  expect(await app.findJob('welcome-email')).toMatchObject({
+  expect(await app.findJob('welcomeEmail')).toMatchObject({
     status: 'failed',
     last_error: expect.stringContaining('permanently broken'),
   });
@@ -95,16 +95,16 @@ test('delayed consumer does not fire until its run_after', async () => {
   await app.signUp('ada@sqlfu.dev');
 
   await app.tick();
-  expect(await app.findJob('onboarding-reminder')).toMatchObject({status: 'pending'});
-  expect(await app.findJob('welcome-email')).toMatchObject({status: 'success'});
+  expect(await app.findJob('onboardingReminder')).toMatchObject({status: 'pending'});
+  expect(await app.findJob('welcomeEmail')).toMatchObject({status: 'success'});
 
   app.clock.advance(1000 * 60 * 60 * 23); // 23h — still too early
   await app.tick();
-  expect(await app.findJob('onboarding-reminder')).toMatchObject({status: 'pending'});
+  expect(await app.findJob('onboardingReminder')).toMatchObject({status: 'pending'});
 
   app.clock.advance(1000 * 60 * 60 * 2); // 25h total, past the 24h delay
   await app.tick();
-  expect(await app.findJob('onboarding-reminder')).toMatchObject({status: 'success'});
+  expect(await app.findJob('onboardingReminder')).toMatchObject({status: 'success'});
 });
 
 test('events emitted inside a handler carry causation back to the originating job', async () => {
@@ -118,7 +118,7 @@ test('events emitted inside a handler carry causation back to the originating jo
   const reminderDueEvent = (await app.listEvents()).find((e) => e.name === 'reminder:due');
   expect(reminderDueEvent).toBeDefined();
   const context = JSON.parse(reminderDueEvent!.context) as {causedBy?: {consumerName: string}};
-  expect(context.causedBy?.consumerName).toBe('onboarding-reminder');
+  expect(context.causedBy?.consumerName).toBe('onboardingReminder');
 
   // the follow-up email actually lands
   expect(await app.listSentEmails()).toContainEqual(expect.objectContaining({subject: 'Still there?'}));
@@ -130,17 +130,17 @@ test('visibility-timeout expiry allows crash recovery', async () => {
 
   // simulate a worker crashing after claim but before completing: claim without processing
   const claimed = await app.outbox.claim({limit: 10});
-  expect(claimed.some((c) => c.consumer_name === 'welcome-email')).toBe(true);
-  expect(await app.findJob('welcome-email')).toMatchObject({status: 'running'});
+  expect(claimed.some((c) => c.consumer_name === 'welcomeEmail')).toBe(true);
+  expect(await app.findJob('welcomeEmail')).toMatchObject({status: 'running'});
 
   // before VT expires — nothing can re-claim it
   await app.tick();
-  expect(await app.findJob('welcome-email')).toMatchObject({status: 'running', attempt: 0});
+  expect(await app.findJob('welcomeEmail')).toMatchObject({status: 'running', attempt: 0});
 
   // fast-forward past the VT — next tick re-claims the orphaned job and processes it
   app.clock.advance(1000 * 60); // 60s — default VT is 30s
   await app.tick();
-  expect(await app.findJob('welcome-email')).toMatchObject({status: 'success'});
+  expect(await app.findJob('welcomeEmail')).toMatchObject({status: 'success'});
 });
 
 /* -------------------------------------------------------------------------- */
@@ -166,7 +166,7 @@ async function createTestApp() {
   let welcomeEmailAlwaysError: string | null = null;
 
   const welcomeEmail = defineConsumer<UserSignedUpPayload, AppEvents>({
-    name: 'welcome-email',
+    name: 'welcomeEmail',
     retry: (_, error) => ({retry: true, reason: String(error), delay: '5s'}),
     handler: async ({payload}) => {
       if (welcomeEmailAlwaysError) throw new Error(welcomeEmailAlwaysError);
@@ -183,7 +183,7 @@ async function createTestApp() {
   });
 
   const testDomainWelcome = defineConsumer<UserSignedUpPayload, AppEvents>({
-    name: 'test-domain-welcome',
+    name: 'testDomainWelcome',
     when: ({payload}) => payload.email.endsWith('@test.com') || payload.email.endsWith('@sqlfu.dev'),
     handler: async ({payload}) => {
       await client.run({
@@ -194,7 +194,7 @@ async function createTestApp() {
   });
 
   const slackAdminNotify = defineConsumer<UserSignedUpPayload, AppEvents>({
-    name: 'slack-admin-notify',
+    name: 'slackAdminNotify',
     handler: async ({payload}) => {
       await client.run({
         sql: 'insert into slack_posts (channel, message) values (?, ?)',
@@ -204,7 +204,7 @@ async function createTestApp() {
   });
 
   const onboardingReminder = defineConsumer<UserSignedUpPayload, AppEvents>({
-    name: 'onboarding-reminder',
+    name: 'onboardingReminder',
     delay: () => '24h',
     handler: async ({payload, emit}) => {
       await emit({name: 'reminder:due', payload: {userId: payload.userId, email: payload.email}});
@@ -212,7 +212,7 @@ async function createTestApp() {
   });
 
   const reminderDueHandler = defineConsumer<ReminderDuePayload, AppEvents>({
-    name: 'reminder-email',
+    name: 'reminderEmail',
     handler: async ({payload}) => {
       await client.run({
         sql: 'insert into sent_emails (to_addr, subject) values (?, ?)',

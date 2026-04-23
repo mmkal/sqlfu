@@ -31,6 +31,19 @@ Today, they are usually stored as `migrations/*.sql`, but the concept is broader
 
 If you replay all migrations from the beginning, they should produce the Desired Schema.
 
+Migration files are ordered lexicographically by filename, so the prefix has to be sortable. `sqlfu draft` names new files with an ISO timestamp by default (`2026-04-22T10.30.45.123Z_create_people.sql`). If your project uses the four-digit sequential convention that pgkit, Kysely, Prisma, and similar tools produce, pass `migrations` as an object instead of a string in `sqlfu.config.ts`:
+
+```ts
+export default defineConfig({
+  // ...
+  migrations: {path: './migrations', prefix: 'four-digit'},
+});
+```
+
+With `prefix: 'four-digit'`, new migrations are named `0000_*.sql`, `0001_*.sql`, … — the next integer after the max of any existing files whose basename already starts with four digits. An empty directory starts at `0000`. Files that don't match `^\d{4}_` are ignored when picking the next integer, so a stray README or legacy timestamped migration won't push the counter up.
+
+Don't mix prefix formats in the same directory. Lexicographic ordering between an ISO timestamp and a four-digit number isn't coherent; pick one.
+
 ### Migration History
 
 Migration History is what a specific database says it has applied.

@@ -48,7 +48,7 @@ export function buildDemoConfig(): SqlfuProjectConfig {
     projectRoot: DEMO_PROJECT_ROOT,
     db: `${DEMO_PROJECT_ROOT}/app.db`,
     definitions: `${DEMO_PROJECT_ROOT}/definitions.sql`,
-    migrations: `${DEMO_PROJECT_ROOT}/migrations`,
+    migrations: {path: `${DEMO_PROJECT_ROOT}/migrations`, prefix: 'iso'},
     queries: `${DEMO_PROJECT_ROOT}/sql`,
     generate: {validator: null, prettyErrors: true, sync: false, importExtension: '.js'},
   };
@@ -191,7 +191,8 @@ function wasmDatabaseAsTypesqlClient(database: Database) {
 }
 
 function createVfsFs(vfs: DemoVfs, config: SqlfuProjectConfig, notify: () => void): HostFs {
-  const migrationsPrefix = `${config.migrations}/`;
+  const migrationsPath = config.migrations?.path;
+  const migrationsPrefix = `${migrationsPath}/`;
   const queriesPrefix = `${config.queries}/`;
 
   const matchMigration = (path: string) =>
@@ -242,7 +243,7 @@ function createVfsFs(vfs: DemoVfs, config: SqlfuProjectConfig, notify: () => voi
       throw new Error(`Cannot write to path outside of the demo vfs: ${path}`);
     },
     async readdir(path) {
-      if (path === config.migrations) return vfs.migrations.map((m) => m.name);
+      if (path === migrationsPath) return vfs.migrations.map((m) => m.name);
       if (path === config.queries) return vfs.queries.map((q) => q.name);
       throw enoent(path);
     },

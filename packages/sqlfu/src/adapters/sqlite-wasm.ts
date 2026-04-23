@@ -1,3 +1,4 @@
+import {wrapAsyncClientErrors} from '../adapter-errors.js';
 import {bindAsyncSql} from '../sql.js';
 import {rawSqlWithSqlSplittingAsync, surroundWithBeginCommitRollbackAsync} from '../sqlite-text.js';
 import type {AsyncClient, QueryArg, ResultRow, SqlQuery} from '../types.js';
@@ -69,7 +70,7 @@ export function createSqliteWasmClient(database: SqliteWasmDatabaseLike): AsyncC
 
   client.sql = bindAsyncSql(client);
 
-  return client;
+  return wrapAsyncClientErrors(client);
 }
 
 export const createSqliteWasmDatabase = createSqliteWasmClient;

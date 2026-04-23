@@ -122,13 +122,28 @@ export interface SqlfuGenerateConfig {
   importExtension?: '.js' | '.ts';
 }
 
+/**
+ * Prefix format used when drafting new migration filenames.
+ * - `'iso'` (default): `2026-04-22T10.30.45.123Z_<slug>.sql`
+ * - `'four-digit'`: `0000_<slug>.sql`, `0001_<slug>.sql`, … (next-integer-after-max of existing
+ *   `^\d{4}_` files; starts at `0000` in an empty directory)
+ */
+export type SqlfuMigrationPrefix = 'iso' | 'four-digit';
+
+export interface SqlfuMigrationsConfig {
+  path: string;
+  prefix: SqlfuMigrationPrefix;
+}
+
 export interface SqlfuConfig {
   db: string;
   /**
-   * Directory containing migration `.sql` files. Optional — omit if your project doesn't use
-   * migrations (e.g. library-author use cases where definitions.sql alone is the source of truth).
+   * Migrations directory. Pass a string for the default ISO-timestamp prefix, or
+   * `{ path, prefix: 'four-digit' }` to use `0000_*.sql`, `0001_*.sql`, … for newly
+   * drafted migrations. Omit entirely if your project doesn't use migrations
+   * (e.g. library-author use cases where definitions.sql alone is the source of truth).
    */
-  migrations?: string;
+  migrations?: string | SqlfuMigrationsConfig;
   definitions: string;
   queries: string;
   generate?: SqlfuGenerateConfig;
@@ -137,7 +152,7 @@ export interface SqlfuConfig {
 export interface SqlfuProjectConfig {
   projectRoot: string;
   db: string;
-  migrations?: string;
+  migrations?: SqlfuMigrationsConfig;
   definitions: string;
   queries: string;
   generate: {

@@ -5,7 +5,7 @@ select name, checksum, applied_at
 from sqlfu_migrations
 order by name;
 `.trim();
-const query = { sql, args: [], name: "select-migration-history" };
+const query = { sql, args: [], name: "selectMigrationHistory" };
 
 export const selectMigrationHistory = Object.assign(
 	async function selectMigrationHistory(client: Client): Promise<selectMigrationHistory.Result[]> {

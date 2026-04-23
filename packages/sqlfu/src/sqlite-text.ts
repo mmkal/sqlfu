@@ -18,7 +18,14 @@ export async function extractSchema(
       where sql is not null
         and name not like 'sqlite_%'
         ${excludedTableFilter}
-      order by type, name
+      order by
+        case type
+          when 'table' then 0
+          when 'view' then 1
+          when 'index' then 2
+          when 'trigger' then 3
+        end,
+        name
     `,
     args: [],
   });

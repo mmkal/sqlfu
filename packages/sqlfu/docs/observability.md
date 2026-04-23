@@ -1,24 +1,24 @@
 # Observability
 
-Generated queries carry their filename to runtime as a `name` field. That name reaches OpenTelemetry spans, Sentry errors, PostHog events, Datadog metrics, and anywhere else you want to see it, without extra configuration per destination.
+Generated queries carry their identity to runtime as a `name` field — the camelCase function name, matching the symbol you import. That name reaches OpenTelemetry spans, Sentry errors, PostHog events, Datadog metrics, and anywhere else you want to see it, without extra configuration per destination.
 
 sqlfu's observability story mostly falls out of making query naming a first-class concept. The instrumentation itself is small: one `instrument(client, ...hooks)` wrapper and a couple of reference hooks.
 
 ## The `name` field
 
-Every `.sql` file you check in becomes a generated wrapper whose emitted `SqlQuery` carries the filename (without extension) as `name`. For `sql/list-profiles.sql` you get:
+Every `.sql` file you check in becomes a generated wrapper whose emitted `SqlQuery` carries its camelCased function name as `name`. For `sql/list-profiles.sql` you get:
 
 ```ts
 // sql/.generated/list-profiles.sql.ts  (generated - do not edit)
-const query: SqlQuery = {sql: ListProfilesSql, args: [], name: 'list-profiles'};
+const query: SqlQuery = {sql: ListProfilesSql, args: [], name: 'listProfiles'};
 ```
 
-Nested directories become slash-separated names (`sql/users/list-profiles.sql` → `name: 'users/list-profiles'`) and the generated function name is the camelCased path (`usersListProfiles`). Function names can't collide because distinct file paths produce distinct names.
+Nested directories fold into the same camelCase (`sql/users/list-profiles.sql` → `name: 'usersListProfiles'`, also the exported function name). Function names can't collide because distinct file paths produce distinct names.
 
 Ad-hoc SQL (via `` client.sql`...` ``) has no name, but you can pass one explicitly:
 
 ```ts
-client.run({sql: 'select 1', args: [], name: 'health-check'});
+client.run({sql: 'select 1', args: [], name: 'healthCheck'});
 ```
 
 ## `instrument` helper
@@ -68,6 +68,8 @@ instrument.onError(({context, error}) => {
   console.error(`query ${context.query.name ?? 'sql'} failed:`, error);
 });
 ```
+
+Every driver error is a [`SqlfuError`](./errors.md) with a normalized `.kind` discriminator — `unique_violation`, `missing_table`, `syntax`, etc. That makes it a natural bucketing dimension in your error reporter (`tags: {'db.error.kind': error.kind}`).
 
 ## Recipes
 
@@ -199,7 +201,7 @@ Full recipe: [`datadog.test.ts`](../test/observability/datadog.test.ts).
 **`client.raw(sql)` is not uniquely identified.** `raw` interpolates values into the SQL text, so per-call distinctness depends on parameter values rather than on a stable name. If you need named observability on dynamic SQL, assemble a `SqlQuery` directly:
 
 ```ts
-client.run({sql, args, name: 'my-query'});
+client.run({sql, args, name: 'myQuery'});
 ```
 
 **`iterate` and `transaction` pass through unchanged.** Queries issued *inside* a transaction still fire hooks because the tx client is re-instrumented on entry. Transactions themselves don't get their own spans. If you want transaction-level spans, wrap `client.transaction(...)` calls yourself using your tracer.

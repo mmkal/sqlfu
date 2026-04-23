@@ -64,14 +64,14 @@ test('queries emit db_query events on success and $exception + db_query on failu
     );
   });
 
-  client.all({sql: 'select id, name from profiles order by id', args: [], name: 'list-profiles'});
-  expect(() => client.all({sql: 'select * from nonexistent', args: [], name: 'find-missing'})).toThrow(/no such table/);
+  client.all({sql: 'select id, name from profiles order by id', args: [], name: 'listProfiles'});
+  expect(() => client.all({sql: 'select * from nonexistent', args: [], name: 'findMissing'})).toThrow(/no such table/);
 
   const events = await posthog.flush();
   expect(renderEvents(events)).toMatchInlineSnapshot(`
-    "db_query  db.query.summary=list-profiles  db.system.name=sqlite  operation=all  outcome=success  duration_ms=<ms>
-    db_query  db.query.summary=find-missing  db.system.name=sqlite  operation=all  outcome=error  duration_ms=<ms>
-    $exception  db.query.summary=find-missing  db.system.name=sqlite  operation=all  db.query.text=select * from nonexistent  $exception_list=[Error: no such table: nonexistent]"
+    "db_query  db.query.summary=listProfiles  db.system.name=sqlite  operation=all  outcome=success  duration_ms=<ms>
+    db_query  db.query.summary=findMissing  db.system.name=sqlite  operation=all  outcome=error  duration_ms=<ms>
+    $exception  db.query.summary=findMissing  db.system.name=sqlite  operation=all  db.query.text=select * from nonexistent  $exception_list=[SqlfuError: no such table: nonexistent]"
   `);
 });
 

@@ -6,7 +6,7 @@ insert into
 values
   (?, ?, ?);
 `.trim();
-const query = (params: insertMigration.Params) => ({ sql, args: [params.name, params.checksum, params.applied_at], name: "insert-migration" });
+const query = (params: insertMigration.Params) => ({ sql, args: [params.name, params.checksum, params.applied_at], name: "insertMigration" });
 
 export const insertMigration = Object.assign(
 	async function insertMigration(client: Client, params: insertMigration.Params) {

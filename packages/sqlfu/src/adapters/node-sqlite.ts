@@ -1,3 +1,4 @@
+import {wrapSyncClientErrors} from '../adapter-errors.js';
 import {bindSyncSql} from '../sql.js';
 import {rawSqlWithSqlSplittingSync, surroundWithBeginCommitRollbackSync} from '../sqlite-text.js';
 import type {ResultRow, SqlQuery, SyncClient} from '../types.js';
@@ -52,7 +53,7 @@ export function createNodeSqliteClient(database: NodeSqliteDatabaseLike): SyncCl
 
   client.sql = bindSyncSql(client);
 
-  return client;
+  return wrapSyncClientErrors(client);
 }
 
 export const createNodeSqliteDatabase = createNodeSqliteClient;

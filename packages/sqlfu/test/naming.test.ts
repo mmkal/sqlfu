@@ -41,8 +41,8 @@ test.for<{label: string; sql: string; expected: string}>([
 });
 
 test('spanNameFor: named query returns the author-given name verbatim', () => {
-  const query: SqlQuery = {sql: 'select * from profiles', args: [], name: 'list-profiles'};
-  expect(spanNameFor(query)).toBe('list-profiles');
+  const query: SqlQuery = {sql: 'select * from profiles', args: [], name: 'listProfiles'};
+  expect(spanNameFor(query)).toBe('listProfiles');
 });
 
 test('spanNameFor: ad-hoc query combines readable nickname with stable 7-char hash', () => {

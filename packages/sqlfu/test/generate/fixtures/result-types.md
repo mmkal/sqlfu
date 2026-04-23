@@ -38,7 +38,7 @@ select id, slug, title from posts where slug = :slug limit 1;
 import type {Client} from 'sqlfu';
 
 const sql = `select id, slug, title from posts where slug = ? limit 1;`;
-const query = (params: findPostBySlug.Params) => ({ sql, args: [params.slug], name: "find-post-by-slug" });
+const query = (params: findPostBySlug.Params) => ({ sql, args: [params.slug], name: "findPostBySlug" });
 
 export const findPostBySlug = Object.assign(
 	async function findPostBySlug(client: Client, params: findPostBySlug.Params): Promise<findPostBySlug.Result | null> {
@@ -100,7 +100,7 @@ select id, body as excerpt from posts limit 5;
 import type {Client} from 'sqlfu';
 
 const sql = `select id, body as excerpt from posts limit 5;`;
-const query = { sql, args: [], name: "find-post-preview" };
+const query = { sql, args: [], name: "findPostPreview" };
 
 export const findPostPreview = Object.assign(
 	async function findPostPreview(client: Client): Promise<findPostPreview.Result[]> {
@@ -158,7 +158,7 @@ import type {Client} from 'sqlfu';
 const sql = `
 select id, published_at from posts where published_at is not null limit 1;
 `.trim();
-const query = { sql, args: [], name: "find-published-post-by-slug" };
+const query = { sql, args: [], name: "findPublishedPostBySlug" };
 
 export const findPublishedPostBySlug = Object.assign(
 	async function findPublishedPostBySlug(client: Client): Promise<findPublishedPostBySlug.Result | null> {
@@ -216,7 +216,7 @@ select id, excerpt from post_summaries;
 import type {Client} from 'sqlfu';
 
 const sql = `select id, excerpt from post_summaries;`;
-const query = { sql, args: [], name: "list-post-summaries" };
+const query = { sql, args: [], name: "listPostSummaries" };
 
 export const listPostSummaries = Object.assign(
 	async function listPostSummaries(client: Client): Promise<listPostSummaries.Result[]> {

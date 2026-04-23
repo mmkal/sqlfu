@@ -46,15 +46,15 @@ test('every query emits a timing + count metric to DogStatsD with tags', async (
     );
   });
 
-  client.all({sql: 'select id, name from profiles order by id', args: [], name: 'list-profiles'});
-  client.run({sql: 'insert into profiles (name) values (?)', args: ['grace'], name: 'insert-profile'});
+  client.all({sql: 'select id, name from profiles order by id', args: [], name: 'listProfiles'});
+  client.run({sql: 'insert into profiles (name) values (?)', args: ['grace'], name: 'insertProfile'});
 
   const packets = await statsd.flush();
   expect(renderPackets(packets)).toMatchInlineSnapshot(`
-    "db.query.duration:<ms>|ms|#db.query.summary:list-profiles,db.system.name:sqlite,operation:all
-    db.query.count:1|c|#db.query.summary:list-profiles,db.system.name:sqlite,operation:all
-    db.query.duration:<ms>|ms|#db.query.summary:insert-profile,db.system.name:sqlite,operation:run
-    db.query.count:1|c|#db.query.summary:insert-profile,db.system.name:sqlite,operation:run"
+    "db.query.duration:<ms>|ms|#db.query.summary:listProfiles,db.system.name:sqlite,operation:all
+    db.query.count:1|c|#db.query.summary:listProfiles,db.system.name:sqlite,operation:all
+    db.query.duration:<ms>|ms|#db.query.summary:insertProfile,db.system.name:sqlite,operation:run
+    db.query.count:1|c|#db.query.summary:insertProfile,db.system.name:sqlite,operation:run"
   `);
 });
 

@@ -1,6 +1,6 @@
 import {expect, test} from 'vitest';
 
-import {isInternalUnsupportedSqlAnalysisError} from '../src/core/sql-editor-diagnostic.js';
+import {isInternalUnsupportedSqlAnalysisError} from '../src/sql-editor-diagnostic.js';
 
 // Guards that the UI's ad-hoc SQL editor stays silent (returns no
 // diagnostics) when the parser/analyzer can't handle a statement kind,

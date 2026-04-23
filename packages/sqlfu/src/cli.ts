@@ -9,9 +9,9 @@ import {createCli, yamlTableConsoleLogger} from 'trpc-cli';
 import * as prompts from '@clack/prompts';
 
 import type {SqlfuCommandConfirm} from './api.js';
-import {router} from './cli-router.js';
-import {loadProjectState} from './core/config-load.js';
-import {createNodeHost} from './core/node-host.js';
+import {router} from './node/cli-router.js';
+import {loadProjectState} from './node/config.js';
+import {createNodeHost} from './node/host.js';
 import packageJson from '../package.json' with {type: 'json'};
 
 export async function createSqlfuCli() {

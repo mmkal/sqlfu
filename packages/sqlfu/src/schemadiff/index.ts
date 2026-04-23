@@ -7,7 +7,7 @@
  * https://github.com/djrobstep/migra). The SQLite implementation under ./sqlite is sqlfu-specific
  * and does not copy code from those projects. See ./CLAUDE.md for the broader inspiration notes.
  */
-import type {SqlfuHost} from '../core/host.js';
+import type {SqlfuHost} from '../host.js';
 import {diffBaselineSqlToDesiredSql} from './sqlite/index.js';
 
 export async function diffSchemaSql(

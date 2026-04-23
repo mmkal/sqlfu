@@ -1,4 +1,4 @@
-import type {SqlEditorDiagnostic} from '../ui/shared.js';
+import type {SqlEditorDiagnostic} from './ui/shared.js';
 
 export function toSqlEditorDiagnostic(sql: string, error: unknown): SqlEditorDiagnostic {
   const message = error instanceof Error ? error.message : String(error);

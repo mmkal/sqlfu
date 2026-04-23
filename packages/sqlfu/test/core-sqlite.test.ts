@@ -1,6 +1,6 @@
 import {expect, test} from 'vitest';
 
-import {rawSqlWithSqlSplittingSync} from '../src/core/sqlite.js';
+import {rawSqlWithSqlSplittingSync} from '../src/sqlite-text.js';
 
 test('rawSqlWithSqlSplittingSync ignores comment-only sql', () => {
   let calls = 0;

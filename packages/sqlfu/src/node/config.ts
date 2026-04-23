@@ -2,14 +2,14 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 
-import type {SqlfuConfig, SqlfuProjectConfig} from './types.js';
+import type {SqlfuConfig, SqlfuProjectConfig} from '../types.js';
 import {
   assertConfigShape,
   createDefaultInitPreview,
   resolveProjectConfig,
   type LoadedSqlfuProject,
   type TsconfigPreferences,
-} from './config.js';
+} from '../config.js';
 
 const defaultConfigFileNames = ['sqlfu.config.ts', 'sqlfu.config.mjs', 'sqlfu.config.js', 'sqlfu.config.cjs'] as const;
 const defaultSqlfuConfigFileName = 'sqlfu.config.ts';

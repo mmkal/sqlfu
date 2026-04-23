@@ -12,7 +12,7 @@
  * workers, and anywhere else sqlfu already runs.
  */
 
-import type {Client} from '../core/types.js';
+import type {Client} from '../types.js';
 
 export type TimeUnit = 's' | 'm' | 'h' | 'd';
 export type TimePeriod = `${number}${TimeUnit}`;

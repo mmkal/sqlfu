@@ -7,7 +7,7 @@
  * very different from Postgres', so the queries and the inspected model shape are sqlfu-specific. What is borrowed is the
  * idea of representing the database as a typed inspected object tree before diffing, rather than diffing SQL text directly.
  */
-import type {Client} from '../../core/types.js';
+import type {Client} from '../../types.js';
 import {quoteSqlString} from './identifiers.js';
 import {
   extractWhereClause,

@@ -1,8 +1,8 @@
 import {expect, test} from 'vitest';
 
-import {migrationNickname, queryNickname, spanNameFor} from '../src/core/naming.js';
-import type {SqlQuery} from '../src/core/types.js';
-import {dedent, normalizeSqlForHash, shortHash} from '../src/core/util.js';
+import {migrationNickname, queryNickname, spanNameFor} from '../src/naming.js';
+import type {SqlQuery} from '../src/types.js';
+import {dedent, normalizeSqlForHash, shortHash} from '../src/util.js';
 
 test.for<{label: string; sql: string; expected: string}>([
   {label: 'select from table', sql: 'select * from profiles', expected: 'list-profiles'},

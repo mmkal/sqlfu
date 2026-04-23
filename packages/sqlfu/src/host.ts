@@ -1,6 +1,6 @@
 import type {AsyncClient, ResultRow, RunResult, SqlfuProjectConfig} from './types.js';
-import type {QueryCatalog} from '../typegen/query-catalog.js';
-import type {SqlAnalysisResponse} from '../ui/shared.js';
+import type {QueryCatalog} from './typegen/query-catalog.js';
+import type {SqlAnalysisResponse} from './ui/shared.js';
 
 export type AdHocSqlResult =
   | {mode: 'rows'; rows: ResultRow[]}

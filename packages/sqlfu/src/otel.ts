@@ -1,5 +1,5 @@
-import type {QueryExecutionHook} from './core/instrument.js';
-import {spanNameFor} from './core/naming.js';
+import type {QueryExecutionHook} from './instrument.js';
+import {spanNameFor} from './naming.js';
 
 /**
  * Minimal OTel tracer shape. Authored structurally so consumers can pass a

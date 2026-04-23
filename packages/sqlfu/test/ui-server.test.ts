@@ -12,7 +12,7 @@ import {expect, test} from 'vitest';
 
 import type {UiRouter} from '../src/ui/server.js';
 import {startSqlfuServer} from '../src/ui/server.js';
-import {createDefaultInitPreview} from '../src/core/config.js';
+import {createDefaultInitPreview} from '../src/config.js';
 import {ensureBuilt, packageRoot} from './adapters/ensure-built.js';
 import {createTempFixtureRoot, dumpFixtureFs, writeFixtureFiles} from './fs-fixture.js';
 

@@ -1,6 +1,6 @@
-import {bindAsyncSql} from '../core/sql.js';
-import {rawSqlWithSqlSplittingAsync, surroundWithBeginCommitRollbackAsync} from '../core/sqlite.js';
-import type {AsyncClient, ResultRow, SqlQuery} from '../core/types.js';
+import {bindAsyncSql} from '../sql.js';
+import {rawSqlWithSqlSplittingAsync, surroundWithBeginCommitRollbackAsync} from '../sqlite-text.js';
+import type {AsyncClient, ResultRow, SqlQuery} from '../types.js';
 
 // @tursodatabase/serverless returns rows as arrays with column names attached as non-enumerable
 // properties (see `createRowObject` in the upstream session implementation). we use the

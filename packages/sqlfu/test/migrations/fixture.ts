@@ -5,11 +5,11 @@ import {DatabaseSync} from 'node:sqlite';
 import {createRouterClient} from '@orpc/server';
 
 import {getMigrationPrefix} from '../../src/api.js';
-import {router} from '../../src/cli-router.js';
+import {router} from '../../src/node/cli-router.js';
 import {createNodeSqliteClient} from '../../src/client.js';
-import {createNodeHost} from '../../src/core/node-host.js';
-import {extractSchema} from '../../src/core/sqlite.js';
-import type {Client, SqlfuProjectConfig} from '../../src/core/types.js';
+import {createNodeHost} from '../../src/node/host.js';
+import {extractSchema} from '../../src/sqlite-text.js';
+import type {Client, SqlfuProjectConfig} from '../../src/types.js';
 import {createTempFixtureRoot, dumpFixtureFs, writeFixtureFiles} from '../fs-fixture.js';
 
 type DisposableClient = {

@@ -11,20 +11,20 @@ import {
   analyzeDatabase,
   formatCheckFailure,
   requireContextConfig,
-} from './api.js';
-import {createDefaultInitPreview} from './core/init-preview.js';
-import {migrationName, readMigrationHistory} from './migrations/index.js';
-import {stopProcessesListeningOnPort} from './core/port-process.js';
-import {generateQueryTypes} from './typegen/index.js';
-import {startSqlfuServer} from './ui/server.js';
-import {resolveSqlfuUi} from './ui/resolve-sqlfu-ui.js';
-import packageJson from '../package.json' with {type: 'json'};
+} from '../api.js';
+import {createDefaultInitPreview} from '../init-preview.js';
+import {migrationName, readMigrationHistory} from '../migrations/index.js';
+import {stopProcessesListeningOnPort} from './port-process.js';
+import {generateQueryTypes} from '../typegen/index.js';
+import {startSqlfuServer} from '../ui/server.js';
+import {resolveSqlfuUi} from '../ui/resolve-sqlfu-ui.js';
+import packageJson from '../../package.json' with {type: 'json'};
 import {
   materializeDefinitionsSchemaForContext,
   materializeMigrationsSchemaForContext,
   compareSchemasForContext,
   readMigrationsFromContext,
-} from './api.js';
+} from '../api.js';
 
 const base = os.$context<SqlfuCommandRouterContext>();
 

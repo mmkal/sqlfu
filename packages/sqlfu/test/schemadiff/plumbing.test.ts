@@ -5,8 +5,8 @@ import path from 'node:path';
 import {DatabaseSync} from 'node:sqlite';
 
 import {createNodeSqliteClient} from '../../src/client.js';
-import {createNodeHost, createAsyncNodeSqliteClient} from '../../src/core/node-host.js';
-import {extractSchema} from '../../src/core/sqlite.js';
+import {createNodeHost, createAsyncNodeSqliteClient} from '../../src/node/host.js';
+import {extractSchema} from '../../src/sqlite-text.js';
 import {applyMigrations} from '../../src/migrations/index.js';
 import {diffSchemaSql} from '../../src/schemadiff/index.js';
 import {parseSchemadiffFixture, runFixtureCase} from './fixture-helpers.js';

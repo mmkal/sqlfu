@@ -4,15 +4,15 @@ import path from 'node:path';
 import {createHash, randomUUID} from 'node:crypto';
 import type {DatabaseSync} from 'node:sqlite';
 
-import type {AsyncClient, ResultRow, SqlfuProjectConfig, SqlQuery} from './types.js';
-import {bindAsyncSql} from './sql.js';
-import {rawSqlWithSqlSplittingAsync, surroundWithBeginCommitRollbackAsync} from './sqlite.js';
+import type {AsyncClient, ResultRow, SqlfuProjectConfig, SqlQuery} from '../types.js';
+import {bindAsyncSql} from '../sql.js';
+import {rawSqlWithSqlSplittingAsync, surroundWithBeginCommitRollbackAsync} from '../sqlite-text.js';
 import type {QueryCatalog} from '../typegen/query-catalog.js';
-import {initializeProject} from './config-load.js';
+import {initializeProject} from './config.js';
 import {analyzeAdHocSqlForConfig, generateQueryTypesForConfig} from '../typegen/index.js';
 import type {SqlAnalysisResponse} from '../ui/shared.js';
-import {isInternalUnsupportedSqlAnalysisError, toSqlEditorDiagnostic} from './sql-editor-diagnostic.js';
-import type {AdHocSqlParams, AdHocSqlResult, DisposableAsyncClient, HostCatalog, HostFs, SqlfuHost} from './host.js';
+import {isInternalUnsupportedSqlAnalysisError, toSqlEditorDiagnostic} from '../sql-editor-diagnostic.js';
+import type {AdHocSqlParams, AdHocSqlResult, DisposableAsyncClient, HostCatalog, HostFs, SqlfuHost} from '../host.js';
 
 type NodeSqliteModule = {DatabaseSync: typeof DatabaseSync};
 

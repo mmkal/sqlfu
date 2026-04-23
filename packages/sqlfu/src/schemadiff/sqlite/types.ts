@@ -2,7 +2,7 @@
  * SQLite-specific schemadiff types.
  * These types describe SQLite inspection output and SQLite planner operations; other dialects should define their own sibling models.
  */
-import type {Client} from '../../core/types.js';
+import type {Client} from '../../types.js';
 
 export type SqliteInspectedDatabase = {
   tables: Record<string, SqliteInspectedTable>;

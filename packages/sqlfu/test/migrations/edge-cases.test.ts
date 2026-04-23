@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import {describe, expect, test} from 'vitest';
 
-import {extractSchema} from '../../src/core/sqlite.js';
+import {extractSchema} from '../../src/sqlite-text.js';
 import {createMigrationsFixture} from './fixture.js';
 
 describe('draft edge cases', () => {

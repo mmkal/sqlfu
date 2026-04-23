@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-import {createNodeHost} from '../../src/core/node-host.js';
+import {createNodeHost} from '../../src/node/host.js';
 import {diffSchemaSql} from '../../src/schemadiff/index.js';
 
 export type SchemadiffFixtureCase = {

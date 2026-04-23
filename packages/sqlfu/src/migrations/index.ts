@@ -1,7 +1,7 @@
 import {sha256} from '../vendor/sha256.js';
 
-import type {AsyncClient, Client, SyncClient} from '../core/types.js';
-import {basename} from '../core/paths.js';
+import type {AsyncClient, Client, SyncClient} from '../types.js';
+import {basename} from '../paths.js';
 import {driveAsync, driveSync, type DualGenerator} from './dual-dispatch.js';
 import {
   deleteMigrationHistory as deleteMigrationHistoryWrapper,

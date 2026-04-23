@@ -11,10 +11,10 @@ import {
   type CheckAnalysis,
   type SqlfuCommandConfirmParams,
 } from '../api.js';
-import {splitSqlStatements} from '../core/sqlite.js';
-import type {SqlfuHost} from '../core/host.js';
-import type {AsyncClient, QueryArg, SqlfuProjectConfig} from '../core/types.js';
-import {basename, joinPath} from '../core/paths.js';
+import {splitSqlStatements} from '../sqlite-text.js';
+import type {SqlfuHost} from '../host.js';
+import type {AsyncClient, QueryArg, SqlfuProjectConfig} from '../types.js';
+import {basename, joinPath} from '../paths.js';
 import type {QueryCatalogEntry} from '../typegen/query-catalog.js';
 import type {
   QueryExecutionResponse,

@@ -1,9 +1,9 @@
-import type {Client, SqlfuProjectConfig} from './core/types.js';
-import type {SqlfuHost} from './core/host.js';
-import {basename, joinPath} from './core/paths.js';
-import {createDefaultInitPreview} from './core/init-preview.js';
-import {migrationNickname} from './core/naming.js';
-import {extractSchema} from './core/sqlite.js';
+import type {Client, SqlfuProjectConfig} from './types.js';
+import type {SqlfuHost} from './host.js';
+import {basename, joinPath} from './paths.js';
+import {createDefaultInitPreview} from './init-preview.js';
+import {migrationNickname} from './naming.js';
+import {extractSchema} from './sqlite-text.js';
 import {
   applyMigrations,
   baselineMigrationHistory,

@@ -7,9 +7,9 @@
  * does not copy code from those projects, but borrows the "materialize both schemas into scratch databases, inspect, diff the
  * inspected models, emit ordered statements" shape.
  */
-import type {SqlfuHost} from '../../core/host.js';
-import {splitSqlStatements} from '../../core/sqlite.js';
-import type {AsyncClient} from '../../core/types.js';
+import type {SqlfuHost} from '../../host.js';
+import {splitSqlStatements} from '../../sqlite-text.js';
+import type {AsyncClient} from '../../types.js';
 import {inspectSqliteSchema} from './inspect.js';
 import {planSchemaDiff} from './plan.js';
 import type {SqliteInspectedDatabase} from './types.js';

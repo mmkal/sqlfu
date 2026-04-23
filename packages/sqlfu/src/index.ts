@@ -8,5 +8,5 @@
 // this means we're overdue a refactor, but for now, just eliminate stuff from index.ts
 
 export * from './client.js';
-export * from './core/config.js';
+export * from './config.js';
 export {prettifyStandardSchemaError} from './vendor/standard-schema/errors.js';

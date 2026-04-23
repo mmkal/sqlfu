@@ -1,6 +1,6 @@
-import {bindSyncSql} from '../core/sql.js';
-import {rawSqlWithSqlSplittingSync, surroundWithBeginCommitRollbackSync} from '../core/sqlite.js';
-import type {ResultRow, SqlQuery, SyncClient} from '../core/types.js';
+import {bindSyncSql} from '../sql.js';
+import {rawSqlWithSqlSplittingSync, surroundWithBeginCommitRollbackSync} from '../sqlite-text.js';
+import type {ResultRow, SqlQuery, SyncClient} from '../types.js';
 
 export interface LibsqlSyncStatementLike {
   reader: boolean;

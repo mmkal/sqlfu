@@ -1,7 +1,7 @@
-export * from './core/sql.js';
-export * from './core/types.js';
-export * from './core/naming.js';
-export * from './core/util.js';
+export * from './sql.js';
+export * from './types.js';
+export * from './naming.js';
+export * from './util.js';
 export * from './instrument.js';
 export type {
   ProcessResult,
@@ -10,7 +10,7 @@ export type {
   QueryExecutionHook,
   QueryExecutionHookArgs,
   QueryOperation,
-} from './core/instrument.js';
+} from './instrument.js';
 export type {SpanLike, TracerLike} from './otel.js';
 export * from './adapters/d1.js';
 export * from './adapters/libsql.js';

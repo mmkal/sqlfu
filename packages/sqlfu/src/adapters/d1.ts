@@ -1,6 +1,6 @@
-import {bindAsyncSql} from '../core/sql.js';
-import {rawSqlWithSqlSplittingAsync, surroundWithBeginCommitRollbackAsync} from '../core/sqlite.js';
-import type {AsyncClient, ResultRow, SqlQuery} from '../core/types.js';
+import {bindAsyncSql} from '../sql.js';
+import {rawSqlWithSqlSplittingAsync, surroundWithBeginCommitRollbackAsync} from '../sqlite-text.js';
+import type {AsyncClient, ResultRow, SqlQuery} from '../types.js';
 
 export interface D1PreparedStatement {
   bind(...values: unknown[]): D1PreparedStatement;

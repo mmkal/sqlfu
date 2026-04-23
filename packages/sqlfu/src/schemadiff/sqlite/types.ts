@@ -84,6 +84,7 @@ export type SchemadiffOperation = {
   id: string;
   kind: SchemadiffOperationKind;
   sql: string;
+  reason?: string;
   dependencies: string[];
 };
 

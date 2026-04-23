@@ -83,8 +83,22 @@ create table person(name text collate nocase);
 -- desired:
 create table person(name text collate rtrim, nickname text collate rtrim);
 -- output:
+-- rebuild: column "name" collation changed from nocase to rtrim
 alter table person rename to __sqlfu_old_person;
 create table person(name text collate rtrim, nickname text collate rtrim);
 insert into person(name) select name from __sqlfu_old_person;
 drop table __sqlfu_old_person;
+-- #endregion
+
+-- #region: inserting a column in the middle rebuilds with a reordered reason
+-- baseline:
+create table a(low int, high int);
+-- desired:
+create table a(low int, mid int, high int);
+-- output:
+-- rebuild: columns reordered
+alter table a rename to __sqlfu_old_a;
+create table a(low int, mid int, high int);
+insert into a(low, high) select low, high from __sqlfu_old_a;
+drop table __sqlfu_old_a;
 -- #endregion

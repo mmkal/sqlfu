@@ -1,5 +1,5 @@
 ---
-status: ready
+status: completed
 size: large
 ---
 
@@ -7,7 +7,26 @@ size: large
 
 ## Status
 
-Grilling complete — 12 turns, every decision branch locked. Supersedes closed PR #48. Full transcript lives in `tasks/import-surface.interview.md`. Implementation hasn't started; this file is the hand-off.
+**Done.** Implemented across 10 commits on PR #50. Every decision from the grill is in place; 1264 tests pass; the strict-tier import check runs in vitest on every test run. One follow-up captured at the bottom (`sqlfu/ui/browser` enforcement).
+
+## Implementation log
+
+- Commit 1 ([0c030f1](../../commit/0c030f1)): delete dead `core/tooling.ts` and `packages/ui/src/generate-catalog.ts`; drive-by fix for a pre-existing broken `../src/index.js` formatter test import
+- Commit 2 ([e434dae](../../commit/e434dae)): add `resolvePath(base, value)` POSIX helper to `core/paths.ts`
+- Commit 3 ([5a19017](../../commit/5a19017)): split `core/config.ts` into pure half (no node:*, uses `core/paths.ts`) + `core/config-load.ts` (I/O half, internal)
+- Commit 4 ([376bdcd](../../commit/376bdcd)): flatten `core/` into `src/` + add `src/node/` for Node-only library code. `sqlite.ts` → `sqlite-text.ts`. `core/instrument.ts` merged into `src/instrument.ts`
+- Commit 5 ([3913729](../../commit/3913729)): rebuild root export — absorb `client.ts`, add migrator subset (`applyMigrations`, `migrationsFromBundle`, `Migration`, `MigrationBundle`), add `defineConfig`, keep `prettifyStandardSchemaError`. Delete `client.ts`; update all consumers + docs
+- Commit 6 ([6dcd5b7](../../commit/6dcd5b7)): rename `browser.ts` → `analyze.ts`, trim exports to just the analysis surface. Roll in the commit-9 entry-point hygiene (drop `./client`, `./cli`, and the conditional on `./ui`)
+- Commit 7 ([5e19bce](../../commit/5e19bce)): eliminate the `ui/index.ts` barrel, point `sqlfu/ui` directly at `ui/server.ts`
+- Commit 8 ([5988d93](../../commit/5988d93)): expand `sqlfu/api` to re-export schemadiff + typegen + formatter public symbols
+- Commit 10 ([501d908](../../commit/501d908)): enforcement — `scripts/check-strict-imports.ts` + `test/import-surface.test.ts`. Vitest `globalSetup` runs a full build once before parallel test workers start. Adapter test fixtures updated for the flattened source paths. Copy step in `bundle-vendor.ts` for the `analyze-vendored-typesql-with-client` shim.
+
+Commit 9 (drop `./client` + `./cli` from exports) folded into commit 6 while package.json was already being edited.
+Commit 11 (top-of-file comment pointing at the enforcement test) folded into commit 5; comment now accurately references `test/import-surface.test.ts`.
+
+## Follow-up
+
+**`sqlfu/ui/browser` is not yet strict-tier enforced.** Parked with a TODO in `scripts/check-strict-imports.ts`. Today the browser build of `uiRouter` transitively pulls `api.ts` (via `ui/router.ts`'s imports of command handlers), which transitively pulls `node:*` helpers. The `uiRouter` value is used at runtime in demo mode (fed to `createRouterClient` in `packages/ui/src/demo/index.ts`), so the fix requires splitting the router's schema/types from its handler implementations and having the browser import only the schema. Tractable, but out of scope for this refactor — opening a follow-up task.
 
 ## Why
 

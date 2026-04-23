@@ -51,6 +51,12 @@ const docs = [
       'Generate arktype, valibot, zod, or zod/mini schemas as the source of truth. Validate params and rows at the wrapper boundary.',
   },
   {
+    slug: 'id-helpers',
+    title: 'Pure-SQL id generators (ulid, ksuid, nanoid, cuid2)',
+    sourcePath: path.join(repoRoot, 'packages', 'sqlfu', 'docs', 'id-helpers.md'),
+    description: 'Copy-paste sqlite views for ULID, KSUID, nanoid, and cuid2-shaped ids — pure SQL, no extensions.',
+  },
+  {
     slug: 'ui',
     title: 'UI',
     sourcePath: path.join(repoRoot, 'packages', 'ui', 'README.md'),

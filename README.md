@@ -72,7 +72,7 @@ You should still get strong TypeScript output from SQL: generated wrappers, type
 ## Core Concepts
 
 - `definitions.sql`
-  The desired schema now.
+  The desired schema now. Tables, views, triggers, and — if you want them — copy-paste id generators (ULID, KSUID, nanoid, cuid2-shaped) live here alongside your schema. See [docs/id-helpers.md](packages/sqlfu/docs/id-helpers.md).
 - `migrations/`
   The ordered history of schema changes.
 - `sql/`

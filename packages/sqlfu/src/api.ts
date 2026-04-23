@@ -1047,15 +1047,24 @@ function formatRecommendationCommand(command: [string, ...string[]]) {
 }
 
 // sqlfu/api is the heavy tier: "all the smart stuff" per the design
-// grill. Re-export the public surfaces of schemadiff, typegen, and the
-// SQL formatter so consumers writing CI scripts / editor integrations /
+// grill. Re-export the public surfaces of schemadiff and the SQL
+// formatter so consumers writing CI scripts / editor integrations /
 // custom tooling can reach them without deep-importing.
+//
+// Typegen is NOT re-exported here. typegen/index.ts has `node:*`
+// imports, and api.ts is transitively imported by ui/router.ts (via
+// uiRouter's handlers), which is in turn imported by ui/browser.ts for
+// demo mode. Re-exporting typegen poisons the browser bundle: the
+// rollup pass for @sqlfu/ui fails on `pathToFileURL` from node:url
+// before tree-shaking can remove the unused re-export. Until the
+// follow-up router/handler split lands (see
+// scripts/check-strict-imports.ts TODO), consumers who need typegen at
+// runtime deep-import `sqlfu/dist/typegen/index.js` — off-piste but
+// functional.
 
 export {diffSchemaSql} from './schemadiff/index.js';
 export {inspectSqliteSchemaSql, schemasEqual} from './schemadiff/sqlite/index.js';
 export type {SqliteInspectedDatabase} from './schemadiff/sqlite/types.js';
-
-export {generateQueryTypes, generateQueryTypesForConfig, analyzeAdHocSqlForConfig} from './typegen/index.js';
 
 export {formatSql} from './formatter.js';
 export type {FormatSqlOptions, SqlFormatStyle} from './formatter.js';

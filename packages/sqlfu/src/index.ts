@@ -8,6 +8,7 @@ export * from './sql.js';
 export * from './types.js';
 export * from './naming.js';
 export * from './util.js';
+export * from './errors.js';
 export * from './instrument.js';
 export type {
   ProcessResult,

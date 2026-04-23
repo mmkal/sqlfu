@@ -17,7 +17,7 @@ import {
   type AsyncClient,
   type Client,
   type SyncClient,
-} from '../src/client.js';
+} from '../src/index.js';
 
 // Every adapter throws `SqlfuError` on driver errors, with:
 //   - the correct `kind` discriminator

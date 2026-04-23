@@ -1,3 +1,4 @@
+import {wrapSyncClientErrors} from '../core/adapter-errors.js';
 import {bindSyncSql} from '../core/sql.js';
 import {rawSqlWithSqlSplittingSync} from '../core/sqlite.js';
 import type {ResultRow, SqlQuery, SyncClient} from '../core/types.js';
@@ -58,7 +59,7 @@ export function createDurableObjectClient(
 
   client.sql = bindSyncSql(client);
 
-  return client;
+  return wrapSyncClientErrors(client);
 }
 
 export const createDurableObjectDatabase = createDurableObjectClient;

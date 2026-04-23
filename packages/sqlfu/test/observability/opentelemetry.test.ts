@@ -15,6 +15,12 @@ import {createNodeSqliteClient, instrument, type SqlQuery} from '../../src/clien
 // `OTLPTraceExporter` url at Datadog's intake URL and add the API key
 // header). The hook wiring below is identical for every destination — only
 // the exporter's URL and headers change.
+//
+// Stack-quality (i.e. `error.stack` still pointing at the user's call site
+// after the adapter wraps with `SqlfuError`) is not asserted here — the
+// test dispatches through a real HTTP server and the call-site frame
+// doesn't survive transport. The direct adapter sweep in `errors.test.ts`
+// is the real stack-quality guard.
 test('named and ad-hoc queries surface on OTel spans and error reporter fires on failure', async () => {
   await using otel = await createOtelFixture();
   const errorReports: Array<{queryName: string | undefined; error: unknown}> = [];

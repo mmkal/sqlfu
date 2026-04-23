@@ -71,7 +71,7 @@ test('queries emit db_query events on success and $exception + db_query on failu
   expect(renderEvents(events)).toMatchInlineSnapshot(`
     "db_query  db.query.summary=listProfiles  db.system.name=sqlite  operation=all  outcome=success  duration_ms=<ms>
     db_query  db.query.summary=findMissing  db.system.name=sqlite  operation=all  outcome=error  duration_ms=<ms>
-    $exception  db.query.summary=findMissing  db.system.name=sqlite  operation=all  db.query.text=select * from nonexistent  $exception_list=[Error: no such table: nonexistent]"
+    $exception  db.query.summary=findMissing  db.system.name=sqlite  operation=all  db.query.text=select * from nonexistent  $exception_list=[SqlfuError: no such table: nonexistent]"
   `);
 });
 

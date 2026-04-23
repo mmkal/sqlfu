@@ -11,6 +11,7 @@ import {
   type CheckAnalysis,
   type SqlfuCommandConfirmParams,
 } from '../api.js';
+import {SqlfuError, type SqlfuErrorKind} from '../core/errors.js';
 import {splitSqlStatements} from '../core/sqlite.js';
 import type {SqlfuHost} from '../core/host.js';
 import type {AsyncClient, QueryArg, SqlfuProjectConfig} from '../core/types.js';
@@ -47,8 +48,7 @@ const uiBase = os.$context<UiRouterContext>().use(async ({next}) => {
   try {
     return await next();
   } catch (error) {
-    if (error instanceof ORPCError) throw error;
-    throw toClientError(error);
+    throw toOrpcError(error);
   }
 });
 const rowRecordSchema = z.record(z.string(), z.unknown());
@@ -198,7 +198,7 @@ export const uiRouter = {
           },
         ).then(
           () => queue.finish(),
-          (error) => queue.fail(error instanceof ORPCError ? error : toClientError(error)),
+          (error) => queue.fail(toOrpcError(error)),
         );
 
         try {
@@ -309,7 +309,7 @@ export const uiRouter = {
             metadata: result.metadata,
           };
         } catch (error) {
-          throw toClientError(error);
+          throw toOrpcError(error);
         }
       }),
     analyze: uiBase
@@ -478,7 +478,7 @@ const pendingConfirmations = new Map<string, PendingConfirmation>();
 function resolvePendingConfirmation(id: string, body: string | null) {
   const pending = pendingConfirmations.get(id);
   if (!pending) {
-    throw toClientError(new Error(`Unknown confirmation id: ${id}`));
+    throw new ORPCError('NOT_FOUND', {message: `Unknown confirmation id: ${id}`});
   }
   pendingConfirmations.delete(id);
   pending.resolve(body);
@@ -560,16 +560,45 @@ function createCommandEventQueue() {
 
 function requireProjectConfig(project: ResolvedUiProject) {
   if (!project.initialized) {
-    throw toClientError(new Error(`No sqlfu config found in ${project.projectRoot}. Run 'sqlfu init' first.`));
+    throw new ORPCError('BAD_REQUEST', {
+      message: `No sqlfu config found in ${project.projectRoot}. Run 'sqlfu init' first.`,
+    });
   }
 
   return project.config;
 }
 
-function toClientError(error: unknown) {
-  return new ORPCError('BAD_REQUEST', {
-    message: String(error),
-  });
+function kindToOrpcCode(kind: SqlfuErrorKind): string {
+  switch (kind) {
+    case 'unique_violation':
+      return 'CONFLICT';
+    case 'transient':
+      return 'SERVICE_UNAVAILABLE';
+    case 'unknown':
+      return 'INTERNAL_SERVER_ERROR';
+    case 'syntax':
+    case 'missing_table':
+    case 'missing_column':
+    case 'not_null_violation':
+    case 'foreign_key_violation':
+    case 'check_violation':
+      return 'BAD_REQUEST';
+  }
+}
+
+// A `SqlfuError` carries a classified `kind` — the oRPC middleware maps it to
+// the appropriate HTTP code and surfaces `kind` on `data` so the React side can
+// branch on specific outcomes (`unique_violation` → "email taken" toast, etc.)
+// instead of string-matching the message.
+function toOrpcError(error: unknown): ORPCError<string, unknown> {
+  if (error instanceof ORPCError) return error;
+  if (error instanceof SqlfuError) {
+    return new ORPCError(kindToOrpcCode(error.kind), {
+      message: error.message,
+      data: {kind: error.kind},
+    });
+  }
+  return new ORPCError('INTERNAL_SERVER_ERROR', {message: String(error)});
 }
 
 function buildSchemaCheckCards(analysis: CheckAnalysis): SchemaCheckCard[] {
@@ -848,13 +877,7 @@ async function saveTableRows(
       row.rowKey.kind === 'new'
         ? buildInsertRowStatement(relationName, row.nextRow, row.changedColumns)
         : buildUpdateRowStatement(relationName, row.rowKey, row.originalRow, row.nextRow, row.changedColumns);
-    try {
-      await client.run({sql: statement.sql, args: statement.args as QueryArg[]});
-    } catch (error) {
-      throw new Error(
-        `${String(error)}\nSQL: ${statement.sql}\nArgs: ${JSON.stringify(statement.args)}`,
-      );
-    }
+    await client.run({sql: statement.sql, args: statement.args as QueryArg[]});
   }
 
   return await getTableRows(client, relationName, input.page);
@@ -869,30 +892,23 @@ async function deleteTableRow(
     rowKey: TableRowKey | undefined;
   },
 ): Promise<TableRowsResponse> {
-  try {
-    const relation = await getRelationInfo(client, relationName);
-    if (relation.type !== 'table') {
-      throw new Error(`Relation "${relationName}" is not editable`);
-    }
-
-    const originalRow = asRecord(input.originalRow);
-    if (!originalRow || !input.rowKey || input.rowKey.kind === 'new') {
-      throw new Error('Delete row payload is malformed');
-    }
-
-    const statement = buildDeleteRowStatement(relationName, input.rowKey, originalRow);
-    const result = await client.run({sql: statement.sql, args: statement.args as QueryArg[]});
-    if (result.rowsAffected !== 1) {
-      throw new Error(`Delete affected ${result.rowsAffected ?? 0} rows`);
-    }
-
-    return await getTableRows(client, relationName, input.page);
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('\nSQL: ')) {
-      throw error;
-    }
-    throw new Error(`${String(error)}`);
+  const relation = await getRelationInfo(client, relationName);
+  if (relation.type !== 'table') {
+    throw new Error(`Relation "${relationName}" is not editable`);
   }
+
+  const originalRow = asRecord(input.originalRow);
+  if (!originalRow || !input.rowKey || input.rowKey.kind === 'new') {
+    throw new Error('Delete row payload is malformed');
+  }
+
+  const statement = buildDeleteRowStatement(relationName, input.rowKey, originalRow);
+  const result = await client.run({sql: statement.sql, args: statement.args as QueryArg[]});
+  if (result.rowsAffected !== 1) {
+    throw new Error(`Delete affected ${result.rowsAffected ?? 0} rows`);
+  }
+
+  return await getTableRows(client, relationName, input.page);
 }
 
 function slugifyQueryName(value: string) {

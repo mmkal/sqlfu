@@ -1,3 +1,4 @@
+import {wrapAsyncClientErrors} from '../core/adapter-errors.js';
 import {bindAsyncSql} from '../core/sql.js';
 import {rawSqlWithSqlSplittingAsync, surroundWithBeginCommitRollbackAsync} from '../core/sqlite.js';
 import type {AsyncClient, ResultRow, SqlQuery} from '../core/types.js';
@@ -57,7 +58,7 @@ export function createTursoDatabaseClient<TDatabase extends TursoDatabaseLike>(
 
   client.sql = bindAsyncSql(client);
 
-  return client;
+  return wrapAsyncClientErrors(client);
 }
 
 export const createTursoDatabase = createTursoDatabaseClient;

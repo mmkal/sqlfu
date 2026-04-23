@@ -1,3 +1,4 @@
+import {wrapSyncClientErrors} from '../core/adapter-errors.js';
 import {bindSyncSql} from '../core/sql.js';
 import {rawSqlWithSqlSplittingSync, surroundWithBeginCommitRollbackSync} from '../core/sqlite.js';
 import type {ResultRow, SqlQuery, SyncClient} from '../core/types.js';
@@ -59,7 +60,7 @@ export function createBetterSqlite3Client(database: BetterSqlite3DatabaseLike): 
 
   client.sql = bindSyncSql(client);
 
-  return client;
+  return wrapSyncClientErrors(client);
 }
 
 export const createBetterSqlite3Database = createBetterSqlite3Client;

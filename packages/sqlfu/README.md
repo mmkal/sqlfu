@@ -136,6 +136,25 @@ const client = instrument(baseClient,
 
 No peer dependencies on OpenTelemetry or Sentry. `TracerLike` is structural; hook consumers bring their own SDK. Copy-pasteable recipes live in [Observability](https://sqlfu.dev/docs/observability).
 
+### Typed errors
+
+Every adapter throws `SqlfuError` with a normalized `.kind` discriminator — `'unique_violation'`, `'missing_table'`, `'syntax'`, `'transient'`, etc. — so application code branches on the outcome instead of string-matching the driver's message.
+
+```ts
+import {SqlfuError} from 'sqlfu';
+
+try {
+  await client.run(createUser);
+} catch (error) {
+  if (error instanceof SqlfuError && error.kind === 'unique_violation') {
+    return response.status(409).json({error: 'email already taken'});
+  }
+  throw error;
+}
+```
+
+The driver error is preserved byte-identical on `.cause`; `.query` and `.system` come along so error reporters can tag events without a parallel `QueryExecutionContext`. Kind names are SQLSTATE-aligned, so the day a postgres adapter lands the mapping is a direct lookup rather than a second vocabulary to remember. Full kind list, handler recipes, Sentry-tagging example: [Errors](https://sqlfu.dev/docs/errors).
+
 ### Outbox
 
 A small transactional-outbox / job-queue sits at `sqlfu/outbox`. Emit events in the same transaction as your domain writes; register consumers with retry, delay, `when` filter, and visibility timeout; drive a worker loop by calling `tick()` on a timer. Fan-out, crash recovery, and causation chains all work the way you'd expect, built on the fact that SQLite serialises writers so the queue doesn't need row-locks. See [Outbox](https://sqlfu.dev/docs/outbox).

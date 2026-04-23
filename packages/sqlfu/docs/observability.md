@@ -69,6 +69,8 @@ instrument.onError(({context, error}) => {
 });
 ```
 
+Every driver error is a [`SqlfuError`](./errors.md) with a normalized `.kind` discriminator — `unique_violation`, `missing_table`, `syntax`, etc. That makes it a natural bucketing dimension in your error reporter (`tags: {'db.error.kind': error.kind}`).
+
 ## Recipes
 
 The test files under [`packages/sqlfu/test/observability/`](../test/observability/) are the authoritative copy-paste source for each integration. They exercise the real SDKs against captured transports and are kept passing in CI.

@@ -70,7 +70,7 @@ export function createSqliteWasmClient(database: SqliteWasmDatabaseLike): AsyncC
 
   client.sql = bindAsyncSql(client);
 
-  return wrapAsyncClientErrors(client, {system: 'sqlite'});
+  return wrapAsyncClientErrors(client);
 }
 
 export const createSqliteWasmDatabase = createSqliteWasmClient;

@@ -59,7 +59,7 @@ export function createLibsqlSyncClient(database: LibsqlSyncDatabaseLike): SyncCl
 
   client.sql = bindSyncSql(client);
 
-  return wrapSyncClientErrors(client, {system: 'sqlite'});
+  return wrapSyncClientErrors(client);
 }
 
 export const createLibsqlSyncDatabase = createLibsqlSyncClient;

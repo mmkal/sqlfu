@@ -60,7 +60,7 @@ export function createBetterSqlite3Client(database: BetterSqlite3DatabaseLike): 
 
   client.sql = bindSyncSql(client);
 
-  return wrapSyncClientErrors(client, {system: 'sqlite'});
+  return wrapSyncClientErrors(client);
 }
 
 export const createBetterSqlite3Database = createBetterSqlite3Client;

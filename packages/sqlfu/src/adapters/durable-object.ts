@@ -59,7 +59,7 @@ export function createDurableObjectClient(
 
   client.sql = bindSyncSql(client);
 
-  return wrapSyncClientErrors(client, {system: 'sqlite'});
+  return wrapSyncClientErrors(client);
 }
 
 export const createDurableObjectDatabase = createDurableObjectClient;

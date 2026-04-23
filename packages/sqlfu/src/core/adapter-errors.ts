@@ -2,24 +2,20 @@ import {mapSqliteDriverError} from './errors.js';
 import {bindAsyncSql, bindSyncSql} from './sql.js';
 import type {AsyncClient, SqlQuery, SyncClient} from './types.js';
 
-interface WrapContext {
-  system: string;
-}
-
 /**
  * Wrap a `SyncClient` so every error from `all` / `run` / `raw` / `iterate`
  * is normalized via `mapSqliteDriverError`. Mirrors `instrumentClient`
  * structurally — applied once at adapter-factory exit rather than per call.
  *
+ * The error's `system` comes from the client's own `.system` field, so
+ * adapters don't have to pass it twice.
+ *
  * Transactions re-wrap the inner client so queries inside a tx get the same
  * error contract as queries outside it.
  */
-export function wrapSyncClientErrors<TDriver>(
-  client: SyncClient<TDriver>,
-  context: WrapContext,
-): SyncClient<TDriver> {
+export function wrapSyncClientErrors<TDriver>(client: SyncClient<TDriver>): SyncClient<TDriver> {
   const mapQuery = (error: unknown, query: SqlQuery) =>
-    mapSqliteDriverError(error, {query, system: context.system});
+    mapSqliteDriverError(error, {query, system: client.system});
 
   const wrapped: Omit<SyncClient<TDriver>, 'sql'> & {sql: SyncClient<TDriver>['sql']} = {
     driver: client.driver,
@@ -54,21 +50,16 @@ export function wrapSyncClientErrors<TDriver>(
       }
     },
     transaction: (<TResult>(fn: (tx: SyncClient<TDriver>) => TResult) =>
-      client.transaction((tx: SyncClient<TDriver>) =>
-        fn(wrapSyncClientErrors(tx, context)),
-      )) as SyncClient<TDriver>['transaction'],
+      client.transaction((tx: SyncClient<TDriver>) => fn(wrapSyncClientErrors(tx)))) as SyncClient<TDriver>['transaction'],
     sql: undefined as unknown as SyncClient<TDriver>['sql'],
   };
   wrapped.sql = bindSyncSql(wrapped);
   return wrapped;
 }
 
-export function wrapAsyncClientErrors<TDriver>(
-  client: AsyncClient<TDriver>,
-  context: WrapContext,
-): AsyncClient<TDriver> {
+export function wrapAsyncClientErrors<TDriver>(client: AsyncClient<TDriver>): AsyncClient<TDriver> {
   const mapQuery = (error: unknown, query: SqlQuery) =>
-    mapSqliteDriverError(error, {query, system: context.system});
+    mapSqliteDriverError(error, {query, system: client.system});
 
   const wrapped: Omit<AsyncClient<TDriver>, 'sql'> & {sql: AsyncClient<TDriver>['sql']} = {
     driver: client.driver,
@@ -102,7 +93,7 @@ export function wrapAsyncClientErrors<TDriver>(
         throw mapQuery(error, query);
       }
     },
-    transaction: (fn) => client.transaction((tx) => fn(wrapAsyncClientErrors(tx, context))),
+    transaction: (fn) => client.transaction((tx) => fn(wrapAsyncClientErrors(tx))),
     sql: undefined as unknown as AsyncClient<TDriver>['sql'],
   };
   wrapped.sql = bindAsyncSql(wrapped);

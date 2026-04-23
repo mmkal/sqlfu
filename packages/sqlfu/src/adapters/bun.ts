@@ -54,7 +54,7 @@ export function createBunClient(database: BunSqliteDatabaseLike): SyncClient<Bun
 
   client.sql = bindSyncSql(client);
 
-  return wrapSyncClientErrors(client, {system: 'sqlite'});
+  return wrapSyncClientErrors(client);
 }
 
 export const createBunDatabase = createBunClient;

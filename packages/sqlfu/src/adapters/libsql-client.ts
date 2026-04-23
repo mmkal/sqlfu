@@ -57,7 +57,7 @@ export function createLibsqlClient(client: LibsqlClientLike): AsyncClient<Libsql
 
   queryClient.sql = bindAsyncSql(queryClient);
 
-  return wrapAsyncClientErrors(queryClient, {system: 'sqlite'});
+  return wrapAsyncClientErrors(queryClient);
 }
 
 export const createLibsqlDatabase = createLibsqlClient;

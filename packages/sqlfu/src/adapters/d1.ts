@@ -69,7 +69,7 @@ export function createD1Client(database: D1DatabaseLike): AsyncClient<D1Database
 
   d1Client.sql = bindAsyncSql(d1Client);
 
-  return wrapAsyncClientErrors(d1Client, {system: 'sqlite'});
+  return wrapAsyncClientErrors(d1Client);
 }
 
 export const createD1Database = createD1Client;

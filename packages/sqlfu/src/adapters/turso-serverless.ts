@@ -63,7 +63,7 @@ export function createTursoServerlessClient<TConnection extends TursoServerlessC
 
   client.sql = bindAsyncSql(client);
 
-  return wrapAsyncClientErrors(client, {system: 'sqlite'});
+  return wrapAsyncClientErrors(client);
 }
 
 export const createTursoServerless = createTursoServerlessClient;

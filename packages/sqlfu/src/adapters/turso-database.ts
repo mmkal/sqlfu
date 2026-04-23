@@ -58,7 +58,7 @@ export function createTursoDatabaseClient<TDatabase extends TursoDatabaseLike>(
 
   client.sql = bindAsyncSql(client);
 
-  return wrapAsyncClientErrors(client, {system: 'sqlite'});
+  return wrapAsyncClientErrors(client);
 }
 
 export const createTursoDatabase = createTursoDatabaseClient;

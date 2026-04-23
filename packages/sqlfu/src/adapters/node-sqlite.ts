@@ -53,7 +53,7 @@ export function createNodeSqliteClient(database: NodeSqliteDatabaseLike): SyncCl
 
   client.sql = bindSyncSql(client);
 
-  return wrapSyncClientErrors(client, {system: 'sqlite'});
+  return wrapSyncClientErrors(client);
 }
 
 export const createNodeSqliteDatabase = createNodeSqliteClient;

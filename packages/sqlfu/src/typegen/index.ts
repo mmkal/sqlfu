@@ -13,7 +13,7 @@ import type {
 } from './query-catalog.js';
 import {loadProjectConfig} from '../node/config.js';
 import type {Client, SqlfuProjectConfig, SqlfuValidator} from '../types.js';
-import {extractSchema} from '../sqlite-text.js';
+import {excludeReservedSqliteObjects, extractSchema} from '../sqlite-text.js';
 import {createBunClient, createNodeSqliteClient} from '../index.js';
 import {migrationName, readMigrationHistory, type Migration} from '../migrations/index.js';
 
@@ -1637,7 +1637,7 @@ async function loadSchema(databasePath: string): Promise<ReadonlyMap<string, Rel
         select name, type, sql
         from sqlite_schema
         where type in ('table', 'view')
-          and name not like 'sqlite_%'
+          and ${excludeReservedSqliteObjects}
         order by name
       `,
       args: [],

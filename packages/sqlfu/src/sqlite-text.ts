@@ -1,5 +1,15 @@
 import type {AsyncClient, Client, QueryArg, SyncClient} from './types.js';
 
+/**
+ * Standard WHERE-clause fragment for user-table introspection queries. Excludes:
+ * - SQLite's own internal tables (`sqlite_master`, `sqlite_sequence`, etc.).
+ * - Cloudflare's reserved `_cf_*` prefix. Workerd's D1 binding emits a warning
+ *   for any identifier matching this prefix case-insensitively. Backslash-escape
+ *   `_` so it matches literally instead of as LIKE's single-char wildcard.
+ *   https://developers.cloudflare.com/d1/reference/database-size/#internal-metadata
+ */
+export const excludeReservedSqliteObjects = `name not like 'sqlite\\_%' escape '\\' and name not like '\\_cf\\_%' escape '\\'`;
+
 export async function extractSchema(
   client: Client,
   schemaName = 'main',
@@ -16,7 +26,7 @@ export async function extractSchema(
       select sql
       from ${schemaName}.sqlite_schema
       where sql is not null
-        and name not like 'sqlite_%'
+        and ${excludeReservedSqliteObjects}
         ${excludedTableFilter}
       order by
         case type
@@ -71,7 +81,7 @@ export async function inspectSchemaFingerprint(client: Client, schemaName = 'mai
       select type, name, sql
       from ${schemaName}.sqlite_schema
       where type in ('table', 'view')
-        and name not like 'sqlite_%'
+        and ${excludeReservedSqliteObjects}
         and name != 'sqlfu_migrations'
       order by type, name
     `,

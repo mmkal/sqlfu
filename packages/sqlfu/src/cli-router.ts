@@ -9,6 +9,7 @@ import {
   applyMigrateSql,
   applySyncSql,
   analyzeDatabase,
+  autoAcceptConfirm,
   formatCheckFailure,
   requireContextConfig,
 } from './api.js';
@@ -156,9 +157,23 @@ export const router = {
   migrate: base
     .meta({
       description: `Apply pending migrations to the configured database.`,
+      aliases: {options: {yes: 'y'}},
     })
-    .handler(async ({context}) => {
-      await applyMigrateSql(requireContextConfig(context), context.confirm);
+    .input(
+      z
+        .object({
+          yes: z
+            .boolean()
+            .describe(
+              `Skip the confirmation prompt and apply pending migrations. Defaults to true when stdin is not a TTY (e.g. CI, piped invocations), false otherwise.`,
+            ),
+        })
+        .partial()
+        .optional(),
+    )
+    .handler(async ({context, input}) => {
+      const yes = input?.yes ?? !process.stdin.isTTY;
+      await applyMigrateSql(requireContextConfig(context), yes ? autoAcceptConfirm : context.confirm);
     }),
 
   pending: base

@@ -125,6 +125,13 @@ export type SqlfuCommandConfirmParams = {
 
 export type SqlfuCommandConfirm = (params: SqlfuCommandConfirmParams) => Promise<string | null>;
 
+/**
+ * A `SqlfuCommandConfirm` that accepts the proposed body without prompting.
+ * Used by the CLI when `--yes` is passed or when stdin is non-TTY, and by
+ * programmatic callers that want to skip interactive confirmation.
+ */
+export const autoAcceptConfirm: SqlfuCommandConfirm = async (params) => params.body.trim() || null;
+
 export async function runSqlfuCommand(
   context: SqlfuCommandContext,
   command: string,

@@ -87,6 +87,15 @@ function vendorBundleTotals(files: PackFile[]): Map<string, number> {
   return totals;
 }
 
+function summaryLine(base: PackResult, head: PackResult): string {
+  if (base.size === 0) return `packed ${humanBytes(head.size)} (new)`;
+  const diff = head.size - base.size;
+  if (diff === 0) return `packed ${humanBytes(head.size)} (no change)`;
+  const sign = diff > 0 ? '+' : '-';
+  const {label: pctLabel} = deltaPct(base.size, head.size);
+  return `packed ${humanBytes(head.size)} (${sign}${humanBytes(Math.abs(diff))}, ${pctLabel})`;
+}
+
 function renderReport(base: PackResult, head: PackResult): string {
   const headerRows: Row[] = [
     {label: 'packed', base: base.size, head: head.size, format: 'bytes'},
@@ -125,7 +134,7 @@ function renderReport(base: PackResult, head: PackResult): string {
     }
   }
 
-  const header = ['## Package size', ''];
+  const header = [`<!-- package-size:summary: ${summaryLine(base, head)} -->`, '## Package size', ''];
   if (maxPct >= WARN_THRESHOLD_PCT) {
     header.push(
       `> ⚠️ **Package size bump ≥${WARN_THRESHOLD_PCT}%** — if this is intentional, note it in the relevant task file so a future reviewer knows it was deliberate.`,

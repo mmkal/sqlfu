@@ -65,8 +65,34 @@ jobs:
       - name: Show report in job summary
         run: cat "$GITHUB_WORKSPACE/report.md" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Post sticky PR comment
-        uses: marocchino/sticky-pull-request-comment@v2
+      - name: Update PR body
+        uses: actions/github-script@v7
         with:
-          header: package-size
-          path: report.md
+          script: |
+            const fs = require('fs');
+            const raw = fs.readFileSync(`${process.env.GITHUB_WORKSPACE}/report.md`, 'utf8');
+            const summaryMatch = raw.match(/<!--\s*package-size:summary:\s*(.+?)\s*-->/);
+            const summary = summaryMatch ? summaryMatch[1] : 'package size';
+            const report = raw.replace(/<!--\s*package-size:summary:.*?-->\s*/, '').trim();
+            const start = '<!-- package-size:start -->';
+            const end = '<!-- package-size:end -->';
+            const section = `${start}\n<details>\n<summary>Package size — ${summary}</summary>\n\n${report}\n\n</details>\n${end}`;
+
+            const {data: pr} = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+            });
+            const body = pr.body || '';
+            const pattern = new RegExp(`${start}[\\s\\S]*?${end}`);
+            const next = pattern.test(body)
+              ? body.replace(pattern, section)
+              : `${body}${body && !body.endsWith('\n') ? '\n' : ''}\n${section}\n`;
+
+            if (next === body) return;
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+              body: next,
+            });

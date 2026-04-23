@@ -3,7 +3,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {describe, expect, inject, test} from 'vitest';
 
-import {formatSql} from '../src/index.js';
+import {formatSql} from '../src/formatter.js';
 
 // Declared in vitest.config.ts → test.provide. `inject('updateSnapshots')` returns true when
 // vitest was invoked with `-u` / `--update`; on mismatch the test rewrites its own region

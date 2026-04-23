@@ -1,6 +1,8 @@
-import type {AsyncClient, ResultRow, RunResult, SqlfuProjectConfig} from './types.js';
+import type {AsyncClient, DisposableAsyncClient, ResultRow, RunResult, SqlfuProjectConfig} from './types.js';
 import type {QueryCatalog} from './typegen/query-catalog.js';
 import type {SqlAnalysisResponse} from './ui/shared.js';
+
+export type {DisposableAsyncClient} from './types.js';
 
 export type AdHocSqlResult =
   | {mode: 'rows'; rows: ResultRow[]}
@@ -16,11 +18,6 @@ export interface HostFs {
   rm(path: string, options?: {force?: boolean}): Promise<void>;
   rename(from: string, to: string): Promise<void>;
   exists(path: string): Promise<boolean>;
-}
-
-export interface DisposableAsyncClient {
-  client: AsyncClient;
-  [Symbol.asyncDispose](): Promise<void>;
 }
 
 export interface HostLogger {

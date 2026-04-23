@@ -4,7 +4,7 @@ import path from 'node:path';
 import {createHash, randomUUID} from 'node:crypto';
 import type {DatabaseSync} from 'node:sqlite';
 
-import type {AsyncClient, ResultRow, SqlfuProjectConfig, SqlQuery} from '../types.js';
+import type {AsyncClient, DisposableAsyncClient, ResultRow, SqlfuProjectConfig, SqlQuery} from '../types.js';
 import {bindAsyncSql} from '../sql.js';
 import {rawSqlWithSqlSplittingAsync, surroundWithBeginCommitRollbackAsync} from '../sqlite-text.js';
 import type {QueryCatalog} from '../typegen/query-catalog.js';
@@ -12,7 +12,7 @@ import {initializeProject} from './config.js';
 import {analyzeAdHocSqlForConfig, generateQueryTypesForConfig} from '../typegen/index.js';
 import type {SqlAnalysisResponse} from '../ui/shared.js';
 import {isInternalUnsupportedSqlAnalysisError, toSqlEditorDiagnostic} from '../sql-editor-diagnostic.js';
-import type {AdHocSqlParams, AdHocSqlResult, DisposableAsyncClient, HostCatalog, HostFs, SqlfuHost} from '../host.js';
+import type {AdHocSqlParams, AdHocSqlResult, HostCatalog, HostFs, SqlfuHost} from '../host.js';
 
 type NodeSqliteModule = {DatabaseSync: typeof DatabaseSync};
 
@@ -44,24 +44,49 @@ function isNodeSqliteExperimentalWarning(warning: string | Error, args: unknown[
   return type === 'ExperimentalWarning' && message.includes('SQLite is an experimental feature');
 }
 
+/**
+ * Open whatever `config.db` points to — a local sqlite file if it's a string,
+ * or a user-provided factory if it's a function. The factory is invoked on every
+ * call; users memoize inside the factory if they want to share an expensive
+ * resource across sqlfu commands.
+ */
+export async function openConfigDb(db: SqlfuProjectConfig['db']): Promise<DisposableAsyncClient> {
+  if (typeof db === 'function') return await db();
+  return openLocalSqliteFile(db);
+}
+
+/**
+ * Open a local sqlite file and return a `DisposableAsyncClient` wrapping a
+ * `node:sqlite` connection. The same primitive the string form of `config.db`
+ * uses under the hood — exported so users can opt into the factory form while
+ * keeping a local file.
+ *
+ * ```ts
+ * defineConfig({
+ *   db: () => openLocalSqliteFile('./app.sqlite'),
+ *   // ...
+ * });
+ * ```
+ */
+export async function openLocalSqliteFile(dbPath: string): Promise<DisposableAsyncClient> {
+  const {DatabaseSync} = await loadNodeSqliteModule();
+  await fs.mkdir(path.dirname(dbPath), {recursive: true});
+  const database = new DatabaseSync(dbPath);
+  return {
+    client: createAsyncNodeSqliteClient(database),
+    async [Symbol.asyncDispose]() {
+      database.close();
+    },
+  };
+}
+
 export async function createNodeHost(): Promise<SqlfuHost> {
   const {DatabaseSync} = await loadNodeSqliteModule();
   const scratchRoot = path.join(os.tmpdir(), 'sqlfu-scratch');
 
-  const openNodeDb = async (dbPath: string): Promise<DisposableAsyncClient> => {
-    await fs.mkdir(path.dirname(dbPath), {recursive: true});
-    const database = new DatabaseSync(dbPath);
-    return {
-      client: createAsyncNodeSqliteClient(database),
-      async [Symbol.asyncDispose]() {
-        database.close();
-      },
-    };
-  };
-
   return {
     fs: nodeFs,
-    openDb: (config) => openNodeDb(config.db),
+    openDb: (config) => openConfigDb(config.db),
     execAdHocSql: async (client, sql, params): Promise<AdHocSqlResult> => {
       const database = client.driver as InstanceType<typeof DatabaseSync>;
       const statement = database.prepare(sql);

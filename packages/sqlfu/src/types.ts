@@ -135,8 +135,35 @@ export interface SqlfuMigrationsConfig {
   prefix: SqlfuMigrationPrefix;
 }
 
+/**
+ * A disposable wrapper around an `AsyncClient`. Returned by `SqlfuHost.openDb` and
+ * by user-provided `SqlfuDbFactory` callbacks. The `[Symbol.asyncDispose]` method
+ * runs when an `await using` scope exits, letting sqlfu pair each command with a
+ * clean connection lifecycle regardless of where the client came from.
+ */
+export interface DisposableAsyncClient {
+  client: AsyncClient;
+  [Symbol.asyncDispose](): Promise<void>;
+}
+
+/**
+ * A factory that produces a fresh disposable client whenever sqlfu needs to touch
+ * the configured database. Invoked on every `host.openDb(config)` call; users
+ * memoize inside the factory if they want to share an expensive resource (e.g. a
+ * Miniflare instance) across multiple sqlfu commands in one process.
+ */
+export type SqlfuDbFactory = () => DisposableAsyncClient | Promise<DisposableAsyncClient>;
+
 export interface SqlfuConfig {
-  db: string;
+  /**
+   * The database sqlfu talks to. Either a filesystem path to a local sqlite
+   * file (sugar for opening it via `node:sqlite`), or a factory that returns a
+   * `DisposableAsyncClient` — use the callback form to point sqlfu at an
+   * adapter-mediated DB (D1, Turso, libsql, miniflare bindings, …) so `migrate`,
+   * `check`, `sync`, `goto`, `baseline`, `generate`, and the UI all operate on
+   * the same database your app reads from.
+   */
+  db: string | SqlfuDbFactory;
   /**
    * Migrations directory. Pass a string for the default ISO-timestamp prefix, or
    * `{ path, prefix: 'four-digit' }` to use `0000_*.sql`, `0001_*.sql`, … for newly
@@ -151,7 +178,7 @@ export interface SqlfuConfig {
 
 export interface SqlfuProjectConfig {
   projectRoot: string;
-  db: string;
+  db: string | SqlfuDbFactory;
   migrations?: SqlfuMigrationsConfig;
   definitions: string;
   queries: string;

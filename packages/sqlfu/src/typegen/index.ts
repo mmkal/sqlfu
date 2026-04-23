@@ -210,9 +210,7 @@ type QueryFile = {
 
 async function materializeTypegenDatabase(config: SqlfuProjectConfig) {
   const tempDbPath = path.join(config.projectRoot, '.sqlfu', 'typegen.db');
-  const mainDatabase = await openMainDevDatabase(config.db);
-  await using ownedMainDatabase = mainDatabase;
-  const schemaSql = await extractSchema(ownedMainDatabase.client);
+  const schemaSql = await readSchemaFromConfigDb(config.db);
 
   await fs.mkdir(path.dirname(tempDbPath), {recursive: true});
   await fs.rm(tempDbPath, {force: true});
@@ -223,6 +221,15 @@ async function materializeTypegenDatabase(config: SqlfuProjectConfig) {
   await typegenDatabase.client.raw(schemaSql);
 
   return tempDbPath;
+}
+
+async function readSchemaFromConfigDb(db: SqlfuProjectConfig['db']): Promise<string> {
+  if (typeof db === 'function') {
+    await using source = await db();
+    return extractSchema(source.client);
+  }
+  await using source = await openMainDevDatabase(db);
+  return extractSchema(source.client);
 }
 
 async function openMainDevDatabase(dbPath: string): Promise<DisposableClient> {

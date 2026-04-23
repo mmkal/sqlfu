@@ -21,7 +21,7 @@ export function resolveProjectConfig(
 
   return {
     projectRoot: configDir,
-    db: resolveConfigPathValue(configDir, fileConfig.db),
+    db: typeof fileConfig.db === 'string' ? resolveConfigPathValue(configDir, fileConfig.db) : fileConfig.db,
     migrations: resolveMigrationsConfig(configDir, fileConfig.migrations),
     definitions: resolveConfigPathValue(configDir, fileConfig.definitions),
     queries: resolveConfigPathValue(configDir, fileConfig.queries),
@@ -41,10 +41,16 @@ export function inferImportExtension(tsconfigPreferences: TsconfigPreferences): 
 const validValidators: SqlfuValidator[] = ['arktype', 'valibot', 'zod', 'zod-mini'];
 
 export function assertConfigShape(configPath: string, config: object): asserts config is SqlfuConfig {
-  for (const field of ['db', 'definitions', 'queries'] as const) {
+  for (const field of ['definitions', 'queries'] as const) {
     if (!(field in config) || typeof (config as Record<string, unknown>)[field] !== 'string') {
       throw new Error(`Invalid sqlfu config at ${configPath}: missing required string field "${field}".`);
     }
+  }
+  const dbField = (config as Record<string, unknown>).db;
+  if (typeof dbField !== 'string' && typeof dbField !== 'function') {
+    throw new Error(
+      `Invalid sqlfu config at ${configPath}: "db" must be a filesystem path or a factory function returning a DisposableAsyncClient.`,
+    );
   }
   const migrations = (config as Record<string, unknown>).migrations;
   if (migrations !== undefined && typeof migrations !== 'string') {

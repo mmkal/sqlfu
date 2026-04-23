@@ -1,0 +1,28 @@
+---
+// Global pre-alpha notice. Shown on every docs page; intentionally subtler than
+// Starlight's default banner (no accent fill, no shadow) so it reads as a note,
+// not a warning.
+---
+
+<div class="prealpha-banner" data-pagefind-ignore>
+  <strong>pre-alpha</strong> — the TypeScript API may still shift. The SQL won't.
+</div>
+
+<style>
+  @layer starlight.core {
+    .prealpha-banner {
+      padding: 0.5rem var(--sl-nav-pad-x);
+      background-color: var(--sl-color-bg-nav);
+      border-bottom: 1px solid var(--sl-color-hairline);
+      color: var(--sl-color-gray-2);
+      font-size: var(--sl-text-sm);
+      line-height: 1.4;
+      text-align: center;
+      text-wrap: balance;
+    }
+    .prealpha-banner strong {
+      color: var(--sl-color-white);
+      font-weight: 600;
+    }
+  }
+</style>

@@ -21,6 +21,8 @@ export default defineConfig({
       components: {
         // Inject the "Source: …" GitHub permalink above each doc title.
         PageTitle: './src/starlight-overrides/PageTitle.astro',
+        // Global pre-alpha notice on every docs page.
+        Banner: './src/starlight-overrides/Banner.astro',
       },
       sidebar: [
         {label: 'Getting Started', slug: 'docs/getting-started'},

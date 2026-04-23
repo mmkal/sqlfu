@@ -4,7 +4,7 @@ import path from 'node:path';
 import {createHash, randomUUID} from 'node:crypto';
 import type {DatabaseSync} from 'node:sqlite';
 
-import type {AsyncClient, ResultRow, SqlfuProjectConfig, SqlQuery} from '../types.js';
+import type {AsyncClient, DisposableAsyncClient, ResultRow, SqlfuProjectConfig, SqlQuery} from '../types.js';
 import {bindAsyncSql} from '../sql.js';
 import {rawSqlWithSqlSplittingAsync, surroundWithBeginCommitRollbackAsync} from '../sqlite-text.js';
 import type {QueryCatalog} from '../typegen/query-catalog.js';
@@ -12,7 +12,7 @@ import {initializeProject} from './config.js';
 import {analyzeAdHocSqlForConfig, generateQueryTypesForConfig} from '../typegen/index.js';
 import type {SqlAnalysisResponse} from '../ui/shared.js';
 import {isInternalUnsupportedSqlAnalysisError, toSqlEditorDiagnostic} from '../sql-editor-diagnostic.js';
-import type {AdHocSqlParams, AdHocSqlResult, DisposableAsyncClient, HostCatalog, HostFs, SqlfuHost} from '../host.js';
+import type {AdHocSqlParams, AdHocSqlResult, HostCatalog, HostFs, SqlfuHost} from '../host.js';
 
 type NodeSqliteModule = {DatabaseSync: typeof DatabaseSync};
 
@@ -44,24 +44,59 @@ function isNodeSqliteExperimentalWarning(warning: string | Error, args: unknown[
   return type === 'ExperimentalWarning' && message.includes('SQLite is an experimental feature');
 }
 
+/**
+ * Open whatever `config.db` points to — a local sqlite file if it's a string,
+ * or a user-provided factory if it's a function. The factory is invoked on every
+ * call; users memoize inside the factory if they want to share an expensive
+ * resource across sqlfu commands.
+ *
+ * Throws a named, actionable error when `db` is undefined — projects on
+ * `generate.authority: 'desired_schema'` can run `sqlfu generate` without a
+ * DB, but anything that reads/writes the real database needs one.
+ */
+export async function openConfigDb(db: SqlfuProjectConfig['db']): Promise<DisposableAsyncClient> {
+  if (db == null) {
+    throw new Error(
+      'sqlfu: this command needs a database, but `db` is not set in sqlfu.config.ts. ' +
+        'Add `db: "./app.sqlite"` (local sqlite) or `db: () => openMyRemoteClient()` (factory) and rerun.',
+    );
+  }
+  if (typeof db === 'function') return await db();
+  return openLocalSqliteFile(db);
+}
+
+/**
+ * Open a local sqlite file and return a `DisposableAsyncClient` wrapping a
+ * `node:sqlite` connection. The same primitive the string form of `config.db`
+ * uses under the hood — exported so users can opt into the factory form while
+ * keeping a local file.
+ *
+ * ```ts
+ * defineConfig({
+ *   db: () => openLocalSqliteFile('./app.sqlite'),
+ *   // ...
+ * });
+ * ```
+ */
+export async function openLocalSqliteFile(dbPath: string): Promise<DisposableAsyncClient> {
+  const {DatabaseSync} = await loadNodeSqliteModule();
+  await fs.mkdir(path.dirname(dbPath), {recursive: true});
+  const database = new DatabaseSync(dbPath);
+  return {
+    client: createAsyncNodeSqliteClient(database),
+    async [Symbol.asyncDispose]() {
+      database.close();
+    },
+  };
+}
+
 export async function createNodeHost(): Promise<SqlfuHost> {
   const {DatabaseSync} = await loadNodeSqliteModule();
   const scratchRoot = path.join(os.tmpdir(), 'sqlfu-scratch');
 
-  const openNodeDb = async (dbPath: string): Promise<DisposableAsyncClient> => {
-    await fs.mkdir(path.dirname(dbPath), {recursive: true});
-    const database = new DatabaseSync(dbPath);
-    return {
-      client: createAsyncNodeSqliteClient(database),
-      async [Symbol.asyncDispose]() {
-        database.close();
-      },
-    };
-  };
-
-  return {
+  const host: SqlfuHost = {
     fs: nodeFs,
-    openDb: (config) => openNodeDb(config.db),
+    openDb: (config) => openConfigDb(config.db),
     execAdHocSql: async (client, sql, params): Promise<AdHocSqlResult> => {
       const database = client.driver as InstanceType<typeof DatabaseSync>;
       const statement = database.prepare(sql);
@@ -99,7 +134,56 @@ export async function createNodeHost(): Promise<SqlfuHost> {
     now: () => new Date(),
     uuid: () => randomUUID(),
     logger: console,
-    catalog: nodeCatalog,
+    // Assigned below so catalog methods can close over the fully-constructed host.
+    catalog: null as unknown as HostCatalog,
+  };
+  host.catalog = createNodeCatalog(host);
+  return host;
+}
+
+function createNodeCatalog(host: SqlfuHost): HostCatalog {
+  return {
+    async load(config): Promise<QueryCatalog> {
+      // Catalog load is best-effort: the UI's schema page calls this on every render, and the
+      // user has a separate "Schema Check" surface that shows real schema errors. If typegen
+      // can't build a catalog right now (broken definitions.sql, unreadable migrations, etc.),
+      // serve the last good catalog — or an empty one if none exists yet — instead of
+      // throwing. The CLI path (`sqlfu generate`) still throws, because there the user asked
+      // explicitly for types.
+      try {
+        await generateQueryTypesForConfig(config, host);
+      } catch (error) {
+        console.warn(`sqlfu/ui: catalog regeneration skipped — ${String(error)}`);
+      }
+      const catalogPath = path.join(config.projectRoot, '.sqlfu', 'query-catalog.json');
+      try {
+        return JSON.parse(await fs.readFile(catalogPath, 'utf8')) as QueryCatalog;
+      } catch {
+        return {generatedAt: new Date(0).toISOString(), queries: []};
+      }
+    },
+    async refresh(config) {
+      try {
+        await generateQueryTypesForConfig(config, host);
+      } catch (error) {
+        console.warn(`sqlfu/ui: catalog regeneration skipped — ${String(error)}`);
+      }
+    },
+    async analyzeSql(config, sql) {
+      if (!sql.trim()) return {};
+      try {
+        const analysis = await analyzeAdHocSqlForConfig(config, host, sql);
+        return {
+          paramsSchema: analysis.paramsSchema,
+          diagnostics: [],
+        };
+      } catch (error) {
+        if (isInternalUnsupportedSqlAnalysisError(error)) return {};
+        return {
+          diagnostics: [toSqlEditorDiagnostic(sql, error)],
+        };
+      }
+    },
   };
 }
 
@@ -133,31 +217,6 @@ const nodeFs: HostFs = {
   },
 };
 
-const nodeCatalog: HostCatalog = {
-  async load(config): Promise<QueryCatalog> {
-    await generateQueryTypesForConfig(config);
-    const catalogPath = path.join(config.projectRoot, '.sqlfu', 'query-catalog.json');
-    return JSON.parse(await fs.readFile(catalogPath, 'utf8')) as QueryCatalog;
-  },
-  async refresh(config) {
-    await generateQueryTypesForConfig(config);
-  },
-  async analyzeSql(config, sql) {
-    if (!sql.trim()) return {};
-    try {
-      const analysis = await analyzeAdHocSqlForConfig(config, sql);
-      return {
-        paramsSchema: analysis.paramsSchema,
-        diagnostics: [],
-      };
-    } catch (error) {
-      if (isInternalUnsupportedSqlAnalysisError(error)) return {};
-      return {
-        diagnostics: [toSqlEditorDiagnostic(sql, error)],
-      };
-    }
-  },
-};
 
 type NodeSqliteDatabase = InstanceType<typeof DatabaseSync>;
 

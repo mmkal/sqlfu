@@ -19,8 +19,9 @@ import {fileURLToPath} from 'node:url';
 import BetterSqlite3 from 'better-sqlite3';
 
 import {createBetterSqlite3Client} from '../src/adapters/better-sqlite3.js';
+import {createNodeHost} from '../src/node/host.js';
 import {generateQueryTypesForConfig} from '../src/typegen/index.js';
-import type {SqlfuProjectConfig} from '../src/core/types.js';
+import type {SqlfuProjectConfig} from '../src/types.js';
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const internalRoot = path.join(packageRoot, 'internal');
@@ -58,10 +59,12 @@ async function main() {
       prettyErrors: false,
       sync: false,
       importExtension: '.js',
+      authority: 'desired_schema',
     },
   };
 
-  await generateQueryTypesForConfig(config);
+  const host = await createNodeHost();
+  await generateQueryTypesForConfig(config, host);
   console.log(`generated ${path.relative(packageRoot, queriesDir)}/.generated/`);
 }
 

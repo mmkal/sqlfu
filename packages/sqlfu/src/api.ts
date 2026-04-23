@@ -15,6 +15,12 @@ import {
 import {diffSchemaSql} from './schemadiff/index.js';
 import {inspectSqliteSchemaSql, schemasEqual} from './schemadiff/sqlite/index.js';
 
+import {
+  materializeDefinitionsSchemaFor,
+  materializeMigrationsSchemaFor,
+  readMigrationFiles,
+} from './materialize.js';
+
 const schemaDriftExcludedTables = (['sqlfu_migrations'] as const).slice();
 
 export async function getCheckMismatches(context: SqlfuContext): Promise<CheckMismatch[]> {
@@ -208,28 +214,7 @@ export async function runSqlfuCommand(
 }
 
 export async function readMigrationsFromContext(context: SqlfuContext): Promise<Migration[]> {
-  if (!context.config.migrations) return [];
-  const migrationsDir = context.config.migrations.path;
-
-  let fileNames: string[];
-  try {
-    fileNames = (await context.host.fs.readdir(migrationsDir))
-      .filter((fileName) => fileName.endsWith('.sql'))
-      .sort();
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return [];
-    }
-    throw error;
-  }
-
-  const migrations: Migration[] = [];
-  for (const fileName of fileNames) {
-    const filePath = joinPath(migrationsDir, fileName);
-    const content = await context.host.fs.readFile(filePath);
-    migrations.push({path: filePath, content});
-  }
-  return migrations;
+  return readMigrationFiles(context.host, context.config);
 }
 
 async function readDefinitionsSql(host: SqlfuHost, definitionsPath: string) {
@@ -611,21 +596,10 @@ function slugify(value: string) {
     .replace(/_+/gu, '_');
 }
 
-export async function materializeDefinitionsSchemaForContext(host: SqlfuHost, definitionsSql: string) {
-  await using database = await host.openScratchDb('materialize-definitions');
-  await database.client.raw(definitionsSql);
-  return await extractSchema(database.client, 'main', {
-    excludedTables: schemaDriftExcludedTables,
-  });
-}
-
-export async function materializeMigrationsSchemaForContext(host: SqlfuHost, migrations: Migration[]) {
-  await using database = await host.openScratchDb('materialize-migrations');
-  await applyMigrations(database.client, {migrations});
-  return await extractSchema(database.client, 'main', {
-    excludedTables: schemaDriftExcludedTables,
-  });
-}
+export const materializeDefinitionsSchemaForContext = (host: SqlfuHost, definitionsSql: string) =>
+  materializeDefinitionsSchemaFor(host, definitionsSql, {excludedTables: schemaDriftExcludedTables});
+export const materializeMigrationsSchemaForContext = (host: SqlfuHost, migrations: Migration[]) =>
+  materializeMigrationsSchemaFor(host, migrations, {excludedTables: schemaDriftExcludedTables});
 
 function getMigrationsThroughTarget(migrations: Migration[], target: string) {
   const targetIndex = migrations.findIndex((migration) => migrationName(migration) === target);

@@ -83,7 +83,35 @@ export type SqlValue = QueryArg | SqlFragment;
 
 export type SqlfuValidator = 'arktype' | 'valibot' | 'zod' | 'zod-mini';
 
+/**
+ * Schema source of truth for `sqlfu generate`. Controls where typegen reads
+ * the schema from when building the query catalog. Defaults to
+ * `'desired_schema'` — typegen reads `definitions.sql` directly, so `generate`
+ * works even without a live database.
+ *
+ * - `'desired_schema'` — read `definitions.sql` verbatim. Fastest, most
+ *   deterministic, requires no DB. Types follow intent; any drift from
+ *   migrations is surfaced by `sqlfu check`.
+ * - `'migrations'` — replay `migrations/*.sql` into a scratch DB and extract
+ *   the resulting schema. Types follow what the migrator actually produces;
+ *   catches drift from `definitions.sql` implicitly.
+ * - `'migration_history'` — read `sqlfu_migrations` from `config.db`, replay
+ *   only the files listed there (in order), extract. Throws if a recorded
+ *   migration is missing from `migrations/`. Useful when types should match
+ *   what's actually deployed.
+ * - `'live_schema'` — extract schema directly from `config.db`. Requires the
+ *   DB to be populated up-front; was the default before the factory form of
+ *   `config.db` landed.
+ */
+export type SqlfuAuthority = 'desired_schema' | 'migrations' | 'migration_history' | 'live_schema';
+
 export interface SqlfuGenerateConfig {
+  /**
+   * Where typegen reads the schema from. Default `'desired_schema'` —
+   * `definitions.sql` is the source of truth and no DB is required. See
+   * {@link SqlfuAuthority} for each value's semantics.
+   */
+  authority?: SqlfuAuthority;
   /**
    * Emit runtime validation schemas as the source of truth for each generated query's params and result.
    *
@@ -135,8 +163,37 @@ export interface SqlfuMigrationsConfig {
   prefix: SqlfuMigrationPrefix;
 }
 
+/**
+ * A disposable wrapper around an `AsyncClient`. Returned by `SqlfuHost.openDb` and
+ * by user-provided `SqlfuDbFactory` callbacks. The `[Symbol.asyncDispose]` method
+ * runs when an `await using` scope exits, letting sqlfu pair each command with a
+ * clean connection lifecycle regardless of where the client came from.
+ */
+export interface DisposableAsyncClient {
+  client: AsyncClient;
+  [Symbol.asyncDispose](): Promise<void>;
+}
+
+/**
+ * A factory that produces a fresh disposable client whenever sqlfu needs to touch
+ * the configured database. Invoked on every `host.openDb(config)` call; users
+ * memoize inside the factory if they want to share an expensive resource (e.g. a
+ * Miniflare instance) across multiple sqlfu commands in one process.
+ */
+export type SqlfuDbFactory = () => DisposableAsyncClient | Promise<DisposableAsyncClient>;
+
 export interface SqlfuConfig {
-  db: string;
+  /**
+   * The database sqlfu talks to. Either a filesystem path to a local sqlite
+   * file (sugar for opening it via `node:sqlite`), or a factory that returns a
+   * `DisposableAsyncClient` — use the callback form to point sqlfu at an
+   * adapter-mediated DB (D1, Turso, libsql, miniflare bindings, …) so
+   * `migrate`, `check`, `sync`, `goto`, `baseline`, and the UI all operate on
+   * the same database your app reads from. Optional: if you only ever run
+   * `sqlfu generate` with `authority: 'desired_schema'` (or `'migrations'`),
+   * you can omit `db` entirely.
+   */
+  db?: string | SqlfuDbFactory;
   /**
    * Migrations directory. Pass a string for the default ISO-timestamp prefix, or
    * `{ path, prefix: 'four-digit' }` to use `0000_*.sql`, `0001_*.sql`, … for newly
@@ -151,7 +208,7 @@ export interface SqlfuConfig {
 
 export interface SqlfuProjectConfig {
   projectRoot: string;
-  db: string;
+  db?: string | SqlfuDbFactory;
   migrations?: SqlfuMigrationsConfig;
   definitions: string;
   queries: string;
@@ -160,6 +217,7 @@ export interface SqlfuProjectConfig {
     prettyErrors: boolean;
     sync: boolean;
     importExtension: '.js' | '.ts';
+    authority: SqlfuAuthority;
   };
 }
 

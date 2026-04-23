@@ -7,6 +7,7 @@
  * very different from Postgres', so the queries and the inspected model shape are sqlfu-specific. What is borrowed is the
  * idea of representing the database as a typed inspected object tree before diffing, rather than diffing SQL text directly.
  */
+import {excludeReservedSqliteObjects} from '../../sqlite-text.js';
 import type {Client} from '../../types.js';
 import {quoteSqlString} from './identifiers.js';
 import {
@@ -37,7 +38,7 @@ export async function inspectSqliteSchema(client: Client, schemaName = 'main'): 
       select type, name, sql
       from ${schemaName}.sqlite_schema
       where type in ('table', 'view')
-        and name not like 'sqlite_%'
+        and ${excludeReservedSqliteObjects}
       order by type, name
     `,
     args: [],

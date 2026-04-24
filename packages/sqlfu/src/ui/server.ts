@@ -10,6 +10,7 @@ import {loadProjectStateFrom} from '../node/config.js';
 import {PortInUseError, getListeningProcesses} from '../node/port-process.js';
 import {generateQueryTypesForConfig} from '../typegen/index.js';
 import type {SqlfuHost} from '../host.js';
+import type {SqlfuProjectConfig} from '../types.js';
 import {createNodeHost} from '../node/host.js';
 import {uiRouter, type ResolvedUiProject} from './router.js';
 
@@ -184,7 +185,8 @@ function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
 
 export async function generateCatalogForProject(projectRoot: string) {
   const config = await loadProjectConfigFrom(projectRoot);
-  await generateQueryTypesForConfig(config);
+  const host = await createNodeHost();
+  await generateQueryTypesForConfig(config, host);
 }
 
 function createFixedProjectResolver(projectRoot: string): ProjectResolver {
@@ -268,7 +270,7 @@ async function ensureDatabase(host: SqlfuHost, projectRoot: string) {
     definitions: path.join(projectRoot, 'definitions.sql'),
     migrations: {path: path.join(projectRoot, 'migrations'), prefix: 'iso'},
     queries: path.join(projectRoot, 'sql'),
-    generate: {validator: null, prettyErrors: true, sync: false, importExtension: '.js'},
+    generate: {validator: null, prettyErrors: true, sync: false, importExtension: '.js', authority: 'desired_schema'},
   });
   try {
     const definitionsSql = await fs.readFile(path.join(projectRoot, 'definitions.sql'), 'utf8');
@@ -564,7 +566,7 @@ function renderServerHomePage(project: ResolvedUiProject) {
     '    <p>Use the UI against this origin via <code>sqlfu.dev/ui</code>, or point a client at <code>/api/rpc</code>.</p>',
     '    <div class="card">',
     '      <p><strong>API base:</strong> <code>/api/rpc</code></p>',
-    '      <p><strong>Configured database:</strong> <code>' + escapeHtml(config.db) + '</code></p>',
+    '      <p><strong>Configured database:</strong> <code>' + escapeHtml(describeConfigDb(config.db)) + '</code></p>',
     '      <p><a href="https://sqlfu.dev">Open docs on sqlfu.dev</a></p>',
     '    </div>',
     '  </main>',
@@ -602,6 +604,12 @@ function renderErrorPage(error: unknown) {
 
 function escapeHtml(value: string) {
   return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+}
+
+function describeConfigDb(db: SqlfuProjectConfig['db']): string {
+  if (typeof db === 'string') return db;
+  if (typeof db === 'function') return '(factory)';
+  return '(not configured)';
 }
 
 function getServerPort(server: http.Server) {

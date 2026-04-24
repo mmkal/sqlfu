@@ -12,7 +12,7 @@ import {
   type SqlfuCommandConfirmParams,
 } from '../api.js';
 import {SqlfuError, type SqlfuErrorKind} from '../errors.js';
-import {splitSqlStatements} from '../sqlite-text.js';
+import {excludeReservedSqliteObjects, splitSqlStatements} from '../sqlite-text.js';
 import type {SqlfuHost} from '../host.js';
 import type {AsyncClient, QueryArg, SqlfuProjectConfig} from '../types.js';
 import {basename, joinPath} from '../paths.js';
@@ -85,7 +85,7 @@ export const uiRouter = {
           select name, type, sql
           from sqlite_master
           where type in ('table', 'view')
-            and name not like 'sqlite_%'
+            and ${excludeReservedSqliteObjects}
           order by type, name
         `,
         args: [],

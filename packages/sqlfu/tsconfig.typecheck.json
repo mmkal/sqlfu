@@ -3,7 +3,7 @@
   "compilerOptions": {
     "noEmit": true
   },
-  "include": ["src/**/*.ts", "test/**/*.ts", "test/**/*.d.ts"],
+  "include": ["src/**/*.ts", "test/**/*.ts", "test/**/*.d.ts", "scripts/**/*.ts"],
   "exclude": [
     "src/vendor/code-block-writer/**/*",
     "src/vendor/typesql/**/*",

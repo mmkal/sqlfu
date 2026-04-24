@@ -1,5 +1,7 @@
 # sqlfu
 
+<img src="./docs/logo.png" alt="" align="right" width="96" />
+
 `sqlfu` is a SQLite-first toolkit for teams that want their data layer to stay close to SQL.
 
 It is built around a simple idea: SQL should be the source language for schema, migrations, queries, formatting, and diffing. TypeScript comes second. You should still get good generated types and wrappers, but without having to push the whole project through an ORM-shaped API.
@@ -207,12 +209,65 @@ export default {
 
 Required fields:
 
-- `db` -- path to the main dev database used by `sync`, `migrate`, `generate`, and other tooling commands
-- `migrations` -- directory containing migration files
 - `definitions` -- schema source of truth (`definitions.sql`)
 - `queries` -- directory containing checked-in `.sql` queries
 
+Optional fields:
+
+- `db` -- the database sqlfu talks to for `migrate`, `check`, `sync`, `goto`, `baseline`, and the UI. Either a filesystem path (opens a local sqlite file) or a factory returning a `DisposableAsyncClient`. See [Pluggable `db`](#pluggable-db). Can be omitted when you only use `sqlfu generate` and the default `generate.authority`.
+- `migrations` -- directory containing migration files. Omit if you don't use migrations (library-author projects).
+- `generate.authority` -- where `sqlfu generate` reads the schema from. See [`generate.authority`](#generateauthority). Default `'desired_schema'`.
+
 `sqlfu` manages its own temporary files under `.sqlfu/`, including scratch databases used for schema diffing. These are generally safe to delete at any time.
+
+### Pluggable `db`
+
+When your app talks to an adapter-mediated database (Cloudflare D1, Turso, libsql, a miniflare binding), point sqlfu at the same client your app uses by giving `db` a factory instead of a path. Every sqlfu command that touches the DB -- `migrate`, `check`, `sync`, `goto`, `baseline`, `generate`, the UI -- will then operate on the *real* database, not a scratch file.
+
+```ts
+import {defineConfig, createD1Client} from 'sqlfu';
+import {Miniflare} from 'miniflare';
+
+export default defineConfig({
+  db: async () => {
+    const mf = new Miniflare({
+      script: '', modules: true,
+      d1Persist: true,
+      d1Databases: {DB: '<dev-db-id>'},
+    });
+    await mf.ready;
+    const d1 = await mf.getD1Database('DB');
+    return {
+      client: createD1Client(d1),
+      async [Symbol.asyncDispose]() { await mf.dispose(); },
+    };
+  },
+  migrations: './migrations',
+  definitions: './definitions.sql',
+  queries: './sql',
+});
+```
+
+The factory is invoked on every `openDb` call; sqlfu calls `[Symbol.asyncDispose]` when the command scope exits. Memoize inside the factory if the setup is expensive (e.g. spinning up miniflare once per process).
+
+### `generate.authority`
+
+`sqlfu generate` needs to know your schema to produce typed query wrappers. The `generate.authority` option controls where it reads the schema from:
+
+- `'desired_schema'` (default) -- read `definitions.sql` directly. No DB required. Fastest, most deterministic. Drift between `definitions.sql` and migrations is surfaced by `sqlfu check`, not silently hidden here.
+- `'migrations'` -- replay `migrations/*.sql` into a scratch DB and extract the resulting schema. No DB required. Types follow what the migrator would actually produce.
+- `'migration_history'` -- read `sqlfu_migrations` from `config.db`, then replay the matching migration files. Requires `db`. Throws if a recorded migration is missing from `migrations/`. Use when types should match what's actually deployed.
+- `'live_schema'` -- extract schema directly from `config.db`. Requires `db` to be populated up-front. This was the default before the factory form of `db` landed; now opt-in.
+
+```ts
+export default defineConfig({
+  // db optional for desired_schema / migrations authority
+  definitions: './definitions.sql',
+  queries: './sql',
+  migrations: './migrations',
+  generate: {authority: 'migrations'},
+});
+```
 
 ## Command Reference
 
@@ -222,7 +277,7 @@ Generate query wrappers:
 sqlfu generate
 ```
 
-Note: `generate` reads the live database schema. Apply pending migrations first with `sqlfu migrate`.
+By default `generate` reads from `definitions.sql` (no DB needed). Switch `generate.authority` if you want types to reflect the live schema or the applied migration history -- see [`generate.authority`](#generateauthority).
 
 Draft a migration:
 

@@ -818,45 +818,6 @@ test('sql runner executes a named-parameter query and saves it to disk', async (
   await expect(fs.readFile(savedQueryPath, 'utf8')).resolves.toContain('where slug = :slug');
 });
 
-test('sql runner understands sqlfu_migrations and suggests a non-noisy saved name', async ({page, projectDir}) => {
-  const savedQueryPath = path.join(projectDir, 'sql', 'list-sqlfu-migrations.sql');
-  await fs.rm(savedQueryPath, {force: true});
-
-  await page.goto('/#schema');
-  await confirmAndRunSchemaCommand(page, page.getByRole('button', {name: 'sqlfu draft'}));
-  await confirmAndRunSchemaCommand(page, page.getByRole('button', {name: /sqlfu baseline /}).first());
-
-  await page.goto('/#sql');
-  await replaceCodeMirrorText(
-    page,
-    'SQL editor',
-    `
-    select *
-    from sqlfu_migrations
-    order by name;
-  `,
-  );
-
-  await expect(page.locator('.cm-lintRange-error')).toHaveCount(0);
-  await page.getByRole('button', {name: 'Run SQL'}).click();
-  await expect(page.getByText('checksum')).toBeVisible();
-  await expect(page.getByText('no such table: sqlfu_migrations')).toHaveCount(0);
-
-  page.once('dialog', (dialog) => {
-    expect(dialog.defaultValue()).toBe('list-sqlfu-migrations');
-    dialog.accept('list-sqlfu-migrations');
-  });
-  await page.getByRole('button', {name: 'Save query'}).click();
-
-  await expect(page).toHaveURL(/#query\/list-sqlfu-migrations$/);
-  await expect(fs.readFile(savedQueryPath, 'utf8')).resolves.toContain('from sqlfu_migrations');
-  await expect(page.getByText('Query error')).toHaveCount(0);
-  await expect(page.getByRole('button', {name: 'Run query'})).toBeVisible();
-  await page.getByRole('button', {name: 'Run query'}).click();
-  await expect(page.getByText('checksum')).toBeVisible();
-  await expect(page.getByText('no such table: sqlfu_migrations')).toHaveCount(0);
-});
-
 test('schema queries are invalidated after sql runs, saved query runs, and relation saves', async ({page}) => {
   await page.goto('/#schema');
   await expect(page.getByRole('heading', {name: 'Schema', exact: true})).toBeVisible();

@@ -99,6 +99,9 @@ a {
 }
 
 .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
   font-family: ui-monospace, 'SFMono-Regular', monospace;
   font-size: 0.84rem;
   letter-spacing: 0.14em;
@@ -106,6 +109,13 @@ a {
   color: var(--accent);
   text-decoration: none;
   line-height: 1;
+}
+
+.brand-logo {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 0.3rem;
+  object-fit: contain;
 }
 
 .nav {

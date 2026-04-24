@@ -17,6 +17,13 @@ export default defineConfig({
   integrations: [
     starlight({
       title: 'sqlfu',
+      favicon: '/favicon.ico',
+      logo: {src: './src/assets/logo.png', alt: 'sqlfu'},
+      head: [
+        {tag: 'link', attrs: {rel: 'icon', type: 'image/png', sizes: '32x32', href: '/favicon-32.png'}},
+        {tag: 'link', attrs: {rel: 'icon', type: 'image/png', sizes: '16x16', href: '/favicon-16.png'}},
+        {tag: 'link', attrs: {rel: 'apple-touch-icon', sizes: '180x180', href: '/apple-touch-icon.png'}},
+      ],
       customCss: ['./src/styles/custom.css'],
       components: {
         // Inject the "Source: …" GitHub permalink above each doc title.

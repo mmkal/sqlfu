@@ -12,6 +12,10 @@ import '../styles/landing.css';
       name="description"
       content="All you need is sql. sqlfu lets you (or your agent) write schema, migrations, and queries as .sql files, and generates typed TypeScript wrappers next to them."
     />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     {/* Mirror Starlight's theme bootstrap: read localStorage 'starlight-theme' key
         and apply data-theme to <html> before first paint to avoid FOUC. Also picks
         up OS preference when no explicit choice is stored. */}
@@ -32,7 +36,10 @@ import '../styles/landing.css';
     </div>
     <div class="site-shell">
       <header class="topbar">
-        <a class="brand" href="/">sqlfu</a>
+        <a class="brand" href="/">
+          <img class="brand-logo" src="/logo.png" alt="" width="28" height="28" />
+          <span>sqlfu</span>
+        </a>
         <nav class="nav">
           <a href="/docs/getting-started">Docs</a>
           <a href="/ui?demo=1">Demo</a>

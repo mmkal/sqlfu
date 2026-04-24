@@ -282,6 +282,25 @@ async function transformMarkdown(markdown, currentDoc) {
     return `![${alt}](${assetRoute(preferredAssetPath)})`;
   });
 
+  // Rewrite HTML <img src="..."> with a relative src. We don't rewrite the
+  // surrounding tag — `align`, `width`, etc. pass through for rendering.
+  out = out.replace(/<img\b([^>]*?)\bsrc\s*=\s*"([^"]+)"([^>]*)>/g, (match, before, rawSrc, after) => {
+    const src = rawSrc.trim();
+    if (/^(https?:|data:|#|\/)/.test(src)) {
+      return match;
+    }
+
+    const absoluteTarget = resolveRepoTarget(src, currentDoc.sourcePath);
+    if (!absoluteTarget) {
+      return match;
+    }
+
+    const [absolutePath] = String(absoluteTarget).split('#');
+    const preferredAssetPath = preferWebpAsset(absolutePath);
+    assetPaths.push(preferredAssetPath);
+    return `<img${before}src="${assetRoute(preferredAssetPath)}"${after}>`;
+  });
+
   // Rewrite markdown link syntax: [text](href) (not preceded by !)
   out = out.replace(/(^|[^!])\[([^\]]+)\]\(([^)]+)\)/g, (_match, prefix, text, rawHref) => {
     const href = rawHref.trim();

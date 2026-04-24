@@ -1,4 +1,4 @@
-import type {SqlfuConfig, SqlfuProjectConfig, SqlfuValidator} from './types.js';
+import type {SqlfuAuthority, SqlfuConfig, SqlfuProjectConfig, SqlfuValidator} from './types.js';
 import {createDefaultInitPreview} from './init-preview.js';
 import {dirname, resolvePath} from './paths.js';
 
@@ -21,7 +21,7 @@ export function resolveProjectConfig(
 
   return {
     projectRoot: configDir,
-    db: resolveConfigPathValue(configDir, fileConfig.db),
+    db: typeof fileConfig.db === 'string' ? resolveConfigPathValue(configDir, fileConfig.db) : fileConfig.db,
     migrations: resolveMigrationsConfig(configDir, fileConfig.migrations),
     definitions: resolveConfigPathValue(configDir, fileConfig.definitions),
     queries: resolveConfigPathValue(configDir, fileConfig.queries),
@@ -30,6 +30,7 @@ export function resolveProjectConfig(
       prettyErrors: fileConfig.generate?.prettyErrors !== false,
       sync: fileConfig.generate?.sync === true,
       importExtension: fileConfig.generate?.importExtension ?? inferImportExtension(tsconfigPreferences),
+      authority: fileConfig.generate?.authority ?? 'desired_schema',
     },
   };
 }
@@ -39,12 +40,19 @@ export function inferImportExtension(tsconfigPreferences: TsconfigPreferences): 
 }
 
 const validValidators: SqlfuValidator[] = ['arktype', 'valibot', 'zod', 'zod-mini'];
+const validAuthorities: SqlfuAuthority[] = ['desired_schema', 'migrations', 'migration_history', 'live_schema'];
 
 export function assertConfigShape(configPath: string, config: object): asserts config is SqlfuConfig {
-  for (const field of ['db', 'definitions', 'queries'] as const) {
+  for (const field of ['definitions', 'queries'] as const) {
     if (!(field in config) || typeof (config as Record<string, unknown>)[field] !== 'string') {
       throw new Error(`Invalid sqlfu config at ${configPath}: missing required string field "${field}".`);
     }
+  }
+  const dbField = (config as Record<string, unknown>).db;
+  if (dbField !== undefined && typeof dbField !== 'string' && typeof dbField !== 'function') {
+    throw new Error(
+      `Invalid sqlfu config at ${configPath}: "db" must be a filesystem path, a factory function returning a DisposableAsyncClient, or omitted.`,
+    );
   }
   const migrations = (config as Record<string, unknown>).migrations;
   if (migrations !== undefined && typeof migrations !== 'string') {
@@ -100,6 +108,14 @@ export function assertConfigShape(configPath: string, config: object): asserts c
     const importExtension = generateRecord.importExtension;
     if (importExtension !== undefined && importExtension !== '.js' && importExtension !== '.ts') {
       throw new Error(`Invalid sqlfu config at ${configPath}: "generate.importExtension" must be '.js' or '.ts'.`);
+    }
+
+    const authority = generateRecord.authority;
+    if (authority !== undefined && !validAuthorities.includes(authority as SqlfuAuthority)) {
+      throw new Error(
+        `Invalid sqlfu config at ${configPath}: "generate.authority" must be one of ` +
+          `${validAuthorities.map((value) => `'${value}'`).join(', ')}, or undefined. Got ${JSON.stringify(authority)}.`,
+      );
     }
   }
 

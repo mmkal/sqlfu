@@ -9,7 +9,7 @@ size: small
 
 Regenerate the typegen output (wrappers under `queries/.generated/`, tables file, barrel, query catalog, migrations bundle) whenever an input file changes. Today the dev loop is "edit SQL → run `sqlfu generate` → look at types → repeat"; watch mode closes that loop so the user keeps typing and `.generated/` stays fresh.
 
-**Executive summary:** fresh task. No implementation yet.
+**Executive summary:** implementation landed. `--watch` flag wired into the CLI; `watchGenerateQueryTypesForConfig` is a reusable entry-point that takes an `AbortSignal` so tests shut it down cleanly. Chokidar v4 watches `config.queries/`, plus `definitions.sql` or `migrations/` depending on `generate.authority`. `.generated/` is ignored so regen output doesn't re-trigger regen. Errors are logged and the watcher keeps running. 4 integration tests plus a manual smoke test against `template-project` all pass.
 
 ## Scope
 
@@ -112,3 +112,13 @@ Fixtures use `Symbol.asyncDispose` per project conventions. Test should use real
 - `live_schema` authority: error vs. poll every N seconds vs. listen for SQLite WAL changes? Going with "error with a helpful message" in the first cut. Revisit if someone asks.
 - Do we want to expose the debounce interval as a flag (`--watch-debounce=150`)? No — YAGNI until someone complains.
 - Exit code on `ctrl-c`? 0, same as `vite` / `tsc --watch`.
+
+## Implementation log
+
+- Added `chokidar@^4.0.3` as a direct dependency of `packages/sqlfu`.
+- New file: `packages/sqlfu/src/typegen/watch.ts`. Exports `watchGenerateQueryTypes()` (CLI entry, wires up SIGINT/SIGTERM) and `watchGenerateQueryTypesForConfig(config, host, options)` (reusable; takes `AbortSignal`, `onReady`, `logger`).
+- Wired `--watch` into the `generate` command in `packages/sqlfu/src/node/cli-router.ts`.
+- Paths watched: `config.queries/` always; `config.definitions` for `desired_schema`; `config.migrations.path` for `migrations` / `migration_history`; `.generated/` ignored to avoid feedback loop.
+- Debounce: 150ms trailing; mutual-exclusion so a slow regen doesn't overlap with itself. While one run is in flight, new events set a `pending` flag and a single follow-up run fires at the end.
+- Errors from `generateQueryTypesForConfig` are caught, logged via `logger.error`, and the watcher stays alive.
+- Integration tests in `packages/sqlfu/test/generate-watch.test.ts` (4 cases) — all green. Full sqlfu test suite: 1315 passed, 0 failed. Manual smoke test against `packages/ui/test/template-project` confirmed query-file changes and `definitions.sql` changes both trigger regen, and SIGINT exits 0.

@@ -71,6 +71,7 @@
   "dependencies": {
     "@clack/prompts": "^1.2.0",
     "@orpc/server": "^1.13.13",
+    "chokidar": "^4.0.3",
     "trpc-cli": "^0.14.0",
     "zod": "^4.3.6"
   },

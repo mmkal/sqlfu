@@ -609,7 +609,10 @@ function slugify(value: string) {
 export const materializeDefinitionsSchemaForContext = (context: SqlfuContext, definitionsSql: string) =>
   materializeDefinitionsSchemaFor(context.host, definitionsSql, {excludedTables: schemaDriftExcludedTables(context)});
 export const materializeMigrationsSchemaForContext = (context: SqlfuContext, migrations: Migration[]) =>
-  materializeMigrationsSchemaFor(context.host, migrations, {excludedTables: schemaDriftExcludedTables(context)});
+  materializeMigrationsSchemaFor(context.host, migrations, {
+    excludedTables: schemaDriftExcludedTables(context),
+    preset: migrationsPresetOf(context),
+  });
 
 function getMigrationsThroughTarget(migrations: Migration[], target: string) {
   const targetIndex = migrations.findIndex((migration) => migrationName(migration) === target);

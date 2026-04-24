@@ -45,7 +45,8 @@ test('d1 preset picks up alchemy-era migrations and appends new ones (handoff)',
 
   // Simulate alchemy having already:
   //   - created `d1_migrations` in its local/miniflare shape (has `type` column)
-  //   - applied migration 0000_init and recorded it
+  //   - applied migration 0000_init.sql and recorded it (alchemy stores names
+  //     with the `.sql` suffix — see alchemy/src/cloudflare/d1-sql-file.ts)
   //   - left the `posts` table behind from that first migration
   await fixture.client.raw(dedent`
     create table d1_migrations (
@@ -54,7 +55,7 @@ test('d1 preset picks up alchemy-era migrations and appends new ones (handoff)',
       applied_at timestamp default current_timestamp not null,
       type text not null
     );
-    insert into d1_migrations (name, type) values ('0000_init', 'migration');
+    insert into d1_migrations (name, type) values ('0000_init.sql', 'migration');
     create table posts (id integer primary key, slug text not null);
   `);
 
@@ -72,14 +73,16 @@ test('d1 preset picks up alchemy-era migrations and appends new ones (handoff)',
   await applyMigrations(fixture.client, {migrations, preset: 'd1'});
 
   // Alchemy's row stayed put. Sqlfu skipped re-applying 0000_init (already in
-  // history) and applied 0001_add_body using the local schema's `type` column.
+  // history, matched by normalizing alchemy's `.sql`-suffixed name against
+  // sqlfu's suffixless internal form) and applied 0001_add_body using the
+  // local schema's `type` column.
   const rows = await fixture.client.all<{name: string; type: string | null}>({
     sql: `select name, type from d1_migrations order by id`,
     args: [],
   });
   expect(rows).toEqual([
-    {name: '0000_init', type: 'migration'},
-    {name: '0001_add_body', type: 'migration'},
+    {name: '0000_init.sql', type: 'migration'},
+    {name: '0001_add_body.sql', type: 'migration'},
   ]);
 
   const columns = await fixture.client.all<{name: string}>({

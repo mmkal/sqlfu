@@ -4,6 +4,8 @@ import {expect, test} from 'vitest';
 
 import {createNodeSqliteClient} from '../../src/index.js';
 import {applyMigrations, readMigrationHistory, type Migration} from '../../src/migrations/index.js';
+import {materializeMigrationsSchemaFor} from '../../src/materialize.js';
+import {createNodeHost} from '../../src/node/host.js';
 
 // Core preset behavior — bookkeeping SQL + checksum semantics — exercised
 // directly against an in-memory node:sqlite database. The miniflare-backed
@@ -133,6 +135,48 @@ test('d1 preset silently accepts edits to an applied migration (no checksum colu
 
   const history = await readMigrationHistory(db.client, {preset: 'd1'});
   expect(history).toHaveLength(1);
+});
+
+test('materializeMigrationsSchemaFor does not leak sqlfu_migrations into the baseline under preset: d1', async () => {
+  // Regression: sqlfu draft was emitting `drop table sqlfu_migrations` when a
+  // user had configured `preset: 'd1'`. The scratch DB in materialize was
+  // defaulting to the sqlfu preset (creating sqlfu_migrations), while the
+  // excludedTables list came from the user config (['d1_migrations']). The
+  // mismatch left sqlfu_migrations visible in the baseline schema, and the
+  // diff engine naturally concluded it should be dropped.
+  const host = await createNodeHost();
+  const baseline = await materializeMigrationsSchemaFor(
+    host,
+    [
+      {
+        path: 'migrations/0000_posts.sql',
+        content: 'create table posts (id integer primary key, slug text not null);',
+      },
+    ],
+    {excludedTables: ['d1_migrations'], preset: 'd1'},
+  );
+
+  expect(baseline.toLowerCase()).not.toContain('sqlfu_migrations');
+  expect(baseline.toLowerCase()).not.toContain('d1_migrations');
+  // The user's actual schema still comes through.
+  expect(baseline.toLowerCase()).toContain('create table posts');
+});
+
+test('materializeMigrationsSchemaFor excludes sqlfu_migrations under preset: sqlfu (default)', async () => {
+  const host = await createNodeHost();
+  const baseline = await materializeMigrationsSchemaFor(
+    host,
+    [
+      {
+        path: 'migrations/0000_posts.sql',
+        content: 'create table posts (id integer primary key, slug text not null);',
+      },
+    ],
+    {excludedTables: ['sqlfu_migrations']},
+  );
+
+  expect(baseline.toLowerCase()).not.toContain('sqlfu_migrations');
+  expect(baseline.toLowerCase()).toContain('create table posts');
 });
 
 function openMemoryDb() {

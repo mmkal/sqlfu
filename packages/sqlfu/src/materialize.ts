@@ -7,7 +7,7 @@
 
 import type {SqlfuHost} from './host.js';
 import {joinPath} from './paths.js';
-import type {SqlfuProjectConfig} from './types.js';
+import type {SqlfuMigrationPreset, SqlfuProjectConfig} from './types.js';
 import {applyMigrations, type Migration} from './migrations/index.js';
 import {extractSchema} from './sqlite-text.js';
 
@@ -16,10 +16,21 @@ export type MaterializeSchemaOptions = {
    * Tables to strip from the extracted schema. The schema-drift callers in
    * api.ts pass `['sqlfu_migrations']` so bookkeeping noise doesn't affect
    * comparison; typegen leaves this empty so the user's schema is reflected
-   * verbatim (sqlfu's own internal generator, for example, *wants*
-   * `sqlfu_migrations` in its generated types).
+   * verbatim.
    */
   excludedTables?: readonly string[];
+};
+
+export type MaterializeMigrationsSchemaOptions = MaterializeSchemaOptions & {
+  /**
+   * Preset to use when populating the scratch DB. Defaults to `'sqlfu'`. This
+   * must match the caller's `excludedTables` choice — if the scratch DB
+   * creates `sqlfu_migrations` but `excludedTables` only strips
+   * `d1_migrations`, the bookkeeping table leaks into the baseline and the
+   * schema-diff engine concludes it should be dropped. Callers that know the
+   * user's configured preset should pass it explicitly.
+   */
+  preset?: SqlfuMigrationPreset;
 };
 
 export async function materializeDefinitionsSchemaFor(
@@ -35,10 +46,10 @@ export async function materializeDefinitionsSchemaFor(
 export async function materializeMigrationsSchemaFor(
   host: SqlfuHost,
   migrations: Migration[],
-  options: MaterializeSchemaOptions = {},
+  options: MaterializeMigrationsSchemaOptions = {},
 ): Promise<string> {
   await using database = await host.openScratchDb('materialize-migrations');
-  await applyMigrations(database.client, {migrations});
+  await applyMigrations(database.client, {migrations, preset: options.preset ?? 'sqlfu'});
   return extractSchema(database.client, 'main', {excludedTables: [...(options.excludedTables ?? [])]});
 }
 

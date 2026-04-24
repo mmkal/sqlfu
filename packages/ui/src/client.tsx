@@ -1,4 +1,4 @@
-import {Component, Suspense, useRef, useSyncExternalStore} from 'react';
+import {Component, Suspense, useRef, useState, useSyncExternalStore} from 'react';
 import type {ReactNode} from 'react';
 import {createRoot} from 'react-dom/client';
 import {createORPCClient} from '@orpc/client';
@@ -54,6 +54,36 @@ import {initThemeOnLoad, useThemePreference} from './theme.js';
 import './styles.css';
 
 initThemeOnLoad();
+
+/**
+ * Session-scoped counterpart to `useLocalStorageState` — the library doesn't
+ * expose a backend switch, so this is a small hand-roll. Values live in
+ * `sessionStorage` (cleared on tab close) and are written through the setter
+ * synchronously, no effect needed. Not a drop-in for every localStorage use —
+ * no cross-tab sync, no `isPersistent` / `removeItem` affordances — but fine
+ * for scratch drafts where cross-tab sync is actively undesirable.
+ */
+function useSessionStorageState<T>(key: string, defaultValue: T): [T, (next: T) => void] {
+  const [value, setValue] = useState<T>(() => {
+    if (typeof window === 'undefined') return defaultValue;
+    const raw = window.sessionStorage.getItem(key);
+    if (raw === null) return defaultValue;
+    try {
+      return JSON.parse(raw) as T;
+    } catch {
+      return defaultValue;
+    }
+  });
+  const set = (next: T) => {
+    setValue(next);
+    if (typeof window !== 'undefined') {
+      try {
+        window.sessionStorage.setItem(key, JSON.stringify(next));
+      } catch {}
+    }
+  };
+  return [value, set];
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -1031,11 +1061,12 @@ function TablePanel(input: {relation: StudioRelation}) {
     },
   });
   const rowsQuery = useSuspenseQuery(tableListOptions);
-  const [draftRows, setDraftRows] = useLocalStorageState<Record<string, unknown>[]>(
+  // sessionStorage (not localStorage): unsaved table edits are per-tab scratch
+  // work. Persisting across browser sessions surfaces stale drafts against
+  // potentially-changed schema/data, which is more confusing than helpful.
+  const [draftRows, setDraftRows] = useSessionStorageState<Record<string, unknown>[]>(
     `sqlfu-ui/table-draft/${input.relation.name}/0`,
-    {
-      defaultValue: rowsQuery.data.rows,
-    },
+    rowsQuery.data.rows,
   );
   const saveRowsMutation = useMutation({
     ...orpc.table.save.mutationOptions(),

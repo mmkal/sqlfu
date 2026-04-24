@@ -633,7 +633,8 @@ test('relation rows can discard dirty cell changes', async ({page}) => {
 
 test('stale relation draft state is ignored when it does not match the fetched table shape', async ({page}) => {
   await page.addInitScript(() => {
-    window.localStorage.setItem(
+    // Table drafts live in sessionStorage so they clear on tab close.
+    window.sessionStorage.setItem(
       'sqlfu-ui/table-draft/posts/0',
       JSON.stringify([{bb: 'stale draft from another table'}]),
     );

@@ -78,11 +78,32 @@ export function selectHistoryQuery(shape: ResolvedPresetShape) {
       name: 'selectMigrationHistory',
     };
   }
+  // D1/local also stores data imports (type = 'import') in the same table;
+  // filter to schema migrations so imports don't show up as sqlfu state.
+  const typeFilter = shape.variant === 'local' ? ` where type = 'migration'` : '';
   return {
-    sql: `select id, name, applied_at from ${shape.table} order by id;`,
+    sql: `select id, name, applied_at from ${shape.table}${typeFilter} order by id;`,
     args: [],
     name: 'selectMigrationHistory',
   };
+}
+
+/**
+ * Alchemy stores migration filenames with the `.sql` suffix in `d1_migrations`
+ * (both remote and local variants). Sqlfu's internal representation drops the
+ * suffix via `migrationName()`. These helpers normalize at the read/write
+ * boundary so callers can keep operating on the sqlfu-native form regardless
+ * of preset.
+ */
+export function normalizeHistoryName(shape: ResolvedPresetShape, name: string): string {
+  if (shape.kind === 'd1' && name.endsWith('.sql')) {
+    return name.slice(0, -'.sql'.length);
+  }
+  return name;
+}
+
+export function serializeHistoryName(shape: ResolvedPresetShape, name: string): string {
+  return shape.kind === 'd1' && !name.endsWith('.sql') ? `${name}.sql` : name;
 }
 
 export function deleteHistoryQuery(shape: ResolvedPresetShape) {
@@ -103,12 +124,13 @@ export function insertMigrationQuery(shape: ResolvedPresetShape, params: InsertM
       name: 'insertMigration',
     };
   }
+  const wireName = serializeHistoryName(shape, params.name);
   if (shape.variant === 'local') {
     // Local schema: id INTEGER AUTOINCREMENT, applied_at DEFAULT CURRENT_TIMESTAMP.
     // Matches alchemy's local insert shape so alchemy tooling keeps working.
     return {
       sql: `insert into ${shape.table} (name, type) values (?, ?);`,
-      args: [params.name, 'migration'],
+      args: [wireName, 'migration'],
       name: 'insertMigration',
     };
   }
@@ -116,7 +138,7 @@ export function insertMigrationQuery(shape: ResolvedPresetShape, params: InsertM
   // Matches the convention alchemy uses (see alchemy/src/cloudflare/d1-migrations.ts).
   return {
     sql: `insert into ${shape.table} (id, name, applied_at) values (printf('%05d', (select coalesce(max(cast(id as integer)), 0) + 1 from ${shape.table})), ?, datetime('now'));`,
-    args: [params.name],
+    args: [wireName],
     name: 'insertMigration',
   };
 }

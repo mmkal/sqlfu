@@ -63,7 +63,7 @@ test('d1 preset adopts pre-existing local/miniflare schema (with type column)', 
       applied_at timestamp default current_timestamp not null,
       type text not null
     );
-    insert into d1_migrations (name, type) values ('0000_from_alchemy', 'migration');
+    insert into d1_migrations (name, type) values ('0000_from_alchemy.sql', 'migration');
     create table posts_legacy (id integer primary key);
   `);
 
@@ -78,14 +78,34 @@ test('d1 preset adopts pre-existing local/miniflare schema (with type column)', 
   const newMigration = migration('create-posts');
   await applyMigrations(db.client, {migrations: [alchemyEra, newMigration], preset: 'd1'});
 
+  // Raw read: names are stored with `.sql` suffix to match alchemy's wire
+  // format. readMigrationHistory() normalizes these back to sqlfu-native form.
   const rows = await db.client.all<{name: string; type: string}>({
     sql: `select name, type from d1_migrations order by id`,
     args: [],
   });
   expect(rows).toEqual([
-    {name: '0000_from_alchemy', type: 'migration'},
-    {name: 'create-posts', type: 'migration'},
+    {name: '0000_from_alchemy.sql', type: 'migration'},
+    {name: 'create-posts.sql', type: 'migration'},
   ]);
+});
+
+test('d1 preset ignores alchemy-applied `type = import` rows', async () => {
+  await using db = openMemoryDb();
+  // Alchemy's local/miniflare schema uses the same table for migrations and
+  // data imports. Sqlfu should treat imports as out-of-scope bookkeeping.
+  await db.client.raw(dedent`
+    create table d1_migrations (
+      id integer primary key autoincrement,
+      name text not null,
+      applied_at timestamp default current_timestamp not null,
+      type text not null
+    );
+    insert into d1_migrations (name, type) values ('seed-data.sql', 'import');
+  `);
+
+  const history = await readMigrationHistory(db.client, {preset: 'd1'});
+  expect(history).toEqual([]);
 });
 
 test('sqlfu preset rejects edits to an applied migration via checksum check', async () => {

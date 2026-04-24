@@ -22,7 +22,7 @@ import {
   readMigrationFiles,
 } from './materialize.js';
 
-function migrationsPresetOf(context: SqlfuContext): SqlfuMigrationPreset {
+export function migrationsPresetOf(context: SqlfuContext): SqlfuMigrationPreset {
   return context.config.migrations?.preset ?? 'sqlfu';
 }
 

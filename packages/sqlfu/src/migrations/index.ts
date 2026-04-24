@@ -8,6 +8,7 @@ import {
   ensureMigrationTableGen,
   insertMigrationQuery,
   type MigrationHistoryRow,
+  normalizeHistoryName,
   type ResolvedPresetShape,
   selectHistoryQuery,
 } from './preset-queries.js';
@@ -69,7 +70,8 @@ export function readMigrationHistory(
 
 function* readMigrationHistoryGen(client: Client, preset: SqlfuMigrationPreset): DualGenerator<MigrationHistoryRow[]> {
   const shape = yield* ensureMigrationTableGen(client, preset);
-  return (yield client.all<MigrationHistoryRow>(selectHistoryQuery(shape))) as MigrationHistoryRow[];
+  const rows = (yield client.all<MigrationHistoryRow>(selectHistoryQuery(shape))) as MigrationHistoryRow[];
+  return rows.map((row) => ({...row, name: normalizeHistoryName(shape, row.name)}));
 }
 
 type ApplyMigrationsParams = {
@@ -118,7 +120,8 @@ export function replaceMigrationHistory(client: Client, params: ReplaceParams): 
 function* applyMigrationsGen(client: Client, params: ApplyMigrationsParams): DualGenerator<void> {
   const preset = params.preset ?? 'sqlfu';
   const shape = yield* ensureMigrationTableGen(client, preset);
-  const applied = (yield client.all<MigrationHistoryRow>(selectHistoryQuery(shape))) as MigrationHistoryRow[];
+  const appliedRaw = (yield client.all<MigrationHistoryRow>(selectHistoryQuery(shape))) as MigrationHistoryRow[];
+  const applied = appliedRaw.map((row) => ({...row, name: normalizeHistoryName(shape, row.name)}));
   const byName = new Map(params.migrations.map((migration) => [migrationName(migration), migration]));
 
   for (const historical of applied) {

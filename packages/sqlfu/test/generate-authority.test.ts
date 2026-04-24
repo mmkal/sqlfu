@@ -112,7 +112,7 @@ async function createAuthorityFixture(input: {
   const config: SqlfuProjectConfig = {
     projectRoot: root,
     db: input.omitDb ? undefined : db,
-    migrations: {path: path.join(root, 'migrations'), prefix: 'iso'},
+    migrations: {path: path.join(root, 'migrations'), prefix: 'iso', preset: 'sqlfu'},
     definitions: path.join(root, 'definitions.sql'),
     queries: path.join(root, 'sql'),
     generate: {

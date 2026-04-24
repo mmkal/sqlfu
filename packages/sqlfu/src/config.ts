@@ -1,4 +1,11 @@
-import type {SqlfuAuthority, SqlfuConfig, SqlfuProjectConfig, SqlfuValidator} from './types.js';
+import type {
+  SqlfuAuthority,
+  SqlfuConfig,
+  SqlfuMigrationPrefix,
+  SqlfuMigrationPreset,
+  SqlfuProjectConfig,
+  SqlfuValidator,
+} from './types.js';
 import {createDefaultInitPreview} from './init-preview.js';
 import {dirname, resolvePath} from './paths.js';
 
@@ -41,6 +48,12 @@ export function inferImportExtension(tsconfigPreferences: TsconfigPreferences): 
 
 const validValidators: SqlfuValidator[] = ['arktype', 'valibot', 'zod', 'zod-mini'];
 const validAuthorities: SqlfuAuthority[] = ['desired_schema', 'migrations', 'migration_history', 'live_schema'];
+const validPrefixes: SqlfuMigrationPrefix[] = ['iso', 'four-digit'];
+const validPresets: SqlfuMigrationPreset[] = ['sqlfu', 'd1'];
+const presetDefaultPrefix: Record<SqlfuMigrationPreset, SqlfuMigrationPrefix> = {
+  sqlfu: 'iso',
+  d1: 'four-digit',
+};
 
 export function assertConfigShape(configPath: string, config: object): asserts config is SqlfuConfig {
   for (const field of ['definitions', 'queries'] as const) {
@@ -59,17 +72,23 @@ export function assertConfigShape(configPath: string, config: object): asserts c
     if (typeof migrations !== 'object' || migrations === null || Array.isArray(migrations)) {
       throw new Error(
         `Invalid sqlfu config at ${configPath}: "migrations" must be a string or ` +
-          `{ path: string; prefix: 'iso' | 'four-digit' } if provided.`,
+          `{ path: string; prefix?: 'iso' | 'four-digit'; preset?: 'sqlfu' | 'd1' } if provided.`,
       );
     }
     const migrationsRecord = migrations as Record<string, unknown>;
     if (typeof migrationsRecord.path !== 'string') {
       throw new Error(`Invalid sqlfu config at ${configPath}: "migrations.path" must be a string.`);
     }
-    if (migrationsRecord.prefix !== 'iso' && migrationsRecord.prefix !== 'four-digit') {
+    if (migrationsRecord.prefix !== undefined && !validPrefixes.includes(migrationsRecord.prefix as SqlfuMigrationPrefix)) {
       throw new Error(
         `Invalid sqlfu config at ${configPath}: "migrations.prefix" must be 'iso' or 'four-digit'. ` +
           `Got ${JSON.stringify(migrationsRecord.prefix)}.`,
+      );
+    }
+    if (migrationsRecord.preset !== undefined && !validPresets.includes(migrationsRecord.preset as SqlfuMigrationPreset)) {
+      throw new Error(
+        `Invalid sqlfu config at ${configPath}: "migrations.preset" must be 'sqlfu' or 'd1'. ` +
+          `Got ${JSON.stringify(migrationsRecord.preset)}.`,
       );
     }
   }
@@ -137,9 +156,11 @@ function resolveMigrationsConfig(
 ): SqlfuProjectConfig['migrations'] {
   if (!value) return undefined;
   if (typeof value === 'string') {
-    return {path: resolveConfigPathValue(configDir, value), prefix: 'iso'};
+    return {path: resolveConfigPathValue(configDir, value), prefix: 'iso', preset: 'sqlfu'};
   }
-  return {path: resolveConfigPathValue(configDir, value.path), prefix: value.prefix};
+  const preset: SqlfuMigrationPreset = value.preset ?? 'sqlfu';
+  const prefix: SqlfuMigrationPrefix = value.prefix ?? presetDefaultPrefix[preset];
+  return {path: resolveConfigPathValue(configDir, value.path), prefix, preset};
 }
 
 export type LoadedSqlfuProject =

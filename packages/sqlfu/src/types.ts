@@ -158,9 +158,38 @@ export interface SqlfuGenerateConfig {
  */
 export type SqlfuMigrationPrefix = 'iso' | 'four-digit';
 
+/**
+ * Which ecosystem sqlfu's migration bookkeeping plays nicely with.
+ *
+ * - `'sqlfu'` (default): sqlfu's own `sqlfu_migrations` table with
+ *   `(name text primary key, checksum text not null, applied_at text not null)`.
+ *   Detects "migration file edited after apply" via checksum.
+ * - `'d1'`: alchemy/wrangler-compatible `d1_migrations` table with
+ *   `(id text primary key, name text not null, applied_at text not null)`. Used
+ *   by Cloudflare D1 projects that want sqlfu to fully take over migration
+ *   ownership from alchemy. No checksum column, so the "edited after apply"
+ *   check is skipped under this preset.
+ */
+export type SqlfuMigrationPreset = 'sqlfu' | 'd1';
+
 export interface SqlfuMigrationsConfig {
   path: string;
+  /**
+   * Filename prefix format for newly drafted migrations. Optional; when
+   * omitted, sqlfu derives the default from `preset` (`'sqlfu'` → `'iso'`,
+   * `'d1'` → `'four-digit'`).
+   */
+  prefix?: SqlfuMigrationPrefix;
+  /**
+   * Bookkeeping preset. Optional; defaults to `'sqlfu'`.
+   */
+  preset?: SqlfuMigrationPreset;
+}
+
+export interface ResolvedMigrationsConfig {
+  path: string;
   prefix: SqlfuMigrationPrefix;
+  preset: SqlfuMigrationPreset;
 }
 
 /**
@@ -209,7 +238,7 @@ export interface SqlfuConfig {
 export interface SqlfuProjectConfig {
   projectRoot: string;
   db?: string | SqlfuDbFactory;
-  migrations?: SqlfuMigrationsConfig;
+  migrations?: ResolvedMigrationsConfig;
   definitions: string;
   queries: string;
   generate: {

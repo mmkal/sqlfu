@@ -144,7 +144,7 @@ export function planSchemaDiff(input: {
     const dependents = transitiveViewDependents([tableName], baselineViewDependencyFacts, input.baseline.views);
     for (const viewName of dependents) {
       if (recreatedViewNames.includes(viewName) && !viewCascadeExplanations.has(viewName)) {
-        viewCascadeExplanations.set(viewName, `table "${tableName}" was rebuilt`);
+        viewCascadeExplanations.set(viewName, `table "${tableName}" needs rebuild`);
       }
     }
   }
@@ -156,11 +156,11 @@ export function planSchemaDiff(input: {
     }
     const trigger = input.desired.triggers[triggerName]!;
     if (rebuiltTables.has(trigger.onName)) {
-      triggerCascadeExplanations.set(triggerName, `table "${trigger.onName}" was rebuilt`);
+      triggerCascadeExplanations.set(triggerName, `table "${trigger.onName}" needs rebuild`);
     } else if (modifiedViewNames.includes(trigger.onName)) {
-      triggerCascadeExplanations.set(triggerName, `view "${trigger.onName}" was modified`);
+      triggerCascadeExplanations.set(triggerName, `view "${trigger.onName}" changing`);
     } else if (recreatedViewNames.includes(trigger.onName)) {
-      triggerCascadeExplanations.set(triggerName, `view "${trigger.onName}" was recreated`);
+      triggerCascadeExplanations.set(triggerName, `view "${trigger.onName}" recreating`);
     }
   }
 
@@ -436,7 +436,7 @@ function columnRemovalExplanation(tableName: string, removedColumnNames: Set<str
   const sorted = [...removedColumnNames].sort((left, right) => left.localeCompare(right));
   const list = sorted.map((name) => `"${name}"`).join(', ');
   const noun = sorted.length === 1 ? 'column' : 'columns';
-  return `table "${tableName}" had ${noun} ${list} removed`;
+  return `table "${tableName}" removing ${noun} ${list}`;
 }
 
 function describeColumnChange(baseline: SqliteInspectedColumn, desired: SqliteInspectedColumn): string {

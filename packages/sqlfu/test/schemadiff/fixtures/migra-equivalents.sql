@@ -49,14 +49,14 @@ create table a(a1 int not null);
 create view av as
 select * from a;
 -- output:
--- dropping view "av": table "a" was rebuilt
+-- dropping view "av": table "a" needs rebuild
 drop view av;
 -- rebuilding table "a": column "a1" not-null added
 alter table a rename to __sqlfu_old_a;
 create table a(a1 int not null);
 insert into a(a1) select a1 from __sqlfu_old_a;
 drop table __sqlfu_old_a;
--- recreating view "av": table "a" was rebuilt
+-- recreating view "av": table "a" needs rebuild
 create view av as
 select * from a;
 -- #endregion
@@ -77,14 +77,14 @@ create trigger a_insert_log after insert on a begin
   insert into audit_log(message) values ('row');
 end;
 -- output:
--- dropping trigger "a_insert_log": table "a" was rebuilt
+-- dropping trigger "a_insert_log": table "a" needs rebuild
 drop trigger a_insert_log;
 -- rebuilding table "a": column "a1" not-null added
 alter table a rename to __sqlfu_old_a;
 create table a(a1 int not null);
 insert into a(a1) select a1 from __sqlfu_old_a;
 drop table __sqlfu_old_a;
--- recreating trigger "a_insert_log": table "a" was rebuilt
+-- recreating trigger "a_insert_log": table "a" needs rebuild
 create trigger a_insert_log after insert on a begin
 insert into audit_log(message) values ('row');
 end;
@@ -108,19 +108,19 @@ select * from a;
 create view av2 as
 select * from av;
 -- output:
--- dropping view "av": table "a" was rebuilt
+-- dropping view "av": table "a" needs rebuild
 drop view av;
--- dropping view "av2": table "a" was rebuilt
+-- dropping view "av2": table "a" needs rebuild
 drop view av2;
 -- rebuilding table "a": column "a1" not-null added
 alter table a rename to __sqlfu_old_a;
 create table a(a1 int not null);
 insert into a(a1) select a1 from __sqlfu_old_a;
 drop table __sqlfu_old_a;
--- recreating view "av": table "a" was rebuilt
+-- recreating view "av": table "a" needs rebuild
 create view av as
 select * from a;
--- recreating view "av2": table "a" was rebuilt
+-- recreating view "av2": table "a" needs rebuild
 create view av2 as
 select * from av;
 -- #endregion
@@ -260,15 +260,15 @@ select x from t;
 create view v2 as
 select x from v1;
 -- output:
--- dropping view "v2": table "t" had column "y" removed
+-- dropping view "v2": table "t" removing column "y"
 drop view v2;
--- dropping view "v1": table "t" had column "y" removed
+-- dropping view "v1": table "t" removing column "y"
 drop view v1;
 alter table t drop column y;
--- recreating view "v1": table "t" had column "y" removed
+-- recreating view "v1": table "t" removing column "y"
 create view v1 as
 select x from t;
--- recreating view "v2": table "t" had column "y" removed
+-- recreating view "v2": table "t" removing column "y"
 create view v2 as
 select x from v1;
 -- #endregion
@@ -299,20 +299,20 @@ create trigger trg instead of insert on v2 begin
   select new.x;
 end;
 -- output:
--- dropping trigger "trg": table "t" had column "y" removed
+-- dropping trigger "trg": table "t" removing column "y"
 drop trigger trg;
--- dropping view "v2": table "t" had column "y" removed
+-- dropping view "v2": table "t" removing column "y"
 drop view v2;
--- dropping view "v1": table "t" had column "y" removed
+-- dropping view "v1": table "t" removing column "y"
 drop view v1;
 alter table t drop column y;
--- recreating view "v1": table "t" had column "y" removed
+-- recreating view "v1": table "t" removing column "y"
 create view v1 as
 select x from t;
--- recreating view "v2": table "t" had column "y" removed
+-- recreating view "v2": table "t" removing column "y"
 create view v2 as
 select x from v1;
--- recreating trigger "trg": table "t" had column "y" removed
+-- recreating trigger "trg": table "t" removing column "y"
 create trigger trg instead of insert on v2 begin
 select new.x;
 end;
@@ -346,20 +346,20 @@ create trigger trg instead of insert on v2 begin
   select new.x;
 end;
 -- output:
--- dropping trigger "trg": table "t" had column "y" removed
+-- dropping trigger "trg": table "t" removing column "y"
 drop trigger trg;
--- dropping view "v2": table "t" had column "y" removed
+-- dropping view "v2": table "t" removing column "y"
 drop view v2;
--- dropping view "v1": table "t" had column "y" removed
+-- dropping view "v1": table "t" removing column "y"
 drop view v1;
 alter table t drop column y;
--- recreating view "v1": table "t" had column "y" removed
+-- recreating view "v1": table "t" removing column "y"
 create view v1 as
 select x from t;
--- recreating view "v2": table "t" had column "y" removed
+-- recreating view "v2": table "t" removing column "y"
 create view v2 as
 select x from v1;
--- recreating trigger "trg": table "t" had column "y" removed
+-- recreating trigger "trg": table "t" removing column "y"
 create trigger trg instead of insert on v2 begin
 select count(*) from v1;
 select new.x;
@@ -384,15 +384,15 @@ create trigger person_view_insert instead of insert on person_view begin
   select new.name;
 end;
 -- output:
--- dropping trigger "person_view_insert": table "person" had column "nickname" removed
+-- dropping trigger "person_view_insert": table "person" removing column "nickname"
 drop trigger person_view_insert;
--- dropping view "person_view": table "person" had column "nickname" removed
+-- dropping view "person_view": table "person" removing column "nickname"
 drop view person_view;
 alter table person drop column nickname;
--- recreating view "person_view": table "person" had column "nickname" removed
+-- recreating view "person_view": table "person" removing column "nickname"
 create view person_view as
 select name from person;
--- recreating trigger "person_view_insert": table "person" had column "nickname" removed
+-- recreating trigger "person_view_insert": table "person" removing column "nickname"
 create trigger person_view_insert instead of insert on person_view begin
 select new.name;
 end;

@@ -16,7 +16,7 @@ create index a_y_idx on a(y);
 -- desired:
 create table a(x int);
 -- output:
--- dropping index "a_y_idx": table "a" had column "y" removed
+-- dropping index "a_y_idx": table "a" removing column "y"
 drop index a_y_idx;
 alter table a drop column y;
 -- #endregion
@@ -112,7 +112,7 @@ end;
 -- desired:
 create table person(name text);
 -- output:
--- dropping trigger "person_log": table "person" had column "nickname" removed
+-- dropping trigger "person_log": table "person" removing column "nickname"
 drop trigger person_log;
 alter table person drop column nickname;
 -- #endregion
@@ -139,7 +139,7 @@ create view person_names as select name, nickname from person;
 -- desired:
 create table person(name text);
 -- output:
--- dropping view "person_names": table "person" had column "nickname" removed
+-- dropping view "person_names": table "person" removing column "nickname"
 drop view person_names;
 alter table person drop column nickname;
 -- #endregion
@@ -189,7 +189,7 @@ select person.nickname from person;
 -- desired:
 create table person(name text);
 -- output:
--- dropping view "person_names": table "person" had column "nickname" removed
+-- dropping view "person_names": table "person" removing column "nickname"
 drop view person_names;
 alter table person drop column nickname;
 -- #endregion

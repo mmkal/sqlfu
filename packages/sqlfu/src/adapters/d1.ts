@@ -1,7 +1,7 @@
 import {wrapAsyncClientErrors} from '../adapter-errors.js';
 import {bindAsyncSql} from '../sql.js';
-import {rawSqlWithSqlSplittingAsync} from '../sqlite-text.js';
-import type {AsyncClient, ResultRow, SqlQuery} from '../types.js';
+import {rawSqlWithSqlSplittingAsync, rewriteNamedParamsToPositional} from '../sqlite-text.js';
+import type {AsyncClient, PreparedStatement, ResultRow, SqlQuery} from '../types.js';
 
 export interface D1PreparedStatement {
   bind(...values: unknown[]): D1PreparedStatement;
@@ -53,6 +53,58 @@ export function createD1Client(database: D1DatabaseLike): AsyncClient<D1Database
       yield row;
     }
   };
+  const prepare: AsyncClient<D1DatabaseLike>['prepare'] = <TRow extends ResultRow = ResultRow>(
+    sql: string,
+  ): PreparedStatement<TRow> => {
+    // D1's `prepare` returns a `D1PreparedStatement` that's reusable across
+    // multiple `.bind(...).all/.run/.first` calls — but `.bind` only accepts
+    // positional values. Named-param Records are routed through the shared
+    // tokenizer; if the caller passes a `Record`, we re-prepare against the
+    // rewritten SQL on first use and cache the rewritten statement so the
+    // reuse contract still holds for repeat calls with the same shape.
+    let positionalStatement: D1PreparedStatement | null = null;
+    let positionalSql: string | null = null;
+
+    const resolveStatement = (params: Parameters<PreparedStatement<TRow>['all']>[0]) => {
+      if (params == null || Array.isArray(params)) {
+        if (!positionalStatement) {
+          positionalStatement = database.prepare(sql);
+          positionalSql = sql;
+        }
+        const args = (params ?? []) as unknown[];
+        return positionalStatement.bind(...args);
+      }
+      // Named-param Record — tokenize and (re)prepare against the rewritten SQL.
+      // If the rewrite produces the same SQL we already prepared, reuse it.
+      const rewritten = rewriteNamedParamsToPositional(sql, params);
+      if (positionalSql !== rewritten.sql) {
+        positionalStatement = database.prepare(rewritten.sql);
+        positionalSql = rewritten.sql;
+      }
+      return positionalStatement!.bind(...rewritten.args);
+    };
+
+    return {
+      async all(params) {
+        const result = await resolveStatement(params).all<TRow>();
+        return result.results;
+      },
+      async run(params) {
+        const result = await resolveStatement(params).run();
+        return {
+          rowsAffected: result.meta?.changes,
+          lastInsertRowid: result.meta?.last_row_id,
+        };
+      },
+      async *iterate(params) {
+        const result = await resolveStatement(params).all<TRow>();
+        for (const row of result.results) {
+          yield row;
+        }
+      },
+      async [Symbol.asyncDispose]() {},
+    };
+  };
   const d1Client: Omit<AsyncClient<D1DatabaseLike>, 'sql'> & {sql: AsyncClient<D1DatabaseLike>['sql']} = {
     driver: database,
     system: 'sqlite',
@@ -61,6 +113,7 @@ export function createD1Client(database: D1DatabaseLike): AsyncClient<D1Database
     run,
     raw,
     iterate,
+    prepare,
     async transaction<TResult>(fn: (tx: AsyncClient<D1DatabaseLike>) => Promise<TResult> | TResult) {
       // D1 (like Durable Objects' built-in SQL) rejects `begin transaction` /
       // `savepoint` in raw SQL — the workerd D1 binding only exposes

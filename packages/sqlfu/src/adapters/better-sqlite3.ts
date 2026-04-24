@@ -1,7 +1,13 @@
 import {wrapSyncClientErrors} from '../adapter-errors.js';
 import {bindSyncSql} from '../sql.js';
 import {rawSqlWithSqlSplittingSync, surroundWithBeginCommitRollbackSync} from '../sqlite-text.js';
-import type {ResultRow, SqlQuery, SyncClient} from '../types.js';
+import type {
+  PreparedStatementParams,
+  ResultRow,
+  SqlQuery,
+  SyncClient,
+  SyncPreparedStatement,
+} from '../types.js';
 
 export interface BetterSqlite3StatementLike<TRow extends ResultRow = ResultRow> {
   reader: boolean;
@@ -11,6 +17,8 @@ export interface BetterSqlite3StatementLike<TRow extends ResultRow = ResultRow> 
     changes?: number;
     lastInsertRowid?: string | number | bigint | null;
   };
+  /** Optional. Native better-sqlite3 statements expose `finalize`; structural mocks may not. */
+  finalize?(): void;
 }
 
 export interface BetterSqlite3DatabaseLike {
@@ -52,6 +60,34 @@ export function createBetterSqlite3Client(database: BetterSqlite3DatabaseLike): 
 
       yield* statement.all(...query.args);
     },
+    prepare<TRow extends ResultRow = ResultRow>(sql: string): SyncPreparedStatement<TRow> {
+      // better-sqlite3 statements natively accept either positional args
+      // (`stmt.all(...args)`) or a single named-param object (`stmt.all({name})`).
+      // bindArgs collapses both shapes into a spread the driver understands.
+      const statement = database.prepare<TRow>(sql);
+      return {
+        all(params) {
+          return statement.all(...bindArgs(params));
+        },
+        run(params) {
+          const result = statement.run(...bindArgs(params));
+          return {
+            rowsAffected: result.changes,
+            lastInsertRowid: result.lastInsertRowid,
+          };
+        },
+        *iterate(params) {
+          if (statement.iterate) {
+            yield* statement.iterate(...bindArgs(params));
+            return;
+          }
+          yield* statement.all(...bindArgs(params));
+        },
+        [Symbol.dispose]() {
+          statement.finalize?.();
+        },
+      };
+    },
     transaction<TResult>(fn: (tx: SyncClient<BetterSqlite3DatabaseLike>) => TResult | Promise<TResult>) {
       return surroundWithBeginCommitRollbackSync(client, fn);
     },
@@ -64,3 +100,9 @@ export function createBetterSqlite3Client(database: BetterSqlite3DatabaseLike): 
 }
 
 export const createBetterSqlite3Database = createBetterSqlite3Client;
+
+function bindArgs(params: PreparedStatementParams | undefined): unknown[] {
+  if (params == null) return [];
+  if (Array.isArray(params)) return params;
+  return [params];
+}

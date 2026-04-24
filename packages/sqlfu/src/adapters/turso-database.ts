@@ -1,7 +1,13 @@
 import {wrapAsyncClientErrors} from '../adapter-errors.js';
 import {bindAsyncSql} from '../sql.js';
 import {rawSqlWithSqlSplittingAsync, surroundWithBeginCommitRollbackAsync} from '../sqlite-text.js';
-import type {AsyncClient, ResultRow, SqlQuery} from '../types.js';
+import type {
+  AsyncClient,
+  PreparedStatement,
+  PreparedStatementParams,
+  ResultRow,
+  SqlQuery,
+} from '../types.js';
 
 export interface TursoDatabaseStatementLike<TRow extends ResultRow = ResultRow> {
   reader: boolean;
@@ -11,6 +17,8 @@ export interface TursoDatabaseStatementLike<TRow extends ResultRow = ResultRow> 
     changes?: number;
     lastInsertRowid?: string | number | bigint | null;
   }>;
+  /** Optional. Native turso statements expose `finalize` to release the underlying handle. */
+  finalize?(): void;
 }
 
 export interface TursoDatabaseLike {
@@ -41,6 +49,32 @@ export function createTursoDatabaseClient<TDatabase extends TursoDatabaseLike>(
   ) {
     yield* database.prepare<TRow>(query.sql).iterate(...query.args);
   };
+  const prepare: AsyncClient<TDatabase>['prepare'] = <TRow extends ResultRow = ResultRow>(
+    sql: string,
+  ): PreparedStatement<TRow> => {
+    // Turso's native prepared statement (the same shape as better-sqlite3 over
+    // the wire — positional spread for `?`, single named-param object for
+    // `:name`).
+    const statement = database.prepare<TRow>(sql);
+    return {
+      async all(params) {
+        return statement.all(...bindArgs(params));
+      },
+      async run(params) {
+        const result = await statement.run(...bindArgs(params));
+        return {
+          rowsAffected: result.changes,
+          lastInsertRowid: result.lastInsertRowid,
+        };
+      },
+      async *iterate(params) {
+        yield* statement.iterate(...bindArgs(params));
+      },
+      async [Symbol.asyncDispose]() {
+        statement.finalize?.();
+      },
+    };
+  };
 
   const client: Omit<AsyncClient<TDatabase>, 'sql'> & {sql: AsyncClient<TDatabase>['sql']} = {
     driver: database,
@@ -50,6 +84,7 @@ export function createTursoDatabaseClient<TDatabase extends TursoDatabaseLike>(
     run,
     raw,
     iterate,
+    prepare,
     transaction<TResult>(fn: (tx: AsyncClient<TDatabase>) => Promise<TResult> | TResult) {
       return surroundWithBeginCommitRollbackAsync(client, fn);
     },
@@ -64,3 +99,9 @@ export function createTursoDatabaseClient<TDatabase extends TursoDatabaseLike>(
 export const createTursoDatabase = createTursoDatabaseClient;
 export const createTursoSyncClient = createTursoDatabaseClient;
 export const createTursoSync = createTursoDatabaseClient;
+
+function bindArgs(params: PreparedStatementParams | undefined): unknown[] {
+  if (params == null) return [];
+  if (Array.isArray(params)) return params;
+  return [params];
+}

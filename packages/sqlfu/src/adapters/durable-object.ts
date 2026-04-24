@@ -1,7 +1,10 @@
 import {wrapSyncClientErrors} from '../adapter-errors.js';
 import {bindSyncSql} from '../sql.js';
-import {rawSqlWithSqlSplittingSync} from '../sqlite-text.js';
-import type {ResultRow, SqlQuery, SyncClient} from '../types.js';
+import {
+  rawSqlWithSqlSplittingSync,
+  rewriteNamedParamsToPositional,
+} from '../sqlite-text.js';
+import type {ResultRow, SqlQuery, SyncClient, SyncPreparedStatement} from '../types.js';
 
 export interface DurableObjectSqlStorageLike {
   exec<TRow extends ResultRow = ResultRow>(
@@ -42,6 +45,30 @@ export function createDurableObjectClient(
     *iterate<TRow extends ResultRow = ResultRow>(query: SqlQuery) {
       const rows = storage.exec<TRow>(query.sql, ...query.args).toArray();
       yield* rows;
+    },
+    prepare<TRow extends ResultRow = ResultRow>(sql: string): SyncPreparedStatement<TRow> {
+      // DO storage has no native prepared-statement concept; this shim
+      // captures the SQL string and re-issues `storage.exec` on every call.
+      // workerd parses the SQL fresh each time — tolerable for DO writes,
+      // which the design grills already declared cheap. Named params are
+      // tokenized to positional because `storage.exec` only accepts a
+      // positional `...bindings` spread.
+      return {
+        all(params) {
+          const rewritten = rewriteNamedParamsToPositional(sql, params);
+          return storage.exec<TRow>(rewritten.sql, ...rewritten.args).toArray();
+        },
+        run(params) {
+          const rewritten = rewriteNamedParamsToPositional(sql, params);
+          const cursor = storage.exec(rewritten.sql, ...rewritten.args);
+          return {rowsAffected: cursor.rowsWritten};
+        },
+        *iterate(params) {
+          const rewritten = rewriteNamedParamsToPositional(sql, params);
+          yield* storage.exec<TRow>(rewritten.sql, ...rewritten.args).toArray();
+        },
+        [Symbol.dispose]() {},
+      };
     },
     transaction<TResult>(fn: (tx: SyncClient<DurableObjectSqlStorageLike>) => TResult | Promise<TResult>) {
       // Durable Objects reject `begin transaction` / `savepoint` in raw SQL and

@@ -6,6 +6,7 @@ import {createClient} from '@libsql/client';
 import {expect, test} from 'vitest';
 
 import {createLibsqlClient} from '../../src/index.js';
+import {applyAsyncPrepareSuite} from './prepare-suite.js';
 
 test('createLibsqlClient works with a real @libsql/client database', async () => {
   await using fixture = await createLibsqlFixture(createClient({url: getTmpDbUrl()}));
@@ -103,3 +104,8 @@ async function getDbPath(raw: ReturnType<typeof createClient>) {
   if (!row?.file) throw new Error('expected pragma database_list to return the backing file path');
   return row.file;
 }
+
+applyAsyncPrepareSuite({
+  label: 'libsql-client',
+  openClient: () => createLibsqlFixture(createClient({url: getTmpDbUrl()})),
+});

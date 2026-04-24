@@ -40,7 +40,9 @@ export {
   extractSchema,
   rawSqlWithSqlSplittingAsync,
   rawSqlWithSqlSplittingSync,
+  rewriteNamedParamsToPositional,
   splitSqlStatements,
+  sqlReturnsRows,
   surroundWithBeginCommitRollbackAsync,
   surroundWithBeginCommitRollbackSync,
 } from './sqlite-text.js';

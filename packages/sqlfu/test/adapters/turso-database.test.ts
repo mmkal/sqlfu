@@ -6,6 +6,7 @@ import {connect} from '@tursodatabase/database';
 import {expect, test} from 'vitest';
 
 import {createTursoDatabaseClient} from '../../src/index.js';
+import {applyAsyncPrepareSuite} from './prepare-suite.js';
 
 test('createTursoDatabaseClient works with a real @tursodatabase/database database', async () => {
   await using fixture = await createFixture();
@@ -111,3 +112,8 @@ async function createFixture() {
     },
   };
 }
+
+applyAsyncPrepareSuite({
+  label: 'turso-database',
+  openClient: () => createFixture(),
+});

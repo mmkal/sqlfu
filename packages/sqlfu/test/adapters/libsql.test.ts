@@ -2,6 +2,7 @@ import Database, {type Database as LibsqlDatabase} from 'libsql';
 import {expect, test} from 'vitest';
 
 import {createLibsqlSyncClient} from '../../src/index.js';
+import {applySyncPrepareSuite} from './prepare-suite.js';
 
 test('createLibsqlSyncClient works with a real libsql database', async () => {
   using fixture = createLibsqlFixture(new Database(':memory:'));
@@ -78,3 +79,8 @@ function createLibsqlFixture(db: LibsqlDatabase) {
     },
   };
 }
+
+applySyncPrepareSuite({
+  label: 'libsql-sync',
+  openClient: () => createLibsqlFixture(new Database(':memory:')),
+});

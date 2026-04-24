@@ -138,6 +138,13 @@ function instrumentAsync<TDriver>(client: AsyncClient<TDriver>, hook: QueryExecu
     run: (query) => hook(buildHookArgs({query, operation: 'run', system: client.system}, () => client.run(query))),
     raw: (sql) => client.raw(sql),
     iterate: (query) => client.iterate(query),
+    // prepare bypasses the hook because the hook contract takes a `SqlQuery`
+    // and a single execute thunk; a prepared handle has no bound `args` and
+    // can be invoked many times. If we ran the hook here, every `.all/.run`
+    // call on the handle would record `args: []` against the original SQL,
+    // which is misleading and worse than skipping. Re-instrumentation can
+    // wrap the handle's methods explicitly if needed in a follow-up.
+    prepare: (sql) => client.prepare(sql),
     transaction: (fn) => client.transaction((tx) => fn(instrumentAsync(tx, hook))),
     sql: undefined as unknown as AsyncClient<TDriver>['sql'],
   };
@@ -154,6 +161,7 @@ function instrumentSync<TDriver>(client: SyncClient<TDriver>, hook: QueryExecuti
     run: (query) => hook(buildHookArgs({query, operation: 'run', system: client.system}, () => client.run(query))),
     raw: (sql) => client.raw(sql),
     iterate: (query) => client.iterate(query),
+    prepare: (sql) => client.prepare(sql),
     transaction: (<TResult>(fn: (tx: SyncClient<TDriver>) => TResult) =>
       client.transaction((tx: SyncClient<TDriver>) =>
         fn(instrumentSync(tx, hook)),

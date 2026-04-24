@@ -1,7 +1,11 @@
 import {wrapAsyncClientErrors} from '../adapter-errors.js';
 import {bindAsyncSql} from '../sql.js';
-import {rawSqlWithSqlSplittingAsync, surroundWithBeginCommitRollbackAsync} from '../sqlite-text.js';
-import type {AsyncClient, ResultRow, SqlQuery} from '../types.js';
+import {
+  rawSqlWithSqlSplittingAsync,
+  rewriteNamedParamsToPositional,
+  surroundWithBeginCommitRollbackAsync,
+} from '../sqlite-text.js';
+import type {AsyncClient, PreparedStatement, ResultRow, SqlQuery} from '../types.js';
 
 // @tursodatabase/serverless returns rows as arrays with column names attached as non-enumerable
 // properties (see `createRowObject` in the upstream session implementation). we use the
@@ -46,6 +50,37 @@ export function createTursoServerlessClient<TConnection extends TursoServerlessC
       yield row;
     }
   };
+  const prepare: AsyncClient<TConnection>['prepare'] = <TRow extends ResultRow = ResultRow>(
+    sql: string,
+  ): PreparedStatement<TRow> => {
+    // @tursodatabase/serverless has no client-side prepared-statement concept;
+    // every `execute` is a fresh HTTP call. This shim captures the SQL and
+    // re-issues `execute` per call. `connection.execute` only accepts a
+    // positional `args` array, so named-param Records are tokenized to `?`.
+    return {
+      async all(params) {
+        const rewritten = rewriteNamedParamsToPositional(sql, params);
+        const result = await connection.execute(rewritten.sql, rewritten.args);
+        return result.rows.map((row) => materializeRow<TRow>(row, result.columns));
+      },
+      async run(params) {
+        const rewritten = rewriteNamedParamsToPositional(sql, params);
+        const result = await connection.execute(rewritten.sql, rewritten.args);
+        return {
+          rowsAffected: result.rowsAffected,
+          lastInsertRowid: result.lastInsertRowid,
+        };
+      },
+      async *iterate(params) {
+        const rewritten = rewriteNamedParamsToPositional(sql, params);
+        const result = await connection.execute(rewritten.sql, rewritten.args);
+        for (const row of result.rows) {
+          yield materializeRow<TRow>(row, result.columns);
+        }
+      },
+      async [Symbol.asyncDispose]() {},
+    };
+  };
 
   const client: Omit<AsyncClient<TConnection>, 'sql'> & {sql: AsyncClient<TConnection>['sql']} = {
     driver: connection,
@@ -55,6 +90,7 @@ export function createTursoServerlessClient<TConnection extends TursoServerlessC
     run,
     raw,
     iterate,
+    prepare,
     transaction<TResult>(fn: (tx: AsyncClient<TConnection>) => Promise<TResult> | TResult) {
       return surroundWithBeginCommitRollbackAsync(client, fn);
     },

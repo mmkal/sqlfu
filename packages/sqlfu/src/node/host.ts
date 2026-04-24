@@ -4,7 +4,7 @@ import path from 'node:path';
 import {createHash, randomUUID} from 'node:crypto';
 import type {DatabaseSync} from 'node:sqlite';
 
-import type {AsyncClient, DisposableAsyncClient, ResultRow, SqlfuProjectConfig, SqlQuery} from '../types.js';
+import type {AsyncClient, DisposableAsyncClient, QueryArg, ResultRow, SqlfuProjectConfig, SqlQuery} from '../types.js';
 import {bindAsyncSql} from '../sql.js';
 import {rawSqlWithSqlSplittingAsync, surroundWithBeginCommitRollbackAsync} from '../sqlite-text.js';
 import type {QueryCatalog} from '../typegen/query-catalog.js';
@@ -98,6 +98,29 @@ export async function createNodeHost(): Promise<SqlfuHost> {
     fs: nodeFs,
     openDb: (config) => openConfigDb(config.db),
     execAdHocSql: async (client, sql, params): Promise<AdHocSqlResult> => {
+      // Async clients (D1, libsql-remote, Turso, etc.): go through the sqlfu
+      // client API rather than reaching into `client.driver`. Per-driver
+      // response shapes (e.g. D1's `{results}` wrapper) are already normalized
+      // by the adapter. Skipping the await path here previously left in-flight
+      // Promises unattended; when the handler's `await using` disposed the
+      // underlying instance, those Promises would reject against a disposed
+      // resource (ERR_DISPOSED) and crash the process.
+      if (!client.sync) {
+        const args: QueryArg[] = Array.isArray(params) ? (params as QueryArg[]) : [];
+        try {
+          const rows = await client.all({sql, args});
+          return {mode: 'rows', rows};
+        } catch {}
+        const result = await client.run({sql, args});
+        return {
+          mode: 'metadata',
+          metadata: {
+            rowsAffected: result.rowsAffected,
+            lastInsertRowid: result.lastInsertRowid,
+          },
+        };
+      }
+
       const database = client.driver as InstanceType<typeof DatabaseSync>;
       const statement = database.prepare(sql);
       try {

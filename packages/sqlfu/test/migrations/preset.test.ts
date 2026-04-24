@@ -1,0 +1,134 @@
+import dedent from 'dedent';
+import {DatabaseSync} from 'node:sqlite';
+import {expect, test} from 'vitest';
+
+import {createNodeSqliteClient} from '../../src/index.js';
+import {applyMigrations, readMigrationHistory, type Migration} from '../../src/migrations/index.js';
+
+// Core preset behavior — bookkeeping SQL + checksum semantics — exercised
+// directly against an in-memory node:sqlite database. The miniflare-backed
+// integration test in test/adapters/d1-preset.test.ts covers the alchemy
+// handoff flow on top of this.
+
+test('sqlfu preset creates sqlfu_migrations table with checksum column', async () => {
+  await using db = openMemoryDb();
+  await applyMigrations(db.client, {migrations: migrationsFor('create-posts')});
+
+  const history = await readMigrationHistory(db.client);
+  expect(history).toMatchObject([{name: 'create-posts', checksum: expect.stringMatching(/^[0-9a-f]{64}$/u)}]);
+
+  const columns = await db.client.all<{name: string}>({
+    sql: `select name from pragma_table_info('sqlfu_migrations') order by cid`,
+    args: [],
+  });
+  expect(columns.map((c) => c.name)).toEqual(['name', 'checksum', 'applied_at']);
+});
+
+test('d1 preset creates d1_migrations table in alchemy-compatible remote shape', async () => {
+  await using db = openMemoryDb();
+  await applyMigrations(db.client, {migrations: migrationsFor('create-posts'), preset: 'd1'});
+
+  const history = await readMigrationHistory(db.client, {preset: 'd1'});
+  expect(history).toMatchObject([{id: '00001', name: 'create-posts'}]);
+  expect(history[0]).not.toHaveProperty('checksum');
+
+  const columns = await db.client.all<{name: string}>({
+    sql: `select name from pragma_table_info('d1_migrations') order by cid`,
+    args: [],
+  });
+  expect(columns.map((c) => c.name)).toEqual(['id', 'name', 'applied_at']);
+});
+
+test('d1 preset id sequence increments across applies', async () => {
+  await using db = openMemoryDb();
+  await applyMigrations(db.client, {
+    migrations: migrationsFor('create-posts', 'add-body', 'add-author'),
+    preset: 'd1',
+  });
+
+  const history = await readMigrationHistory(db.client, {preset: 'd1'});
+  expect(history.map((row) => row.id)).toEqual(['00001', '00002', '00003']);
+});
+
+test('d1 preset adopts pre-existing local/miniflare schema (with type column)', async () => {
+  await using db = openMemoryDb();
+  // Simulate alchemy having created the local-schema table and its first
+  // migration. The corresponding `posts_legacy` table exists too — alchemy
+  // would have applied the migration body before inserting the bookkeeping
+  // row.
+  await db.client.raw(dedent`
+    create table d1_migrations (
+      id integer primary key autoincrement,
+      name text not null,
+      applied_at timestamp default current_timestamp not null,
+      type text not null
+    );
+    insert into d1_migrations (name, type) values ('0000_from_alchemy', 'migration');
+    create table posts_legacy (id integer primary key);
+  `);
+
+  // Sqlfu's migrations list includes both the alchemy-era entry (so the
+  // history-is-prefix check passes) and the new one to apply. The alchemy
+  // entry is already in history, so sqlfu skips it and only applies the new
+  // one.
+  const alchemyEra: Migration = {
+    path: 'migrations/0000_from_alchemy.sql',
+    content: 'create table posts_legacy (id integer primary key);',
+  };
+  const newMigration = migration('create-posts');
+  await applyMigrations(db.client, {migrations: [alchemyEra, newMigration], preset: 'd1'});
+
+  const rows = await db.client.all<{name: string; type: string}>({
+    sql: `select name, type from d1_migrations order by id`,
+    args: [],
+  });
+  expect(rows).toEqual([
+    {name: '0000_from_alchemy', type: 'migration'},
+    {name: 'create-posts', type: 'migration'},
+  ]);
+});
+
+test('sqlfu preset rejects edits to an applied migration via checksum check', async () => {
+  await using db = openMemoryDb();
+  const original = migration('create-posts');
+  await applyMigrations(db.client, {migrations: [original]});
+
+  const edited = {...original, content: `${original.content}-- edited after apply`};
+  // node:sqlite is a sync driver so applyMigrations throws synchronously here;
+  // using `expect(() => ...).toThrow` rather than `.rejects.toThrow`.
+  expect(() => applyMigrations(db.client, {migrations: [edited]})).toThrow(
+    /applied migration checksum mismatch/u,
+  );
+});
+
+test('d1 preset silently accepts edits to an applied migration (no checksum column)', async () => {
+  await using db = openMemoryDb();
+  const original = migration('create-posts');
+  await applyMigrations(db.client, {migrations: [original], preset: 'd1'});
+
+  const edited = {...original, content: `${original.content}-- edited after apply`};
+  // Under d1, there's no checksum column so the "edited after apply" check
+  // can't run. Documented downgrade of alchemy compatibility.
+  await applyMigrations(db.client, {migrations: [edited], preset: 'd1'});
+
+  const history = await readMigrationHistory(db.client, {preset: 'd1'});
+  expect(history).toHaveLength(1);
+});
+
+function openMemoryDb() {
+  const database = new DatabaseSync(':memory:');
+  const client = createNodeSqliteClient(database);
+  return {
+    client,
+    [Symbol.dispose]: () => database.close(),
+  };
+}
+
+function migration(name: string): Migration {
+  // Each migration name gets a distinct CREATE so replays produce different DDL.
+  return {path: `migrations/${name}.sql`, content: `create table ${name.replaceAll('-', '_')} (id integer primary key);`};
+}
+
+function migrationsFor(...names: string[]): Migration[] {
+  return names.map((name) => migration(name));
+}

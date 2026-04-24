@@ -18,6 +18,7 @@ import type {SqlfuHost} from '../host.js';
 import {excludeReservedSqliteObjects, extractSchema} from '../sqlite-text.js';
 import {createBunClient, createNodeSqliteClient} from '../index.js';
 import {migrationName, readMigrationHistory, type Migration} from '../migrations/index.js';
+import {presetTableName} from '../migrations/preset-queries.js';
 import {materializeDefinitionsSchemaFor, readMigrationFiles} from '../materialize.js';
 
 export type {
@@ -242,7 +243,7 @@ async function readSchemaForAuthority(config: SqlfuProjectConfig, host: SqlfuHos
     case 'migration_history':
       return replayMigrationHistoryAsSchemaSql(config, host);
     case 'live_schema':
-      return readLiveSchema(config.db);
+      return readLiveSchema(config);
     default: {
       const never: never = authority;
       throw new Error(`Invalid generate.authority: ${JSON.stringify(never)}`);
@@ -285,7 +286,7 @@ async function replayMigrationHistoryAsSchemaSql(config: SqlfuProjectConfig, hos
     );
   }
   await using live = await openLiveDb(config.db, 'migration_history');
-  const history = await Promise.resolve(readMigrationHistory(live.client));
+  const history = await Promise.resolve(readMigrationHistory(live.client, {preset: config.migrations.preset}));
 
   const migrations = await readMigrationFiles(host, config);
   const byName = new Map(migrations.map((migration) => [migrationName(migration), migration]));
@@ -304,12 +305,14 @@ async function replayMigrationHistoryAsSchemaSql(config: SqlfuProjectConfig, hos
   return materializeDefinitionsSchemaFor(host, matched.map((migration) => migration.content).join('\n'));
 }
 
-async function readLiveSchema(db: SqlfuProjectConfig['db']): Promise<string> {
-  await using source = await openLiveDb(db, 'live_schema');
-  // Exclude sqlfu's bookkeeping table from the live schema — it's noise, not something the
-  // user wrote. The other authorities replay raw SQL into an empty scratch DB so no bookkeeping
-  // is created in the first place.
-  return extractSchema(source.client, 'main', {excludedTables: ['sqlfu_migrations']});
+async function readLiveSchema(config: SqlfuProjectConfig): Promise<string> {
+  await using source = await openLiveDb(config.db, 'live_schema');
+  // Exclude the preset's bookkeeping table from the live schema — it's noise, not something
+  // the user wrote. The other authorities replay raw SQL into an empty scratch DB so no
+  // bookkeeping is created in the first place. Without a `migrations` block there's no
+  // bookkeeping in play; default to sqlfu's table name so we still strip it if present.
+  const excludedTable = presetTableName(config.migrations?.preset ?? 'sqlfu');
+  return extractSchema(source.client, 'main', {excludedTables: [excludedTable]});
 }
 
 async function openLiveDb(

@@ -268,8 +268,8 @@ export const router = {
         readMigrationsFromContext(sqlfuContext),
       ]);
       const [definitionsSchema, migrationsSchema] = await Promise.all([
-        materializeDefinitionsSchemaForContext(sqlfuContext.host, definitionsSql),
-        materializeMigrationsSchemaForContext(sqlfuContext.host, migrations),
+        materializeDefinitionsSchemaForContext(sqlfuContext, definitionsSql),
+        materializeMigrationsSchemaForContext(sqlfuContext, migrations),
       ]);
       if ((await compareSchemasForContext(sqlfuContext.host, definitionsSchema, migrationsSchema)).isDifferent) {
         throw new Error('replayed migrations do not match definitions.sql');

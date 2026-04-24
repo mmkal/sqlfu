@@ -71,7 +71,15 @@ export type SqliteSchemaFingerprint = {
   }[];
 };
 
-export async function inspectSchemaFingerprint(client: Client, schemaName = 'main'): Promise<SqliteSchemaFingerprint> {
+export async function inspectSchemaFingerprint(
+  client: Client,
+  schemaName = 'main',
+  input: {excludedTables?: string[]} = {},
+): Promise<SqliteSchemaFingerprint> {
+  const excludedTables = input.excludedTables ?? [];
+  const excludedTableFilter = excludedTables
+    .map((tableName) => `and name != ${sqlStringLiteral(tableName)}`)
+    .join('\n        ');
   const objects = await client.all<{
     type: 'table' | 'view';
     name: string;
@@ -82,7 +90,7 @@ export async function inspectSchemaFingerprint(client: Client, schemaName = 'mai
       from ${schemaName}.sqlite_schema
       where type in ('table', 'view')
         and ${excludeReservedSqliteObjects}
-        and name != 'sqlfu_migrations'
+        ${excludedTableFilter}
       order by type, name
     `,
     args: [],

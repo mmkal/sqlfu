@@ -5,13 +5,13 @@
 `package.json` has:
 
 ```jsonc
-"build": "pnpm run build:internal-queries && pnpm run build:runtime && pnpm run build:vendor-typesql && pnpm run build:bundle-vendor",
+"build": "pnpm run build:runtime && pnpm run build:vendor-typesql && pnpm run build:bundle-vendor",
 "build:runtime": "tsgo -p tsconfig.build.json",
 "build:vendor-typesql": "rm -rf dist/vendor/code-block-writer dist/vendor/sqlfu-sqlite-parser dist/vendor/typesql && tsgo -p src/vendor/typesql/tsconfig.json",
 "build:bundle-vendor": "tsx scripts/bundle-vendor.ts",
 ```
 
-(`build:internal-queries` is a codegen step, not part of this discussion.) The three compile/bundle steps **look** like ceremony worth collapsing. They aren't. The split protects real constraints, and every "obvious" simplification we've tried breaks one of them.
+The three compile/bundle steps **look** like ceremony worth collapsing. They aren't. The split protects real constraints, and every "obvious" simplification we've tried breaks one of them.
 
 ### Why two configs
 

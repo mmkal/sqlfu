@@ -1,15 +1,16 @@
 import {sha256} from '../vendor/sha256.js';
 
-import type {AsyncClient, Client, SyncClient} from '../types.js';
+import type {AsyncClient, Client, SqlfuMigrationPreset, SyncClient} from '../types.js';
 import {basename} from '../paths.js';
 import {driveAsync, driveSync, type DualGenerator} from './dual-dispatch.js';
 import {
-  deleteMigrationHistory as deleteMigrationHistoryWrapper,
-  ensureMigrationTable as ensureMigrationTableWrapper,
-  insertMigration as insertMigrationWrapper,
-  selectMigrationHistory as selectMigrationHistoryWrapper,
-  type SqlfuMigrationsRow,
-} from './queries/.generated/index.js';
+  deleteHistoryQuery,
+  ensureMigrationTableGen,
+  insertMigrationQuery,
+  type MigrationHistoryRow,
+  type ResolvedPresetShape,
+  selectHistoryQuery,
+} from './preset-queries.js';
 
 export type Migration = {
   path: string;
@@ -39,39 +40,47 @@ export function migrationsFromBundle(bundle: MigrationBundle): Migration[] {
     .map(([path, content]) => ({path, content}));
 }
 
-// The shape of a `sqlfu_migrations` row — re-exported from the generated output so
-// external callers (and the sqlfu UI) can type their migration-history consumers
-// without knowing where the type comes from. If you want to change the shape, edit
-// `packages/sqlfu/internal/definitions.sql` and run `pnpm run build:internal-queries`.
-export type {SqlfuMigrationsRow};
-
-function* ensureMigrationTableGen(client: Client): DualGenerator<void> {
-  yield client.run(ensureMigrationTableWrapper.query);
-}
+export type {MigrationHistoryRow};
+/**
+ * @deprecated Use `MigrationHistoryRow`. Retained for back-compat; an alias of
+ * the wider row type that covers both sqlfu and d1 preset shapes.
+ */
+export type SqlfuMigrationsRow = MigrationHistoryRow;
 
 export function migrationName(migration: {path: string}) {
   return basename(migration.path, '.sql');
 }
 
-export function readMigrationHistory(client: SyncClient): SqlfuMigrationsRow[];
-export function readMigrationHistory(client: AsyncClient): Promise<SqlfuMigrationsRow[]>;
-export function readMigrationHistory(client: Client): SqlfuMigrationsRow[] | Promise<SqlfuMigrationsRow[]>;
-export function readMigrationHistory(client: Client): SqlfuMigrationsRow[] | Promise<SqlfuMigrationsRow[]> {
-  return client.sync ? driveSync(readMigrationHistoryGen(client)) : driveAsync(readMigrationHistoryGen(client));
+type HistoryParams = {preset?: SqlfuMigrationPreset};
+
+export function readMigrationHistory(client: SyncClient, params?: HistoryParams): MigrationHistoryRow[];
+export function readMigrationHistory(client: AsyncClient, params?: HistoryParams): Promise<MigrationHistoryRow[]>;
+export function readMigrationHistory(
+  client: Client,
+  params?: HistoryParams,
+): MigrationHistoryRow[] | Promise<MigrationHistoryRow[]>;
+export function readMigrationHistory(
+  client: Client,
+  params: HistoryParams = {},
+): MigrationHistoryRow[] | Promise<MigrationHistoryRow[]> {
+  const preset = params.preset ?? 'sqlfu';
+  return client.sync ? driveSync(readMigrationHistoryGen(client, preset)) : driveAsync(readMigrationHistoryGen(client, preset));
 }
 
-function* readMigrationHistoryGen(client: Client): DualGenerator<SqlfuMigrationsRow[]> {
-  yield* ensureMigrationTableGen(client);
-  return (yield client.all<SqlfuMigrationsRow>(selectMigrationHistoryWrapper.query)) as SqlfuMigrationsRow[];
+function* readMigrationHistoryGen(client: Client, preset: SqlfuMigrationPreset): DualGenerator<MigrationHistoryRow[]> {
+  const shape = yield* ensureMigrationTableGen(client, preset);
+  return (yield client.all<MigrationHistoryRow>(selectHistoryQuery(shape))) as MigrationHistoryRow[];
 }
 
 type ApplyMigrationsParams = {
   migrations: Migration[];
+  preset?: SqlfuMigrationPreset;
 };
 
 type BaselineParams = {
   migrations: Migration[];
   target: string;
+  preset?: SqlfuMigrationPreset;
 };
 
 export function applyMigrations(client: SyncClient, params: ApplyMigrationsParams): void;
@@ -92,18 +101,24 @@ export function baselineMigrationHistory(client: Client, params: BaselineParams)
     : driveAsync(baselineMigrationHistoryGen(client, params));
 }
 
-export function replaceMigrationHistory(client: SyncClient, migrations: Migration[]): void;
-export function replaceMigrationHistory(client: AsyncClient, migrations: Migration[]): Promise<void>;
-export function replaceMigrationHistory(client: Client, migrations: Migration[]): void | Promise<void>;
-export function replaceMigrationHistory(client: Client, migrations: Migration[]): void | Promise<void> {
+type ReplaceParams = {
+  migrations: Migration[];
+  preset?: SqlfuMigrationPreset;
+};
+
+export function replaceMigrationHistory(client: SyncClient, params: ReplaceParams): void;
+export function replaceMigrationHistory(client: AsyncClient, params: ReplaceParams): Promise<void>;
+export function replaceMigrationHistory(client: Client, params: ReplaceParams): void | Promise<void>;
+export function replaceMigrationHistory(client: Client, params: ReplaceParams): void | Promise<void> {
   return client.sync
-    ? driveSync(replaceMigrationHistoryGen(client, migrations))
-    : driveAsync(replaceMigrationHistoryGen(client, migrations));
+    ? driveSync(replaceMigrationHistoryGen(client, params))
+    : driveAsync(replaceMigrationHistoryGen(client, params));
 }
 
 function* applyMigrationsGen(client: Client, params: ApplyMigrationsParams): DualGenerator<void> {
-  yield* ensureMigrationTableGen(client);
-  const applied = yield* readMigrationHistoryGen(client);
+  const preset = params.preset ?? 'sqlfu';
+  const shape = yield* ensureMigrationTableGen(client, preset);
+  const applied = (yield client.all<MigrationHistoryRow>(selectHistoryQuery(shape))) as MigrationHistoryRow[];
   const byName = new Map(params.migrations.map((migration) => [migrationName(migration), migration]));
 
   for (const historical of applied) {
@@ -111,7 +126,9 @@ function* applyMigrationsGen(client: Client, params: ApplyMigrationsParams): Dua
     if (!current) {
       throw new Error(`deleted applied migration: ${historical.name}`);
     }
-    if (digest(current.content) !== historical.checksum) {
+    // Under presets without a checksum column (d1), we can't detect edits.
+    // Documented downgrade — see docs/migration-model.md.
+    if (shape.hasChecksum && historical.checksum && digest(current.content) !== historical.checksum) {
       throw new Error(`applied migration checksum mismatch: ${historical.name}`);
     }
   }
@@ -135,7 +152,7 @@ function* applyMigrationsGen(client: Client, params: ApplyMigrationsParams): Dua
     // inner generator through the matching driver so the same generator body
     // services both shapes.
     yield client.transaction((tx) => {
-      const innerGen = applyOneMigrationGen(tx, {content: migration.content, name, checksum, applied_at});
+      const innerGen = applyOneMigrationGen(tx, shape, {content: migration.content, name, checksum, applied_at});
       return tx.sync ? (driveSync(innerGen) as unknown as Promise<void>) : driveAsync(innerGen);
     });
   }
@@ -143,12 +160,11 @@ function* applyMigrationsGen(client: Client, params: ApplyMigrationsParams): Dua
 
 function* applyOneMigrationGen(
   client: Client,
+  shape: ResolvedPresetShape,
   input: {content: string; name: string; checksum: string; applied_at: string},
 ): DualGenerator<void> {
   yield client.raw(input.content);
-  yield client.run(
-    insertMigrationWrapper.query({name: input.name, checksum: input.checksum, applied_at: input.applied_at}),
-  );
+  yield client.run(insertMigrationQuery(shape, {name: input.name, checksum: input.checksum, applied_at: input.applied_at}));
 }
 
 function* baselineMigrationHistoryGen(client: Client, params: BaselineParams): DualGenerator<void> {
@@ -158,17 +174,18 @@ function* baselineMigrationHistoryGen(client: Client, params: BaselineParams): D
   }
   const appliedSlice = params.migrations.slice(0, targetIndex + 1);
   yield client.transaction((tx) => {
-    const innerGen = replaceMigrationHistoryGen(tx, appliedSlice);
+    const innerGen = replaceMigrationHistoryGen(tx, {migrations: appliedSlice, preset: params.preset});
     return tx.sync ? (driveSync(innerGen) as unknown as Promise<void>) : driveAsync(innerGen);
   });
 }
 
-function* replaceMigrationHistoryGen(client: Client, migrations: Migration[]): DualGenerator<void> {
-  yield* ensureMigrationTableGen(client);
-  yield client.run(deleteMigrationHistoryWrapper.query);
-  for (const migration of migrations) {
+function* replaceMigrationHistoryGen(client: Client, params: ReplaceParams): DualGenerator<void> {
+  const preset = params.preset ?? 'sqlfu';
+  const shape = yield* ensureMigrationTableGen(client, preset);
+  yield client.run(deleteHistoryQuery(shape));
+  for (const migration of params.migrations) {
     yield client.run(
-      insertMigrationWrapper.query({
+      insertMigrationQuery(shape, {
         name: migrationName(migration),
         checksum: digest(migration.content),
         applied_at: new Date().toISOString(),

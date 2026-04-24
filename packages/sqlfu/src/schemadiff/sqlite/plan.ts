@@ -21,6 +21,7 @@ import {normalizeComparableSql, sqlMentionsIdentifier} from './sqltext.js';
 import type {
   SqliteDependencyFact,
   SchemadiffOperation,
+  SchemadiffReason,
   SqliteInspectedColumn,
   SqliteInspectedDatabase,
   SqliteInspectedIndex,
@@ -28,6 +29,9 @@ import type {
   SqliteInspectedTrigger,
   SqliteInspectedView,
 } from './types.js';
+
+const formatReason = (reason: SchemadiffReason): string =>
+  `${reason.verb} ${reason.resourceType} "${reason.resourceName}": ${reason.explanation}`;
 
 export function planSchemaDiff(input: {
   baseline: SqliteInspectedDatabase;
@@ -135,28 +139,28 @@ export function planSchemaDiff(input: {
     .map(([triggerName]) => triggerName)
     .sort((left, right) => left.localeCompare(right));
 
-  const viewRecreationReasons = new Map<string, string>();
+  const viewCascadeExplanations = new Map<string, string>();
   for (const tableName of [...rebuiltTables].sort((left, right) => left.localeCompare(right))) {
     const dependents = transitiveViewDependents([tableName], baselineViewDependencyFacts, input.baseline.views);
     for (const viewName of dependents) {
-      if (recreatedViewNames.includes(viewName) && !viewRecreationReasons.has(viewName)) {
-        viewRecreationReasons.set(viewName, `recreating because table "${tableName}" was rebuilt`);
+      if (recreatedViewNames.includes(viewName) && !viewCascadeExplanations.has(viewName)) {
+        viewCascadeExplanations.set(viewName, `table "${tableName}" was rebuilt`);
       }
     }
   }
 
-  const triggerRecreationReasons = new Map<string, string>();
+  const triggerCascadeExplanations = new Map<string, string>();
   for (const triggerName of recreatedTriggerNames) {
     if (modifiedTriggerNames.includes(triggerName)) {
       continue;
     }
     const trigger = input.desired.triggers[triggerName]!;
     if (rebuiltTables.has(trigger.onName)) {
-      triggerRecreationReasons.set(triggerName, `recreating because table "${trigger.onName}" was rebuilt`);
+      triggerCascadeExplanations.set(triggerName, `table "${trigger.onName}" was rebuilt`);
     } else if (modifiedViewNames.includes(trigger.onName)) {
-      triggerRecreationReasons.set(triggerName, `recreating because view "${trigger.onName}" changed`);
+      triggerCascadeExplanations.set(triggerName, `view "${trigger.onName}" was modified`);
     } else if (recreatedViewNames.includes(trigger.onName)) {
-      triggerRecreationReasons.set(triggerName, `recreating because view "${trigger.onName}" was recreated`);
+      triggerCascadeExplanations.set(triggerName, `view "${trigger.onName}" was recreated`);
     }
   }
 
@@ -205,9 +209,11 @@ export function planSchemaDiff(input: {
     if (handledRemovedTriggerNames.has(triggerName)) {
       continue;
     }
-    const reason = triggerRecreationReasons.get(triggerName);
-    if (reason) {
-      prefixes.push(`-- ${reason}`);
+    const explanation = triggerCascadeExplanations.get(triggerName);
+    if (explanation) {
+      prefixes.push(
+        `-- ${formatReason({verb: 'dropping', resourceType: 'trigger', resourceName: triggerName, explanation})}`,
+      );
     }
     prefixes.push(`drop trigger ${maybeQuoteIdentifier(triggerName)};`);
   }
@@ -218,9 +224,11 @@ export function planSchemaDiff(input: {
     if (handledRemovedViewNames.has(viewName)) {
       continue;
     }
-    const reason = viewRecreationReasons.get(viewName);
-    if (reason) {
-      prefixes.push(`-- ${reason}`);
+    const explanation = viewCascadeExplanations.get(viewName);
+    if (explanation) {
+      prefixes.push(
+        `-- ${formatReason({verb: 'dropping', resourceType: 'view', resourceName: viewName, explanation})}`,
+      );
     }
     prefixes.push(`drop view ${maybeQuoteIdentifier(viewName)};`);
   }
@@ -252,9 +260,11 @@ export function planSchemaDiff(input: {
     if (handledCreatedViewNames.has(viewName)) {
       continue;
     }
-    const reason = viewRecreationReasons.get(viewName);
-    if (reason) {
-      statements.push(`-- ${reason}`);
+    const explanation = viewCascadeExplanations.get(viewName);
+    if (explanation) {
+      statements.push(
+        `-- ${formatReason({verb: 'recreating', resourceType: 'view', resourceName: viewName, explanation})}`,
+      );
     }
     statements.push(withSemicolon(input.desired.views[viewName]!.createSql));
   }
@@ -267,9 +277,11 @@ export function planSchemaDiff(input: {
     if (handledCreatedTriggerNames.has(triggerName)) {
       continue;
     }
-    const reason = triggerRecreationReasons.get(triggerName);
-    if (reason) {
-      statements.push(`-- ${reason}`);
+    const explanation = triggerCascadeExplanations.get(triggerName);
+    if (explanation) {
+      statements.push(
+        `-- ${formatReason({verb: 'recreating', resourceType: 'trigger', resourceName: triggerName, explanation})}`,
+      );
     }
     statements.push(withSemicolon(input.desired.triggers[triggerName]!.createSql));
   }
@@ -298,7 +310,7 @@ function classifyTableChange(input: {
       handledCreatedViewNames: string[];
       handledCreatedTriggerNames: string[];
     }
-  | {kind: 'rebuild'; reason: string} {
+  | {kind: 'rebuild'; reason: SchemadiffReason} {
   const {
     tableName,
     baseline,
@@ -367,18 +379,26 @@ function classifyTableChange(input: {
     };
   }
 
-  return {kind: 'rebuild', reason: diagnoseRebuildReason(baselineTable, desiredTable)};
+  return {
+    kind: 'rebuild',
+    reason: {
+      verb: 'rebuilding',
+      resourceType: 'table',
+      resourceName: desiredTable.name,
+      explanation: diagnoseRebuildExplanation(baselineTable, desiredTable),
+    },
+  };
 }
 
-function diagnoseRebuildReason(baseline: SqliteInspectedTable, desired: SqliteInspectedTable): string {
+function diagnoseRebuildExplanation(baseline: SqliteInspectedTable, desired: SqliteInspectedTable): string {
   if (!arraysEqual(baseline.primaryKey, desired.primaryKey)) {
-    return 'rebuild: primary key changed';
+    return 'primary key changed';
   }
   if (stableStringify(baseline.uniqueConstraints) !== stableStringify(desired.uniqueConstraints)) {
-    return 'rebuild: unique constraints changed';
+    return 'unique constraints changed';
   }
   if (stableStringify(baseline.foreignKeys) !== stableStringify(desired.foreignKeys)) {
-    return 'rebuild: foreign keys changed';
+    return 'foreign keys changed';
   }
 
   const baselineByName = new Map(baseline.columns.map((column) => [column.name, column]));
@@ -396,38 +416,27 @@ function diagnoseRebuildReason(baseline: SqliteInspectedTable, desired: SqliteIn
 
   if (droppedNames.length > 0) {
     const quoted = droppedNames.map((name) => `"${name}"`).join(', ');
-    return `rebuild: column${droppedNames.length === 1 ? '' : 's'} ${quoted} dropped (direct drop not safe)`;
+    const noun = droppedNames.length === 1 ? 'column' : 'columns';
+    return `${noun} ${quoted} dropped (cannot drop in place)`;
   }
 
   for (const addedColumn of addedColumns) {
     if (addedColumn.generated) {
-      return `rebuild: new column "${addedColumn.name}" is generated`;
+      return `new column "${addedColumn.name}" is generated`;
     }
     if (addedColumn.hidden !== 0) {
-      return `rebuild: new column "${addedColumn.name}" is hidden`;
+      return `new column "${addedColumn.name}" is hidden`;
     }
   }
 
-  return 'rebuild: columns reordered';
+  return 'columns reordered';
 }
 
-function columnRemovalReason(
-  verb: 'dropping' | 'recreating',
-  tableName: string,
-  removedColumnNames: Set<string>,
-): string {
+function columnRemovalExplanation(tableName: string, removedColumnNames: Set<string>): string {
   const sorted = [...removedColumnNames].sort((left, right) => left.localeCompare(right));
   const list = sorted.map((name) => `"${name}"`).join(', ');
   const noun = sorted.length === 1 ? 'column' : 'columns';
-  const predicate =
-    sorted.length === 1
-      ? verb === 'dropping'
-        ? 'is being removed'
-        : 'was removed'
-      : verb === 'dropping'
-        ? 'are being removed'
-        : 'were removed';
-  return `${verb} because ${noun} ${list} ${predicate} from "${tableName}"`;
+  return `table "${tableName}" had ${noun} ${list} removed`;
 }
 
 function describeColumnChange(baseline: SqliteInspectedColumn, desired: SqliteInspectedColumn): string {
@@ -435,26 +444,26 @@ function describeColumnChange(baseline: SqliteInspectedColumn, desired: SqliteIn
   if (baseline.declaredType !== desired.declaredType) {
     const from = baseline.declaredType || '<none>';
     const to = desired.declaredType || '<none>';
-    return `rebuild: column "${name}" type changed from ${from} to ${to}`;
+    return `column "${name}" type changed from ${from} to ${to}`;
   }
   if ((baseline.collation || '') !== (desired.collation || '')) {
     const from = baseline.collation || 'default';
     const to = desired.collation || 'default';
-    return `rebuild: column "${name}" collation changed from ${from} to ${to}`;
+    return `column "${name}" collation changed from ${from} to ${to}`;
   }
   if (baseline.notNull !== desired.notNull) {
-    return `rebuild: column "${name}" not-null ${desired.notNull ? 'added' : 'removed'}`;
+    return `column "${name}" not-null ${desired.notNull ? 'added' : 'removed'}`;
   }
   if (baseline.defaultSql !== desired.defaultSql) {
-    return `rebuild: column "${name}" default changed`;
+    return `column "${name}" default changed`;
   }
   if (Boolean(baseline.generated) !== Boolean(desired.generated)) {
-    return `rebuild: column "${name}" generated expression ${desired.generated ? 'added' : 'removed'}`;
+    return `column "${name}" generated expression ${desired.generated ? 'added' : 'removed'}`;
   }
   if (baseline.hidden !== desired.hidden) {
-    return `rebuild: column "${name}" hidden status changed`;
+    return `column "${name}" hidden status changed`;
   }
-  return `rebuild: column "${name}" definition changed`;
+  return `column "${name}" definition changed`;
 }
 
 function canUseDirectDropColumn(input: {
@@ -548,8 +557,12 @@ function planDirectDropColumnOperations(input: {
     desiredTriggerDependencyFacts,
   } = input;
   const removedColumnNames = new Set(removedColumns.map((column) => column.name));
-  const dropReason = columnRemovalReason('dropping', tableName, removedColumnNames);
-  const createReason = columnRemovalReason('recreating', tableName, removedColumnNames);
+  const cascadeExplanation = columnRemovalExplanation(tableName, removedColumnNames);
+  const cascadeReason = (
+    verb: 'dropping' | 'recreating',
+    resourceType: 'view' | 'trigger' | 'index',
+    resourceName: string,
+  ): SchemadiffReason => ({verb, resourceType, resourceName, explanation: cascadeExplanation});
   const operations: SchemadiffOperation[] = [];
   const blockerDropIds: string[] = [];
   const handledRemovedViewNames: string[] = [];
@@ -579,7 +592,7 @@ function planDirectDropColumnOperations(input: {
       id,
       kind: 'drop-index',
       sql: `drop index ${maybeQuoteIdentifier(index.name)};`,
-      reason: dropReason,
+      reason: cascadeReason('dropping', 'index', index.name),
       dependencies: [],
     });
   }
@@ -597,7 +610,7 @@ function planDirectDropColumnOperations(input: {
       id,
       kind: 'drop-trigger',
       sql: `drop trigger ${maybeQuoteIdentifier(trigger.name)};`,
-      reason: dropReason,
+      reason: cascadeReason('dropping', 'trigger', trigger.name),
       dependencies: [],
     });
   }
@@ -632,7 +645,7 @@ function planDirectDropColumnOperations(input: {
       id,
       kind: 'drop-view',
       sql: `drop view ${maybeQuoteIdentifier(view.name)};`,
-      reason: dropReason,
+      reason: cascadeReason('dropping', 'view', view.name),
       dependencies: [...new Set(dependencies)].sort((left, right) => left.localeCompare(right)),
     });
   }
@@ -659,7 +672,7 @@ function planDirectDropColumnOperations(input: {
       id: `create-index:${tableName}:${index.name}`,
       kind: 'create-index',
       sql: withSemicolon(index.createSql),
-      reason: createReason,
+      reason: cascadeReason('recreating', 'index', index.name),
       dependencies: [dropColumnId],
     });
   }
@@ -678,7 +691,7 @@ function planDirectDropColumnOperations(input: {
       id: desiredCreateViewIds.get(view.name)!,
       kind: 'create-view',
       sql: withSemicolon(view.createSql),
-      reason: createReason,
+      reason: cascadeReason('recreating', 'view', view.name),
       dependencies: [...new Set(dependencies)].sort((left, right) => left.localeCompare(right)),
     });
   }
@@ -707,7 +720,7 @@ function planDirectDropColumnOperations(input: {
       id: `create-trigger:${trigger.name}`,
       kind: 'create-trigger',
       sql: withSemicolon(trigger.createSql),
-      reason: createReason,
+      reason: cascadeReason('recreating', 'trigger', trigger.name),
       dependencies,
     });
   }
@@ -740,7 +753,7 @@ function orderOperations(operations: SchemadiffOperation[]): string[] {
   return orderedIds.flatMap((id) => {
     const operation = operationsById.get(id)!;
     const lines = splitStatementForOutput(operation.sql);
-    return operation.reason ? [`-- ${operation.reason}`, ...lines] : lines;
+    return operation.reason ? [`-- ${formatReason(operation.reason)}`, ...lines] : lines;
   });
 }
 
@@ -805,7 +818,11 @@ function orderViewsForDrop(
   return [...orderViewsForCreate(views, schema)].reverse();
 }
 
-function planTableRebuild(baseline: SqliteInspectedTable, desired: SqliteInspectedTable, reason: string): string[] {
+function planTableRebuild(
+  baseline: SqliteInspectedTable,
+  desired: SqliteInspectedTable,
+  reason: SchemadiffReason,
+): string[] {
   const tempName = `__sqlfu_old_${desired.name}`;
   const introducedPrimaryKeyColumns = desired.primaryKey.filter(
     (columnName) =>
@@ -827,7 +844,7 @@ function planTableRebuild(baseline: SqliteInspectedTable, desired: SqliteInspect
   });
 
   const statements = [
-    `-- ${reason}`,
+    `-- ${formatReason(reason)}`,
     `alter table ${renderTableName(baseline.name)} rename to ${renderTableName(tempName)};`,
   ];
   statements.push(withSemicolon(desired.createSql));

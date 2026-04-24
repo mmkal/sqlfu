@@ -83,7 +83,7 @@ create table person(name text collate nocase);
 -- desired:
 create table person(name text collate rtrim, nickname text collate rtrim);
 -- output:
--- rebuild: column "name" collation changed from nocase to rtrim
+-- rebuilding table "person": column "name" collation changed from nocase to rtrim
 alter table person rename to __sqlfu_old_person;
 create table person(name text collate rtrim, nickname text collate rtrim);
 insert into person(name) select name from __sqlfu_old_person;
@@ -96,7 +96,7 @@ create table a(low int, high int);
 -- desired:
 create table a(low int, mid int, high int);
 -- output:
--- rebuild: columns reordered
+-- rebuilding table "a": columns reordered
 alter table a rename to __sqlfu_old_a;
 create table a(low int, mid int, high int);
 insert into a(low, high) select low, high from __sqlfu_old_a;

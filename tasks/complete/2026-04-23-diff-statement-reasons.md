@@ -1,9 +1,18 @@
 ---
-status: ready
+status: done
 size: small
 ---
 
 # Annotate weird/destructive diff statements with `-- reason` comments
+
+## Status (executive summary)
+
+Implemented and landed. Reasons are emitted as `-- ...` comment lines above:
+- table rebuild prologue (`alter table X rename to __sqlfu_old_X`),
+- cascade view/trigger drops+recreates (when the object itself wasn't user-modified),
+- drop-column cascade ops (indexes/views/triggers dropped because the column was).
+
+Statements reflecting direct user intent (added/dropped tables, `add column`, user-modified views/triggers) stay uncommented. All 1303 existing tests pass; snapshot fixtures updated and eyeballed. One new fixture case in `basics.sql` covers the "columns reordered" case (`(low, high) -> (low, mid, high)`).
 
 ## Summary
 

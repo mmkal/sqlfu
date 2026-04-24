@@ -16,7 +16,7 @@ create index a_y_idx on a(y);
 -- desired:
 create table a(x int);
 -- output:
--- dropping because column "y" is being removed from "a"
+-- dropping index "a_y_idx": table "a" had column "y" removed
 drop index a_y_idx;
 alter table a drop column y;
 -- #endregion
@@ -51,7 +51,7 @@ create table child(x int, parent_id int references parent(id));
 create table parent(id int primary key);
 create table child(x int);
 -- output:
--- rebuild: foreign keys changed
+-- rebuilding table "child": foreign keys changed
 alter table child rename to __sqlfu_old_child;
 create table child(x int);
 insert into child(x) select x from __sqlfu_old_child;
@@ -64,7 +64,7 @@ create table a(x int, y int check(y > 0));
 -- desired:
 create table a(x int);
 -- output:
--- rebuild: column "y" dropped (direct drop not safe)
+-- rebuilding table "a": column "y" dropped (cannot drop in place)
 alter table a rename to __sqlfu_old_a;
 create table a(x int);
 insert into a(x) select x from __sqlfu_old_a;
@@ -112,7 +112,7 @@ end;
 -- desired:
 create table person(name text);
 -- output:
--- dropping because column "nickname" is being removed from "person"
+-- dropping trigger "person_log": table "person" had column "nickname" removed
 drop trigger person_log;
 alter table person drop column nickname;
 -- #endregion
@@ -139,7 +139,7 @@ create view person_names as select name, nickname from person;
 -- desired:
 create table person(name text);
 -- output:
--- dropping because column "nickname" is being removed from "person"
+-- dropping view "person_names": table "person" had column "nickname" removed
 drop view person_names;
 alter table person drop column nickname;
 -- #endregion
@@ -189,7 +189,7 @@ select person.nickname from person;
 -- desired:
 create table person(name text);
 -- output:
--- dropping because column "nickname" is being removed from "person"
+-- dropping view "person_names": table "person" had column "nickname" removed
 drop view person_names;
 alter table person drop column nickname;
 -- #endregion

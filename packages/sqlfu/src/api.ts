@@ -960,10 +960,6 @@ export async function loadContextConfig(context: SqlfuCommandContext): Promise<S
     throw new Error(`No sqlfu config found in ${project.projectRoot}. Run 'sqlfu init' first.`);
   }
 
-  context.projectRoot = project.projectRoot;
-  context.configPath = project.configPath;
-  context.config = project.config;
-
   return {
     config: project.config,
     host: context.host,

@@ -228,7 +228,7 @@ If a repo has more than one sqlfu project, pass the config file explicitly:
 
 ```sh
 sqlfu --config ./durable-objects/counter/sqlfu.config.ts generate
-sqlfu --config ./durable-objects/session/sqlfu.config.ts draft add-session-index
+sqlfu --config ./durable-objects/session/sqlfu.config.ts draft
 ```
 
 Relative paths inside that config are resolved from the config file's directory, so each Durable Object can keep its own `definitions.sql`, `migrations/`, and `sql/` directories alongside the config.

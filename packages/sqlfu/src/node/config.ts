@@ -10,7 +10,7 @@ import {
   type LoadedSqlfuProject,
   type TsconfigPreferences,
 } from '../config.js';
-import {resolveCliConfigPath} from './cli-argv.js';
+import {resolveCliConfigPath} from './cli-config.js';
 
 const defaultConfigFileNames = ['sqlfu.config.ts', 'sqlfu.config.mjs', 'sqlfu.config.js', 'sqlfu.config.cjs'] as const;
 const defaultSqlfuConfigFileName = 'sqlfu.config.ts';

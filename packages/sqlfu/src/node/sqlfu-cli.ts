@@ -4,41 +4,50 @@ import os from 'node:os';
 import path from 'node:path';
 
 import * as prompts from '@clack/prompts';
-import {createCli, yamlTableConsoleLogger} from 'trpc-cli';
+import {createCli, getCliContext, yamlTableConsoleLogger, type TrpcCliRunParams} from 'trpc-cli';
 
 import type {SqlfuCommandConfirm} from '../api.js';
 import {router} from './cli-router.js';
-import {extractSqlfuCliArgv} from './cli-argv.js';
 import {loadProjectState} from './config.js';
 import {createNodeHost} from './host.js';
 import packageJson from '../../package.json' with {type: 'json'};
 
 export async function createSqlfuCli(input: {configPath?: string} = {}) {
-  const [project, host] = await Promise.all([
-    loadProjectState({configPath: input.configPath}),
-    createNodeHost(),
-  ]);
+  const cwd = process.cwd();
+  const host = await createNodeHost();
+  let cached: Awaited<ReturnType<typeof loadProjectState>> | undefined;
+  let cachedConfigPath: string | undefined;
+
+  async function loadProjectStateForCommand() {
+    const configPath = input.configPath || readConfigPathFromCliContext();
+    if (!cached || cachedConfigPath !== configPath) {
+      cached = await loadProjectState({configPath});
+      cachedConfigPath = configPath;
+    }
+    return cached;
+  }
+
   return createCli({
     router,
     name: packageJson.name,
     version: packageJson.version,
     description: packageJson.description,
     context: {
-      projectRoot: project.projectRoot,
-      configPath: project.configPath,
-      config: project.initialized ? project.config : undefined,
+      projectRoot: cwd,
+      configPath: input.configPath,
+      loadProjectState: loadProjectStateForCommand,
       host,
       confirm,
     },
   });
 }
 
-export async function runSqlfuCli(argv: string[]) {
-  const parsed = extractSqlfuCliArgv(argv);
-  const cli = await createSqlfuCli({configPath: parsed.configPath});
+export async function runSqlfuCli(argv: string[], input: Pick<TrpcCliRunParams, 'logger' | 'process'> = {}) {
+  const cli = await createSqlfuCli();
   const runParams = {
-    logger: yamlTableConsoleLogger,
+    logger: input.logger || yamlTableConsoleLogger,
     formatError: formatCliError,
+    process: input.process,
     prompts,
   };
   const program = cli.buildProgram(runParams);
@@ -47,7 +56,7 @@ export async function runSqlfuCli(argv: string[]) {
   await cli.run(
     {
       ...runParams,
-      argv: parsed.argv,
+      argv,
     },
     program,
   );
@@ -70,6 +79,26 @@ function hasOptionMethod(command: unknown): command is {option(flags: string, de
 
 function hasCommands(command: unknown): command is {commands: unknown[]} {
   return typeof command === 'object' && command !== null && 'commands' in command && Array.isArray(command.commands);
+}
+
+function readConfigPathFromCliContext() {
+  const context = getCliContext();
+  if (!context) {
+    return undefined;
+  }
+
+  const values = [context.program.opts().config, context.command.opts().config].filter((value) => value !== undefined);
+  if (values.length === 0) {
+    return undefined;
+  }
+  if (values.length > 1) {
+    throw new Error('Pass --config at most once.');
+  }
+  const value = values[0];
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new Error('Missing value for --config.');
+  }
+  return value;
 }
 
 export const confirm: SqlfuCommandConfirm = async (params) => {

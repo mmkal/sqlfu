@@ -272,6 +272,8 @@ type GeneratedField = {
   optional?: boolean;
   objectFields?: GeneratedField[];
   driverObjectFields?: GeneratedField[];
+  isArray?: boolean;
+  acceptsSingleOrArray?: boolean;
 };
 
 type GeneratedQueryDescriptor = {
@@ -315,7 +317,7 @@ type QuerySource = {
   sqlContent: string;
   /** full source file contents, preserved for UI display. */
   sqlFileContent: string;
-  /** SQL passed to the analyzer after expanding inline modifiers into representative placeholders. */
+  /** SQL passed to the analyzer after expanding object-shaped params into representative placeholders. */
   analysisSqlContent: string;
   parameterExpansions: ParameterExpansion[];
 };
@@ -335,6 +337,8 @@ type ParameterExpansion =
       kind: 'object-array';
       name: string;
       fields: string[];
+      sqlShape: 'values' | 'row-list';
+      acceptsSingleOrArray: boolean;
     };
 
 async function materializeTypegenDatabase(config: SqlfuProjectConfig, host: SqlfuHost) {
@@ -656,6 +660,7 @@ function assertUniqueQueryFunctionNames(querySources: QuerySource[]): void {
 
 function applyParameterExpansionsForAnalysis(sql: string, expansions: ParameterExpansion[]): string {
   if (expansions.length === 0) return sql;
+  sql = rewriteRowListExpansionsForAnalysis(sql, expansions);
   const expansionMap = new Map(expansions.map((expansion) => [expansion.name, expansion]));
   return replaceNamedParameters(sql, (reference) => {
     if (reference.path.length > 0) {
@@ -680,19 +685,35 @@ function applyParameterExpansionsForAnalysis(sql: string, expansions: ParameterE
   });
 }
 
+function rewriteRowListExpansionsForAnalysis(sql: string, expansions: ParameterExpansion[]): string {
+  let output = sql;
+  for (const expansion of expansions) {
+    if (expansion.kind !== 'object-array' || expansion.sqlShape !== 'row-list') continue;
+    const pattern = new RegExp(
+      `\\(([^()]+)\\)\\s+(?:not\\s+)?in\\s*\\(\\s*:${expansion.name}\\s*\\)`,
+      'gi',
+    );
+    output = output.replace(pattern, (match, rawFields: string) => {
+      const fields = parseSimpleSqlFieldList(rawFields, 'inferred row IN parameter');
+      if (fields.join('\0') !== expansion.fields.join('\0')) return match;
+      const predicates = rawFields
+        .split(',')
+        .map((field) => field.trim())
+        .map((field, index) => `${field} = :${expandedFieldName(expansion.name, fields[index]!)}`)
+        .join(' and ');
+      return `(${predicates})`;
+    });
+  }
+  return output;
+}
+
 type NamedParameterReference = {
   raw: string;
   name: string;
   path: string[];
-  modifier?: NamedParameterModifier;
   start: number;
   end: number;
   wrappedInParens: boolean;
-};
-
-type NamedParameterModifier = {
-  kind: 'tupleList';
-  fields: string[];
 };
 
 function replaceNamedParameters(
@@ -779,17 +800,13 @@ function findNamedParameterReferences(sql: string): NamedParameterReference[] {
       cursor += fieldMatch[0]!.length;
     }
 
-    const modifier = parseInlineParameterModifier(sql, cursor);
-    if (modifier) {
-      cursor = modifier.end;
-    }
+    cursor = assertNoParameterModifier(sql, cursor);
 
     const raw = sql.slice(start, cursor);
     references.push({
       raw,
       name: match[1]!,
       path: referencePath,
-      modifier: modifier?.modifier,
       start,
       end: cursor,
       wrappedInParens: isWrappedInParens(sql, start, cursor),
@@ -800,52 +817,27 @@ function findNamedParameterReferences(sql: string): NamedParameterReference[] {
   return references;
 }
 
-function parseInlineParameterModifier(
-  sql: string,
-  index: number,
-): {modifier: NamedParameterModifier; end: number} | undefined {
-  if (sql[index] !== ':' || sql[index + 1] === ':') return undefined;
+function assertNoParameterModifier(sql: string, index: number): number {
+  if (sql[index] !== ':' || sql[index + 1] === ':') return index;
 
-  if (!sql.startsWith(':tupleList', index)) {
-    const match = sql.slice(index).match(/^:([A-Za-z_$][A-Za-z0-9_$]*)/);
-    throw new Error(`Unsupported parameter modifier: ${match ? match[0] : sql.slice(index, index + 1)}`);
-  }
-  const openParen = index + ':tupleList'.length;
-  if (sql[openParen] !== '(') {
-    throw new Error('Parameter modifier :tupleList must be followed by a field list');
-  }
-  const closeParen = sql.indexOf(')', openParen + 1);
-  if (closeParen === -1) {
-    throw new Error('Parameter modifier :tupleList is missing a closing ")"');
-  }
-  return {
-    modifier: {
-      kind: 'tupleList',
-      fields: parseExpansionFields(sql.slice(openParen + 1, closeParen), ':tupleList'),
-    },
-    end: closeParen + 1,
-  };
+  const match = sql.slice(index).match(/^:([A-Za-z_$][A-Za-z0-9_$]*)/);
+  throw new Error(`Unsupported parameter modifier: ${match ? match[0] : sql.slice(index, index + 1)}`);
 }
 
 function parseInlineParameterExpansions(sql: string): ParameterExpansion[] {
   const expansions = new Map<string, ParameterExpansion>();
   const references = findNamedParameterReferences(sql);
 
+  for (const expansion of inferInsertValuesParameterExpansions(sql)) {
+    addParameterExpansion(expansions, expansion);
+  }
+  for (const expansion of inferRowInParameterExpansions(sql)) {
+    addParameterExpansion(expansions, expansion);
+  }
+
   for (const reference of references) {
     if (reference.path.length > 1) {
       throw new Error(`Nested parameter paths are not supported yet: ${reference.raw}`);
-    }
-
-    if (reference.modifier) {
-      if (reference.path.length > 0) {
-        throw new Error(`Parameter modifiers are only supported on top-level params: ${reference.raw}`);
-      }
-      addParameterExpansion(expansions, {
-        kind: 'object-array',
-        name: reference.name,
-        fields: reference.modifier.fields,
-      });
-      continue;
     }
 
     if (reference.path.length === 1) {
@@ -860,9 +852,9 @@ function parseInlineParameterExpansions(sql: string): ParameterExpansion[] {
   }
 
   for (const reference of references) {
-    if (reference.modifier || reference.path.length > 0) continue;
+    if (reference.path.length > 0) continue;
     const expansion = expansions.get(reference.name);
-    if (expansion) {
+    if (expansion?.kind === 'object-fields') {
       throw new Error(
         `Parameter ${JSON.stringify(reference.name)} cannot be used both as ${reference.raw} and ${expansion.kind}`,
       );
@@ -870,6 +862,66 @@ function parseInlineParameterExpansions(sql: string): ParameterExpansion[] {
   }
 
   return Array.from(expansions.values());
+}
+
+function inferInsertValuesParameterExpansions(sql: string): ParameterExpansion[] {
+  const expansions: ParameterExpansion[] = [];
+  const identifier = `[A-Za-z_$][A-Za-z0-9_$]*`;
+  const tableName = `${identifier}(?:\\s*\\.\\s*${identifier})?`;
+  const pattern = new RegExp(
+    `\\binsert\\s+(?:or\\s+${identifier}\\s+)?into\\s+${tableName}\\s*\\(([^)]*)\\)\\s+values\\s+:(${identifier})\\b`,
+    'gi',
+  );
+
+  for (const match of sql.matchAll(pattern)) {
+    expansions.push({
+      kind: 'object-array',
+      name: match[2]!,
+      fields: parseSimpleSqlFieldList(match[1]!, 'inferred INSERT values parameter'),
+      sqlShape: 'values',
+      acceptsSingleOrArray: true,
+    });
+  }
+  return expansions;
+}
+
+function inferRowInParameterExpansions(sql: string): ParameterExpansion[] {
+  const expansions: ParameterExpansion[] = [];
+  const pattern = /\(([^()]+)\)\s+(?:not\s+)?in\s*\(\s*:([A-Za-z_$][A-Za-z0-9_$]*)\s*\)/gi;
+
+  for (const match of sql.matchAll(pattern)) {
+    const fields = parseSimpleSqlFieldList(match[1]!, 'inferred row IN parameter');
+    if (fields.length < 2) continue;
+    expansions.push({
+      kind: 'object-array',
+      name: match[2]!,
+      fields,
+      sqlShape: 'row-list',
+      acceptsSingleOrArray: false,
+    });
+  }
+  return expansions;
+}
+
+function parseSimpleSqlFieldList(rawFields: string, syntaxName: string): string[] {
+  const fields = rawFields.split(',').map((field) => field.trim()).filter(Boolean);
+  if (fields.length === 0) {
+    throw new Error(`${syntaxName} needs at least one field`);
+  }
+
+  const names = fields.map((field) => {
+    const match = field.match(/^(?:(?:[A-Za-z_$][A-Za-z0-9_$]*)\.)?([A-Za-z_$][A-Za-z0-9_$]*)$/);
+    if (!match) {
+      throw new Error(`${syntaxName} only supports simple column names: ${JSON.stringify(field)}`);
+    }
+    return match[1]!;
+  });
+
+  const duplicate = names.find((field, index) => names.indexOf(field) !== index);
+  if (duplicate) {
+    throw new Error(`${syntaxName} cannot infer duplicate field ${JSON.stringify(duplicate)}`);
+  }
+  return names;
 }
 
 function addParameterExpansion(expansions: Map<string, ParameterExpansion>, expansion: ParameterExpansion): void {
@@ -896,31 +948,15 @@ function addParameterExpansion(expansions: Map<string, ParameterExpansion>, expa
   }
 
   if (existing.kind === 'object-array' && expansion.kind === 'object-array') {
-    if (existing.fields.join('\0') !== expansion.fields.join('\0')) {
-      throw new Error(`Parameter ${JSON.stringify(expansion.name)} cannot use multiple tupleList field sets`);
+    if (
+      existing.fields.join('\0') !== expansion.fields.join('\0') ||
+      existing.sqlShape !== expansion.sqlShape ||
+      existing.acceptsSingleOrArray !== expansion.acceptsSingleOrArray
+    ) {
+      throw new Error(`Parameter ${JSON.stringify(expansion.name)} cannot use multiple inferred field sets`);
     }
     return;
   }
-}
-
-function parseExpansionFields(rawFields: string, syntaxName: string): string[] {
-  const fields = rawFields
-    .split(',')
-    .map((field) => field.trim())
-    .filter(Boolean);
-  if (fields.length === 0) {
-    throw new Error(`${syntaxName} needs at least one field`);
-  }
-  for (const field of fields) {
-    if (!/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(field)) {
-      throw new Error(`${syntaxName} field ${JSON.stringify(field)} is not a valid identifier`);
-    }
-  }
-  const duplicates = fields.filter((field, index) => fields.indexOf(field) !== index);
-  if (duplicates.length > 0) {
-    throw new Error(`${syntaxName} cannot repeat field ${JSON.stringify(duplicates[0])}`);
-  }
-  return fields;
 }
 
 function isWrappedInParens(sql: string, start: number, end: number): boolean {
@@ -1349,7 +1385,11 @@ function renderExpansionGuards(
     if (expansion.kind !== 'scalar-array' && expansion.kind !== 'object-array') continue;
     const variableExpression = expansionVariables.get(expansion.name);
     if (!variableExpression) continue;
-    lines.push(`${indent}if (${variableExpression}.length === 0) {`);
+    const emptyArrayCondition =
+      expansion.kind === 'object-array' && expansion.acceptsSingleOrArray
+        ? `Array.isArray(${variableExpression}) && ${variableExpression}.length === 0`
+        : `${variableExpression}.length === 0`;
+    lines.push(`${indent}if (${emptyArrayCondition}) {`);
     lines.push(`${indent}\tthrow new Error(${JSON.stringify(`Parameter "${expansion.name}" must be a non-empty array`)});`);
     lines.push(`${indent}}`);
   }
@@ -1394,12 +1434,22 @@ function runtimeExpansionTemplateChunk(
     const placeholders = `${variableExpression}.map(() => '?').join(', ')`;
     return wrappedInParens ? '${' + placeholders + '}' : '(${' + placeholders + '})';
   }
-
-  const rowPlaceholders = expansion.fields.map(() => '?').join(', ');
-  if (wrappedInParens) {
-    return '${' + `${variableExpression}.map(() => ${JSON.stringify(rowPlaceholders)}).join('), (')` + '}';
+  if (expansion.kind !== 'object-array') {
+    return '?';
   }
-  return '${' + `${variableExpression}.map(() => ${JSON.stringify(`(${rowPlaceholders})`)}).join(', ')` + '}';
+
+  const arrayExpression = expansion.acceptsSingleOrArray
+    ? `(Array.isArray(${variableExpression}) ? ${variableExpression} : [${variableExpression}])`
+    : variableExpression;
+  const rowPlaceholders = expansion.fields.map(() => '?').join(', ');
+  if (expansion.sqlShape === 'row-list') {
+    return '${' + `${arrayExpression}.map(() => ${JSON.stringify(`(${rowPlaceholders})`)}).join(', ')` + '}';
+  }
+
+  if (wrappedInParens) {
+    return '${' + `${arrayExpression}.map(() => ${JSON.stringify(rowPlaceholders)}).join('), (')` + '}';
+  }
+  return '${' + `${arrayExpression}.map(() => ${JSON.stringify(`(${rowPlaceholders})`)}).join(', ')` + '}';
 }
 
 function escapeTemplateLiteralChunk(value: string): string {
@@ -1577,7 +1627,10 @@ function arktypeBaseExpressionForField(field: GeneratedField): string {
       .map((objectField) => `${objectField.name}: ${arktypeFieldExpression(objectField, objectField.notNull)}`)
       .join(', ');
     const objectExpression = `type({ ${fields} })`;
-    return field.tsType.startsWith('Array<') ? `${objectExpression}.array()` : objectExpression;
+    if (field.acceptsSingleOrArray) {
+      return `type(${objectExpression}, '|', ${objectExpression}.array())`;
+    }
+    return field.isArray ? `${objectExpression}.array()` : objectExpression;
   }
   return arktypeBaseExpression(field.tsType);
 }
@@ -1803,7 +1856,10 @@ function zodExpressionForField(field: GeneratedField, namespace: 'z'): string {
         return `${objectField.name}: ${expression}`;
       })
       .join(', ')} })`;
-    return field.tsType.startsWith('Array<') ? `${namespace}.array(${objectExpression})` : objectExpression;
+    if (field.acceptsSingleOrArray) {
+      return `${namespace}.union([${objectExpression}, ${namespace}.array(${objectExpression})])`;
+    }
+    return field.isArray ? `${namespace}.array(${objectExpression})` : objectExpression;
   }
   return zodExpressionForTsType(field.tsType, namespace);
 }
@@ -1836,7 +1892,10 @@ function valibotExpressionForField(field: GeneratedField): string {
         return `${objectField.name}: ${expression}`;
       })
       .join(', ')} })`;
-    return field.tsType.startsWith('Array<') ? `v.array(${objectExpression})` : objectExpression;
+    if (field.acceptsSingleOrArray) {
+      return `v.union([${objectExpression}, v.array(${objectExpression})])`;
+    }
+    return field.isArray ? `v.array(${objectExpression})` : objectExpression;
   }
   return valibotExpressionForTsType(field.tsType);
 }
@@ -2118,7 +2177,11 @@ function fieldTypeExpression(field: GeneratedField, fieldKind: 'parameter' | 're
   let typeExpression = field.tsType;
   if (field.objectFields) {
     const objectType = renderInlineObjectTsType(field.objectFields);
-    typeExpression = field.tsType.startsWith('Array<') ? `Array<${objectType}>` : objectType;
+    if (field.acceptsSingleOrArray) {
+      typeExpression = `${objectType} | Array<${objectType}>`;
+    } else {
+      typeExpression = field.isArray ? `Array<${objectType}>` : objectType;
+    }
   }
   if (fieldKind === 'parameter' && !field.notNull) {
     return `${typeExpression} | null`;
@@ -2149,10 +2212,23 @@ function objectSchema(
 }
 
 function schemaForField(field: GeneratedField): JsonSchema {
+  if (field.objectFields && field.acceptsSingleOrArray) {
+    const object = objectSchema(field.name, field.objectFields);
+    return {
+      anyOf: [
+        object,
+        {
+          type: 'array',
+          items: object,
+        },
+      ],
+    };
+  }
+
   const schema = field.objectFields
     ? {
-        type: field.tsType.startsWith('Array<') ? 'array' : 'object',
-        ...(field.tsType.startsWith('Array<')
+        type: field.isArray ? 'array' : 'object',
+        ...(field.isArray
           ? {items: objectSchema(field.name, field.objectFields)}
           : objectSchema(field.name, field.objectFields)),
       } satisfies JsonSchemaObject
@@ -2241,11 +2317,26 @@ function prepareQueryDescriptor(input: {
   }
 
   const parameterExpansions = Array.from(expansions.values());
+  assertNoUnsupportedInferredReturning(input.descriptor, parameterExpansions);
   assertRuntimeExpansionReferences(input.sourceSql, parameterExpansions);
   return {
     descriptor: applyParameterExpansionDescriptor(input.descriptor, parameterExpansions, input.sourceSql),
     parameterExpansions,
   };
+}
+
+function assertNoUnsupportedInferredReturning(
+  descriptor: GeneratedQueryDescriptor,
+  expansions: ParameterExpansion[],
+): void {
+  if (!descriptor.returning) return;
+  const expansion = expansions.find(
+    (candidate) => candidate.kind === 'object-array' && candidate.acceptsSingleOrArray,
+  );
+  if (!expansion) return;
+  throw new Error(
+    `Inferred INSERT values parameter ${JSON.stringify(expansion.name)} does not support RETURNING yet`,
+  );
 }
 
 function assertRuntimeExpansionReferences(sql: string, expansions: ParameterExpansion[]): void {
@@ -2304,6 +2395,9 @@ function staticSqlForExpandedQuery(sql: string, expansions: ParameterExpansion[]
     }
 
     const placeholders = expansion.fields.map(() => '?').join(', ');
+    if (expansion.sqlShape === 'row-list') {
+      return `(${placeholders})`;
+    }
     if (reference.wrappedInParens) return placeholders;
     return `(${placeholders})`;
   });
@@ -2393,13 +2487,20 @@ function buildObjectExpansionField<T extends GeneratedField & {toDriver: string;
   if (objectFields.length === 0) return undefined;
 
   const tsType = renderInlineObjectTsType(objectFields);
+  const fieldTsType =
+    expansion.kind === 'object-array'
+      ? expansion.acceptsSingleOrArray
+        ? `${tsType} | Array<${tsType}>`
+        : `Array<${tsType}>`
+      : tsType;
   return {
     name: expansion.name,
-    tsType: expansion.kind === 'object-array' ? `Array<${tsType}>` : tsType,
+    tsType: fieldTsType,
     notNull: true,
     optional: false,
     toDriver: expansion.name,
-    isArray: expansion.kind === 'object-array',
+    isArray: expansion.kind === 'object-array' && !expansion.acceptsSingleOrArray,
+    acceptsSingleOrArray: expansion.kind === 'object-array' ? expansion.acceptsSingleOrArray : false,
     objectFields,
     driverObjectFields,
   } as T;
@@ -2485,11 +2586,14 @@ function toDriver(
     isArray: boolean;
   },
 ): string {
-  if (param.objectFields && param.isArray) {
+  if (param.objectFields && (param.isArray || param.acceptsSingleOrArray)) {
+    const collectionExpression = param.acceptsSingleOrArray
+      ? `(Array.isArray(${variableName}.${param.name}) ? ${variableName}.${param.name} : [${variableName}.${param.name}])`
+      : `${variableName}.${param.name}`;
     const values = (param.driverObjectFields || param.objectFields).map((field) =>
       toDriverValue(`item.${field.name}`, field),
     );
-    return `...${variableName}.${param.name}.flatMap((item) => [${values.join(', ')}])`;
+    return `...${collectionExpression}.flatMap((item) => [${values.join(', ')}])`;
   }
   if (param.objectFields) {
     const values = (param.driverObjectFields || param.objectFields).map((field) =>

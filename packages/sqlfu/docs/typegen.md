@@ -94,35 +94,64 @@ The generated params type is `{post: {slug: string; title: string}}`. One object
 path segment is supported today; nested paths such as `:post.author.id` are
 intentionally rejected until the type shape is designed.
 
-Use `:tupleList(...)` for bulk row tuples.
+Use an object param directly after `values` when an INSERT column list already
+names the object fields. The generated param accepts either one object or a
+non-empty array.
 
 ```sql
 /** @name insertPosts */
 insert into posts (slug, title)
-values :posts:tupleList(slug, title)
-returning id, slug, title;
+values :posts;
 ```
 
 ```ts
 await insertPosts(client, {
+  posts: {slug: 'first', title: 'First'},
+});
+
+await insertPosts(client, {
   posts: [
-    {slug: 'first', title: 'First'},
     {slug: 'second', title: 'Second'},
+    {slug: 'third', title: 'Third'},
   ],
 });
 ```
 
-At runtime sqlfu executes `values (?, ?), (?, ?)` and flattens the values in the
-field order declared in `tupleList`. Empty arrays throw.
+At runtime sqlfu executes `values (?, ?)` for one object or `values (?, ?), (?, ?)`
+for an array, and flattens values in the INSERT column-list order. Empty arrays
+throw. This inferred INSERT shorthand does not support `RETURNING` yet; use
+explicit dot-path values such as `values (:post.slug, :post.title)` for returning
+single-row inserts.
+
+Row-value `IN` lists also infer object-array params from the left-hand column
+tuple.
+
+```sql
+/** @name listPostsByKeys */
+select id, slug, title
+from posts
+where (slug, title) in (:keys)
+order by id;
+```
+
+```ts
+await listPostsByKeys(client, {
+  keys: [
+    {slug: 'first', title: 'First'},
+    {slug: 'third', title: 'Third'},
+  ],
+});
+```
 
 ## Limits
 
-- Runtime-expanded params, currently inferred `IN` lists and `:tupleList(...)`, can appear only
+- Runtime-expanded params, currently inferred scalar `IN` lists, row-value `IN`
+  lists, and INSERT `values :param` objects, can appear only
   once in a query. Reusing the same expanded array in two places would require
   duplicating the driver arguments, so sqlfu rejects that shape for now.
 - Typed JSON params are not supported yet. A JSON column is still usable as a
   regular scalar param, but sqlfu does not infer or enforce the TypeScript object
   shape inside SQLite JSON text/blob values.
-- Parameter modifiers are part of the SQL placeholder, not comment metadata.
-  `@name` names queries; `IN (:ids)` and `:posts:tupleList(...)` describe runtime
-  placeholder expansion where the SQL shape changes.
+- Parameter shape is inferred from SQL shape, not comment metadata. `@name` names
+  queries; `IN (:ids)`, `(slug, title) in (:keys)`, and `values :posts` describe
+  runtime placeholder expansion where the SQL shape changes.

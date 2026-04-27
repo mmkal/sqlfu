@@ -86,7 +86,7 @@ test('generate with validator: zod validates params and rows at runtime', async 
   expect(mod.findPostBySlug.sql).toContain('from posts where slug = ?');
 });
 
-test('generated annotated queries expand inline list and object params at runtime', async () => {
+test('generated annotated queries expand inferred list and object params at runtime', async () => {
   await using project = await createRuntimeFixture({
     definitionsSql: `create table posts (id integer primary key, slug text not null, title text not null);`,
     files: {
@@ -95,10 +95,13 @@ test('generated annotated queries expand inline list and object params at runtim
         insert into posts (slug, title) values (:post.slug, :post.title) returning id, slug, title;
 
         /** @name insertPosts */
-        insert into posts (slug, title) values :posts:tupleList(slug, title) returning id, slug, title;
+        insert into posts (slug, title) values :posts;
 
         /** @name listPostsByIds */
         select id, slug, title from posts where id in (:ids) order by id;
+
+        /** @name listPostsBySlugAndTitle */
+        select id, slug, title from posts where (slug, title) in (:posts) order by id;
       `,
     },
   });
@@ -114,19 +117,25 @@ test('generated annotated queries expand inline list and object params at runtim
     {
       id: 'posts#insertPosts',
       functionName: 'insertPosts',
-      args: [{name: 'posts', tsType: 'Array<{ slug: string; title: string }>', isArray: true}],
+      args: [{name: 'posts', tsType: '{ slug: string; title: string } | Array<{ slug: string; title: string }>'}],
     },
     {
       id: 'posts#listPostsByIds',
       functionName: 'listPostsByIds',
       args: [{name: 'ids', tsType: 'number[]', isArray: true}],
     },
+    {
+      id: 'posts#listPostsBySlugAndTitle',
+      functionName: 'listPostsBySlugAndTitle',
+      args: [{name: 'posts', tsType: 'Array<{ slug: string; title: string }>', isArray: true}],
+    },
   ]);
 
   const mod = await project.importTranspiledModule<{
     insertPost: (client: unknown, params: {post: {slug: string; title: string}}) => Promise<{id: number; slug: string; title: string}>;
-    insertPosts: (client: unknown, params: {posts: {slug: string; title: string}[]}) => Promise<{id: number; slug: string; title: string}>;
+    insertPosts: (client: unknown, params: {posts: {slug: string; title: string} | {slug: string; title: string}[]}) => Promise<unknown>;
     listPostsByIds: (client: unknown, params: {ids: number[]}) => Promise<{id: number; slug: string; title: string}[]>;
+    listPostsBySlugAndTitle: (client: unknown, params: {posts: {slug: string; title: string}[]}) => Promise<{id: number; slug: string; title: string}[]>;
   }>('sql/.generated/posts.sql.ts');
 
   using database = project.openDatabase();
@@ -137,18 +146,36 @@ test('generated annotated queries expand inline list and object params at runtim
     slug: 'one',
   });
   await mod.insertPosts(client, {
+    posts: {slug: 'two', title: 'Two'},
+  });
+  await mod.insertPosts(client, {
     posts: [
-      {slug: 'two', title: 'Two'},
       {slug: 'three', title: 'Three'},
+      {slug: 'four', title: 'Four'},
     ],
   });
 
-  await expect(mod.listPostsByIds(client, {ids: [1, 3]})).resolves.toEqual([
+  await expect(mod.listPostsByIds(client, {ids: [1, 3, 4]})).resolves.toEqual([
     {id: 1, slug: 'one', title: 'One'},
     {id: 3, slug: 'three', title: 'Three'},
+    {id: 4, slug: 'four', title: 'Four'},
+  ]);
+  await expect(
+    mod.listPostsBySlugAndTitle(client, {
+      posts: [
+        {slug: 'one', title: 'One'},
+        {slug: 'four', title: 'Four'},
+      ],
+    }),
+  ).resolves.toEqual([
+    {id: 1, slug: 'one', title: 'One'},
+    {id: 4, slug: 'four', title: 'Four'},
   ]);
   await expect(mod.listPostsByIds(client, {ids: []})).rejects.toThrow(
     'Parameter "ids" must be a non-empty array',
+  );
+  await expect(mod.listPostsBySlugAndTitle(client, {posts: []})).rejects.toThrow(
+    'Parameter "posts" must be a non-empty array',
   );
 });
 

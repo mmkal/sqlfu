@@ -557,7 +557,7 @@ function splitQueryDocument(queryFile: QueryFile): QuerySource[] {
         functionName: toCamelCase(queryFile.relativePath),
         sqlContent: queryFile.sqlContent,
         sqlFileContent: queryFile.sqlContent,
-        analysisSqlContent: applyParameterExpansionsForAnalysis(queryFile.sqlContent, parameterExpansions),
+        analysisSqlContent: prepareSqlForAnalysis(queryFile.sqlContent, parameterExpansions),
         parameterExpansions,
       },
     ];
@@ -585,10 +585,14 @@ function splitQueryDocument(queryFile: QueryFile): QuerySource[] {
       functionName: annotation.functionName,
       sqlContent,
       sqlFileContent: queryFile.sqlContent,
-      analysisSqlContent: applyParameterExpansionsForAnalysis(sqlContent, parameterExpansions),
+      analysisSqlContent: prepareSqlForAnalysis(sqlContent, parameterExpansions),
       parameterExpansions,
     };
   });
+}
+
+function prepareSqlForAnalysis(sql: string, parameterExpansions: ParameterExpansion[]): string {
+  return stripSqlComments(applyParameterExpansionsForAnalysis(sql, parameterExpansions));
 }
 
 type QueryAnnotation = {
@@ -600,9 +604,8 @@ type QueryAnnotation = {
 
 function parseQueryAnnotations(sqlContent: string): QueryAnnotation[] {
   const annotations: QueryAnnotation[] = [];
-  const commentPattern = /\/\*[\s\S]*?\*\//g;
-  for (const match of sqlContent.matchAll(commentPattern)) {
-    const comment = match[0];
+  for (const blockComment of findSqlIgnoredRanges(sqlContent).filter((range) => range.kind === 'block-comment')) {
+    const comment = sqlContent.slice(blockComment.start, blockComment.end);
     if (!comment.includes('@name')) continue;
 
     const body = comment.replace(/^\/\*+/, '').replace(/\*+\/$/, '');
@@ -617,8 +620,8 @@ function parseQueryAnnotations(sqlContent: string): QueryAnnotation[] {
     const rawName = nameMatch[1]!;
     const functionName = functionNameFromAnnotation(rawName);
     annotations.push({
-      commentStart: match.index!,
-      commentEnd: match.index! + comment.length,
+      commentStart: blockComment.start,
+      commentEnd: blockComment.end,
       rawName,
       functionName,
     });
@@ -639,9 +642,14 @@ function hasExecutableSql(sql: string): boolean {
 }
 
 function stripSqlComments(sql: string): string {
-  return sql
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/--[^\n\r]*/g, '');
+  const comments = findSqlIgnoredRanges(sql).filter((range) => range.kind !== 'string');
+  let output = '';
+  let cursor = 0;
+  for (const comment of comments) {
+    output += sql.slice(cursor, comment.start);
+    cursor = comment.end;
+  }
+  return output + sql.slice(cursor);
 }
 
 function assertUniqueQueryFunctionNames(querySources: QuerySource[]): void {
@@ -693,7 +701,7 @@ function rewriteRowListExpansionsForAnalysis(sql: string, expansions: ParameterE
       `\\(([^()]+)\\)\\s+(?:not\\s+)?in\\s*\\(\\s*:${expansion.name}\\s*\\)`,
       'gi',
     );
-    output = output.replace(pattern, (match, rawFields: string) => {
+    output = replaceSqlPatternOutsideCommentsAndStrings(output, pattern, (match, [rawFields = '']) => {
       const fields = parseSimpleSqlFieldList(rawFields, 'inferred row IN parameter');
       if (fields.join('\0') !== expansion.fields.join('\0')) return match;
       const predicates = rawFields
@@ -866,6 +874,7 @@ function parseInlineParameterExpansions(sql: string): ParameterExpansion[] {
 
 function inferInsertValuesParameterExpansions(sql: string): ParameterExpansion[] {
   const expansions: ParameterExpansion[] = [];
+  const searchableSql = maskSqlCommentsAndStrings(sql);
   const identifier = `[A-Za-z_$][A-Za-z0-9_$]*`;
   const tableName = `${identifier}(?:\\s*\\.\\s*${identifier})?`;
   const pattern = new RegExp(
@@ -873,7 +882,7 @@ function inferInsertValuesParameterExpansions(sql: string): ParameterExpansion[]
     'gi',
   );
 
-  for (const match of sql.matchAll(pattern)) {
+  for (const match of searchableSql.matchAll(pattern)) {
     expansions.push({
       kind: 'object-array',
       name: match[2]!,
@@ -887,9 +896,10 @@ function inferInsertValuesParameterExpansions(sql: string): ParameterExpansion[]
 
 function inferRowInParameterExpansions(sql: string): ParameterExpansion[] {
   const expansions: ParameterExpansion[] = [];
+  const searchableSql = maskSqlCommentsAndStrings(sql);
   const pattern = /\(([^()]+)\)\s+(?:not\s+)?in\s*\(\s*:([A-Za-z_$][A-Za-z0-9_$]*)\s*\)/gi;
 
-  for (const match of sql.matchAll(pattern)) {
+  for (const match of searchableSql.matchAll(pattern)) {
     const fields = parseSimpleSqlFieldList(match[1]!, 'inferred row IN parameter');
     if (fields.length < 2) continue;
     expansions.push({
@@ -981,6 +991,111 @@ function nextNonWhitespace(sql: string, index: number): string | undefined {
 
 function expandedFieldName(parameterName: string, fieldName: string): string {
   return `${parameterName}__${fieldName}`;
+}
+
+type SqlIgnoredRange = {
+  kind: 'line-comment' | 'block-comment' | 'string';
+  start: number;
+  end: number;
+};
+
+function findSqlIgnoredRanges(sql: string): SqlIgnoredRange[] {
+  const ranges: SqlIgnoredRange[] = [];
+  let quote: "'" | '"' | '`' | null = null;
+  let quoteStart = 0;
+  let lineCommentStart: number | null = null;
+  let blockCommentStart: number | null = null;
+
+  for (let index = 0; index < sql.length; index += 1) {
+    const char = sql[index]!;
+    const next = sql[index + 1];
+
+    if (lineCommentStart !== null) {
+      if (char === '\n' || char === '\r') {
+        ranges.push({kind: 'line-comment', start: lineCommentStart, end: index});
+        lineCommentStart = null;
+      }
+      continue;
+    }
+
+    if (blockCommentStart !== null) {
+      if (char === '*' && next === '/') {
+        ranges.push({kind: 'block-comment', start: blockCommentStart, end: index + 2});
+        blockCommentStart = null;
+        index += 1;
+      }
+      continue;
+    }
+
+    if (quote) {
+      if (char === quote) {
+        if (next === quote) {
+          index += 1;
+          continue;
+        }
+        ranges.push({kind: 'string', start: quoteStart, end: index + 1});
+        quote = null;
+      }
+      continue;
+    }
+
+    if (char === '-' && next === '-') {
+      lineCommentStart = index;
+      index += 1;
+      continue;
+    }
+
+    if (char === '/' && next === '*') {
+      blockCommentStart = index;
+      index += 1;
+      continue;
+    }
+
+    if (char === "'" || char === '"' || char === '`') {
+      quote = char;
+      quoteStart = index;
+    }
+  }
+
+  if (lineCommentStart !== null) {
+    ranges.push({kind: 'line-comment', start: lineCommentStart, end: sql.length});
+  }
+  if (blockCommentStart !== null) {
+    ranges.push({kind: 'block-comment', start: blockCommentStart, end: sql.length});
+  }
+  if (quote) {
+    ranges.push({kind: 'string', start: quoteStart, end: sql.length});
+  }
+
+  return ranges;
+}
+
+function maskSqlCommentsAndStrings(sql: string): string {
+  const chars = sql.split('');
+  for (const range of findSqlIgnoredRanges(sql)) {
+    for (let index = range.start; index < range.end; index += 1) {
+      chars[index] = ' ';
+    }
+  }
+  return chars.join('');
+}
+
+function replaceSqlPatternOutsideCommentsAndStrings(
+  sql: string,
+  pattern: RegExp,
+  replace: (match: string, groups: string[]) => string,
+): string {
+  const searchableSql = maskSqlCommentsAndStrings(sql);
+  let output = '';
+  let cursor = 0;
+  for (const match of searchableSql.matchAll(pattern)) {
+    const start = match.index!;
+    const end = start + match[0]!.length;
+    output += sql.slice(cursor, start);
+    output += replace(sql.slice(start, end), match.slice(1).map((group) => group || ''));
+    cursor = end;
+  }
+  return output + sql.slice(cursor);
 }
 
 async function writeGeneratedBarrel(

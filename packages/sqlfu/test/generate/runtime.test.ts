@@ -204,6 +204,41 @@ test('generate supports multiline @name comments in multi-query files', async ()
   expect(generatedModule).toContain('export const findPostBySlug');
 });
 
+test('generate ignores annotation and expansion-looking text inside comments and strings', async () => {
+  await using project = await createRuntimeFixture({
+    definitionsSql: `create table posts (id integer primary key, slug text not null, title text not null);`,
+    files: {
+      'sql/posts.sql': dedent`
+        /*
+          @name findPostBySlug
+        */
+        -- insert into posts (slug, title) values :commentedPosts
+        select id, slug, title
+        from posts
+        where slug = :slug
+          and '/* @name notAQuery */' <> ''
+          /* and (slug, title) in (:commentedKeys) */
+          and 1 = 1;
+      `,
+    },
+  });
+
+  await project.generate();
+  const catalog = JSON.parse(await project.readText('.sqlfu/query-catalog.json'));
+  const generatedModule = await project.readText('sql/.generated/posts.sql.ts');
+
+  expect(catalog.queries).toMatchObject([
+    {
+      functionName: 'findPostBySlug',
+      args: [{name: 'slug'}],
+    },
+  ]);
+  expect(catalog.queries).toHaveLength(1);
+  expect(generatedModule).toContain('export const findPostBySlug');
+  expect(generatedModule).not.toContain('export const notAQuery');
+  expect(generatedModule).not.toContain('expandedSql');
+});
+
 test('generate with validator: valibot validates inputs at runtime via standard schema', async () => {
   await using project = await createRuntimeFixture({
     definitionsSql: dedent`

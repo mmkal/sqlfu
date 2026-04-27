@@ -642,14 +642,15 @@ function hasExecutableSql(sql: string): boolean {
 }
 
 function stripSqlComments(sql: string): string {
-  const comments = findSqlIgnoredRanges(sql).filter((range) => range.kind !== 'string');
-  let output = '';
-  let cursor = 0;
-  for (const comment of comments) {
-    output += sql.slice(cursor, comment.start);
-    cursor = comment.end;
+  const chars = sql.split('');
+  for (const comment of findSqlIgnoredRanges(sql).filter((range) => range.kind !== 'string')) {
+    for (let index = comment.start; index < comment.end; index += 1) {
+      if (chars[index] !== '\n' && chars[index] !== '\r') {
+        chars[index] = ' ';
+      }
+    }
   }
-  return output + sql.slice(cursor);
+  return chars.join('');
 }
 
 function assertUniqueQueryFunctionNames(querySources: QuerySource[]): void {

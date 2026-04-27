@@ -2,7 +2,6 @@
 
 # sqlfu
 
-
 `sqlfu` is a SQLite-first toolkit for teams that want their data layer to stay close to SQL.
 
 It is built around a simple idea: SQL should be the source language for schema, migrations, queries, formatting, and diffing. TypeScript comes second. You should still get good generated types and wrappers, but without having to push the whole project through an ORM-shaped API.

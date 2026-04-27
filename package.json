@@ -1,6 +1,10 @@
 {
   "name": "sqlfu-workspace",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mmkal/sqlfu"
+  },
   "scripts": {
     "dev": "pnpm --filter @sqlfu/ui dev",
     "demo": "pnpm --filter @sqlfu/ui demo",

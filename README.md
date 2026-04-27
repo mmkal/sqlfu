@@ -1,6 +1,6 @@
-# sqlfu
+<img src="./docs/logo.png" alt="" align="left" width="72" />
 
-<img src="./docs/logo.png" alt="" align="right" width="96" />
+# sqlfu
 
 `sqlfu` is a SQLite-first toolkit for teams that want their data layer to stay close to SQL.
 

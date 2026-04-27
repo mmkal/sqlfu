@@ -15,18 +15,6 @@ declare const sql: typeof import('../../src/index.ts').sql;
 declare const applyMigrations: typeof import('../../src/migrations/index.ts').applyMigrations;
 declare const migrationsFromBundle: typeof import('../../src/migrations/index.ts').migrationsFromBundle;
 
-test('createDurableObjectClient rejects a bare durable object sql handle', () => {
-  const sqlStorage = {
-    exec() {
-      return {toArray: () => []};
-    },
-  };
-
-  expect(() => createLocalDurableObjectClient(sqlStorage as any)).toThrow(
-    'createDurableObjectClient expects ctx.storage or {sql, transactionSync}; pass ctx.storage.sql as {sql}.',
-  );
-});
-
 test('createDurableObjectClient works in a real durable object', async () => {
   await using fixture = await createDOFixture(
     class ClientDotAllTest {
@@ -290,6 +278,18 @@ test('createDurableObjectClient.raw runs multiple statements', async () => {
     {id: 1, name: 'bob'},
     {id: 2, name: 'ada'},
   ]);
+});
+
+test('createDurableObjectClient rejects a bare durable object sql handle', () => {
+  const sqlStorage = {
+    exec() {
+      return {toArray: () => []};
+    },
+  };
+
+  expect(() => createLocalDurableObjectClient(sqlStorage as any)).toThrow(
+    'createDurableObjectClient expects ctx.storage or {sql, transactionSync}; pass ctx.storage.sql as {sql}.',
+  );
 });
 
 async function createDOFixture<TInstance extends object>(classDef: new (...args: any[]) => TInstance) {

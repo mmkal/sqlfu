@@ -27,6 +27,44 @@ Why this matters:
 
 In short: the client you get matches the driver you brought. sqlfu doesn't pretend a sync driver is async, and it doesn't pretend an async driver is sync.
 
+## Prepared statements
+
+Generated wrappers are still the main application path: put stable queries in `.sql` files, run `sqlfu generate`, and call the generated function. `client.prepare(sql)` is the lower-level client API for SQL that needs to stay dynamic or ad-hoc without reaching through to `client.driver`.
+
+Use it when you want to reuse one statement handle, bind named parameters directly, or call `.all()` and `.run()` against the same SQL string. The handle follows the same sync/async split as the client:
+
+```ts
+interface PostRow {
+  id: number;
+  title: string;
+}
+
+using stmt = syncClient.prepare<PostRow>(`
+  select id, title
+  from posts
+  where slug = :slug
+`);
+
+const rows = stmt.all({slug: 'hello-world'});
+```
+
+```ts
+interface PostRow {
+  id: number;
+  title: string;
+}
+
+await using stmt = asyncClient.prepare<PostRow>(`
+  select id, title
+  from posts
+  where slug = :slug
+`);
+
+const rows = await stmt.all({slug: 'hello-world'});
+```
+
+Prepared handles expose `.all(params)`, `.run(params)`, and `.iterate(params)`. `params` can be a positional array (`[id]`) or a named object (`{slug}`). Adapters that have native prepared statements hold the driver handle and dispose it when the `using` scope exits. Adapters whose driver only exposes an `exec`/`execute` API provide a compatible shim: the method still exists, but each call re-issues the SQL through the driver.
+
 
 ## Compatibility matrix
 
@@ -236,6 +274,9 @@ Each adapter is a thin function that wraps a driver into a `SyncClient` or `Asyn
 - `run(query)` → `{rowsAffected?, lastInsertRowid?}`
 - `raw(sql)` → multi-statement string execution
 - `iterate(query)` → row iterator
+- `prepare(sql)` → reusable statement handle with `.all`, `.run`, `.iterate`, and a dispose method
 - `transaction(fn)` → run `fn` inside a transaction (the `sqlfu/core/sqlite` helpers provide `surroundWithBeginCommitRollback{Sync,Async}` that implement this for you using `begin`/`commit`/`rollback`)
 
-If your driver is SQLite-compatible but not listed, opening a PR with a new adapter file + a test file in `test/adapters/` is usually a ~50-line change.
+If your driver has a native prepared statement, wrap it. If it does not, implement `prepare(sql)` as a small shim that captures the SQL string and calls the driver's normal execution method on each `.all`, `.run`, or `.iterate`. The method should still return a disposable handle so callers can use `using` / `await using` uniformly.
+
+If your driver is SQLite-compatible but not listed, opening a PR with a new adapter file + a test file in `test/adapters/` is usually a small change.

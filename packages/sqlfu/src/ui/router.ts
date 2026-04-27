@@ -932,7 +932,7 @@ function normalizeSqlRunnerParams(value: unknown): AdHocSqlParams {
   throw new Error('SQL runner params must be an object or array');
 }
 
-function materializeRow(row: Record<string, unknown>) {
+function materializeRow(row: object) {
   return Object.fromEntries(
     Object.entries(row).map(([key, value]) => {
       if (typeof value === 'bigint') {

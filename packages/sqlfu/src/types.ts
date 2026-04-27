@@ -1,6 +1,6 @@
 export type QueryArg = null | string | number | bigint | Uint8Array | boolean;
 
-export type ResultRow = Record<string, unknown>;
+export type ResultRow = object;
 
 export interface SqlFragment {
   sql: string;

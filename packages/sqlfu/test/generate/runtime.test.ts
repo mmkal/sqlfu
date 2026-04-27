@@ -86,28 +86,19 @@ test('generate with validator: zod validates params and rows at runtime', async 
   expect(mod.findPostBySlug.sql).toContain('from posts where slug = ?');
 });
 
-test('generated annotated queries expand array and object params at runtime', async () => {
+test('generated annotated queries expand inline list and object params at runtime', async () => {
   await using project = await createRuntimeFixture({
     definitionsSql: `create table posts (id integer primary key, slug text not null, title text not null);`,
     files: {
       'sql/posts.sql': dedent`
-        /*
-          @name insertPost
-          @param post -> (slug, title)
-        */
-        insert into posts (slug, title) values :post returning id, slug, title;
+        /** @name insertPost */
+        insert into posts (slug, title) values (:post.slug, :post.title) returning id, slug, title;
 
-        /*
-          @name insertPosts
-          @param posts -> ((slug, title)...)
-        */
-        insert into posts (slug, title) values :posts returning id, slug, title;
+        /** @name insertPosts */
+        insert into posts (slug, title) values :posts:tupleList(slug, title) returning id, slug, title;
 
-        /*
-          @name listPostsByIds
-          @param ids -> (...)
-        */
-        select id, slug, title from posts where id in :ids order by id;
+        /** @name listPostsByIds */
+        select id, slug, title from posts where id in (:ids:list) order by id;
       `,
     },
   });

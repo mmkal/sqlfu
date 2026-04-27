@@ -44,6 +44,13 @@ const docs = [
     description: 'Named queries reach OpenTelemetry, Sentry, PostHog, Datadog via a single instrument() hook.',
   },
   {
+    slug: 'typegen',
+    title: 'Type generation',
+    sourcePath: path.join(repoRoot, 'packages', 'sqlfu', 'docs', 'typegen.md'),
+    description:
+      'Generated query wrappers, multi-query SQL files, and inline parameter modifiers for lists and bulk tuples.',
+  },
+  {
     slug: 'runtime-validation',
     title: 'Runtime validation',
     sourcePath: path.join(repoRoot, 'packages', 'sqlfu', 'docs', 'runtime-validation.mdx'),

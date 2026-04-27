@@ -1,5 +1,6 @@
-PgTyped-style annotations let one SQL file declare multiple named queries and let
-query parameters expand arrays or objects into SQLite placeholders at runtime.
+Query annotations let one SQL file declare multiple named queries. Inline parameter
+modifiers cover the cases where one authored placeholder needs to become many SQLite
+placeholders at runtime.
 
 <details>
 <summary>default config</summary>
@@ -104,7 +105,7 @@ export type PostsRow = {
 
 </details>
 
-## expands scalar arrays into placeholder lists
+## expands list params into placeholder lists
 
 <details data-outputs="sql/.generated/**/*.ts,.sqlfu/query-catalog.json">
 <summary>input</summary>
@@ -117,11 +118,8 @@ create table posts (
 ```
 
 ```sql (sql/posts-by-ids.sql)
-/*
-  @name listPostsByIds
-  @param ids -> (...)
-*/
-select id, slug from posts where id in :ids order by id;
+/** @name listPostsByIds */
+select id, slug from posts where id in (:ids:list) order by id;
 ```
 
 </details>
@@ -176,7 +174,7 @@ export type PostsRow = {
 
 </details>
 
-## expands object parameters into picked fields
+## types object field params with dot paths
 
 <details data-outputs="sql/.generated/**/*.ts,.sqlfu/query-catalog.json">
 <summary>input</summary>
@@ -190,11 +188,8 @@ create table posts (
 ```
 
 ```sql (sql/insert-post.sql)
-/*
-  @name insertPost
-  @param post -> (slug, title)
-*/
-insert into posts (slug, title) values :post returning id, slug, title;
+/** @name insertPost */
+insert into posts (slug, title) values (:post.slug, :post.title) returning id, slug, title;
 ```
 
 </details>
@@ -248,7 +243,7 @@ export type PostsRow = {
 
 </details>
 
-## expands object arrays into row tuples
+## expands tupleList params into row tuples
 
 <details data-outputs="sql/.generated/**/*.ts,.sqlfu/query-catalog.json">
 <summary>input</summary>
@@ -262,11 +257,8 @@ create table posts (
 ```
 
 ```sql (sql/insert-posts.sql)
-/*
-  @name insertPosts
-  @param posts -> ((slug, title)...)
-*/
-insert into posts (slug, title) values :posts returning id, slug, title;
+/** @name insertPosts */
+insert into posts (slug, title) values :posts:tupleList(slug, title) returning id, slug, title;
 ```
 
 </details>
@@ -351,11 +343,8 @@ export default {
 ```
 
 ```sql (sql/posts-by-ids.sql)
-/*
-  @name listPostsByIds
-  @param ids -> (...)
-*/
-select id, slug from posts where id in :ids order by id;
+/** @name listPostsByIds */
+select id, slug from posts where id in (:ids:list) order by id;
 ```
 
 </details>
@@ -417,5 +406,85 @@ export type PostsRow = {
 	slug: string;
 };
 ```
+
+</details>
+
+## rejects nested object parameter paths
+
+<details>
+<summary>input</summary>
+
+```sql (definitions.sql)
+create table posts (
+  id integer primary key,
+  slug text not null
+);
+```
+
+```sql (sql/find-post.sql)
+/** @name findPost */
+select id, slug from posts where slug = :post.identity.slug;
+```
+
+</details>
+
+<details>
+<summary>error</summary>
+
+Nested parameter paths are not supported yet: :post\.identity\.slug
+
+</details>
+
+## rejects repeated runtime-expanded params
+
+<details>
+<summary>input</summary>
+
+```sql (definitions.sql)
+create table posts (
+  id integer primary key,
+  parent_id integer
+);
+```
+
+```sql (sql/list-posts.sql)
+/** @name listPosts */
+select id from posts where id in (:ids:list) or parent_id in (:ids:list);
+```
+
+</details>
+
+<details>
+<summary>error</summary>
+
+Runtime-expanded parameter "ids" can only appear once: :ids:list
+
+</details>
+
+## rejects comment-level parameter expansion metadata
+
+<details>
+<summary>input</summary>
+
+```sql (definitions.sql)
+create table posts (
+  id integer primary key
+);
+```
+
+```sql (sql/list-posts.sql)
+/*
+  @name listPosts
+  @param ids -> (...)
+*/
+select id from posts where id in (:ids);
+```
+
+</details>
+
+<details>
+<summary>error</summary>
+
+Query annotations only support @name; use inline parameter modifiers such as :ids:list
 
 </details>

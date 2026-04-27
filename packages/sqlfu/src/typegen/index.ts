@@ -271,6 +271,7 @@ type GeneratedField = {
   notNull: boolean;
   optional?: boolean;
   objectFields?: GeneratedField[];
+  driverObjectFields?: GeneratedField[];
 };
 
 type GeneratedQueryDescriptor = {
@@ -314,7 +315,7 @@ type QuerySource = {
   sqlContent: string;
   /** full source file contents, preserved for UI display. */
   sqlFileContent: string;
-  /** SQL passed to the analyzer after expanding annotated params into representative placeholders. */
+  /** SQL passed to the analyzer after expanding inline modifiers into representative placeholders. */
   analysisSqlContent: string;
   parameterExpansions: ParameterExpansion[];
 };
@@ -325,9 +326,10 @@ type ParameterExpansion =
       name: string;
     }
   | {
-      kind: 'object';
+      kind: 'object-fields';
       name: string;
       fields: string[];
+      driverFields: string[];
     }
   | {
       kind: 'object-array';
@@ -542,6 +544,7 @@ async function loadQueryDocuments(queriesDir: string): Promise<QueryDocument[]> 
 function splitQueryDocument(queryFile: QueryFile): QuerySource[] {
   const annotations = parseQueryAnnotations(queryFile.sqlContent);
   if (annotations.length === 0) {
+    const parameterExpansions = parseInlineParameterExpansions(queryFile.sqlContent);
     return [
       {
         sqlPath: queryFile.sqlPath,
@@ -550,8 +553,8 @@ function splitQueryDocument(queryFile: QueryFile): QuerySource[] {
         functionName: toCamelCase(queryFile.relativePath),
         sqlContent: queryFile.sqlContent,
         sqlFileContent: queryFile.sqlContent,
-        analysisSqlContent: queryFile.sqlContent,
-        parameterExpansions: [],
+        analysisSqlContent: applyParameterExpansionsForAnalysis(queryFile.sqlContent, parameterExpansions),
+        parameterExpansions,
       },
     ];
   }
@@ -570,6 +573,7 @@ function splitQueryDocument(queryFile: QueryFile): QuerySource[] {
       throw new Error(`${queryFile.sqlPath} @name ${annotation.rawName} is not followed by a SQL statement`);
     }
 
+    const parameterExpansions = parseInlineParameterExpansions(sqlContent);
     return {
       sqlPath: `${queryFile.sqlPath}#${annotation.functionName}`,
       sourceSqlPath: queryFile.sqlPath,
@@ -577,8 +581,8 @@ function splitQueryDocument(queryFile: QueryFile): QuerySource[] {
       functionName: annotation.functionName,
       sqlContent,
       sqlFileContent: queryFile.sqlContent,
-      analysisSqlContent: applyParameterExpansionsForAnalysis(sqlContent, annotation.parameterExpansions),
-      parameterExpansions: annotation.parameterExpansions,
+      analysisSqlContent: applyParameterExpansionsForAnalysis(sqlContent, parameterExpansions),
+      parameterExpansions,
     };
   });
 }
@@ -588,7 +592,6 @@ type QueryAnnotation = {
   commentEnd: number;
   rawName: string;
   functionName: string;
-  parameterExpansions: ParameterExpansion[];
 };
 
 function parseQueryAnnotations(sqlContent: string): QueryAnnotation[] {
@@ -603,16 +606,17 @@ function parseQueryAnnotations(sqlContent: string): QueryAnnotation[] {
     if (!nameMatch) {
       throw new Error('Query annotation is missing a valid @name tag');
     }
+    if (/@param\b/.test(body)) {
+      throw new Error('Query annotations only support @name; use inline parameter modifiers such as :ids:list');
+    }
 
     const rawName = nameMatch[1]!;
     const functionName = functionNameFromAnnotation(rawName);
-    const parameterExpansions = parseParameterExpansions(body);
     annotations.push({
       commentStart: match.index!,
       commentEnd: match.index! + comment.length,
       rawName,
       functionName,
-      parameterExpansions,
     });
   }
   return annotations;
@@ -624,47 +628,6 @@ function functionNameFromAnnotation(rawName: string): string {
     throw new Error(`Query annotation @name ${rawName} does not produce a valid TypeScript identifier`);
   }
   return candidate;
-}
-
-function parseParameterExpansions(annotationBody: string): ParameterExpansion[] {
-  const expansions: ParameterExpansion[] = [];
-  const paramPattern = /@param\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*->\s*([^\n\r*]+)/g;
-  for (const match of annotationBody.matchAll(paramPattern)) {
-    const name = match[1]!;
-    const rawExpansion = match[2]!.trim();
-    const scalarArrayMatch = rawExpansion.match(/^\(\s*\.\.\.\s*\)$/);
-    if (scalarArrayMatch) {
-      expansions.push({kind: 'scalar-array', name});
-      continue;
-    }
-
-    const objectArrayMatch = rawExpansion.match(/^\(\(\s*([A-Za-z_$][A-Za-z0-9_$]*(?:\s*,\s*[A-Za-z_$][A-Za-z0-9_$]*)*)\s*\)\s*\.\.\.\)$/);
-    if (objectArrayMatch) {
-      expansions.push({
-        kind: 'object-array',
-        name,
-        fields: parseExpansionFields(objectArrayMatch[1]!),
-      });
-      continue;
-    }
-
-    const objectMatch = rawExpansion.match(/^\(\s*([A-Za-z_$][A-Za-z0-9_$]*(?:\s*,\s*[A-Za-z_$][A-Za-z0-9_$]*)*)\s*\)$/);
-    if (objectMatch) {
-      expansions.push({
-        kind: 'object',
-        name,
-        fields: parseExpansionFields(objectMatch[1]!),
-      });
-      continue;
-    }
-
-    throw new Error(`Unsupported @param expansion for ${name}: ${rawExpansion}`);
-  }
-  return expansions;
-}
-
-function parseExpansionFields(rawFields: string): string[] {
-  return rawFields.split(',').map((field) => field.trim()).filter(Boolean);
 }
 
 function hasExecutableSql(sql: string): boolean {
@@ -695,11 +658,20 @@ function applyParameterExpansionsForAnalysis(sql: string, expansions: ParameterE
   if (expansions.length === 0) return sql;
   const expansionMap = new Map(expansions.map((expansion) => [expansion.name, expansion]));
   return replaceNamedParameters(sql, (reference) => {
+    if (reference.path.length > 0) {
+      return `:${expandedFieldName(reference.name, reference.path[0]!)}`;
+    }
+
     const expansion = expansionMap.get(reference.name);
     if (!expansion) return reference.raw;
 
     if (expansion.kind === 'scalar-array') {
-      return reference.wrappedInParens ? reference.raw : `(${reference.raw})`;
+      const placeholder = `:${reference.name}`;
+      return reference.wrappedInParens ? placeholder : `(${placeholder})`;
+    }
+
+    if (expansion.kind === 'object-fields') {
+      return reference.raw;
     }
 
     const replacement = expansion.fields.map((field) => `:${expandedFieldName(expansion.name, field)}`).join(', ');
@@ -711,10 +683,21 @@ function applyParameterExpansionsForAnalysis(sql: string, expansions: ParameterE
 type NamedParameterReference = {
   raw: string;
   name: string;
+  path: string[];
+  modifier?: NamedParameterModifier;
   start: number;
   end: number;
   wrappedInParens: boolean;
 };
+
+type NamedParameterModifier =
+  | {
+      kind: 'list';
+    }
+  | {
+      kind: 'tupleList';
+      fields: string[];
+    };
 
 function replaceNamedParameters(
   sql: string,
@@ -782,23 +765,194 @@ function findNamedParameterReferences(sql: string): NamedParameterReference[] {
     }
 
     if (char !== ':') continue;
+    if (next === ':') {
+      index += 1;
+      continue;
+    }
+
     const match = sql.slice(index).match(/^:([A-Za-z_$][A-Za-z0-9_$]*)/);
     if (!match) continue;
 
-    const raw = match[0]!;
     const start = index;
-    const end = index + raw.length;
+    let cursor = index + match[0]!.length;
+    const referencePath: string[] = [];
+    while (sql[cursor] === '.') {
+      const fieldMatch = sql.slice(cursor).match(/^\.([A-Za-z_$][A-Za-z0-9_$]*)/);
+      if (!fieldMatch) break;
+      referencePath.push(fieldMatch[1]!);
+      cursor += fieldMatch[0]!.length;
+    }
+
+    const modifier = parseInlineParameterModifier(sql, cursor);
+    if (modifier) {
+      cursor = modifier.end;
+    }
+
+    const raw = sql.slice(start, cursor);
     references.push({
       raw,
       name: match[1]!,
+      path: referencePath,
+      modifier: modifier?.modifier,
       start,
-      end,
-      wrappedInParens: isWrappedInParens(sql, start, end),
+      end: cursor,
+      wrappedInParens: isWrappedInParens(sql, start, cursor),
     });
-    index = end - 1;
+    index = cursor - 1;
   }
 
   return references;
+}
+
+function parseInlineParameterModifier(
+  sql: string,
+  index: number,
+): {modifier: NamedParameterModifier; end: number} | undefined {
+  if (sql[index] !== ':' || sql[index + 1] === ':') return undefined;
+
+  if (hasExactModifierName(sql, index, ':list')) {
+    return {
+      modifier: {kind: 'list'},
+      end: index + ':list'.length,
+    };
+  }
+
+  if (!sql.startsWith(':tupleList', index)) {
+    const match = sql.slice(index).match(/^:([A-Za-z_$][A-Za-z0-9_$]*)/);
+    throw new Error(`Unsupported parameter modifier: ${match ? match[0] : sql.slice(index, index + 1)}`);
+  }
+  const openParen = index + ':tupleList'.length;
+  if (sql[openParen] !== '(') {
+    throw new Error('Parameter modifier :tupleList must be followed by a field list');
+  }
+  const closeParen = sql.indexOf(')', openParen + 1);
+  if (closeParen === -1) {
+    throw new Error('Parameter modifier :tupleList is missing a closing ")"');
+  }
+  return {
+    modifier: {
+      kind: 'tupleList',
+      fields: parseExpansionFields(sql.slice(openParen + 1, closeParen), ':tupleList'),
+    },
+    end: closeParen + 1,
+  };
+}
+
+function hasExactModifierName(sql: string, index: number, name: string): boolean {
+  if (!sql.startsWith(name, index)) return false;
+  const next = sql[index + name.length];
+  return next === undefined || !/[A-Za-z0-9_$]/.test(next);
+}
+
+function parseInlineParameterExpansions(sql: string): ParameterExpansion[] {
+  const expansions = new Map<string, ParameterExpansion>();
+  const runtimeExpansionCounts = new Map<string, number>();
+  const references = findNamedParameterReferences(sql);
+
+  for (const reference of references) {
+    if (reference.path.length > 1) {
+      throw new Error(`Nested parameter paths are not supported yet: ${reference.raw}`);
+    }
+
+    if (reference.modifier) {
+      if (reference.path.length > 0) {
+        throw new Error(`Parameter modifiers are only supported on top-level params: ${reference.raw}`);
+      }
+      if (reference.modifier.kind === 'list') {
+        addParameterExpansion(expansions, {kind: 'scalar-array', name: reference.name});
+        incrementRuntimeExpansionCount(runtimeExpansionCounts, reference.name, reference.raw);
+        continue;
+      }
+      addParameterExpansion(expansions, {
+        kind: 'object-array',
+        name: reference.name,
+        fields: reference.modifier.fields,
+      });
+      incrementRuntimeExpansionCount(runtimeExpansionCounts, reference.name, reference.raw);
+      continue;
+    }
+
+    if (reference.path.length === 1) {
+      const fieldName = reference.path[0]!;
+      addParameterExpansion(expansions, {
+        kind: 'object-fields',
+        name: reference.name,
+        fields: [fieldName],
+        driverFields: [fieldName],
+      });
+    }
+  }
+
+  for (const reference of references) {
+    if (reference.modifier || reference.path.length > 0) continue;
+    const expansion = expansions.get(reference.name);
+    if (expansion) {
+      throw new Error(
+        `Parameter ${JSON.stringify(reference.name)} cannot be used both as ${reference.raw} and ${expansion.kind}`,
+      );
+    }
+  }
+
+  return Array.from(expansions.values());
+}
+
+function incrementRuntimeExpansionCount(counts: Map<string, number>, name: string, rawReference: string): void {
+  const count = (counts.get(name) || 0) + 1;
+  counts.set(name, count);
+  if (count > 1) {
+    throw new Error(`Runtime-expanded parameter ${JSON.stringify(name)} can only appear once: ${rawReference}`);
+  }
+}
+
+function addParameterExpansion(expansions: Map<string, ParameterExpansion>, expansion: ParameterExpansion): void {
+  const existing = expansions.get(expansion.name);
+  if (!existing) {
+    expansions.set(expansion.name, expansion);
+    return;
+  }
+
+  if (existing.kind !== expansion.kind) {
+    throw new Error(
+      `Parameter ${JSON.stringify(expansion.name)} cannot use both ${existing.kind} and ${expansion.kind}`,
+    );
+  }
+
+  if (existing.kind === 'object-fields' && expansion.kind === 'object-fields') {
+    for (const fieldName of expansion.fields) {
+      if (!existing.fields.includes(fieldName)) {
+        existing.fields.push(fieldName);
+      }
+    }
+    existing.driverFields.push(...expansion.driverFields);
+    return;
+  }
+
+  if (existing.kind === 'object-array' && expansion.kind === 'object-array') {
+    if (existing.fields.join('\0') !== expansion.fields.join('\0')) {
+      throw new Error(`Parameter ${JSON.stringify(expansion.name)} cannot use multiple tupleList field sets`);
+    }
+    return;
+  }
+}
+
+function parseExpansionFields(rawFields: string, syntaxName: string): string[] {
+  const fields = rawFields
+    .split(',')
+    .map((field) => field.trim())
+    .filter(Boolean);
+  if (fields.length === 0) {
+    throw new Error(`${syntaxName} needs at least one field`);
+  }
+  for (const field of fields) {
+    if (!/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(field)) {
+      throw new Error(`${syntaxName} field ${JSON.stringify(field)} is not a valid identifier`);
+    }
+  }
+  const duplicates = fields.filter((field, index) => fields.indexOf(field) !== index);
+  if (duplicates.length > 0) {
+    throw new Error(`${syntaxName} cannot repeat field ${JSON.stringify(duplicates[0])}`);
+  }
+  return fields;
 }
 
 function isWrappedInParens(sql: string, start: number, end: number): boolean {
@@ -1244,6 +1398,12 @@ function renderRuntimeSqlExpression(
   let cursor = 0;
   for (const reference of findNamedParameterReferences(sql)) {
     chunks.push(escapeTemplateLiteralChunk(replaceNamedParameters(sql.slice(cursor, reference.start), () => '?')));
+    if (reference.path.length > 0) {
+      chunks.push('?');
+      cursor = reference.end;
+      continue;
+    }
+
     const expansion = expansionMap.get(reference.name);
     if (!expansion) {
       chunks.push('?');
@@ -1265,11 +1425,6 @@ function runtimeExpansionTemplateChunk(
   if (expansion.kind === 'scalar-array') {
     const placeholders = `${variableExpression}.map(() => '?').join(', ')`;
     return wrappedInParens ? '${' + placeholders + '}' : '(${' + placeholders + '})';
-  }
-
-  if (expansion.kind === 'object') {
-    const placeholders = expansion.fields.map(() => '?').join(', ');
-    return wrappedInParens ? placeholders : `(${placeholders})`;
   }
 
   const rowPlaceholders = expansion.fields.map(() => '?').join(', ');
@@ -2108,11 +2263,17 @@ function applyParameterExpansionDescriptor(
 function staticSqlForExpandedQuery(sql: string, expansions: ParameterExpansion[]): string {
   const expansionMap = new Map(expansions.map((expansion) => [expansion.name, expansion]));
   return replaceNamedParameters(sql, (reference) => {
+    if (reference.path.length > 0) return '?';
+
     const expansion = expansionMap.get(reference.name);
     if (!expansion) return '?';
 
     if (expansion.kind === 'scalar-array') {
       return reference.wrappedInParens ? '?' : '(?)';
+    }
+
+    if (expansion.kind === 'object-fields') {
+      return '?';
     }
 
     const placeholders = expansion.fields.map(() => '?').join(', ');
@@ -2131,7 +2292,7 @@ function mergeExpandedParameterFields<T extends GeneratedField & {toDriver: stri
   const emittedObjectExpansions = new Set<string>();
   for (const field of fields) {
     const childExpansion = expansions
-      .filter(isObjectParameterExpansion)
+      .filter(isObjectLikeParameterExpansion)
       .find((expansion) =>
         expansion.fields.some((fieldName) => expandedFieldName(expansion.name, fieldName) === field.name),
       );
@@ -2163,7 +2324,7 @@ function mergeExpandedParameterFields<T extends GeneratedField & {toDriver: stri
   return output;
 }
 
-function isObjectParameterExpansion(
+function isObjectLikeParameterExpansion(
   expansion: ParameterExpansion,
 ): expansion is Exclude<ParameterExpansion, {kind: 'scalar-array'}> {
   return expansion.kind !== 'scalar-array';
@@ -2188,6 +2349,20 @@ function buildObjectExpansionField<T extends GeneratedField & {toDriver: string;
       name: fieldName,
     };
   });
+  const driverObjectFields = (expansion.kind === 'object-fields' ? expansion.driverFields : expansion.fields).map(
+    (fieldName) => {
+      const field = objectFields.find((candidate) => candidate.name === fieldName);
+      if (!field) {
+        return {
+          name: fieldName,
+          tsType: 'any',
+          notNull: false,
+          optional: false,
+        };
+      }
+      return field;
+    },
+  );
   if (objectFields.length === 0) return undefined;
 
   const tsType = renderInlineObjectTsType(objectFields);
@@ -2199,6 +2374,7 @@ function buildObjectExpansionField<T extends GeneratedField & {toDriver: string;
     toDriver: expansion.name,
     isArray: expansion.kind === 'object-array',
     objectFields,
+    driverObjectFields,
   } as T;
 }
 
@@ -2283,11 +2459,15 @@ function toDriver(
   },
 ): string {
   if (param.objectFields && param.isArray) {
-    const values = param.objectFields.map((field) => toDriverValue(`item.${field.name}`, field));
+    const values = (param.driverObjectFields || param.objectFields).map((field) =>
+      toDriverValue(`item.${field.name}`, field),
+    );
     return `...${variableName}.${param.name}.flatMap((item) => [${values.join(', ')}])`;
   }
   if (param.objectFields) {
-    const values = param.objectFields.map((field) => toDriverValue(`${variableName}.${param.name}.${field.name}`, field));
+    const values = (param.driverObjectFields || param.objectFields).map((field) =>
+      toDriverValue(`${variableName}.${param.name}.${field.name}`, field),
+    );
     return values.join(', ');
   }
   if (param.tsType.endsWith('[]')) {

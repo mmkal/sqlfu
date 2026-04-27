@@ -40,13 +40,15 @@ export async function generateQueryTypes(): Promise<void> {
 export async function generateQueryTypesForConfig(config: SqlfuProjectConfig, host: SqlfuHost): Promise<void> {
   const databasePath = await materializeTypegenDatabase(config, host);
   const schema = await loadSchema(databasePath);
-  const queryFiles = await loadQueryFiles(config.queries);
+  const queryDocuments = await loadQueryDocuments(config.queries);
+  const querySources = queryDocuments.flatMap((queryDocument) => queryDocument.queries);
+  assertUniqueQueryFunctionNames(querySources);
 
   const queryAnalyses = await analyzeVendoredTypesqlQueries(
     databasePath,
-    queryFiles.map((query) => ({
+    querySources.map((query) => ({
       sqlPath: query.sqlPath,
-      sqlContent: query.sqlContent,
+      sqlContent: query.analysisSqlContent,
     })),
   );
 
@@ -54,39 +56,14 @@ export async function generateQueryTypesForConfig(config: SqlfuProjectConfig, ho
   await fs.mkdir(generatedDir, {recursive: true});
 
   await Promise.all(
-    queryFiles.map(async (queryFile) => {
-      const wrapperPath = path.join(generatedDir, `${queryFile.relativePath}.sql.ts`);
+    queryDocuments.map(async (queryDocument) => {
+      const wrapperPath = path.join(generatedDir, `${queryDocument.relativePath}.sql.ts`);
       await fs.mkdir(path.dirname(wrapperPath), {recursive: true});
 
-      const analysis = queryAnalyses.find((query) => query.sqlPath === queryFile.sqlPath);
-      if (!analysis) {
-        throw new Error(`Missing vendored TypeSQL analysis for ${queryFile.sqlPath}`);
-      }
-
-      if (!analysis.ok) {
-        await fs.writeFile(wrapperPath, `//Invalid SQL\nexport {};\n`);
-        return;
-      }
-
-      // DDL / connection-control statements (create/drop/alter/pragma/vacuum/begin/...) get a
-      // trivial wrapper that just runs the SQL — no params, no result columns. The vendored
-      // typesql analyzer tags these as `queryType: 'Ddl'`; see the divergence note in
-      // src/vendor/typesql/CLAUDE.md.
-      if (analysis.descriptor.queryType === 'Ddl') {
-        await fs.writeFile(
-          wrapperPath,
-          renderDdlWrapper({
-            relativePath: queryFile.relativePath,
-            sql: queryFile.sqlContent,
-            sync: config.generate.sync,
-          }),
-        );
-        return;
-      }
-
-      const contents = renderQueryWrapper({
-        relativePath: queryFile.relativePath,
-        descriptor: refineDescriptor(analysis.descriptor, queryFile.sqlContent, schema),
+      const contents = renderQueryDocument({
+        queryDocument,
+        queryAnalyses,
+        schema,
         validator: config.generate.validator,
         prettyErrors: config.generate.prettyErrors,
         sync: config.generate.sync,
@@ -96,29 +73,130 @@ export async function generateQueryTypesForConfig(config: SqlfuProjectConfig, ho
   );
 
   await writeTablesFile(generatedDir, schema);
-  await writeGeneratedBarrel(generatedDir, queryFiles, config.generate.importExtension);
-  await writeQueryCatalog(config, queryFiles, queryAnalyses, schema);
+  await writeGeneratedBarrel(generatedDir, queryDocuments, config.generate.importExtension);
+  await writeQueryCatalog(config, querySources, queryAnalyses, schema);
   if (config.migrations) {
     await writeMigrationsBundle(config);
   }
 }
 
-function renderDdlWrapper(input: {relativePath: string; sql: string; sync: boolean}): string {
-  const functionName = toCamelCase(input.relativePath);
+function renderQueryDocument(input: {
+  queryDocument: QueryDocument;
+  queryAnalyses: Awaited<ReturnType<typeof analyzeVendoredTypesqlQueries>>;
+  schema: ReadonlyMap<string, RelationInfo>;
+  validator: SqlfuValidator | null;
+  prettyErrors: boolean;
+  sync: boolean;
+}): string {
+  const renderedQueries = input.queryDocument.queries.map((querySource) => {
+    const analysis = input.queryAnalyses.find((query) => query.sqlPath === querySource.sqlPath);
+    if (!analysis) {
+      throw new Error(`Missing vendored TypeSQL analysis for ${querySource.sqlPath}`);
+    }
+
+    if (!analysis.ok) {
+      return `//Invalid SQL\nexport {};\n`;
+    }
+
+    const useUniqueLocals = input.queryDocument.queries.length > 1;
+    const localNames = useUniqueLocals
+      ? {
+          sql: `${querySource.functionName}Sql`,
+          query: `${querySource.functionName}Query`,
+          dataSchema: `${querySource.functionName}Data`,
+          paramsSchema: `${querySource.functionName}Params`,
+          resultSchema: `${querySource.functionName}Result`,
+        }
+      : undefined;
+
+    // DDL / connection-control statements (create/drop/alter/pragma/vacuum/begin/...) get a
+    // trivial wrapper that just runs the SQL — no params, no result columns. The vendored
+    // typesql analyzer tags these as `queryType: 'Ddl'`; see the divergence note in
+    // src/vendor/typesql/CLAUDE.md.
+    if (analysis.descriptor.queryType === 'Ddl') {
+      return renderDdlWrapper({
+        functionName: querySource.functionName,
+        sql: querySource.sqlContent,
+        sync: input.sync,
+        localNames,
+      });
+    }
+
+    const {descriptor, parameterExpansions} = prepareQueryDescriptor({
+      descriptor: refineDescriptor(analysis.descriptor, querySource.analysisSqlContent, input.schema),
+      explicitParameterExpansions: querySource.parameterExpansions,
+      sourceSql: querySource.sqlContent,
+    });
+    return renderQueryWrapper({
+      functionName: querySource.functionName,
+      sourceSql: querySource.sqlContent,
+      descriptor,
+      parameterExpansions,
+      validator: input.validator,
+      prettyErrors: input.prettyErrors,
+      sync: input.sync,
+      localNames,
+    });
+  });
+
+  if (input.queryDocument.queries.length === 1) {
+    return renderedQueries[0]!;
+  }
+
+  return combineRenderedQueryModules(renderedQueries);
+}
+
+function combineRenderedQueryModules(renderedQueries: string[]): string {
+  const imports = new Set<string>();
+  const bodies: string[] = [];
+
+  for (const renderedQuery of renderedQueries) {
+    const lines = renderedQuery.trimEnd().split('\n');
+    let firstBodyLine = 0;
+    while (firstBodyLine < lines.length && lines[firstBodyLine]!.startsWith('import ')) {
+      imports.add(lines[firstBodyLine]!);
+      firstBodyLine += 1;
+    }
+    if (lines[firstBodyLine] === '') {
+      firstBodyLine += 1;
+    }
+    bodies.push(lines.slice(firstBodyLine).join('\n'));
+  }
+
+  return [...imports].sort().join('\n') + '\n\n' + bodies.join('\n\n') + '\n';
+}
+
+type LocalNames = {
+  sql: string;
+  query: string;
+  dataSchema: string;
+  paramsSchema: string;
+  resultSchema: string;
+};
+
+function renderDdlWrapper(input: {
+  functionName: string;
+  sql: string;
+  sync: boolean;
+  localNames?: LocalNames;
+}): string {
+  const functionName = input.functionName;
+  const sqlName = input.localNames?.sql || 'sql';
+  const queryName = input.localNames?.query || 'query';
   const clientType = input.sync ? 'SyncClient' : 'Client';
   const maybeAsync = input.sync ? '' : 'async ';
 
   return [
     `import type {${clientType}} from 'sqlfu';`,
     ``,
-    ...renderSqlConstant(input.sql),
-    `const query = { sql, args: [], name: ${JSON.stringify(functionName)} };`,
+    ...renderSqlConstant(input.sql, sqlName),
+    `const ${queryName} = { ${objectProperty('sql', sqlName)}, args: [], name: ${JSON.stringify(functionName)} };`,
     ``,
     `export const ${functionName} = Object.assign(`,
     `\t${maybeAsync}function ${functionName}(client: ${clientType}) {`,
-    `\t\treturn client.run(query);`,
+    `\t\treturn client.run(${queryName});`,
     `\t},`,
-    `\t{ sql, query },`,
+    `\t{ ${objectProperty('sql', sqlName)}, ${objectProperty('query', queryName)} },`,
     `);`,
     ``,
   ].join('\n');
@@ -130,14 +208,14 @@ function renderDdlWrapper(input: {relativePath: string; sql: string; sync: boole
  * otherwise splits across three lines with the SQL body on its own line and a trailing
  * `.trim()` so the runtime value has no leading/trailing whitespace from the indentation.
  */
-function renderSqlConstant(sql: string): string[] {
-  const trimmed = normalizeSqlForTemplate(sql).join('\n').trim();
-  const oneLiner = `const sql = \`${trimmed}\`;`;
+function renderSqlConstant(sql: string, variableName: string = 'sql'): string[] {
+  const trimmed = escapeTemplateLiteralChunk(normalizeSqlForTemplate(sql).join('\n').trim());
+  const oneLiner = `const ${variableName} = \`${trimmed}\`;`;
   if (!trimmed.includes('\n') && oneLiner.length <= 80) {
     return [oneLiner];
   }
   return [
-    `const sql = \``,
+    `const ${variableName} = \``,
     trimmed,
     `\`.trim();`,
   ];
@@ -192,6 +270,10 @@ type GeneratedField = {
   tsType: string;
   notNull: boolean;
   optional?: boolean;
+  objectFields?: GeneratedField[];
+  driverObjectFields?: GeneratedField[];
+  isArray?: boolean;
+  acceptsSingleOrArray?: boolean;
 };
 
 type GeneratedQueryDescriptor = {
@@ -217,6 +299,47 @@ type QueryFile = {
   relativePath: string;
   sqlContent: string;
 };
+
+type QueryDocument = QueryFile & {
+  queries: QuerySource[];
+};
+
+type QuerySource = {
+  /** unique path passed through the analyzer; can include an annotation suffix for multi-query files. */
+  sqlPath: string;
+  /** absolute path to the source .sql file. */
+  sourceSqlPath: string;
+  /** query id for catalogs and UI consumers. */
+  id: string;
+  /** generated export name. */
+  functionName: string;
+  /** the SQL statement without the annotation block. */
+  sqlContent: string;
+  /** full source file contents, preserved for UI display. */
+  sqlFileContent: string;
+  /** SQL passed to the analyzer after expanding object-shaped params into representative placeholders. */
+  analysisSqlContent: string;
+  parameterExpansions: ParameterExpansion[];
+};
+
+type ParameterExpansion =
+  | {
+      kind: 'scalar-array';
+      name: string;
+    }
+  | {
+      kind: 'object-fields';
+      name: string;
+      fields: string[];
+      driverFields: string[];
+    }
+  | {
+      kind: 'object-array';
+      name: string;
+      fields: string[];
+      sqlShape: 'values' | 'row-list';
+      acceptsSingleOrArray: boolean;
+    };
 
 async function materializeTypegenDatabase(config: SqlfuProjectConfig, host: SqlfuHost) {
   const tempDbPath = path.join(config.projectRoot, '.sqlfu', 'typegen.db');
@@ -376,8 +499,8 @@ async function openMainDevDatabase(dbPath: string): Promise<DisposableClient> {
   }
 }
 
-async function loadQueryFiles(queriesDir: string): Promise<QueryFile[]> {
-  const files: QueryFile[] = [];
+async function loadQueryDocuments(queriesDir: string): Promise<QueryDocument[]> {
+  const files: QueryDocument[] = [];
 
   async function walk(currentDir: string, relativePrefix: string): Promise<void> {
     let entries;
@@ -402,10 +525,17 @@ async function loadQueryFiles(queriesDir: string): Promise<QueryFile[]> {
       }
 
       if (entry.isFile() && entry.name.endsWith('.sql')) {
+        const sqlContent = await fs.readFile(childPath, 'utf8');
+        const relativePath = childRelative.slice(0, -'.sql'.length);
         files.push({
           sqlPath: childPath,
-          relativePath: childRelative.slice(0, -'.sql'.length),
-          sqlContent: await fs.readFile(childPath, 'utf8'),
+          relativePath,
+          sqlContent,
+          queries: splitQueryDocument({
+            sqlPath: childPath,
+            relativePath,
+            sqlContent,
+          }),
         });
       }
     }
@@ -413,6 +543,560 @@ async function loadQueryFiles(queriesDir: string): Promise<QueryFile[]> {
 
   await walk(queriesDir, '');
   return files;
+}
+
+function splitQueryDocument(queryFile: QueryFile): QuerySource[] {
+  const annotations = parseQueryAnnotations(queryFile.sqlContent);
+  if (annotations.length === 0) {
+    const parameterExpansions = parseInlineParameterExpansions(queryFile.sqlContent);
+    return [
+      {
+        sqlPath: queryFile.sqlPath,
+        sourceSqlPath: queryFile.sqlPath,
+        id: queryFile.relativePath,
+        functionName: toCamelCase(queryFile.relativePath),
+        sqlContent: queryFile.sqlContent,
+        sqlFileContent: queryFile.sqlContent,
+        analysisSqlContent: prepareSqlForAnalysis(queryFile.sqlContent, parameterExpansions),
+        parameterExpansions,
+      },
+    ];
+  }
+
+  const leadingContent = queryFile.sqlContent.slice(0, annotations[0]!.commentStart);
+  if (hasExecutableSql(leadingContent)) {
+    throw new Error(`${queryFile.sqlPath} has SQL before its first @name annotation`);
+  }
+
+  return annotations.map((annotation, index) => {
+    const nextAnnotation = annotations[index + 1];
+    const sqlContent = queryFile.sqlContent
+      .slice(annotation.commentEnd, nextAnnotation ? nextAnnotation.commentStart : queryFile.sqlContent.length)
+      .trim();
+    if (!sqlContent) {
+      throw new Error(`${queryFile.sqlPath} @name ${annotation.rawName} is not followed by a SQL statement`);
+    }
+
+    const parameterExpansions = parseInlineParameterExpansions(sqlContent);
+    return {
+      sqlPath: `${queryFile.sqlPath}#${annotation.functionName}`,
+      sourceSqlPath: queryFile.sqlPath,
+      id: `${queryFile.relativePath}#${annotation.functionName}`,
+      functionName: annotation.functionName,
+      sqlContent,
+      sqlFileContent: queryFile.sqlContent,
+      analysisSqlContent: prepareSqlForAnalysis(sqlContent, parameterExpansions),
+      parameterExpansions,
+    };
+  });
+}
+
+function prepareSqlForAnalysis(sql: string, parameterExpansions: ParameterExpansion[]): string {
+  return stripSqlComments(applyParameterExpansionsForAnalysis(sql, parameterExpansions));
+}
+
+type QueryAnnotation = {
+  commentStart: number;
+  commentEnd: number;
+  rawName: string;
+  functionName: string;
+};
+
+function parseQueryAnnotations(sqlContent: string): QueryAnnotation[] {
+  const annotations: QueryAnnotation[] = [];
+  for (const blockComment of findSqlIgnoredRanges(sqlContent).filter((range) => range.kind === 'block-comment')) {
+    const comment = sqlContent.slice(blockComment.start, blockComment.end);
+    if (!comment.includes('@name')) continue;
+
+    const body = comment.replace(/^\/\*+/, '').replace(/\*+\/$/, '');
+    const nameMatch = body.match(/@name\s+([A-Za-z_$][A-Za-z0-9_$-]*)/);
+    if (!nameMatch) {
+      throw new Error('Query annotation is missing a valid @name tag');
+    }
+    if (/@param\b/.test(body)) {
+      throw new Error('Query annotations only support @name; use IN params such as (:ids) for scalar lists');
+    }
+
+    const rawName = nameMatch[1]!;
+    const functionName = functionNameFromAnnotation(rawName);
+    annotations.push({
+      commentStart: blockComment.start,
+      commentEnd: blockComment.end,
+      rawName,
+      functionName,
+    });
+  }
+  return annotations;
+}
+
+function functionNameFromAnnotation(rawName: string): string {
+  const candidate = /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(rawName) ? rawName : toCamelCase(rawName);
+  if (!/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(candidate)) {
+    throw new Error(`Query annotation @name ${rawName} does not produce a valid TypeScript identifier`);
+  }
+  return candidate;
+}
+
+function hasExecutableSql(sql: string): boolean {
+  return stripSqlComments(sql).trim().length > 0;
+}
+
+function stripSqlComments(sql: string): string {
+  const chars = sql.split('');
+  for (const comment of findSqlIgnoredRanges(sql).filter((range) => range.kind !== 'string')) {
+    for (let index = comment.start; index < comment.end; index += 1) {
+      if (chars[index] !== '\n' && chars[index] !== '\r') {
+        chars[index] = ' ';
+      }
+    }
+  }
+  return chars.join('');
+}
+
+function assertUniqueQueryFunctionNames(querySources: QuerySource[]): void {
+  const seen = new Map<string, QuerySource>();
+  for (const querySource of querySources) {
+    const existing = seen.get(querySource.functionName);
+    if (!existing) {
+      seen.set(querySource.functionName, querySource);
+      continue;
+    }
+    throw new Error(
+      `Duplicate generated query name ${querySource.functionName} in ${existing.sourceSqlPath} and ${querySource.sourceSqlPath}`,
+    );
+  }
+}
+
+function applyParameterExpansionsForAnalysis(sql: string, expansions: ParameterExpansion[]): string {
+  if (expansions.length === 0) return sql;
+  sql = rewriteRowListExpansionsForAnalysis(sql, expansions);
+  const expansionMap = new Map(expansions.map((expansion) => [expansion.name, expansion]));
+  return replaceNamedParameters(sql, (reference) => {
+    if (reference.path.length > 0) {
+      return `:${expandedFieldName(reference.name, reference.path[0]!)}`;
+    }
+
+    const expansion = expansionMap.get(reference.name);
+    if (!expansion) return reference.raw;
+
+    if (expansion.kind === 'scalar-array') {
+      const placeholder = `:${reference.name}`;
+      return reference.wrappedInParens ? placeholder : `(${placeholder})`;
+    }
+
+    if (expansion.kind === 'object-fields') {
+      return reference.raw;
+    }
+
+    const replacement = expansion.fields.map((field) => `:${expandedFieldName(expansion.name, field)}`).join(', ');
+    if (reference.wrappedInParens) return replacement;
+    return `(${replacement})`;
+  });
+}
+
+function rewriteRowListExpansionsForAnalysis(sql: string, expansions: ParameterExpansion[]): string {
+  let output = sql;
+  for (const expansion of expansions) {
+    if (expansion.kind !== 'object-array' || expansion.sqlShape !== 'row-list') continue;
+    const pattern = new RegExp(
+      `\\(([^()]+)\\)\\s+(?:not\\s+)?in\\s*\\(\\s*:${expansion.name}\\s*\\)`,
+      'gi',
+    );
+    output = replaceSqlPatternOutsideCommentsAndStrings(output, pattern, (match, [rawFields = '']) => {
+      const fields = parseSimpleSqlFieldList(rawFields, 'inferred row IN parameter');
+      if (fields.join('\0') !== expansion.fields.join('\0')) return match;
+      const predicates = rawFields
+        .split(',')
+        .map((field) => field.trim())
+        .map((field, index) => `${field} = :${expandedFieldName(expansion.name, fields[index]!)}`)
+        .join(' and ');
+      return `(${predicates})`;
+    });
+  }
+  return output;
+}
+
+type NamedParameterReference = {
+  raw: string;
+  name: string;
+  path: string[];
+  start: number;
+  end: number;
+  wrappedInParens: boolean;
+};
+
+function replaceNamedParameters(
+  sql: string,
+  replace: (reference: NamedParameterReference) => string,
+): string {
+  let output = '';
+  let cursor = 0;
+  for (const reference of findNamedParameterReferences(sql)) {
+    output += sql.slice(cursor, reference.start);
+    output += replace(reference);
+    cursor = reference.end;
+  }
+  return output + sql.slice(cursor);
+}
+
+function findNamedParameterReferences(sql: string): NamedParameterReference[] {
+  const references: NamedParameterReference[] = [];
+  let quote: "'" | '"' | '`' | null = null;
+  let lineComment = false;
+  let blockComment = false;
+
+  for (let index = 0; index < sql.length; index += 1) {
+    const char = sql[index]!;
+    const next = sql[index + 1];
+
+    if (lineComment) {
+      if (char === '\n' || char === '\r') lineComment = false;
+      continue;
+    }
+
+    if (blockComment) {
+      if (char === '*' && next === '/') {
+        blockComment = false;
+        index += 1;
+      }
+      continue;
+    }
+
+    if (quote) {
+      if (char === quote) {
+        if (sql[index + 1] === quote) {
+          index += 1;
+          continue;
+        }
+        quote = null;
+      }
+      continue;
+    }
+
+    if (char === '-' && next === '-') {
+      lineComment = true;
+      index += 1;
+      continue;
+    }
+
+    if (char === '/' && next === '*') {
+      blockComment = true;
+      index += 1;
+      continue;
+    }
+
+    if (char === "'" || char === '"' || char === '`') {
+      quote = char;
+      continue;
+    }
+
+    if (char !== ':') continue;
+    if (next === ':') {
+      index += 1;
+      continue;
+    }
+
+    const match = sql.slice(index).match(/^:([A-Za-z_$][A-Za-z0-9_$]*)/);
+    if (!match) continue;
+
+    const start = index;
+    let cursor = index + match[0]!.length;
+    const referencePath: string[] = [];
+    while (sql[cursor] === '.') {
+      const fieldMatch = sql.slice(cursor).match(/^\.([A-Za-z_$][A-Za-z0-9_$]*)/);
+      if (!fieldMatch) break;
+      referencePath.push(fieldMatch[1]!);
+      cursor += fieldMatch[0]!.length;
+    }
+
+    cursor = assertNoParameterModifier(sql, cursor);
+
+    const raw = sql.slice(start, cursor);
+    references.push({
+      raw,
+      name: match[1]!,
+      path: referencePath,
+      start,
+      end: cursor,
+      wrappedInParens: isWrappedInParens(sql, start, cursor),
+    });
+    index = cursor - 1;
+  }
+
+  return references;
+}
+
+function assertNoParameterModifier(sql: string, index: number): number {
+  if (sql[index] !== ':' || sql[index + 1] === ':') return index;
+
+  const match = sql.slice(index).match(/^:([A-Za-z_$][A-Za-z0-9_$]*)/);
+  throw new Error(`Unsupported parameter modifier: ${match ? match[0] : sql.slice(index, index + 1)}`);
+}
+
+function parseInlineParameterExpansions(sql: string): ParameterExpansion[] {
+  const expansions = new Map<string, ParameterExpansion>();
+  const references = findNamedParameterReferences(sql);
+
+  for (const expansion of inferInsertValuesParameterExpansions(sql)) {
+    addParameterExpansion(expansions, expansion);
+  }
+  for (const expansion of inferRowInParameterExpansions(sql)) {
+    addParameterExpansion(expansions, expansion);
+  }
+
+  for (const reference of references) {
+    if (reference.path.length > 1) {
+      throw new Error(`Nested parameter paths are not supported yet: ${reference.raw}`);
+    }
+
+    if (reference.path.length === 1) {
+      const fieldName = reference.path[0]!;
+      addParameterExpansion(expansions, {
+        kind: 'object-fields',
+        name: reference.name,
+        fields: [fieldName],
+        driverFields: [fieldName],
+      });
+    }
+  }
+
+  for (const reference of references) {
+    if (reference.path.length > 0) continue;
+    const expansion = expansions.get(reference.name);
+    if (expansion?.kind === 'object-fields') {
+      throw new Error(
+        `Parameter ${JSON.stringify(reference.name)} cannot be used both as ${reference.raw} and ${expansion.kind}`,
+      );
+    }
+  }
+
+  return Array.from(expansions.values());
+}
+
+function inferInsertValuesParameterExpansions(sql: string): ParameterExpansion[] {
+  const expansions: ParameterExpansion[] = [];
+  const searchableSql = maskSqlCommentsAndStrings(sql);
+  const identifier = `[A-Za-z_$][A-Za-z0-9_$]*`;
+  const tableName = `${identifier}(?:\\s*\\.\\s*${identifier})?`;
+  const pattern = new RegExp(
+    `\\binsert\\s+(?:or\\s+${identifier}\\s+)?into\\s+${tableName}\\s*\\(([^)]*)\\)\\s+values\\s+:(${identifier})\\b`,
+    'gi',
+  );
+
+  for (const match of searchableSql.matchAll(pattern)) {
+    expansions.push({
+      kind: 'object-array',
+      name: match[2]!,
+      fields: parseSimpleSqlFieldList(match[1]!, 'inferred INSERT values parameter'),
+      sqlShape: 'values',
+      acceptsSingleOrArray: true,
+    });
+  }
+  return expansions;
+}
+
+function inferRowInParameterExpansions(sql: string): ParameterExpansion[] {
+  const expansions: ParameterExpansion[] = [];
+  const searchableSql = maskSqlCommentsAndStrings(sql);
+  const pattern = /\(([^()]+)\)\s+(?:not\s+)?in\s*\(\s*:([A-Za-z_$][A-Za-z0-9_$]*)\s*\)/gi;
+
+  for (const match of searchableSql.matchAll(pattern)) {
+    const fields = parseSimpleSqlFieldList(match[1]!, 'inferred row IN parameter');
+    if (fields.length < 2) continue;
+    expansions.push({
+      kind: 'object-array',
+      name: match[2]!,
+      fields,
+      sqlShape: 'row-list',
+      acceptsSingleOrArray: false,
+    });
+  }
+  return expansions;
+}
+
+function parseSimpleSqlFieldList(rawFields: string, syntaxName: string): string[] {
+  const fields = rawFields.split(',').map((field) => field.trim()).filter(Boolean);
+  if (fields.length === 0) {
+    throw new Error(`${syntaxName} needs at least one field`);
+  }
+
+  const names = fields.map((field) => {
+    const match = field.match(/^(?:(?:[A-Za-z_$][A-Za-z0-9_$]*)\.)?([A-Za-z_$][A-Za-z0-9_$]*)$/);
+    if (!match) {
+      throw new Error(`${syntaxName} only supports simple column names: ${JSON.stringify(field)}`);
+    }
+    return match[1]!;
+  });
+
+  const duplicate = names.find((field, index) => names.indexOf(field) !== index);
+  if (duplicate) {
+    throw new Error(`${syntaxName} cannot infer duplicate field ${JSON.stringify(duplicate)}`);
+  }
+  return names;
+}
+
+function addParameterExpansion(expansions: Map<string, ParameterExpansion>, expansion: ParameterExpansion): void {
+  const existing = expansions.get(expansion.name);
+  if (!existing) {
+    expansions.set(expansion.name, expansion);
+    return;
+  }
+
+  if (existing.kind !== expansion.kind) {
+    throw new Error(
+      `Parameter ${JSON.stringify(expansion.name)} cannot use both ${existing.kind} and ${expansion.kind}`,
+    );
+  }
+
+  if (existing.kind === 'object-fields' && expansion.kind === 'object-fields') {
+    for (const fieldName of expansion.fields) {
+      if (!existing.fields.includes(fieldName)) {
+        existing.fields.push(fieldName);
+      }
+    }
+    existing.driverFields.push(...expansion.driverFields);
+    return;
+  }
+
+  if (existing.kind === 'object-array' && expansion.kind === 'object-array') {
+    if (
+      existing.fields.join('\0') !== expansion.fields.join('\0') ||
+      existing.sqlShape !== expansion.sqlShape ||
+      existing.acceptsSingleOrArray !== expansion.acceptsSingleOrArray
+    ) {
+      throw new Error(`Parameter ${JSON.stringify(expansion.name)} cannot use multiple inferred field sets`);
+    }
+    return;
+  }
+}
+
+function isWrappedInParens(sql: string, start: number, end: number): boolean {
+  return previousNonWhitespace(sql, start) === '(' && nextNonWhitespace(sql, end) === ')';
+}
+
+function previousNonWhitespace(sql: string, index: number): string | undefined {
+  for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
+    const char = sql[cursor]!;
+    if (!/\s/.test(char)) return char;
+  }
+  return undefined;
+}
+
+function nextNonWhitespace(sql: string, index: number): string | undefined {
+  for (let cursor = index; cursor < sql.length; cursor += 1) {
+    const char = sql[cursor]!;
+    if (!/\s/.test(char)) return char;
+  }
+  return undefined;
+}
+
+function expandedFieldName(parameterName: string, fieldName: string): string {
+  return `${parameterName}__${fieldName}`;
+}
+
+type SqlIgnoredRange = {
+  kind: 'line-comment' | 'block-comment' | 'string';
+  start: number;
+  end: number;
+};
+
+function findSqlIgnoredRanges(sql: string): SqlIgnoredRange[] {
+  const ranges: SqlIgnoredRange[] = [];
+  let quote: "'" | '"' | '`' | null = null;
+  let quoteStart = 0;
+  let lineCommentStart: number | null = null;
+  let blockCommentStart: number | null = null;
+
+  for (let index = 0; index < sql.length; index += 1) {
+    const char = sql[index]!;
+    const next = sql[index + 1];
+
+    if (lineCommentStart !== null) {
+      if (char === '\n' || char === '\r') {
+        ranges.push({kind: 'line-comment', start: lineCommentStart, end: index});
+        lineCommentStart = null;
+      }
+      continue;
+    }
+
+    if (blockCommentStart !== null) {
+      if (char === '*' && next === '/') {
+        ranges.push({kind: 'block-comment', start: blockCommentStart, end: index + 2});
+        blockCommentStart = null;
+        index += 1;
+      }
+      continue;
+    }
+
+    if (quote) {
+      if (char === quote) {
+        if (next === quote) {
+          index += 1;
+          continue;
+        }
+        ranges.push({kind: 'string', start: quoteStart, end: index + 1});
+        quote = null;
+      }
+      continue;
+    }
+
+    if (char === '-' && next === '-') {
+      lineCommentStart = index;
+      index += 1;
+      continue;
+    }
+
+    if (char === '/' && next === '*') {
+      blockCommentStart = index;
+      index += 1;
+      continue;
+    }
+
+    if (char === "'" || char === '"' || char === '`') {
+      quote = char;
+      quoteStart = index;
+    }
+  }
+
+  if (lineCommentStart !== null) {
+    ranges.push({kind: 'line-comment', start: lineCommentStart, end: sql.length});
+  }
+  if (blockCommentStart !== null) {
+    ranges.push({kind: 'block-comment', start: blockCommentStart, end: sql.length});
+  }
+  if (quote) {
+    ranges.push({kind: 'string', start: quoteStart, end: sql.length});
+  }
+
+  return ranges;
+}
+
+function maskSqlCommentsAndStrings(sql: string): string {
+  const chars = sql.split('');
+  for (const range of findSqlIgnoredRanges(sql)) {
+    for (let index = range.start; index < range.end; index += 1) {
+      chars[index] = ' ';
+    }
+  }
+  return chars.join('');
+}
+
+function replaceSqlPatternOutsideCommentsAndStrings(
+  sql: string,
+  pattern: RegExp,
+  replace: (match: string, groups: string[]) => string,
+): string {
+  const searchableSql = maskSqlCommentsAndStrings(sql);
+  let output = '';
+  let cursor = 0;
+  for (const match of searchableSql.matchAll(pattern)) {
+    const start = match.index!;
+    const end = start + match[0]!.length;
+    output += sql.slice(cursor, start);
+    output += replace(sql.slice(start, end), match.slice(1).map((group) => group || ''));
+    cursor = end;
+  }
+  return output + sql.slice(cursor);
 }
 
 async function writeGeneratedBarrel(
@@ -531,22 +1215,22 @@ async function writeMigrationsBundle(config: SqlfuProjectConfig): Promise<void> 
 
 async function writeQueryCatalog(
   config: SqlfuProjectConfig,
-  queryFiles: QueryFile[],
+  querySources: QuerySource[],
   queryAnalyses: Awaited<ReturnType<typeof analyzeVendoredTypesqlQueries>>,
   schema: ReadonlyMap<string, RelationInfo>,
 ): Promise<void> {
   // DDL statements (e.g. `create table if not exists`) get trivial wrappers but have no
   // params / result columns / json schema — nothing to populate a form with. Leaving them out
   // of the catalog keeps UI consumers from rendering a meaningless "run" button for each one.
-  const entries: QueryCatalogEntry[] = queryFiles.flatMap<QueryCatalogEntry>((queryFile) => {
-    const analysis = queryAnalyses.find((query) => query.sqlPath === queryFile.sqlPath);
+  const entries: QueryCatalogEntry[] = querySources.flatMap<QueryCatalogEntry>((querySource) => {
+    const analysis = queryAnalyses.find((query) => query.sqlPath === querySource.sqlPath);
     if (!analysis) {
-      throw new Error(`Missing vendored TypeSQL analysis for ${queryFile.sqlPath}`);
+      throw new Error(`Missing vendored TypeSQL analysis for ${querySource.sqlPath}`);
     }
 
-    const functionName = toCamelCase(queryFile.relativePath);
-    const id = queryFile.relativePath;
-    const sqlFile = path.relative(config.projectRoot, queryFile.sqlPath).split(path.sep).join('/');
+    const functionName = querySource.functionName;
+    const id = querySource.id;
+    const sqlFile = path.relative(config.projectRoot, querySource.sourceSqlPath).split(path.sep).join('/');
 
     if (!analysis.ok) {
       const errorEntry: QueryCatalogEntry = {
@@ -554,8 +1238,8 @@ async function writeQueryCatalog(
         id,
         sqlFile,
         functionName,
-        sql: queryFile.sqlContent,
-        sqlFileContent: queryFile.sqlContent,
+        sql: querySource.sqlContent,
+        sqlFileContent: querySource.sqlFileContent,
         error: analysis.error,
       };
       return [errorEntry];
@@ -565,7 +1249,11 @@ async function writeQueryCatalog(
       return [];
     }
 
-    const descriptor = refineDescriptor(analysis.descriptor, queryFile.sqlContent, schema);
+    const {descriptor} = prepareQueryDescriptor({
+      descriptor: refineDescriptor(analysis.descriptor, querySource.analysisSqlContent, schema),
+      explicitParameterExpansions: querySource.parameterExpansions,
+      sourceSql: querySource.sqlContent,
+    });
     const columns = getResultFields(descriptor).map((field) => toCatalogField(field));
     const args = [
       ...(descriptor.data ?? []).map((field) => toCatalogArgument('data', field)),
@@ -578,7 +1266,7 @@ async function writeQueryCatalog(
       sqlFile,
       functionName,
       sql: descriptor.sql,
-      sqlFileContent: queryFile.sqlContent,
+      sqlFileContent: querySource.sqlFileContent,
       queryType: descriptor.queryType as Exclude<GeneratedQueryDescriptor['queryType'], 'Ddl'>,
       multipleRowsResult: descriptor.multipleRowsResult,
       resultMode: getResultMode(descriptor),
@@ -624,23 +1312,31 @@ function toAdHocQueryAnalysis(descriptor: GeneratedQueryDescriptor): AdHocQueryA
 }
 
 function renderQueryWrapper(input: {
-  relativePath: string;
+  functionName: string;
+  sourceSql: string;
   descriptor: GeneratedQueryDescriptor;
+  parameterExpansions: ParameterExpansion[];
   validator: SqlfuValidator | null;
   prettyErrors: boolean;
   sync: boolean;
+  localNames?: LocalNames;
 }): string {
   if (input.validator !== null) {
     return renderValidatorQueryWrapper({
-      relativePath: input.relativePath,
+      functionName: input.functionName,
+      sourceSql: input.sourceSql,
       descriptor: input.descriptor,
+      parameterExpansions: input.parameterExpansions,
       emitter: getValidatorEmitter(input.validator),
       prettyErrors: input.prettyErrors,
       sync: input.sync,
+      localNames: input.localNames,
     });
   }
 
-  const functionName = toCamelCase(input.relativePath);
+  const functionName = input.functionName;
+  const sqlName = input.localNames?.sql || 'sql';
+  const queryName = input.localNames?.query || 'query';
 
   const clientType = input.sync ? 'SyncClient' : 'Client';
   const maybeAsync = input.sync ? '' : 'async ';
@@ -665,12 +1361,26 @@ function renderQueryWrapper(input: {
   const factoryArgs: string[] = [];
   if (hasData) factoryArgs.push(`data: ${dataTypeRef}`);
   if (hasParams) factoryArgs.push(`params: ${paramsTypeRef}`);
-  const queryReference = buildQueryReference(hasData, hasParams, 'data', 'params');
-  const queryDeclaration = renderQueryDeclaration({
-    factoryArgs,
-    queryArgs,
-    queryName: functionName,
-  });
+  const queryReference = buildQueryReference(hasData, hasParams, 'data', 'params', queryName);
+  const queryDeclaration =
+    !hasRuntimeParameterExpansions(input.parameterExpansions)
+      ? renderQueryDeclaration({
+          factoryArgs,
+          queryArgs,
+          queryName: functionName,
+          sqlName,
+          queryVariableName: queryName,
+        })
+      : renderExpandedQueryDeclaration({
+          sourceSql: input.sourceSql,
+          descriptor: input.descriptor,
+          parameterExpansions: input.parameterExpansions,
+          factoryArgs,
+          queryArgs,
+          queryName: functionName,
+          sqlName,
+          queryVariableName: queryName,
+        });
 
   const signatureReturnAnnotation = emitResultType
     ? input.sync
@@ -703,14 +1413,14 @@ function renderQueryWrapper(input: {
   return [
     `import type {${clientType}} from 'sqlfu';`,
     ``,
-    ...renderSqlConstant(input.descriptor.sql),
+    ...renderSqlConstant(input.descriptor.sql, sqlName),
     queryDeclaration,
     ``,
     `export const ${functionName} = Object.assign(`,
     functionDeclaration,
     ...implementationLines,
     `\t},`,
-    `\t{ sql, query },`,
+    `\t{ ${objectProperty('sql', sqlName)}, ${objectProperty('query', queryName)} },`,
     `);`,
     ``,
     ...(namespaceLines.length === 0
@@ -728,12 +1438,138 @@ function renderQueryDeclaration(input: {
   factoryArgs: string[];
   queryArgs: string;
   queryName: string;
+  sqlName?: string;
+  queryVariableName?: string;
 }): string {
-  const payload = `{ sql, args: ${input.queryArgs}, name: ${JSON.stringify(input.queryName)} }`;
+  const sqlName = input.sqlName || 'sql';
+  const queryVariableName = input.queryVariableName || 'query';
+  const payload = `{ ${objectProperty('sql', sqlName)}, args: ${input.queryArgs}, name: ${JSON.stringify(input.queryName)} }`;
   if (input.factoryArgs.length === 0) {
-    return `const query = ${payload};`;
+    return `const ${queryVariableName} = ${payload};`;
   }
-  return `const query = (${input.factoryArgs.join(', ')}) => (${payload});`;
+  return `const ${queryVariableName} = (${input.factoryArgs.join(', ')}) => (${payload});`;
+}
+
+function renderExpandedQueryDeclaration(input: {
+  sourceSql: string;
+  descriptor: GeneratedQueryDescriptor;
+  parameterExpansions: ParameterExpansion[];
+  factoryArgs: string[];
+  queryArgs: string;
+  queryName: string;
+  sqlName: string;
+  queryVariableName: string;
+}): string {
+  const expansionVariables = expansionVariableExpressions(input.descriptor);
+  const dynamicSqlExpression = renderRuntimeSqlExpression(
+    input.sourceSql,
+    input.parameterExpansions,
+    expansionVariables,
+  );
+  const guardLines = renderExpansionGuards(input.parameterExpansions, expansionVariables, '\t');
+  return [
+    `const ${input.queryVariableName} = (${input.factoryArgs.join(', ')}) => {`,
+    ...guardLines,
+    `\tconst expandedSql = ${dynamicSqlExpression};`,
+    `\treturn { sql: expandedSql, args: ${input.queryArgs}, name: ${JSON.stringify(input.queryName)} };`,
+    `};`,
+  ].join('\n');
+}
+
+function hasRuntimeParameterExpansions(expansions: ParameterExpansion[]): boolean {
+  return expansions.some((expansion) => expansion.kind === 'scalar-array' || expansion.kind === 'object-array');
+}
+
+function expansionVariableExpressions(descriptor: GeneratedQueryDescriptor): ReadonlyMap<string, string> {
+  const expressions = new Map<string, string>();
+  for (const field of descriptor.data ?? []) {
+    expressions.set(field.name, `data.${field.name}`);
+  }
+  for (const field of descriptor.parameters) {
+    expressions.set(field.name, `params.${field.name}`);
+  }
+  return expressions;
+}
+
+function renderExpansionGuards(
+  expansions: ParameterExpansion[],
+  expansionVariables: ReadonlyMap<string, string>,
+  indent: string,
+): string[] {
+  const lines: string[] = [];
+  for (const expansion of expansions) {
+    if (expansion.kind !== 'scalar-array' && expansion.kind !== 'object-array') continue;
+    const variableExpression = expansionVariables.get(expansion.name);
+    if (!variableExpression) continue;
+    const emptyArrayCondition =
+      expansion.kind === 'object-array' && expansion.acceptsSingleOrArray
+        ? `Array.isArray(${variableExpression}) && ${variableExpression}.length === 0`
+        : `${variableExpression}.length === 0`;
+    lines.push(`${indent}if (${emptyArrayCondition}) {`);
+    lines.push(`${indent}\tthrow new Error(${JSON.stringify(`Parameter "${expansion.name}" must be a non-empty array`)});`);
+    lines.push(`${indent}}`);
+  }
+  return lines;
+}
+
+function renderRuntimeSqlExpression(
+  sql: string,
+  expansions: ParameterExpansion[],
+  expansionVariables: ReadonlyMap<string, string>,
+): string {
+  const expansionMap = new Map(expansions.map((expansion) => [expansion.name, expansion]));
+  const chunks: string[] = [];
+  let cursor = 0;
+  for (const reference of findNamedParameterReferences(sql)) {
+    chunks.push(escapeTemplateLiteralChunk(replaceNamedParameters(sql.slice(cursor, reference.start), () => '?')));
+    if (reference.path.length > 0) {
+      chunks.push('?');
+      cursor = reference.end;
+      continue;
+    }
+
+    const expansion = expansionMap.get(reference.name);
+    if (!expansion) {
+      chunks.push('?');
+    } else {
+      const variableExpression = expansionVariables.get(expansion.name) || `params.${expansion.name}`;
+      chunks.push(runtimeExpansionTemplateChunk(expansion, variableExpression, reference.wrappedInParens));
+    }
+    cursor = reference.end;
+  }
+  chunks.push(escapeTemplateLiteralChunk(replaceNamedParameters(sql.slice(cursor), () => '?')));
+  return `\`${chunks.join('')}\``;
+}
+
+function runtimeExpansionTemplateChunk(
+  expansion: ParameterExpansion,
+  variableExpression: string,
+  wrappedInParens: boolean,
+): string {
+  if (expansion.kind === 'scalar-array') {
+    const placeholders = `${variableExpression}.map(() => '?').join(', ')`;
+    return wrappedInParens ? '${' + placeholders + '}' : '(${' + placeholders + '})';
+  }
+  if (expansion.kind !== 'object-array') {
+    return '?';
+  }
+
+  const arrayExpression = expansion.acceptsSingleOrArray
+    ? `(Array.isArray(${variableExpression}) ? ${variableExpression} : [${variableExpression}])`
+    : variableExpression;
+  const rowPlaceholders = expansion.fields.map(() => '?').join(', ');
+  if (expansion.sqlShape === 'row-list') {
+    return '${' + `${arrayExpression}.map(() => ${JSON.stringify(`(${rowPlaceholders})`)}).join(', ')` + '}';
+  }
+
+  if (wrappedInParens) {
+    return '${' + `${arrayExpression}.map(() => ${JSON.stringify(rowPlaceholders)}).join('), (')` + '}';
+  }
+  return '${' + `${arrayExpression}.map(() => ${JSON.stringify(`(${rowPlaceholders})`)}).join(', ')` + '}';
+}
+
+function escapeTemplateLiteralChunk(value: string): string {
+  return value.replaceAll('\\', '\\\\').replaceAll('`', '\\`').replaceAll('${', '\\${');
 }
 
 /** `query` for object form, `query(data, params)` / `query(params)` / `query(data)` for factories. */
@@ -742,12 +1578,13 @@ function buildQueryReference(
   hasParams: boolean,
   dataVar: string,
   paramsVar: string,
+  queryVariableName: string = 'query',
 ): string {
-  if (!hasData && !hasParams) return 'query';
+  if (!hasData && !hasParams) return queryVariableName;
   const callArgs: string[] = [];
   if (hasData) callArgs.push(dataVar);
   if (hasParams) callArgs.push(paramsVar);
-  return `query(${callArgs.join(', ')})`;
+  return `${queryVariableName}(${callArgs.join(', ')})`;
 }
 
 /**
@@ -783,12 +1620,12 @@ type ValidatorEmitter = {
 
 /** Default field-line rendering for the zod/valibot/zod-mini emitters — key is plain, value is wrapped. */
 function valueWrappedFieldLine(
-  expressionForTsType: (tsType: string) => string,
+  expressionForField: (field: GeneratedField) => string,
   nullable: (expression: string) => string,
   optional: (expression: string) => string,
 ): (field: GeneratedField, fieldKind: 'parameter' | 'result') => string {
   return (field, fieldKind) => {
-    let expression = expressionForTsType(field.tsType);
+    let expression = expressionForField(field);
     if (!field.notNull) {
       expression = nullable(expression);
     }
@@ -803,7 +1640,7 @@ const zodEmitter: ValidatorEmitter = {
   importLine: `import {z} from 'zod';`,
   parseFlavour: 'zod',
   renderFieldLine: valueWrappedFieldLine(
-    (tsType) => zodExpressionForTsType(tsType, 'z'),
+    (field) => zodExpressionForField(field, 'z'),
     (expression) => `${expression}.nullable()`,
     (expression) => `${expression}.optional()`,
   ),
@@ -821,7 +1658,7 @@ const zodMiniEmitter: ValidatorEmitter = {
   // zod-mini keeps the same nullable/optional wrapper calls as standard zod — the same schema
   // object, a smaller bundle path.
   renderFieldLine: valueWrappedFieldLine(
-    (tsType) => zodExpressionForTsType(tsType, 'z'),
+    (field) => zodExpressionForField(field, 'z'),
     (expression) => `z.nullable(${expression})`,
     (expression) => `z.optional(${expression})`,
   ),
@@ -837,7 +1674,7 @@ const valibotEmitter: ValidatorEmitter = {
   importLine: `import * as v from 'valibot';`,
   parseFlavour: 'standard',
   renderFieldLine: valueWrappedFieldLine(
-    (tsType) => valibotExpressionForTsType(tsType),
+    (field) => valibotExpressionForField(field),
     (expression) => `v.nullable(${expression})`,
     (expression) => `v.optional(${expression})`,
   ),
@@ -864,7 +1701,7 @@ const arktypeEmitter: ValidatorEmitter = {
     const keyText = keySuffix
       ? JSON.stringify(`${field.name}${keySuffix}`)
       : field.name;
-    return `\t${keyText}: ${arktypeFieldExpression(field.tsType, field.notNull)},`;
+    return `\t${keyText}: ${arktypeFieldExpression(field, field.notNull)},`;
   },
   objectSchemaDeclaration: ({schemaName, fieldLines}) => [
     `const ${schemaName} = type({`,
@@ -887,8 +1724,8 @@ function getValidatorEmitter(validator: SqlfuValidator): ValidatorEmitter {
  * `type.instanceOf(...)` helper (arktype accepts a Type value in an object literal alongside
  * string definitions).
  */
-function arktypeFieldExpression(tsType: string, notNull: boolean): string {
-  const baseExpression = arktypeBaseExpression(tsType);
+function arktypeFieldExpression(field: GeneratedField, notNull: boolean): string {
+  const baseExpression = arktypeBaseExpressionForField(field);
   if (notNull) return baseExpression;
 
   // Nullable: for the string form we widen the union; for the escape-hatch form
@@ -898,6 +1735,20 @@ function arktypeFieldExpression(tsType: string, notNull: boolean): string {
     return JSON.stringify(`${innerDefinition} | null`);
   }
   return `type(${baseExpression}, '|', 'null')`;
+}
+
+function arktypeBaseExpressionForField(field: GeneratedField): string {
+  if (field.objectFields) {
+    const fields = field.objectFields
+      .map((objectField) => `${objectField.name}: ${arktypeFieldExpression(objectField, objectField.notNull)}`)
+      .join(', ');
+    const objectExpression = `type({ ${fields} })`;
+    if (field.acceptsSingleOrArray) {
+      return `type(${objectExpression}, '|', ${objectExpression}.array())`;
+    }
+    return field.isArray ? `${objectExpression}.array()` : objectExpression;
+  }
+  return arktypeBaseExpression(field.tsType);
 }
 
 function arktypeBaseExpression(tsType: string): string {
@@ -926,13 +1777,21 @@ function arktypeBaseExpression(tsType: string): string {
 }
 
 function renderValidatorQueryWrapper(input: {
-  relativePath: string;
+  functionName: string;
+  sourceSql: string;
   descriptor: GeneratedQueryDescriptor;
+  parameterExpansions: ParameterExpansion[];
   emitter: ValidatorEmitter;
   prettyErrors: boolean;
   sync: boolean;
+  localNames?: LocalNames;
 }): string {
-  const functionName = toCamelCase(input.relativePath);
+  const functionName = input.functionName;
+  const sqlName = input.localNames?.sql || 'sql';
+  const queryName = input.localNames?.query || 'query';
+  const dataSchemaName = input.localNames?.dataSchema || 'Data';
+  const paramsSchemaName = input.localNames?.paramsSchema || 'Params';
+  const resultSchemaName = input.localNames?.resultSchema || 'Result';
   const {descriptor, emitter, prettyErrors, sync} = input;
   const clientType = sync ? 'SyncClient' : 'Client';
   const resultMode = getResultMode(descriptor);
@@ -950,16 +1809,16 @@ function renderValidatorQueryWrapper(input: {
   // point at the same schemas through the merged export.
   const schemaDeclarations: string[] = [];
   if (hasData) {
-    schemaDeclarations.push(...renderObjectSchemaDeclaration(emitter, 'Data', descriptor.data!, 'parameter'));
+    schemaDeclarations.push(...renderObjectSchemaDeclaration(emitter, dataSchemaName, descriptor.data!, 'parameter'));
   }
   if (hasParams) {
-    schemaDeclarations.push(...renderObjectSchemaDeclaration(emitter, 'Params', descriptor.parameters, 'parameter'));
+    schemaDeclarations.push(...renderObjectSchemaDeclaration(emitter, paramsSchemaName, descriptor.parameters, 'parameter'));
   }
   if (emitResultSchema) {
-    schemaDeclarations.push(...renderObjectSchemaDeclaration(emitter, 'Result', resultFields, 'result'));
+    schemaDeclarations.push(...renderObjectSchemaDeclaration(emitter, resultSchemaName, resultFields, 'result'));
   }
 
-  const sqlLines = renderSqlConstant(descriptor.sql);
+  const sqlLines = renderSqlConstant(descriptor.sql, sqlName);
 
   const dataTypeRef = `${functionName}.Data`;
   const paramsTypeRef = `${functionName}.Params`;
@@ -973,12 +1832,12 @@ function renderValidatorQueryWrapper(input: {
   let dataExpression: string | null = null;
   let paramsExpression: string | null = null;
   if (hasData) {
-    const dataValidation = buildInputValidation(emitter, 'Data', 'data', prettyErrors);
+    const dataValidation = buildInputValidation(emitter, dataSchemaName, 'data', prettyErrors);
     validationLines.push(...dataValidation.statements);
     dataExpression = dataValidation.expression;
   }
   if (hasParams) {
-    const paramsValidation = buildInputValidation(emitter, 'Params', 'params', prettyErrors);
+    const paramsValidation = buildInputValidation(emitter, paramsSchemaName, 'params', prettyErrors);
     validationLines.push(...paramsValidation.statements);
     paramsExpression = paramsValidation.expression;
   }
@@ -992,12 +1851,26 @@ function renderValidatorQueryWrapper(input: {
     dataVariable: hasData ? 'data' : null,
     paramsVariable: hasParams ? 'params' : null,
   });
-  const queryDeclaration = renderQueryDeclaration({
-    factoryArgs,
-    queryArgs: factoryArgsExpression,
-    queryName: functionName,
-  });
-  const queryReference = buildQueryReference(hasData, hasParams, dataExpression!, paramsExpression!);
+  const queryDeclaration =
+    !hasRuntimeParameterExpansions(input.parameterExpansions)
+      ? renderQueryDeclaration({
+          factoryArgs,
+          queryArgs: factoryArgsExpression,
+          queryName: functionName,
+          sqlName,
+          queryVariableName: queryName,
+        })
+      : renderExpandedQueryDeclaration({
+          sourceSql: input.sourceSql,
+          descriptor,
+          parameterExpansions: input.parameterExpansions,
+          factoryArgs,
+          queryArgs: factoryArgsExpression,
+          queryName: functionName,
+          sqlName,
+          queryVariableName: queryName,
+        });
+  const queryReference = buildQueryReference(hasData, hasParams, dataExpression!, paramsExpression!, queryName);
 
   const implementationLines = emitResultSchema
     ? buildValidatorImplementation({
@@ -1011,10 +1884,10 @@ function renderValidatorQueryWrapper(input: {
     : [`\t\treturn client.run(${queryReference});`];
 
   const attachedProperties: string[] = [];
-  if (hasData) attachedProperties.push('Data');
-  if (hasParams) attachedProperties.push('Params');
-  if (emitResultSchema) attachedProperties.push('Result');
-  attachedProperties.push('sql', 'query');
+  if (hasData) attachedProperties.push(objectProperty('Data', dataSchemaName));
+  if (hasParams) attachedProperties.push(objectProperty('Params', paramsSchemaName));
+  if (emitResultSchema) attachedProperties.push(objectProperty('Result', resultSchemaName));
+  attachedProperties.push(objectProperty('sql', sqlName), objectProperty('query', queryName));
 
   const namespaceLines: string[] = [];
   if (hasData) {
@@ -1075,15 +1948,36 @@ function buildRuntimeImports(emitter: ValidatorEmitter, prettyErrors: boolean, c
   return `import type {${clientType}} from 'sqlfu';`;
 }
 
+function objectProperty(propertyName: string, variableName: string): string {
+  return propertyName === variableName ? propertyName : `${propertyName}: ${variableName}`;
+}
+
 function renderObjectSchemaDeclaration(
   emitter: ValidatorEmitter,
-  schemaName: 'Data' | 'Params' | 'Result',
+  schemaName: string,
   fields: GeneratedField[],
   fieldKind: 'parameter' | 'result',
 ): string[] {
   // see tasks/typegen-extensibility.md — future user-provided validator plugins and per-column overrides would hook in here.
   const fieldLines = fields.map((field) => emitter.renderFieldLine(field, fieldKind));
   return emitter.objectSchemaDeclaration({schemaName, fieldLines});
+}
+
+function zodExpressionForField(field: GeneratedField, namespace: 'z'): string {
+  if (field.objectFields) {
+    const objectExpression = `${namespace}.object({ ${field.objectFields
+      .map((objectField) => {
+        let expression = zodExpressionForField(objectField, namespace);
+        if (!objectField.notNull) expression = `${expression}.nullable()`;
+        return `${objectField.name}: ${expression}`;
+      })
+      .join(', ')} })`;
+    if (field.acceptsSingleOrArray) {
+      return `${namespace}.union([${objectExpression}, ${namespace}.array(${objectExpression})])`;
+    }
+    return field.isArray ? `${namespace}.array(${objectExpression})` : objectExpression;
+  }
+  return zodExpressionForTsType(field.tsType, namespace);
 }
 
 function zodExpressionForTsType(tsType: string, namespace: 'z'): string {
@@ -1103,6 +1997,23 @@ function zodExpressionForTsType(tsType: string, namespace: 'z'): string {
   }
 
   return `${namespace}.unknown()`;
+}
+
+function valibotExpressionForField(field: GeneratedField): string {
+  if (field.objectFields) {
+    const objectExpression = `v.object({ ${field.objectFields
+      .map((objectField) => {
+        let expression = valibotExpressionForField(objectField);
+        if (!objectField.notNull) expression = `v.nullable(${expression})`;
+        return `${objectField.name}: ${expression}`;
+      })
+      .join(', ')} })`;
+    if (field.acceptsSingleOrArray) {
+      return `v.union([${objectExpression}, v.array(${objectExpression})])`;
+    }
+    return field.isArray ? `v.array(${objectExpression})` : objectExpression;
+  }
+  return valibotExpressionForTsType(field.tsType);
 }
 
 function valibotExpressionForTsType(tsType: string): string {
@@ -1145,7 +2056,7 @@ type InputValidation = {
  */
 function buildInputValidation(
   emitter: ValidatorEmitter,
-  schemaName: 'Data' | 'Params',
+  schemaName: string,
   rawVariable: string,
   prettyErrors: boolean,
   indent: string = '\t\t',
@@ -1373,10 +2284,25 @@ function renderObjectTypeBody(
 ): string {
   const lines = fields.map((field) => {
     const optional = fieldKind === 'parameter' ? Boolean(field.optional) : !field.notNull;
-    const orNull = fieldKind === 'parameter' && !field.notNull ? ' | null' : '';
-    return `\t\t${field.name}${optional ? '?' : ''}: ${field.tsType}${orNull};`;
+    return `\t\t${field.name}${optional ? '?' : ''}: ${fieldTypeExpression(field, fieldKind)};`;
   });
   return [`{`, ...lines, `\t}`].join('\n');
+}
+
+function fieldTypeExpression(field: GeneratedField, fieldKind: 'parameter' | 'result'): string {
+  let typeExpression = field.tsType;
+  if (field.objectFields) {
+    const objectType = renderInlineObjectTsType(field.objectFields);
+    if (field.acceptsSingleOrArray) {
+      typeExpression = `${objectType} | Array<${objectType}>`;
+    } else {
+      typeExpression = field.isArray ? `Array<${objectType}>` : objectType;
+    }
+  }
+  if (fieldKind === 'parameter' && !field.notNull) {
+    return `${typeExpression} | null`;
+  }
+  return typeExpression;
 }
 
 function objectSchema(
@@ -1402,7 +2328,27 @@ function objectSchema(
 }
 
 function schemaForField(field: GeneratedField): JsonSchema {
-  const schema = schemaForTsType(field.tsType);
+  if (field.objectFields && field.acceptsSingleOrArray) {
+    const object = objectSchema(field.name, field.objectFields);
+    return {
+      anyOf: [
+        object,
+        {
+          type: 'array',
+          items: object,
+        },
+      ],
+    };
+  }
+
+  const schema = field.objectFields
+    ? {
+        type: field.isArray ? 'array' : 'object',
+        ...(field.isArray
+          ? {items: objectSchema(field.name, field.objectFields)}
+          : objectSchema(field.name, field.objectFields)),
+      } satisfies JsonSchemaObject
+    : schemaForTsType(field.tsType);
   if (field.notNull) {
     return schema;
   }
@@ -1458,6 +2404,226 @@ function parseStringLiteralUnion(tsType: string): string[] | undefined {
   }
 
   return parts.map((part) => part.slice(1, -1));
+}
+
+function prepareQueryDescriptor(input: {
+  descriptor: GeneratedQueryDescriptor;
+  explicitParameterExpansions: ParameterExpansion[];
+  sourceSql: string;
+}): {
+  descriptor: GeneratedQueryDescriptor;
+  parameterExpansions: ParameterExpansion[];
+} {
+  const expansions = new Map(
+    input.explicitParameterExpansions.map((expansion) => [expansion.name, expansion]),
+  );
+  const sourceReferences = findNamedParameterReferences(input.sourceSql);
+  const descriptorFields = [...(input.descriptor.data || []), ...input.descriptor.parameters];
+
+  // TypeSQL already infers `IN (:ids)` / `NOT IN (:ids)` params as arrays. sqlfu
+  // only adapts that descriptor fact into its existing runtime SQL/args expansion path.
+  for (const field of descriptorFields) {
+    if (field.objectFields) continue;
+    if (!field.isArray && !field.tsType.endsWith('[]')) continue;
+    const hasTopLevelReference = sourceReferences.some(
+      (reference) => reference.name === field.name && reference.path.length === 0,
+    );
+    if (!hasTopLevelReference) continue;
+    addParameterExpansion(expansions, {kind: 'scalar-array', name: field.name});
+  }
+
+  const parameterExpansions = Array.from(expansions.values());
+  assertNoUnsupportedInferredReturning(input.descriptor, parameterExpansions);
+  assertRuntimeExpansionReferences(input.sourceSql, parameterExpansions);
+  return {
+    descriptor: applyParameterExpansionDescriptor(input.descriptor, parameterExpansions, input.sourceSql),
+    parameterExpansions,
+  };
+}
+
+function assertNoUnsupportedInferredReturning(
+  descriptor: GeneratedQueryDescriptor,
+  expansions: ParameterExpansion[],
+): void {
+  if (!descriptor.returning) return;
+  const expansion = expansions.find(
+    (candidate) => candidate.kind === 'object-array' && candidate.acceptsSingleOrArray,
+  );
+  if (!expansion) return;
+  throw new Error(
+    `Inferred INSERT values parameter ${JSON.stringify(expansion.name)} does not support RETURNING yet`,
+  );
+}
+
+function assertRuntimeExpansionReferences(sql: string, expansions: ParameterExpansion[]): void {
+  const runtimeExpansionNames = new Set(
+    expansions
+      .filter((expansion) => expansion.kind === 'scalar-array' || expansion.kind === 'object-array')
+      .map((expansion) => expansion.name),
+  );
+  if (runtimeExpansionNames.size === 0) return;
+
+  const counts = new Map<string, {count: number; rawReference: string}>();
+  for (const reference of findNamedParameterReferences(sql)) {
+    if (!runtimeExpansionNames.has(reference.name) || reference.path.length > 0) continue;
+    const existing = counts.get(reference.name);
+    counts.set(reference.name, {
+      count: (existing?.count || 0) + 1,
+      rawReference: reference.raw,
+    });
+  }
+
+  for (const [name, entry] of counts) {
+    if (entry.count > 1) {
+      throw new Error(`Runtime-expanded parameter ${JSON.stringify(name)} can only appear once: ${entry.rawReference}`);
+    }
+  }
+}
+
+function applyParameterExpansionDescriptor(
+  descriptor: GeneratedQueryDescriptor,
+  expansions: ParameterExpansion[],
+  sourceSql: string,
+): GeneratedQueryDescriptor {
+  if (expansions.length === 0) return descriptor;
+  return {
+    ...descriptor,
+    sql: staticSqlForExpandedQuery(sourceSql, expansions),
+    parameters: mergeExpandedParameterFields(descriptor.parameters, expansions),
+    data: descriptor.data ? mergeExpandedParameterFields(descriptor.data, expansions) : undefined,
+  };
+}
+
+function staticSqlForExpandedQuery(sql: string, expansions: ParameterExpansion[]): string {
+  const expansionMap = new Map(expansions.map((expansion) => [expansion.name, expansion]));
+  return replaceNamedParameters(sql, (reference) => {
+    if (reference.path.length > 0) return '?';
+
+    const expansion = expansionMap.get(reference.name);
+    if (!expansion) return '?';
+
+    if (expansion.kind === 'scalar-array') {
+      return reference.wrappedInParens ? '?' : '(?)';
+    }
+
+    if (expansion.kind === 'object-fields') {
+      return '?';
+    }
+
+    const placeholders = expansion.fields.map(() => '?').join(', ');
+    if (expansion.sqlShape === 'row-list') {
+      return `(${placeholders})`;
+    }
+    if (reference.wrappedInParens) return placeholders;
+    return `(${placeholders})`;
+  });
+}
+
+function mergeExpandedParameterFields<T extends GeneratedField & {toDriver: string; isArray: boolean}>(
+  fields: T[],
+  expansions: ParameterExpansion[],
+): T[] {
+  const expansionByName = new Map(expansions.map((expansion) => [expansion.name, expansion]));
+  const output: T[] = [];
+  const fieldByName = new Map(fields.map((field) => [field.name, field]));
+  const emittedObjectExpansions = new Set<string>();
+  for (const field of fields) {
+    const childExpansion = expansions
+      .filter(isObjectLikeParameterExpansion)
+      .find((expansion) =>
+        expansion.fields.some((fieldName) => expandedFieldName(expansion.name, fieldName) === field.name),
+      );
+    if (childExpansion) {
+      if (!emittedObjectExpansions.has(childExpansion.name)) {
+        const objectField = buildObjectExpansionField(childExpansion, fieldByName);
+        if (objectField) output.push(objectField as T);
+        emittedObjectExpansions.add(childExpansion.name);
+      }
+      continue;
+    }
+
+    const expansion = expansionByName.get(field.name);
+    if (expansion?.kind === 'scalar-array') {
+      const scalarTsType = field.tsType.endsWith('[]') ? field.tsType : `${field.tsType}[]`;
+      output.push({
+        ...field,
+        tsType: scalarTsType,
+        notNull: true,
+        optional: false,
+        isArray: true,
+      });
+      continue;
+    }
+
+    output.push(field);
+  }
+
+  return output;
+}
+
+function isObjectLikeParameterExpansion(
+  expansion: ParameterExpansion,
+): expansion is Exclude<ParameterExpansion, {kind: 'scalar-array'}> {
+  return expansion.kind !== 'scalar-array';
+}
+
+function buildObjectExpansionField<T extends GeneratedField & {toDriver: string; isArray: boolean}>(
+  expansion: Exclude<ParameterExpansion, {kind: 'scalar-array'}>,
+  fieldByName: ReadonlyMap<string, T>,
+): T | undefined {
+  const objectFields = expansion.fields.map((fieldName) => {
+    const field = fieldByName.get(expandedFieldName(expansion.name, fieldName));
+    if (!field) {
+      return {
+        name: fieldName,
+        tsType: 'any',
+        notNull: false,
+        optional: false,
+      };
+    }
+    return {
+      ...field,
+      name: fieldName,
+    };
+  });
+  const driverObjectFields = (expansion.kind === 'object-fields' ? expansion.driverFields : expansion.fields).map(
+    (fieldName) => {
+      const field = objectFields.find((candidate) => candidate.name === fieldName);
+      if (!field) {
+        return {
+          name: fieldName,
+          tsType: 'any',
+          notNull: false,
+          optional: false,
+        };
+      }
+      return field;
+    },
+  );
+  if (objectFields.length === 0) return undefined;
+
+  const tsType = renderInlineObjectTsType(objectFields);
+  const fieldTsType =
+    expansion.kind === 'object-array'
+      ? expansion.acceptsSingleOrArray
+        ? `${tsType} | Array<${tsType}>`
+        : `Array<${tsType}>`
+      : tsType;
+  return {
+    name: expansion.name,
+    tsType: fieldTsType,
+    notNull: true,
+    optional: false,
+    toDriver: expansion.name,
+    isArray: expansion.kind === 'object-array' && !expansion.acceptsSingleOrArray,
+    acceptsSingleOrArray: expansion.kind === 'object-array' ? expansion.acceptsSingleOrArray : false,
+    objectFields,
+    driverObjectFields,
+  } as T;
+}
+
+function renderInlineObjectTsType(fields: GeneratedField[]): string {
+  return `{ ${fields.map((field) => `${field.name}: ${fieldTypeExpression(field, 'parameter')}`).join('; ')} }`;
 }
 
 function getResultFields(descriptor: GeneratedQueryDescriptor): GeneratedField[] {
@@ -1536,17 +2702,52 @@ function toDriver(
     isArray: boolean;
   },
 ): string {
-  if (param.tsType === 'Date') {
-    return `${variableName}.${param.toDriver}`;
+  if (param.objectFields && (param.isArray || param.acceptsSingleOrArray)) {
+    const collectionExpression = param.acceptsSingleOrArray
+      ? `(Array.isArray(${variableName}.${param.name}) ? ${variableName}.${param.name} : [${variableName}.${param.name}])`
+      : `${variableName}.${param.name}`;
+    const values = (param.driverObjectFields || param.objectFields).map((field) =>
+      toDriverValue(`item.${field.name}`, field),
+    );
+    return `...${collectionExpression}.flatMap((item) => [${values.join(', ')}])`;
   }
-  if (param.tsType === 'boolean') {
-    const variable = `${variableName}.${param.name}`;
-    return `${variable} != null ? Number(${variable}) : ${variable}`;
+  if (param.objectFields) {
+    const values = (param.driverObjectFields || param.objectFields).map((field) =>
+      toDriverValue(`${variableName}.${param.name}.${field.name}`, field),
+    );
+    return values.join(', ');
   }
   if (param.tsType.endsWith('[]')) {
-    return `...${variableName}.${param.name}`;
+    const itemField = {
+      ...param,
+      name: 'item',
+      tsType: param.tsType.slice(0, -2),
+    };
+    const itemExpression = toDriverValue('item', itemField);
+    if (itemExpression === 'item') {
+      return `...${variableName}.${param.name}`;
+    }
+    return `...${variableName}.${param.name}.map((item) => ${itemExpression})`;
   }
-  return `${variableName}.${param.name}`;
+  return toDriverValue(`${variableName}.${param.name}`, param);
+}
+
+function toDriverValue(
+  valueExpression: string,
+  field: GeneratedField & {
+    toDriver?: string;
+  },
+): string {
+  if (field.tsType === 'Date') {
+    if (field.toDriver?.includes(`split('T')[0]`) && !field.toDriver.includes(`replace('T', ' ')`)) {
+      return `${valueExpression}?.toISOString().split('T')[0]`;
+    }
+    return `${valueExpression}?.toISOString().split('.')[0].replace('T', ' ')`;
+  }
+  if (field.tsType === 'boolean') {
+    return `${valueExpression} != null ? Number(${valueExpression}) : ${valueExpression}`;
+  }
+  return valueExpression;
 }
 
 function normalizeSqlForTemplate(sql: string): string[] {

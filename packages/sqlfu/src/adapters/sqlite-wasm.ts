@@ -1,7 +1,14 @@
 import {wrapAsyncClientErrors} from '../adapter-errors.js';
 import {bindAsyncSql} from '../sql.js';
 import {rawSqlWithSqlSplittingAsync, surroundWithBeginCommitRollbackAsync} from '../sqlite-text.js';
-import type {AsyncClient, QueryArg, ResultRow, SqlQuery} from '../types.js';
+import type {
+  AsyncClient,
+  PreparedStatement,
+  PreparedStatementParams,
+  QueryArg,
+  ResultRow,
+  SqlQuery,
+} from '../types.js';
 
 export type SqliteWasmBindValue = string | number | bigint | Uint8Array | null;
 
@@ -54,6 +61,48 @@ export function createSqliteWasmClient(database: SqliteWasmDatabaseLike): AsyncC
       yield row;
     }
   };
+  const prepare: AsyncClient<SqliteWasmDatabaseLike>['prepare'] = <TRow extends ResultRow = ResultRow>(
+    sql: string,
+  ): PreparedStatement<TRow> => {
+    // sqlite-wasm exposes a low-level cursor `Stmt` via `db.prepare(sql)`, but
+    // wrapping it would expand the structural `SqliteWasmDatabaseLike`
+    // interface and require manual finalize/step plumbing in error paths.
+    // Instead this shim captures the SQL and re-issues `db.exec` per call.
+    // The wasm runtime caches parsed statements internally, so repeated exec
+    // of the same SQL doesn't re-parse at the C level — sqlfu just doesn't
+    // hold a native handle. Named params flow through wasm's native `bind`
+    // shape (it accepts `Record` directly).
+    return {
+      async all(params) {
+        const rows = database.exec({
+          sql,
+          bind: toBind(params),
+          rowMode: 'object',
+          returnValue: 'resultRows',
+        });
+        return (rows as TRow[] | undefined) ?? [];
+      },
+      async run(params) {
+        database.exec({
+          sql,
+          bind: toBind(params),
+        });
+        return captureRunResult(database);
+      },
+      async *iterate(params) {
+        const rows = database.exec({
+          sql,
+          bind: toBind(params),
+          rowMode: 'object',
+          returnValue: 'resultRows',
+        });
+        for (const row of (rows as TRow[] | undefined) ?? []) {
+          yield row;
+        }
+      },
+      async [Symbol.asyncDispose]() {},
+    };
+  };
   const client: Omit<AsyncClient<SqliteWasmDatabaseLike>, 'sql'> & {sql: AsyncClient<SqliteWasmDatabaseLike>['sql']} = {
     driver: database,
     system: 'sqlite',
@@ -62,6 +111,7 @@ export function createSqliteWasmClient(database: SqliteWasmDatabaseLike): AsyncC
     run,
     raw,
     iterate,
+    prepare,
     async transaction<TResult>(fn: (tx: AsyncClient<SqliteWasmDatabaseLike>) => Promise<TResult> | TResult) {
       return surroundWithBeginCommitRollbackAsync(client, fn);
     },
@@ -79,12 +129,27 @@ function toPositionalBind(args: QueryArg[]): SqliteWasmBindValue[] | undefined {
   if (args.length === 0) {
     return undefined;
   }
-  return args.map((value) => {
-    if (typeof value === 'boolean') {
-      return value ? 1 : 0;
-    }
-    return value;
-  });
+  return args.map(coerceBindValue);
+}
+
+function toBind(
+  params: PreparedStatementParams | undefined,
+): SqliteWasmBindValue[] | Record<string, SqliteWasmBindValue> | undefined {
+  if (params == null) return undefined;
+  if (Array.isArray(params)) return toPositionalBind(params as QueryArg[]);
+  const out: Record<string, SqliteWasmBindValue> = {};
+  for (const [key, value] of Object.entries(params)) {
+    out[key.startsWith(':') || key.startsWith('$') || key.startsWith('@') ? key : `:${key}`] =
+      coerceBindValue(value as QueryArg);
+  }
+  return out;
+}
+
+function coerceBindValue(value: QueryArg): SqliteWasmBindValue {
+  if (typeof value === 'boolean') {
+    return value ? 1 : 0;
+  }
+  return value;
 }
 
 function captureRunResult(database: SqliteWasmDatabaseLike) {

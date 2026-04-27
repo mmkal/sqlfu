@@ -103,6 +103,8 @@ sqlfu doesn't ship its own database driver. Instead, `sqlfu` exports a thin adap
 
 That sync/async distinction carries through generated query wrappers and the migrator. Sync-backed generated functions return rows directly, and `applyMigrations()` runs synchronously on a `SyncClient`. Async-backed clients get the same API shape, but with promises where the underlying driver actually needs them.
 
+When you need to run SQL outside a generated wrapper, the same client surface gives you `client.all(...)`, `client.run(...)`, `client.iterate(...)`, and `client.prepare(sql)`. Prepared statements are the low-level path for reusable ad-hoc SQL and named parameters without reaching through to `client.driver`. See [Prepared statements](https://sqlfu.dev/docs/adapters#prepared-statements).
+
 See [Adapters](https://sqlfu.dev/docs/adapters) for the full driver table, copy-paste snippets, and guidance on which to pick.
 
 ### Migrator

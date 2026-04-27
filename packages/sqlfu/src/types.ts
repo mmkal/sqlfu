@@ -1,6 +1,6 @@
 export type QueryArg = null | string | number | bigint | Uint8Array | boolean;
 
-export type ResultRow = Record<string, unknown>;
+export type ResultRow = object;
 
 export interface SqlFragment {
   sql: string;
@@ -18,6 +18,30 @@ export interface QueryMetadata {
 
 export type RunResult = QueryMetadata;
 
+/**
+ * Loose param shape accepted by `prepare()` handles. Either positional
+ * (`QueryArg[]`) or named (`Record<string, unknown>` keyed by the bare param
+ * name — `:slug` matches `{slug: ...}`). Each adapter translates this to its
+ * driver's binding shape; positional-only drivers (D1, DO, turso-serverless,
+ * expo) route named params through the shared `rewriteNamedParamsToPositional`
+ * helper in `sqlite-text.ts`.
+ */
+export type PreparedStatementParams = Record<string, unknown> | QueryArg[];
+
+export interface SyncPreparedStatement<TRow extends ResultRow = ResultRow> {
+  all(params?: PreparedStatementParams): TRow[];
+  run(params?: PreparedStatementParams): RunResult;
+  iterate(params?: PreparedStatementParams): Iterable<TRow>;
+  [Symbol.dispose](): void;
+}
+
+export interface PreparedStatement<TRow extends ResultRow = ResultRow> {
+  all(params?: PreparedStatementParams): Promise<TRow[]>;
+  run(params?: PreparedStatementParams): Promise<RunResult>;
+  iterate(params?: PreparedStatementParams): AsyncIterable<TRow>;
+  [Symbol.asyncDispose](): Promise<void>;
+}
+
 export interface SyncClient<TDriver = unknown> {
   driver: TDriver;
   /** OTel `db.system.name`. Stamped by each adapter ('sqlite', 'postgresql', etc.). */
@@ -28,6 +52,14 @@ export interface SyncClient<TDriver = unknown> {
   run(query: SqlQuery): RunResult;
   raw(sql: string): RunResult;
   iterate<TRow extends ResultRow = ResultRow>(query: SqlQuery): Iterable<TRow>;
+  /**
+   * Prepare a SQL string once and reuse the resulting handle for many
+   * `.all` / `.run` / `.iterate` calls. The handle wraps the driver's native
+   * prepared statement where available; on drivers without a real prepare
+   * concept (Durable Objects, sqlite-wasm) it's a shim that re-issues the
+   * driver's exec on every call.
+   */
+  prepare<TRow extends ResultRow = ResultRow>(sql: string): SyncPreparedStatement<TRow>;
   transaction<TResult>(fn: (tx: SyncClient<TDriver>) => TResult): TResult;
   transaction<TResult>(fn: (tx: SyncClient<TDriver>) => Promise<TResult>): Promise<TResult>;
   sql: SyncSqlTag;
@@ -43,6 +75,8 @@ export interface AsyncClient<TDriver = unknown> {
   run(query: SqlQuery): Promise<RunResult>;
   raw(sql: string): Promise<RunResult>;
   iterate<TRow extends ResultRow = ResultRow>(query: SqlQuery): AsyncIterable<TRow>;
+  /** See {@link SyncClient.prepare}. Async variant; handle uses `Symbol.asyncDispose`. */
+  prepare<TRow extends ResultRow = ResultRow>(sql: string): PreparedStatement<TRow>;
   transaction<TResult>(fn: (tx: AsyncClient<TDriver>) => Promise<TResult> | TResult): Promise<TResult>;
   sql: AsyncSqlTag;
 }

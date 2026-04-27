@@ -1,7 +1,10 @@
 import {wrapSyncClientErrors} from '../adapter-errors.js';
 import {bindSyncSql} from '../sql.js';
-import {rawSqlWithSqlSplittingSync} from '../sqlite-text.js';
-import type {ResultRow, SqlQuery, SyncClient} from '../types.js';
+import {
+  rawSqlWithSqlSplittingSync,
+  rewriteNamedParamsToPositional,
+} from '../sqlite-text.js';
+import type {ResultRow, SqlQuery, SyncClient, SyncPreparedStatement} from '../types.js';
 
 // Intentionally non-generic and bindings-typed-as-`any[]` so this interface
 // accepts Cloudflare's real `SqlStorage` (`exec<T extends Record<string,
@@ -61,6 +64,30 @@ export function createDurableObjectClient<TStorage extends DurableObjectClientIn
     *iterate<TRow extends ResultRow = ResultRow>(query: SqlQuery) {
       const rows = sqlStorage.exec(query.sql, ...query.args).toArray() as TRow[];
       yield* rows;
+    },
+    prepare<TRow extends ResultRow = ResultRow>(sql: string): SyncPreparedStatement<TRow> {
+      // DO storage has no native prepared-statement concept; this shim
+      // captures the SQL string and re-issues `storage.exec` on every call.
+      // workerd parses the SQL fresh each time — tolerable for DO writes,
+      // which the design grills already declared cheap. Named params are
+      // tokenized to positional because `storage.exec` only accepts a
+      // positional `...bindings` spread.
+      return {
+        all(params) {
+          const rewritten = rewriteNamedParamsToPositional(sql, params);
+          return sqlStorage.exec(rewritten.sql, ...rewritten.args).toArray() as TRow[];
+        },
+        run(params) {
+          const rewritten = rewriteNamedParamsToPositional(sql, params);
+          const cursor = sqlStorage.exec(rewritten.sql, ...rewritten.args);
+          return {rowsAffected: cursor.rowsWritten};
+        },
+        *iterate(params) {
+          const rewritten = rewriteNamedParamsToPositional(sql, params);
+          yield* (sqlStorage.exec(rewritten.sql, ...rewritten.args).toArray() as TRow[]);
+        },
+        [Symbol.dispose]() {},
+      };
     },
     transaction<TResult>(fn: (tx: SyncClient<TStorage>) => TResult | Promise<TResult>) {
       // Durable Objects reject transaction-control SQL. When callers pass full

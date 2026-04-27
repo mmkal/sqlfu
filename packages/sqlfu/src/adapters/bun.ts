@@ -1,11 +1,23 @@
 import {wrapSyncClientErrors} from '../adapter-errors.js';
 import {bindSyncSql} from '../sql.js';
 import {rawSqlWithSqlSplittingSync, surroundWithBeginCommitRollbackSync} from '../sqlite-text.js';
-import type {ResultRow, SqlQuery, SyncClient} from '../types.js';
+import type {
+  PreparedStatementParams,
+  ResultRow,
+  SqlQuery,
+  SyncClient,
+  SyncPreparedStatement,
+} from '../types.js';
 
 export interface BunSqliteStatementLike<TRow extends ResultRow = ResultRow> {
   all(...params: unknown[]): TRow[];
   iterate(...params: unknown[]): IterableIterator<TRow>;
+  run?(...params: unknown[]): {
+    changes?: number;
+    lastInsertRowid?: string | number | bigint | null;
+  };
+  /** Optional. bun:sqlite `Statement.finalize()` releases the underlying VM. */
+  finalize?(): void;
 }
 
 export interface BunSqliteDatabaseLike {
@@ -46,6 +58,40 @@ export function createBunClient(database: BunSqliteDatabaseLike): SyncClient<Bun
     *iterate<TRow extends ResultRow = ResultRow>(query: SqlQuery) {
       yield* database.query<TRow>(query.sql).iterate(...query.args);
     },
+    prepare<TRow extends ResultRow = ResultRow>(sql: string): SyncPreparedStatement<TRow> {
+      // bun:sqlite `Statement` accepts either positional spread or a single
+      // named-param object (matching better-sqlite3's API). bindArgs collapses
+      // both shapes into the spread.
+      const statement = database.query<TRow>(sql);
+      return {
+        all(params) {
+          return statement.all(...bindArgs(params));
+        },
+        run(params) {
+          // Bun's Statement may not expose `.run` on every version; fall back
+          // to driver-level `database.run` for that path. Loses statement
+          // reuse for `.run`, keeps the API contract.
+          if (statement.run) {
+            const result = statement.run(...bindArgs(params));
+            return {
+              rowsAffected: result.changes,
+              lastInsertRowid: result.lastInsertRowid,
+            };
+          }
+          const fallback = database.run(sql, bindArgs(params) as unknown[]);
+          return {
+            rowsAffected: fallback.changes,
+            lastInsertRowid: fallback.lastInsertRowid,
+          };
+        },
+        *iterate(params) {
+          yield* statement.iterate(...bindArgs(params));
+        },
+        [Symbol.dispose]() {
+          statement.finalize?.();
+        },
+      };
+    },
     transaction<TResult>(fn: (tx: SyncClient<BunSqliteDatabaseLike>) => TResult | Promise<TResult>) {
       return surroundWithBeginCommitRollbackSync(client, fn);
     },
@@ -58,3 +104,9 @@ export function createBunClient(database: BunSqliteDatabaseLike): SyncClient<Bun
 }
 
 export const createBunDatabase = createBunClient;
+
+function bindArgs(params: PreparedStatementParams | undefined): unknown[] {
+  if (params == null) return [];
+  if (Array.isArray(params)) return params;
+  return [params];
+}

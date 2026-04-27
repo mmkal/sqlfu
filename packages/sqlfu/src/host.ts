@@ -1,4 +1,11 @@
-import type {AsyncClient, DisposableAsyncClient, ResultRow, RunResult, SqlfuProjectConfig} from './types.js';
+import type {
+  AsyncClient,
+  DisposableAsyncClient,
+  PreparedStatementParams,
+  ResultRow,
+  RunResult,
+  SqlfuProjectConfig,
+} from './types.js';
 import type {QueryCatalog} from './typegen/query-catalog.js';
 import type {SqlAnalysisResponse} from './ui/shared.js';
 
@@ -8,7 +15,7 @@ export type AdHocSqlResult =
   | {mode: 'rows'; rows: ResultRow[]}
   | {mode: 'metadata'; metadata: RunResult};
 
-export type AdHocSqlParams = Record<string, unknown> | unknown[] | undefined;
+export type AdHocSqlParams = PreparedStatementParams | undefined;
 
 export interface HostFs {
   readFile(path: string): Promise<string>;

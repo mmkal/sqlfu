@@ -13,7 +13,7 @@ import {
 } from '../api.js';
 import {SqlfuError, type SqlfuErrorKind} from '../errors.js';
 import {excludeReservedSqliteObjects, splitSqlStatements} from '../sqlite-text.js';
-import type {SqlfuHost} from '../host.js';
+import type {AdHocSqlParams, SqlfuHost} from '../host.js';
 import type {AsyncClient, QueryArg, SqlfuProjectConfig} from '../types.js';
 import {basename, joinPath} from '../paths.js';
 import type {QueryCatalogEntry} from '../typegen/query-catalog.js';
@@ -919,12 +919,12 @@ function slugifyQueryName(value: string) {
     .replace(/^-+|-+$/g, '');
 }
 
-function normalizeSqlRunnerParams(value: unknown): Record<string, unknown> | unknown[] | undefined {
+function normalizeSqlRunnerParams(value: unknown): AdHocSqlParams {
   if (value == null || value === '') {
     return undefined;
   }
   if (Array.isArray(value)) {
-    return value;
+    return value as QueryArg[];
   }
   if (typeof value === 'object') {
     return value as Record<string, unknown>;
@@ -932,7 +932,7 @@ function normalizeSqlRunnerParams(value: unknown): Record<string, unknown> | unk
   throw new Error('SQL runner params must be an object or array');
 }
 
-function materializeRow(row: Record<string, unknown>) {
+function materializeRow(row: object) {
   return Object.fromEntries(
     Object.entries(row).map(([key, value]) => {
       if (typeof value === 'bigint') {

@@ -1,6 +1,13 @@
 import {mapSqliteDriverError} from './errors.js';
 import {bindAsyncSql, bindSyncSql} from './sql.js';
-import type {AsyncClient, SqlQuery, SyncClient} from './types.js';
+import type {
+  AsyncClient,
+  PreparedStatement,
+  ResultRow,
+  SqlQuery,
+  SyncClient,
+  SyncPreparedStatement,
+} from './types.js';
 
 /**
  * Wrap a `SyncClient` so every error from `all` / `run` / `raw` / `iterate`
@@ -49,6 +56,40 @@ export function wrapSyncClientErrors<TDriver>(client: SyncClient<TDriver>): Sync
         throw mapQuery(error, query);
       }
     },
+    prepare<TRow extends ResultRow = ResultRow>(sql: string): SyncPreparedStatement<TRow> {
+      let stmt: SyncPreparedStatement<TRow>;
+      try {
+        stmt = client.prepare<TRow>(sql);
+      } catch (error) {
+        throw mapQuery(error, {sql, args: []});
+      }
+      return {
+        all(params) {
+          try {
+            return stmt.all(params);
+          } catch (error) {
+            throw mapQuery(error, {sql, args: []});
+          }
+        },
+        run(params) {
+          try {
+            return stmt.run(params);
+          } catch (error) {
+            throw mapQuery(error, {sql, args: []});
+          }
+        },
+        *iterate(params) {
+          try {
+            yield* stmt.iterate(params);
+          } catch (error) {
+            throw mapQuery(error, {sql, args: []});
+          }
+        },
+        [Symbol.dispose]() {
+          stmt[Symbol.dispose]();
+        },
+      };
+    },
     transaction: (<TResult>(fn: (tx: SyncClient<TDriver>) => TResult) =>
       client.transaction((tx: SyncClient<TDriver>) => fn(wrapSyncClientErrors(tx)))) as SyncClient<TDriver>['transaction'],
     sql: undefined as unknown as SyncClient<TDriver>['sql'],
@@ -92,6 +133,40 @@ export function wrapAsyncClientErrors<TDriver>(client: AsyncClient<TDriver>): As
       } catch (error) {
         throw mapQuery(error, query);
       }
+    },
+    prepare<TRow extends ResultRow = ResultRow>(sql: string): PreparedStatement<TRow> {
+      let stmt: PreparedStatement<TRow>;
+      try {
+        stmt = client.prepare<TRow>(sql);
+      } catch (error) {
+        throw mapQuery(error, {sql, args: []});
+      }
+      return {
+        async all(params) {
+          try {
+            return await stmt.all(params);
+          } catch (error) {
+            throw mapQuery(error, {sql, args: []});
+          }
+        },
+        async run(params) {
+          try {
+            return await stmt.run(params);
+          } catch (error) {
+            throw mapQuery(error, {sql, args: []});
+          }
+        },
+        async *iterate(params) {
+          try {
+            yield* stmt.iterate(params);
+          } catch (error) {
+            throw mapQuery(error, {sql, args: []});
+          }
+        },
+        async [Symbol.asyncDispose]() {
+          await stmt[Symbol.asyncDispose]();
+        },
+      };
     },
     transaction: (fn) => client.transaction((tx) => fn(wrapAsyncClientErrors(tx))),
     sql: undefined as unknown as AsyncClient<TDriver>['sql'],

@@ -1,7 +1,13 @@
 import {wrapSyncClientErrors} from '../adapter-errors.js';
 import {bindSyncSql} from '../sql.js';
 import {rawSqlWithSqlSplittingSync, surroundWithBeginCommitRollbackSync} from '../sqlite-text.js';
-import type {ResultRow, SqlQuery, SyncClient} from '../types.js';
+import type {
+  PreparedStatementParams,
+  ResultRow,
+  SqlQuery,
+  SyncClient,
+  SyncPreparedStatement,
+} from '../types.js';
 
 export interface NodeSqliteStatementLike<TRow extends ResultRow = ResultRow> {
   all(...params: unknown[]): ResultRow[];
@@ -10,6 +16,8 @@ export interface NodeSqliteStatementLike<TRow extends ResultRow = ResultRow> {
     changes?: number | bigint;
     lastInsertRowid?: string | number | bigint | null;
   };
+  /** Optional. Native node:sqlite `StatementSync` exposes `finalize`; structural mocks may not. */
+  finalize?(): void;
 }
 
 export interface NodeSqliteDatabaseLike {
@@ -45,6 +53,32 @@ export function createNodeSqliteClient(database: NodeSqliteDatabaseLike): SyncCl
         yield materializeRow(row) as TRow;
       }
     },
+    prepare<TRow extends ResultRow = ResultRow>(sql: string): SyncPreparedStatement<TRow> {
+      // node:sqlite `StatementSync.all/run/iterate` accept either positional
+      // args via the rest spread or a single named-param object as the only
+      // arg. bindArgs collapses both shapes into the spread.
+      const statement = database.prepare(sql);
+      return {
+        all(params) {
+          return materializeRows(statement.all(...bindArgs(params))) as TRow[];
+        },
+        run(params) {
+          const result = statement.run(...bindArgs(params));
+          return {
+            rowsAffected: result.changes == null ? undefined : Number(result.changes),
+            lastInsertRowid: result.lastInsertRowid,
+          };
+        },
+        *iterate(params) {
+          for (const row of statement.iterate(...bindArgs(params))) {
+            yield materializeRow(row) as TRow;
+          }
+        },
+        [Symbol.dispose]() {
+          statement.finalize?.();
+        },
+      };
+    },
     transaction<TResult>(fn: (tx: SyncClient<NodeSqliteDatabaseLike>) => TResult | Promise<TResult>) {
       return surroundWithBeginCommitRollbackSync(client, fn);
     },
@@ -64,4 +98,10 @@ function materializeRows<TRow extends ResultRow>(rows: TRow[]): TRow[] {
 
 function materializeRow<TRow extends ResultRow>(row: TRow): TRow {
   return {...row};
+}
+
+function bindArgs(params: PreparedStatementParams | undefined): unknown[] {
+  if (params == null) return [];
+  if (Array.isArray(params)) return params;
+  return [params];
 }

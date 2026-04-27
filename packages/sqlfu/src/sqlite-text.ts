@@ -1,4 +1,102 @@
-import type {AsyncClient, Client, QueryArg, SyncClient} from './types.js';
+import type {AsyncClient, Client, PreparedStatementParams, QueryArg, SyncClient} from './types.js';
+
+/**
+ * Returns true for statements that produce a result set — `select`, `with`,
+ * `pragma`, `explain`, `values`, and any of the write variants with a
+ * `returning` clause. Used by `execAdHocSql` to decide whether the UI should
+ * render rows or a row-count summary. Strips leading comments/whitespace so a
+ * commented query is classified by its actual first keyword.
+ *
+ * Try/catch on `.all()` is *not* a safe substitute: node:sqlite returns `[]`
+ * for writes (no error to catch), and better-sqlite3 may execute partial side
+ * effects before throwing — falling back to `.run()` would double-execute.
+ * Keyword classification sidesteps both.
+ */
+export function sqlReturnsRows(sql: string): boolean {
+  const stripped = sql.replace(/^(?:\s+|--[^\n]*(?:\n|$)|\/\*[\s\S]*?\*\/)+/u, '');
+  if (/^(select|with|pragma|explain|values)\b/iu.test(stripped)) return true;
+  return /\breturning\b/iu.test(sql);
+}
+
+/**
+ * Adapter-internal compatibility shim for drivers whose binding API is
+ * strictly positional (D1, Durable Objects, turso-serverless, expo-sqlite).
+ * Rewrites `:name` / `$name` / `@name` to `?` and returns the args in
+ * appearance order so the strictly-positional driver can bind them. A minimal
+ * tokenizer skips string literals and comments so colons/dollars inside
+ * quoted strings aren't mistaken for placeholders.
+ *
+ * Adapters whose driver natively accepts `Record` bindings (better-sqlite3,
+ * node:sqlite, libsql, sqlite-wasm) skip this helper and pass the params
+ * straight through.
+ */
+export function rewriteNamedParamsToPositional(
+  sql: string,
+  params: PreparedStatementParams | undefined,
+): {sql: string; args: QueryArg[]} {
+  if (params == null) return {sql, args: []};
+  if (Array.isArray(params)) return {sql, args: params as QueryArg[]};
+
+  const named = params as Record<string, unknown>;
+  const order: string[] = [];
+  let out = '';
+  let i = 0;
+  while (i < sql.length) {
+    const ch = sql[i]!;
+    if (ch === "'" || ch === '"') {
+      const quote = ch;
+      const start = i;
+      i += 1;
+      while (i < sql.length) {
+        if (sql[i] === quote) {
+          if (sql[i + 1] === quote) {
+            i += 2;
+            continue;
+          }
+          i += 1;
+          break;
+        }
+        i += 1;
+      }
+      out += sql.slice(start, i);
+      continue;
+    }
+    if (ch === '-' && sql[i + 1] === '-') {
+      const eol = sql.indexOf('\n', i);
+      const end = eol === -1 ? sql.length : eol;
+      out += sql.slice(i, end);
+      i = end;
+      continue;
+    }
+    if (ch === '/' && sql[i + 1] === '*') {
+      const close = sql.indexOf('*/', i + 2);
+      const end = close === -1 ? sql.length : close + 2;
+      out += sql.slice(i, end);
+      i = end;
+      continue;
+    }
+    if (ch === ':' || ch === '$' || ch === '@') {
+      const rest = sql.slice(i + 1);
+      const match = /^[a-zA-Z_][a-zA-Z0-9_]*/u.exec(rest);
+      if (match) {
+        order.push(match[0]);
+        out += '?';
+        i += 1 + match[0].length;
+        continue;
+      }
+    }
+    out += ch;
+    i += 1;
+  }
+
+  const args = order.map((name) => {
+    if (!Object.prototype.hasOwnProperty.call(named, name)) {
+      throw new Error(`SQL: missing value for named parameter "${name}".`);
+    }
+    return named[name] as QueryArg;
+  });
+  return {sql: out, args};
+}
 
 /**
  * Standard WHERE-clause fragment for user-table introspection queries. Excludes:

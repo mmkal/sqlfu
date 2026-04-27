@@ -1,17 +1,15 @@
-import {createSqliteWasmClient} from 'sqlfu';
+import {createSqliteWasmClient, sqlReturnsRows} from 'sqlfu';
 import {
   analyzeVendoredTypesqlQueriesWithClient,
   isInternalUnsupportedSqlAnalysisError,
   toSqlEditorDiagnostic,
 } from 'sqlfu/analyze';
 import type {
-  AdHocSqlParams,
   AdHocSqlResult,
   DisposableAsyncClient,
   HostCatalog,
   HostFs,
   QueryCatalog,
-  ResultRow,
   SqlfuHost,
   SqlfuProjectConfig,
 } from 'sqlfu';
@@ -87,30 +85,24 @@ export async function createBrowserHost(input: {
       } as unknown as DisposableAsyncClient;
     },
     execAdHocSql: async (client, sqlText, params): Promise<AdHocSqlResult> => {
-      const db = client.driver as Database;
-      const bindings = normalizeAdHocParams(params);
-      const returnsRows = statementReturnsRows(db, sqlText);
-      if (returnsRows) {
-        const rows = db.exec({
-          sql: sqlText,
-          bind: bindings as never,
-          rowMode: 'object',
-          returnValue: 'resultRows',
-        }) as ResultRow[];
+      // Mirror the node host: route through `client.prepare` and use the
+      // shared `sqlReturnsRows` classifier to decide rows vs. metadata. The
+      // sqlite-wasm adapter handles named-param `Record` natively; we just
+      // pass `params` through.
+      await using stmt = client.prepare(sqlText);
+      if (sqlReturnsRows(sqlText)) {
         // SELECTs don't mutate the db; skip the schema-change broadcast. The
         // RelationQueryPanel's useQuery subscribes to this same endpoint, so
         // an invalidateQueries() here would re-fire the query and loop.
+        const rows = await stmt.all(params);
         return {mode: 'rows', rows};
       }
-      db.exec({sql: sqlText, bind: bindings as never});
+      const result = await stmt.run(params);
       input.onSchemaChange();
-      const rowsAffected = Number(db.changes(false, false) ?? 0);
-      const lastInsertRowidValue = db.selectValue('select last_insert_rowid() as value');
-      const lastInsertRowid =
-        typeof lastInsertRowidValue === 'bigint'
-          ? Number(lastInsertRowidValue)
-          : ((lastInsertRowidValue as number | null | undefined) ?? null);
-      return {mode: 'metadata', metadata: {rowsAffected, lastInsertRowid}};
+      return {mode: 'metadata', metadata: {
+        rowsAffected: result.rowsAffected,
+        lastInsertRowid: result.lastInsertRowid,
+      }};
     },
     initializeProject: async () => {
       throw new Error('sqlfu init is not supported in demo mode');
@@ -131,15 +123,6 @@ export async function createBrowserHost(input: {
   };
 
   return {host, config, vfs, database};
-}
-
-function statementReturnsRows(db: Database, sqlText: string): boolean {
-  const stmt = db.prepare(sqlText);
-  try {
-    return stmt.columnCount > 0;
-  } finally {
-    stmt.finalize();
-  }
 }
 
 function createBrowserCatalog(vfs: DemoVfs, database: Database): HostCatalog {
@@ -297,7 +280,3 @@ function seedLiveDatabase(database: Database, definitionsSql: string) {
   `);
 }
 
-function normalizeAdHocParams(params: AdHocSqlParams): Record<string, unknown> | unknown[] {
-  if (params == null) return [];
-  return params as Record<string, unknown> | unknown[];
-}

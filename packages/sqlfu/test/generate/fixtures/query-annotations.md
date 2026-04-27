@@ -33,9 +33,7 @@ create table posts (
 /** @name listPosts */
 select id, slug, title from posts order by id;
 
-/*
-  @name findPostBySlug
-*/
+/** @name findPostBySlug */
 select id, slug, title from posts where slug = :slug;
 ```
 

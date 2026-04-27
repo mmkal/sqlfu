@@ -152,6 +152,31 @@ test('generated annotated queries expand inline list and object params at runtim
   );
 });
 
+test('generate supports multiline @name comments in multi-query files', async () => {
+  await using project = await createRuntimeFixture({
+    definitionsSql: `create table posts (id integer primary key, slug text not null);`,
+    files: {
+      'sql/posts.sql': dedent`
+        /*
+          @name listPosts
+        */
+        select id, slug from posts order by id;
+
+        /*
+          @name findPostBySlug
+        */
+        select id, slug from posts where slug = :slug;
+      `,
+    },
+  });
+
+  await project.generate();
+  const generatedModule = await project.readText('sql/.generated/posts.sql.ts');
+
+  expect(generatedModule).toContain('export const listPosts');
+  expect(generatedModule).toContain('export const findPostBySlug');
+});
+
 test('generate with validator: valibot validates inputs at runtime via standard schema', async () => {
   await using project = await createRuntimeFixture({
     definitionsSql: dedent`

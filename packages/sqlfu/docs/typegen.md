@@ -53,14 +53,15 @@ where id = :id;
 await getPost(client, {id: 123});
 ```
 
-Use `:list` when one param should expand into a comma-separated placeholder list.
-The most common shape is an `in (...)` clause.
+Use `IN (:ids)` or `NOT IN (:ids)` when one scalar param should expand into a
+comma-separated placeholder list. TypeSQL infers the array type from the `IN`
+operator, and sqlfu uses that inferred type to expand the runtime placeholders.
 
 ```sql
 /** @name listPostsByIds */
 select id, slug, title
 from posts
-where id in (:ids:list)
+where id in (:ids)
 order by id;
 ```
 
@@ -116,12 +117,12 @@ field order declared in `tupleList`. Empty arrays throw.
 
 ## Limits
 
-- Runtime-expanded params, currently `:list` and `:tupleList(...)`, can appear only
+- Runtime-expanded params, currently inferred `IN` lists and `:tupleList(...)`, can appear only
   once in a query. Reusing the same expanded array in two places would require
   duplicating the driver arguments, so sqlfu rejects that shape for now.
 - Typed JSON params are not supported yet. A JSON column is still usable as a
   regular scalar param, but sqlfu does not infer or enforce the TypeScript object
   shape inside SQLite JSON text/blob values.
 - Parameter modifiers are part of the SQL placeholder, not comment metadata.
-  `@name` names queries; `:ids:list` and `:posts:tupleList(...)` describe runtime
+  `@name` names queries; `IN (:ids)` and `:posts:tupleList(...)` describe runtime
   placeholder expansion where the SQL shape changes.

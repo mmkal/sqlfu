@@ -122,16 +122,16 @@ function renderQueryDocument(input: {
       });
     }
 
-    const descriptor = applyParameterExpansionDescriptor(
-      refineDescriptor(analysis.descriptor, querySource.analysisSqlContent, input.schema),
-      querySource.parameterExpansions,
-      querySource.sqlContent,
-    );
+    const {descriptor, parameterExpansions} = prepareQueryDescriptor({
+      descriptor: refineDescriptor(analysis.descriptor, querySource.analysisSqlContent, input.schema),
+      explicitParameterExpansions: querySource.parameterExpansions,
+      sourceSql: querySource.sqlContent,
+    });
     return renderQueryWrapper({
       functionName: querySource.functionName,
       sourceSql: querySource.sqlContent,
       descriptor,
-      parameterExpansions: querySource.parameterExpansions,
+      parameterExpansions,
       validator: input.validator,
       prettyErrors: input.prettyErrors,
       sync: input.sync,
@@ -607,7 +607,7 @@ function parseQueryAnnotations(sqlContent: string): QueryAnnotation[] {
       throw new Error('Query annotation is missing a valid @name tag');
     }
     if (/@param\b/.test(body)) {
-      throw new Error('Query annotations only support @name; use inline parameter modifiers such as :ids:list');
+      throw new Error('Query annotations only support @name; use IN params such as (:ids) for scalar lists');
     }
 
     const rawName = nameMatch[1]!;
@@ -690,14 +690,10 @@ type NamedParameterReference = {
   wrappedInParens: boolean;
 };
 
-type NamedParameterModifier =
-  | {
-      kind: 'list';
-    }
-  | {
-      kind: 'tupleList';
-      fields: string[];
-    };
+type NamedParameterModifier = {
+  kind: 'tupleList';
+  fields: string[];
+};
 
 function replaceNamedParameters(
   sql: string,
@@ -810,13 +806,6 @@ function parseInlineParameterModifier(
 ): {modifier: NamedParameterModifier; end: number} | undefined {
   if (sql[index] !== ':' || sql[index + 1] === ':') return undefined;
 
-  if (hasExactModifierName(sql, index, ':list')) {
-    return {
-      modifier: {kind: 'list'},
-      end: index + ':list'.length,
-    };
-  }
-
   if (!sql.startsWith(':tupleList', index)) {
     const match = sql.slice(index).match(/^:([A-Za-z_$][A-Za-z0-9_$]*)/);
     throw new Error(`Unsupported parameter modifier: ${match ? match[0] : sql.slice(index, index + 1)}`);
@@ -838,15 +827,8 @@ function parseInlineParameterModifier(
   };
 }
 
-function hasExactModifierName(sql: string, index: number, name: string): boolean {
-  if (!sql.startsWith(name, index)) return false;
-  const next = sql[index + name.length];
-  return next === undefined || !/[A-Za-z0-9_$]/.test(next);
-}
-
 function parseInlineParameterExpansions(sql: string): ParameterExpansion[] {
   const expansions = new Map<string, ParameterExpansion>();
-  const runtimeExpansionCounts = new Map<string, number>();
   const references = findNamedParameterReferences(sql);
 
   for (const reference of references) {
@@ -858,17 +840,11 @@ function parseInlineParameterExpansions(sql: string): ParameterExpansion[] {
       if (reference.path.length > 0) {
         throw new Error(`Parameter modifiers are only supported on top-level params: ${reference.raw}`);
       }
-      if (reference.modifier.kind === 'list') {
-        addParameterExpansion(expansions, {kind: 'scalar-array', name: reference.name});
-        incrementRuntimeExpansionCount(runtimeExpansionCounts, reference.name, reference.raw);
-        continue;
-      }
       addParameterExpansion(expansions, {
         kind: 'object-array',
         name: reference.name,
         fields: reference.modifier.fields,
       });
-      incrementRuntimeExpansionCount(runtimeExpansionCounts, reference.name, reference.raw);
       continue;
     }
 
@@ -894,14 +870,6 @@ function parseInlineParameterExpansions(sql: string): ParameterExpansion[] {
   }
 
   return Array.from(expansions.values());
-}
-
-function incrementRuntimeExpansionCount(counts: Map<string, number>, name: string, rawReference: string): void {
-  const count = (counts.get(name) || 0) + 1;
-  counts.set(name, count);
-  if (count > 1) {
-    throw new Error(`Runtime-expanded parameter ${JSON.stringify(name)} can only appear once: ${rawReference}`);
-  }
 }
 
 function addParameterExpansion(expansions: Map<string, ParameterExpansion>, expansion: ParameterExpansion): void {
@@ -1129,11 +1097,11 @@ async function writeQueryCatalog(
       return [];
     }
 
-    const descriptor = applyParameterExpansionDescriptor(
-      refineDescriptor(analysis.descriptor, querySource.analysisSqlContent, schema),
-      querySource.parameterExpansions,
-      querySource.sqlContent,
-    );
+    const {descriptor} = prepareQueryDescriptor({
+      descriptor: refineDescriptor(analysis.descriptor, querySource.analysisSqlContent, schema),
+      explicitParameterExpansions: querySource.parameterExpansions,
+      sourceSql: querySource.sqlContent,
+    });
     const columns = getResultFields(descriptor).map((field) => toCatalogField(field));
     const args = [
       ...(descriptor.data ?? []).map((field) => toCatalogArgument('data', field)),
@@ -2244,6 +2212,65 @@ function parseStringLiteralUnion(tsType: string): string[] | undefined {
   }
 
   return parts.map((part) => part.slice(1, -1));
+}
+
+function prepareQueryDescriptor(input: {
+  descriptor: GeneratedQueryDescriptor;
+  explicitParameterExpansions: ParameterExpansion[];
+  sourceSql: string;
+}): {
+  descriptor: GeneratedQueryDescriptor;
+  parameterExpansions: ParameterExpansion[];
+} {
+  const expansions = new Map(
+    input.explicitParameterExpansions.map((expansion) => [expansion.name, expansion]),
+  );
+  const sourceReferences = findNamedParameterReferences(input.sourceSql);
+  const descriptorFields = [...(input.descriptor.data || []), ...input.descriptor.parameters];
+
+  // TypeSQL already infers `IN (:ids)` / `NOT IN (:ids)` params as arrays. sqlfu
+  // only adapts that descriptor fact into its existing runtime SQL/args expansion path.
+  for (const field of descriptorFields) {
+    if (field.objectFields) continue;
+    if (!field.isArray && !field.tsType.endsWith('[]')) continue;
+    const hasTopLevelReference = sourceReferences.some(
+      (reference) => reference.name === field.name && reference.path.length === 0,
+    );
+    if (!hasTopLevelReference) continue;
+    addParameterExpansion(expansions, {kind: 'scalar-array', name: field.name});
+  }
+
+  const parameterExpansions = Array.from(expansions.values());
+  assertRuntimeExpansionReferences(input.sourceSql, parameterExpansions);
+  return {
+    descriptor: applyParameterExpansionDescriptor(input.descriptor, parameterExpansions, input.sourceSql),
+    parameterExpansions,
+  };
+}
+
+function assertRuntimeExpansionReferences(sql: string, expansions: ParameterExpansion[]): void {
+  const runtimeExpansionNames = new Set(
+    expansions
+      .filter((expansion) => expansion.kind === 'scalar-array' || expansion.kind === 'object-array')
+      .map((expansion) => expansion.name),
+  );
+  if (runtimeExpansionNames.size === 0) return;
+
+  const counts = new Map<string, {count: number; rawReference: string}>();
+  for (const reference of findNamedParameterReferences(sql)) {
+    if (!runtimeExpansionNames.has(reference.name) || reference.path.length > 0) continue;
+    const existing = counts.get(reference.name);
+    counts.set(reference.name, {
+      count: (existing?.count || 0) + 1,
+      rawReference: reference.raw,
+    });
+  }
+
+  for (const [name, entry] of counts) {
+    if (entry.count > 1) {
+      throw new Error(`Runtime-expanded parameter ${JSON.stringify(name)} can only appear once: ${entry.rawReference}`);
+    }
+  }
 }
 
 function applyParameterExpansionDescriptor(

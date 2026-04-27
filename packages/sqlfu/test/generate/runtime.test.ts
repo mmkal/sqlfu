@@ -98,7 +98,7 @@ test('generated annotated queries expand inline list and object params at runtim
         insert into posts (slug, title) values :posts:tupleList(slug, title) returning id, slug, title;
 
         /** @name listPostsByIds */
-        select id, slug, title from posts where id in (:ids:list) order by id;
+        select id, slug, title from posts where id in (:ids) order by id;
       `,
     },
   });

@@ -117,7 +117,7 @@ create table posts (
 
 ```sql (sql/posts-by-ids.sql)
 /** @name listPostsByIds */
-select id, slug from posts where id in (:ids:list) order by id;
+select id, slug from posts where id in (:ids) order by id;
 ```
 
 </details>
@@ -342,7 +342,7 @@ export default {
 
 ```sql (sql/posts-by-ids.sql)
 /** @name listPostsByIds */
-select id, slug from posts where id in (:ids:list) order by id;
+select id, slug from posts where id in (:ids) order by id;
 ```
 
 </details>
@@ -447,7 +447,7 @@ create table posts (
 
 ```sql (sql/list-posts.sql)
 /** @name listPosts */
-select id from posts where id in (:ids:list) or parent_id in (:ids:list);
+select id from posts where id in (:ids) or parent_id in (:ids);
 ```
 
 </details>
@@ -455,7 +455,7 @@ select id from posts where id in (:ids:list) or parent_id in (:ids:list);
 <details>
 <summary>error</summary>
 
-Runtime-expanded parameter "ids" can only appear once: :ids:list
+Runtime-expanded parameter "ids" can only appear once: :ids
 
 </details>
 
@@ -483,6 +483,6 @@ select id from posts where id in (:ids);
 <details>
 <summary>error</summary>
 
-Query annotations only support @name; use inline parameter modifiers such as :ids:list
+Query annotations only support @name; use IN params such as \(:ids\) for scalar lists
 
 </details>

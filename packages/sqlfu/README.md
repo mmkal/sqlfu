@@ -130,11 +130,11 @@ values :posts:tupleList(slug, title);
 /** @name listPostsByIds */
 select id, slug, title
 from posts
-where id in (:ids:list);
+where id in (:ids);
 ```
 
-Scalar params stay `:id`, object fields use dot paths like `:post.slug`, and empty
-runtime-expanded arrays throw before SQLite sees the query. See [Type generation](https://sqlfu.dev/docs/typegen).
+Scalar params stay `:id`; scalar lists are inferred from `IN (:ids)` / `NOT IN (:ids)`;
+object fields use dot paths like `:post.slug`; and empty runtime-expanded arrays throw before SQLite sees the query. See [Type generation](https://sqlfu.dev/docs/typegen).
 
 Opt in to runtime validation by setting `generate.validator` to `'arktype'`, `'valibot'`, `'zod'`, or `'zod-mini'`. Wrappers then validate params on the way in and rows on the way out, and derive types via the validator's native inference. See [Runtime validation](https://sqlfu.dev/docs/runtime-validation).
 

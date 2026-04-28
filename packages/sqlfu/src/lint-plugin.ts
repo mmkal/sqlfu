@@ -446,7 +446,15 @@ function unescapeWrappedSql(raw: string): string {
 const SQL_FILE_TAG = '__sqlfuSqlFile';
 const SQL_FILE_WRAPPER_PREFIX = SQL_FILE_TAG + '`';
 const SQL_FILE_WRAPPER_SUFFIX = '`;\n';
-const SOURCE_HASH_COMMENT_PATTERN = /^\/\/ sqlfu-source-hash:\s*([a-f0-9]{64})\s*$/m;
+const QUERY_SOURCE_ENTRY_PATTERN =
+  /\{\s*sqlFile:\s*("(?:(?:\\.)|[^"\\])*")\s*,\s*generatedFile:\s*("(?:(?:\\.)|[^"\\])*")\s*,\s*sourceHash:\s*("(?:(?:\\.)|[^"\\])*")\s*,?\s*\}/g;
+const SOURCE_HASH_PATTERN = /^[a-f0-9]{64}$/u;
+
+type QuerySourceManifestEntry = {
+  sqlFile: string;
+  generatedFile: string;
+  sourceHash: string;
+};
 
 const generatedQueryFreshness: Rule.RuleModule = {
   meta: {
@@ -469,6 +477,16 @@ const generatedQueryFreshness: Rule.RuleModule = {
     const filename = context.physicalFilename || context.filename || context.getFilename();
     if (!filename || filename === '<input>' || filename === '<text>') return {};
 
+    const generatedQueriesFile = generatedQueriesFileFromFilename(filename);
+    if (generatedQueriesFile) {
+      const queriesDir = path.dirname(path.dirname(generatedQueriesFile));
+      return {
+        Program(node) {
+          reportGeneratedQueriesManifestProblems(context, node, queriesDir, generatedQueriesFile);
+        },
+      };
+    }
+
     const sourceSqlFile = sourceSqlFileFromProcessorFilename(filename);
     if (!sourceSqlFile) return {};
 
@@ -483,42 +501,180 @@ const generatedQueryFreshness: Rule.RuleModule = {
     const relativePath = relativeSqlPathInQueriesDir(queriesDir, sourceSqlFile);
     if (!relativePath) return {};
 
-    const generatedPath = path.join(queriesDir, '.generated', `${relativePath.slice(0, -'.sql'.length)}.sql.ts`);
-
     return {
       TaggedTemplateExpression(node) {
         if (node.tag.type !== 'Identifier' || node.tag.name !== SQL_FILE_TAG) return;
-        if (!fs.existsSync(generatedPath)) {
-          context.report({
-            node,
-            message: `generated wrapper for '${relativePath}' is missing; run sqlfu generate.`,
-          });
-          return;
-        }
-
-        const expectedHash = sourceSqlFileHash(sourceSqlFile);
-        const generatedText = fs.readFileSync(generatedPath, 'utf8');
-        const actualHash = SOURCE_HASH_COMMENT_PATTERN.exec(generatedText)?.[1];
-        if (!actualHash) {
-          context.report({
-            node,
-            message: `generated wrapper for '${relativePath}' does not include a source hash; run sqlfu generate.`,
-          });
-          return;
-        }
-        if (actualHash !== expectedHash) {
-          context.report({
-            node,
-            message: `generated wrapper for '${relativePath}' is stale; run sqlfu generate.`,
-          });
-        }
+        reportSourceQueryFreshnessProblem(context, node, queriesDir, sourceSqlFile, relativePath);
       },
     };
   },
 };
 
+function reportSourceQueryFreshnessProblem(
+  context: Rule.RuleContext,
+  node: ESTree.Node,
+  queriesDir: string,
+  sourceSqlFile: string,
+  relativePath: string,
+): void {
+  const generatedDir = path.join(queriesDir, '.generated');
+  const manifest = readQuerySourceManifest(generatedDir);
+  if (!manifest) {
+    context.report({
+      node,
+      message: `generated query manifest is missing; run sqlfu generate.`,
+    });
+    return;
+  }
+
+  const entry = manifest.find((candidate) => candidate.sqlFile === relativePath);
+  if (!entry) {
+    context.report({
+      node,
+      message: `generated query manifest does not include '${relativePath}'; run sqlfu generate.`,
+    });
+    return;
+  }
+
+  const expectedGeneratedFile = generatedFileForSqlFile(relativePath);
+  if (entry.generatedFile !== expectedGeneratedFile) {
+    context.report({
+      node,
+      message: `generated query manifest has the wrong wrapper path for '${relativePath}'; run sqlfu generate.`,
+    });
+    return;
+  }
+
+  if (!fs.existsSync(path.join(generatedDir, entry.generatedFile))) {
+    context.report({
+      node,
+      message: `generated wrapper for '${relativePath}' is missing; run sqlfu generate.`,
+    });
+    return;
+  }
+
+  if (entry.sourceHash !== sourceSqlFileHash(sourceSqlFile)) {
+    context.report({
+      node,
+      message: `generated query manifest hash for '${relativePath}' is stale; run sqlfu generate.`,
+    });
+  }
+}
+
+function reportGeneratedQueriesManifestProblems(
+  context: Rule.RuleContext,
+  node: ESTree.Node,
+  queriesDir: string,
+  generatedQueriesFile: string,
+): void {
+  const generatedDir = path.dirname(generatedQueriesFile);
+  const entries = readQuerySourceManifest(generatedDir) || [];
+  const sourceSqlFiles = walkSqlFiles(queriesDir)
+    .map((absolutePath) => ({
+      absolutePath,
+      relativePath: relativeSqlPathInQueriesDir(queriesDir, absolutePath),
+    }))
+    .filter((entry): entry is {absolutePath: string; relativePath: string} => Boolean(entry.relativePath));
+  const sourceByRelativePath = new Map(sourceSqlFiles.map((file) => [file.relativePath, file]));
+  const entriesBySqlFile = new Map<string, QuerySourceManifestEntry>();
+  const entryGeneratedFiles = new Set<string>();
+
+  for (const entry of entries) {
+    if (entriesBySqlFile.has(entry.sqlFile)) {
+      context.report({
+        node,
+        message: `generated query manifest has duplicate entries for '${entry.sqlFile}'; run sqlfu generate.`,
+      });
+      continue;
+    }
+    entriesBySqlFile.set(entry.sqlFile, entry);
+    entryGeneratedFiles.add(entry.generatedFile);
+  }
+
+  for (const file of sourceSqlFiles) {
+    const entry = entriesBySqlFile.get(file.relativePath);
+    if (!entry) {
+      context.report({
+        node,
+        message: `generated query manifest does not include '${file.relativePath}'; run sqlfu generate.`,
+      });
+      continue;
+    }
+
+    const expectedGeneratedFile = generatedFileForSqlFile(file.relativePath);
+    if (entry.generatedFile !== expectedGeneratedFile) {
+      context.report({
+        node,
+        message: `generated query manifest has the wrong wrapper path for '${file.relativePath}'; run sqlfu generate.`,
+      });
+      continue;
+    }
+
+    if (entry.sourceHash !== sourceSqlFileHash(file.absolutePath)) {
+      context.report({
+        node,
+        message: `generated query manifest hash for '${file.relativePath}' is stale; run sqlfu generate.`,
+      });
+    }
+
+    if (!fs.existsSync(path.join(generatedDir, entry.generatedFile))) {
+      context.report({
+        node,
+        message: `generated wrapper for '${file.relativePath}' is missing; run sqlfu generate.`,
+      });
+    }
+  }
+
+  for (const entry of entries) {
+    if (!sourceByRelativePath.has(entry.sqlFile)) {
+      context.report({
+        node,
+        message: `generated query manifest still lists deleted source '${entry.sqlFile}'; run sqlfu generate.`,
+      });
+    }
+  }
+
+  for (const generatedFile of walkGeneratedQueryWrapperFiles(generatedDir)) {
+    if (entryGeneratedFiles.has(generatedFile)) continue;
+    context.report({
+      node,
+      message: `orphaned generated query wrapper '${generatedFile}'; run sqlfu generate.`,
+    });
+  }
+}
+
 function sourceSqlFileHash(sourceSqlFile: string): string {
   return crypto.createHash('sha256').update(fs.readFileSync(sourceSqlFile)).digest('hex');
+}
+
+function generatedFileForSqlFile(relativeSqlFile: string): string {
+  return `${relativeSqlFile.slice(0, -'.sql'.length)}.sql.ts`;
+}
+
+function readQuerySourceManifest(generatedDir: string): QuerySourceManifestEntry[] | null {
+  const manifestPath = path.join(generatedDir, 'queries.ts');
+  if (!fs.existsSync(manifestPath)) return null;
+  const text = fs.readFileSync(manifestPath, 'utf8');
+  const entries: QuerySourceManifestEntry[] = [];
+  for (const match of text.matchAll(QUERY_SOURCE_ENTRY_PATTERN)) {
+    const entry = {
+      sqlFile: JSON.parse(match[1]!),
+      generatedFile: JSON.parse(match[2]!),
+      sourceHash: JSON.parse(match[3]!),
+    };
+    if (typeof entry.sqlFile !== 'string') continue;
+    if (typeof entry.generatedFile !== 'string') continue;
+    if (typeof entry.sourceHash !== 'string' || !SOURCE_HASH_PATTERN.test(entry.sourceHash)) continue;
+    entries.push(entry);
+  }
+  return entries;
+}
+
+function generatedQueriesFileFromFilename(filename: string): string | null {
+  const absolutePath = path.resolve(filename);
+  if (path.basename(absolutePath) !== 'queries.ts') return null;
+  if (path.basename(path.dirname(absolutePath)) !== '.generated') return null;
+  return absolutePath;
 }
 
 function sourceSqlFileFromProcessorFilename(filename: string): string | null {
@@ -536,6 +692,25 @@ function relativeSqlPathInQueriesDir(queriesDir: string, sourceSqlFile: string):
   if (relative.startsWith('.generated/')) return null;
   if (!relative.endsWith('.sql')) return null;
   return relative;
+}
+
+function walkGeneratedQueryWrapperFiles(generatedDir: string): string[] {
+  const out: string[] = [];
+  if (!fs.existsSync(generatedDir)) return out;
+
+  function walk(currentDir: string): void {
+    for (const entry of fs.readdirSync(currentDir, {withFileTypes: true})) {
+      const absolutePath = path.join(currentDir, entry.name);
+      if (entry.isDirectory()) {
+        walk(absolutePath);
+      } else if (entry.isFile() && entry.name.endsWith('.sql.ts')) {
+        out.push(path.relative(generatedDir, absolutePath).replace(/\\/g, '/'));
+      }
+    }
+  }
+
+  walk(generatedDir);
+  return out.sort((left, right) => left.localeCompare(right));
 }
 
 /**
@@ -617,6 +792,7 @@ const recommended: Linter.Config[] = [
     rules: {
       'sqlfu/query-naming': 'error',
       'sqlfu/format-sql': 'error',
+      'sqlfu/generated-query-freshness': 'error',
     },
   },
   {

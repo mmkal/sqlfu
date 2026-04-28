@@ -134,6 +134,7 @@ Em-dash inventory (source docs only; vendored CLAUDE.md and generated content ex
 - [x] `website/src/pages/index.astro`: replace the pre-alpha-notice em-dash with a period. _80be404: now reads "pre-alpha. The TypeScript API may still shift. The SQL won't."_
 - [x] Verify docs build: `pnpm --filter sqlfu-website build`. _green: 23 pages built (8 docs pages, landing, examples, ui sync)_
 - [x] Update this sub-section with breadcrumb italics as items land. _this commit_
+- [x] Tag `Outbox` as experimental in `packages/sqlfu/README.md` (TOC + section heading) and add an inline warning matching the docs page. _follow-up after PR feedback: TOC entry now reads "Outbox (experimental) → #outbox-experimental"; section heading mirrors; one-line ⚠️ callout aligns with `docs/outbox.md`. Pre-commit regenerates root README._
 
 Not in scope this pass:
 
@@ -147,4 +148,3 @@ For the next pass:
 - The Authority Mismatches table column header is now `Comparison + Direction` (forward / backward). Confirm with users / reviewers that this reads naturally; if not, the alternative is splitting into two columns or a single-row inline footnote.
 - `getting-started.md` still implies `sqlfu init` exists today — confirm it really does. The existing `tasks/generate-preflight.md` already flags the related `generate`-needs-live-DB ordering issue.
 - `docs/adapters.md` "Choosing an adapter" overlaps with the `sqlfu` overview's "Adapters" link — worth seeing whether the bullet list there could move into a smaller "see also" or get pulled up into the README's adapter table.
-- `docs/outbox.md` carries an "Extra-experimental" warning at the top but the README's Outbox section is in the same Capabilities list as stable features. Worth either flagging Outbox in the README ("alpha") or moving it out of the main Capabilities list until the API stabilises.

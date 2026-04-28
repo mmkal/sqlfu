@@ -21,7 +21,7 @@ It is built around a simple idea: SQL should be the source language for schema, 
   - [Type Generator](#type-generator)
   - [Formatter](#formatter)
   - [Observability](#observability)
-  - [Outbox](#outbox)
+  - [Outbox (experimental)](#outbox-experimental)
   - [UI](#ui)
   - [Lint Plugin](#lint-plugin)
   - [Agent Skill](#agent-skill)
@@ -181,7 +181,9 @@ try {
 
 The driver error is preserved byte-identical on `.cause`; `.query` and `.system` come along so error reporters can tag events without a parallel `QueryExecutionContext`. Kind names are SQLSTATE-aligned, so the day a postgres adapter lands the mapping is a direct lookup rather than a second vocabulary to remember. Full kind list, handler recipes, Sentry-tagging example: [Errors](https://sqlfu.dev/docs/errors).
 
-### Outbox
+### Outbox (experimental)
+
+> ⚠️ The shape of this module is still in flux. The basic principle of events + consumers will stay, but expect breaking changes between releases.
 
 A small transactional-outbox / job-queue sits at `sqlfu/outbox`. Emit events in the same transaction as your domain writes; register consumers with retry, delay, `when` filter, and visibility timeout; drive a worker loop by calling `tick()` on a timer. Fan-out, crash recovery, and causation chains all work the way you'd expect, built on the fact that SQLite serialises writers so the queue doesn't need row-locks. See [Outbox](https://sqlfu.dev/docs/outbox).
 

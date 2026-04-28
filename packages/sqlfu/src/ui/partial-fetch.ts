@@ -294,11 +294,18 @@ function assetResponse(assetPath: string, body: SqlfuUiAssetBody, head: boolean)
     });
   }
 
-  return new Response(head ? null : body, {
+  return new Response(head ? null : responseBody(body), {
     headers: {
       'content-type': contentTypeForPath(assetPath),
     },
   });
+}
+
+function responseBody(body: Exclude<SqlfuUiAssetBody, Response>) {
+  if (body instanceof Uint8Array) {
+    return new Uint8Array(body).buffer;
+  }
+  return body;
 }
 
 function contentTypeForPath(filePath: string) {

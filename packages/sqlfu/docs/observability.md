@@ -1,6 +1,6 @@
 # Observability
 
-Generated queries carry their identity to runtime as a `name` field — the camelCase function name, matching the symbol you import. That name reaches OpenTelemetry spans, Sentry errors, PostHog events, Datadog metrics, and anywhere else you want to see it, without extra configuration per destination.
+Generated queries carry their identity to runtime as a `name` field, the camelCase function name matching the symbol you import. A single `instrument(client, ...hooks)` call routes that name to OpenTelemetry spans, Sentry errors, PostHog events, and Datadog metrics; the recipes below show one hook per destination.
 
 sqlfu's observability story mostly falls out of making query naming a first-class concept. The instrumentation itself is small: one `instrument(client, ...hooks)` wrapper and a couple of reference hooks.
 
@@ -69,7 +69,7 @@ instrument.onError(({context, error}) => {
 });
 ```
 
-Every driver error is a [`SqlfuError`](./errors.md) with a normalized `.kind` discriminator — `unique_violation`, `missing_table`, `syntax`, etc. That makes it a natural bucketing dimension in your error reporter (`tags: {'db.error.kind': error.kind}`).
+Every driver error is a [`SqlfuError`](./errors.md) with a normalized `.kind` discriminator (`unique_violation`, `missing_table`, `syntax`, and so on). That makes it a natural bucketing dimension in your error reporter (`tags: {'db.error.kind': error.kind}`).
 
 ## Recipes
 

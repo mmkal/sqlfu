@@ -150,7 +150,7 @@ Supporting pieces live in:
 - [src/api.ts](../src/api.ts)
   command integration for `check`, `draft`, `sync`, and `goto`
 
-So the short answer is "mostly yes, but not entirely". The `src/schemadiff/sqlite/` folder is now the core engine, but it still relies on shared SQLite parsing/execution helpers and API-level integration points elsewhere.
+The `src/schemadiff/sqlite/` folder is the core engine, but it leans on shared SQLite parsing/execution helpers and API-level integration points elsewhere in the tree.
 
 ## Supported And Unsupported Scope
 

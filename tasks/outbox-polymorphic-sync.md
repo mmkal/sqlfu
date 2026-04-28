@@ -68,7 +68,7 @@ by client factory.
 
 Branch: `outbox-polymorphic-sync`
 
-Status (for humans): not started — about to begin the duplicate-and-strip-awaits implementation.
+Status (for humans): impl landed; sync sibling test still to write. Async tests pass. Typecheck clean.
 
 Plan:
 
@@ -80,9 +80,9 @@ Plan:
 
 Checklist:
 
-- [ ] type signatures: `createOutbox<TEvents, TClient extends Client>` with conditional return types on `emit`/`claim`/`setup`
-- [ ] runtime: split body into `runSync`/`runAsync` paths picked off `client.sync`
-- [ ] async tests still green
+- [x] type signatures: `createOutbox<TEvents, TClient extends Client = Client>` with conditional return types on `emit`/`claim`/`setup` _via `MaybeAsync<TClient, TSync, TAsync>` helper conditional in `outbox/index.ts`. Defaulted `TClient = Client` keeps the existing `Outbox<Events>` callsites working._
+- [x] runtime: split body into `createSyncOutbox` / `createAsyncOutbox` paths picked off `client.sync` _bodies are deliberately copy-pasted with `await`s stripped, per the task's recommendation; comment at the top of `createSyncOutbox` warns to keep them in sync._
+- [x] async tests still green _existing `outbox.test.ts` continues to pass unchanged._
 - [ ] sync sibling test asserting non-Promise returns lands and passes
-- [ ] typecheck clean
+- [x] typecheck clean _`pnpm --filter sqlfu typecheck` passes._
 

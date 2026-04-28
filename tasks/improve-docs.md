@@ -90,3 +90,61 @@ Executive decisions made (with rationale):
 - Schema Diff Model moved to last in sidebar (deep-theory, not how-to-use).
 - Runtime validation moved up in sidebar (early-decision feature, high-value for tRPC/forms apps).
 - Demo is fully self-contained (sqlite-wasm, no backend needed); landing page footer and button copy updated to communicate this.
+
+## 2026-04-28 pass
+
+Status: planned. Branch: `improve-docs-2026-04-28`. Worktree: `/Users/mmkal/src/worktrees/sqlfu/improve-docs-2026-04-28`.
+
+Scope is the carry-over list from passes #1 and #2 plus an em-dash sweep on docs files that haven't been swept yet. Source-of-truth carry-overs:
+
+1. `migration-model.md` Authority Mismatches table: `Pending Migrations` and `History Drift` rows share the same `Comparison` text. Distinguish them inline.
+2. `observability.md` lede claims "without extra configuration per destination" — broader than what actually ships. Tighten to match the README's "through a single `instrument()` call" framing.
+3. `schema-diff-model.md` line 153 has a stray "So the short answer is" sentence that lands awkwardly mid-section under "Where The Code Lives".
+4. `packages/sqlfu/README.md` Limitations: two bullets ("SQLite view typing is still imperfect in TypeSQL" and "some expressions need the sqlfu post-pass to get better generated result types") are restating the same fact. Fold into one.
+5. **Confirmed implemented**: `sqlfu check` recommending a target migration when the live schema matches a replayed migration prefix is real (`findRecommendedTarget` in `src/api.ts`, called for both baseline and goto recommendations). Drop the aspirational "may", "should" voice in `migration-model.md` lines 292-307.
+
+Em-dash inventory (source docs only; vendored CLAUDE.md and generated content excluded):
+
+- `packages/sqlfu/README.md`: 4 em-dashes in the Core Concepts and Capabilities sections (`definitions.sql` bullet, `sqlfu_migrations` bullet, Observability paragraph, `SqlfuError.kind` paragraph). Pass #1 cleaned the older em-dashes; these are newer additions.
+- `packages/sqlfu/docs/adapters.md`: 9 em-dashes — sync-stays-sync intro, compatibility-matrix preamble, choosing-an-adapter heading, three section headers (`@libsql/client —`, `@tursodatabase/serverless —`, `@tursodatabase/sync —`), one in the comment line.
+- `packages/sqlfu/docs/errors.md`: 7 em-dashes spread across the lede, the `missing_table` deviation note, the `.cause` paragraph, the `.stack` description, the `.query` shape comment, and the dimensionality paragraph.
+- `packages/sqlfu/docs/dynamic-queries.md`: 2 em-dashes (the "more than a handful of optional filters" bullet, the "deliberate non-goal" paragraph).
+- `packages/sqlfu/docs/getting-started.md`: 3 em-dashes (the global-binary delegation paragraph, the "Adapters" link in "Where to go next", the OTel sentence).
+- `packages/sqlfu/docs/id-helpers.md`: 9 em-dashes in the catalog intro, `definitions.sql` paragraph, the cuid2 caveat, the monotonicity caveat, the recipe-page sentence, all four section headers, and the bigger-SQL-bundles section.
+- `packages/sqlfu/docs/migration-model.md`: 5 em-dashes left after pass #1 (the `four-digit` paragraph, the `migrations.preset` lede, the d1-era migrations note, the schema-detection paragraph, the checksum-downgrade tradeoff, the `prefix` override example).
+- `packages/sqlfu/docs/observability.md`: 2 em-dashes (the lede, the `SqlfuError.kind` discriminator paragraph).
+- `packages/sqlfu/docs/outbox.md`: 6 em-dashes throughout (header bullet, the consumer-options comment, the time-period sentence, two `client` / `causedBy` sentences, the OTel out-of-scope note).
+- `website/src/pages/index.astro`: 1 em-dash (the pre-alpha notice).
+
+`packages/sqlfu/docs/lint-plugin.md`, `typegen.md`, `runtime-validation.mdx`, `schema-diff-model.md`, `packages/ui/README.md` are em-dash-free already.
+
+### Plan
+
+- [x] Land this plan as the first commit so the PR shows context. _first commit_
+- [x] `packages/sqlfu/docs/migration-model.md`: split the shared `Migrations <> Migration History` comparison column so Pending and History Drift rows are visibly different (add a "Direction" or split the comparison text); sweep the 5 remaining em-dashes; drop aspirational voice on `sqlfu check`'s prefix-matching recommendation now that it's implemented. _b1ca8f0: 5 em-dashes replaced; comparison column changed to "Migrations vs Migration History (forward)" / "(backward)"; aspirational "may also recommend a target migration when it can prove..." rewritten to "also recommends a target migration when..."; replay-procedure list trimmed since the implementation walks prefixes 1..n itself_
+- [x] `packages/sqlfu/docs/observability.md`: tighten the lede to mirror the README's narrower claim (one `instrument()` call covers the listed destinations), and drop "anywhere else you want to see it"; sweep 2 em-dashes. _bd56ad7: lede rephrased without "without extra configuration per destination"; both em-dashes replaced (lede uses period; SqlfuError list uses parentheses)_
+- [x] `packages/sqlfu/docs/schema-diff-model.md`: remove the stray "So the short answer is" sentence at the end of "Where The Code Lives" — it's a leftover from an earlier framing question. _bd56ad7: deleted_
+- [x] `packages/sqlfu/README.md`: fold the two TypeSQL/post-pass bullets in Limitations into one; sweep 4 em-dashes (Core Concepts, Capabilities); pre-commit hook regenerates root README. _b9e6dde: bullets merged into "SQLite view typing in vendored TypeSQL is still imperfect in places, and the sqlfu post-pass that fills the gaps is still evolving"; em-dashes replaced; root README hook regenerated automatically by pre-commit_
+- [x] `packages/sqlfu/docs/adapters.md`: sweep 9 em-dashes — section headers become plain titles, sync-stays-sync paragraphs use periods/commas. _b9e6dde: 9 replacements; section headers now use ":" or strip the parenthetical; intro/closing paragraphs use periods or commas_
+- [x] `packages/sqlfu/docs/errors.md`: sweep 7 em-dashes (lede, deviations note, `.cause` / `.stack` / `.query` shape, low-cardinality dimension). _b9e6dde: 7 replacements; the lede uses a period split, the others use periods or parentheses_
+- [x] `packages/sqlfu/docs/dynamic-queries.md`: sweep 2 em-dashes. _b9e6dde: both replaced (parens for the optional-filters bullet, period for the non-goal paragraph)_
+- [x] `packages/sqlfu/docs/getting-started.md`: sweep 3 em-dashes. _b9e6dde: 3 replacements (period or `;` depending on flow)_
+- [x] `packages/sqlfu/docs/id-helpers.md`: sweep 9 em-dashes — section headers use ":" instead of " — ". _b9e6dde: 9 replacements_
+- [x] `packages/sqlfu/docs/outbox.md`: sweep 6 em-dashes. _b9e6dde: 6 replacements_
+- [x] `website/src/pages/index.astro`: replace the pre-alpha-notice em-dash with a period or comma. _b9e6dde: replaced with ". " (two short sentences)_
+- [x] Verify docs build: `pnpm --filter sqlfu-website build`. _green: 9 pages built (8 docs pages + landing)_
+- [x] Update this sub-section with breadcrumb italics as items land. _this commit_
+
+Not in scope this pass:
+
+- `packages/sqlfu/docs/lint-plugin.md`, `typegen.md`, `runtime-validation.mdx`, `schema-diff-model.md`, `packages/ui/README.md`: already em-dash-free.
+- `src/vendor/*/CLAUDE.md` em-dashes: agent-facing vendor notes, deliberately out of scope.
+- The two-bullets-in-Limitations restructure may surface an underlying question about whether "view typing" should be its own dedicated docs section; flagging but not pursuing this pass.
+- Restructuring `migration-model.md`'s big "Authority Mismatches" prose around the table (vs the table cells themselves) — pass #1 also deferred this.
+
+For the next pass:
+
+- The Authority Mismatches table column header is now `Comparison + Direction` (forward / backward). Confirm with users / reviewers that this reads naturally; if not, the alternative is splitting into two columns or a single-row inline footnote.
+- `getting-started.md` still implies `sqlfu init` exists today — confirm it really does. The existing `tasks/generate-preflight.md` already flags the related `generate`-needs-live-DB ordering issue.
+- `docs/adapters.md` "Choosing an adapter" overlaps with the `sqlfu` overview's "Adapters" link — worth seeing whether the bullet list there could move into a smaller "see also" or get pulled up into the README's adapter table.
+- `docs/outbox.md` carries an "Extra-experimental" warning at the top but the README's Outbox section is in the same Capabilities list as stable features. Worth either flagging Outbox in the README ("alpha") or moving it out of the main Capabilities list until the API stabilises.

@@ -579,7 +579,7 @@ function Studio() {
             <a
               key={relation.name}
               className={
-                selectedTable?.name === relation.name && route.kind !== 'query' && route.kind !== 'sql'
+                route.kind === 'table' && selectedTable?.name === relation.name
                   ? 'nav-link active'
                   : 'nav-link'
               }
@@ -596,7 +596,11 @@ function Studio() {
           {catalogQuery.data.queries.map((query) => (
             <a
               key={query.id}
-              className={selectedQuery?.id === query.id ? 'nav-link active' : 'nav-link'}
+              className={
+                route.kind === 'query' && selectedQuery?.id === query.id
+                  ? 'nav-link active'
+                  : 'nav-link'
+              }
               href={`#query/${encodeURIComponent(query.id)}`}
             >
               <span>{query.id}</span>

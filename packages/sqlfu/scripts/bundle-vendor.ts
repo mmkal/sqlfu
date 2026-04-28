@@ -41,10 +41,6 @@ await esbuild.build({
 
 const typesqlToDelete = [
 	'code-block-writer',
-	// `sqlfu-sqlite-parser` is compiled by `build:vendor-typesql` into the
-	// parser's per-file dist output, but the esbuild pass above inlines all
-	// of it into `typesql/sqlfu.js` — so we drop the unbundled copies.
-	'sqlfu-sqlite-parser',
 	'small-utils.js',
 	'small-utils.js.map',
 	'small-utils.d.ts',
@@ -85,6 +81,15 @@ const typesqlToDelete = [
 
 for (const p of typesqlToDelete) {
 	await rm(resolve(distVendor, p), {recursive: true, force: true});
+}
+
+// `sqlfu-sqlite-parser` is compiled by `build:vendor-typesql` into per-file dist
+// output. TypeSQL's analyzer gets the parser inlined into `typesql/sqlfu.js`, but
+// schemadiff's SQL normalizer imports the standalone tokenizer at runtime.
+const sqliteParserDir = resolve(distVendor, 'sqlfu-sqlite-parser');
+for (const entry of await readdir(sqliteParserDir)) {
+	if (entry === 'tokenizer.js') continue;
+	await rm(resolve(sqliteParserDir, entry), {recursive: true, force: true});
 }
 
 // src/typegen/analyze-vendored-typesql-with-client.{js,d.ts} is a hand-written

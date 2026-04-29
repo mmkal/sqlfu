@@ -1,5 +1,3 @@
-import path from 'node:path';
-
 import {expect, test} from 'vitest';
 
 import packageJson from '../package.json' with {type: 'json'};
@@ -9,7 +7,9 @@ test('resolveSqlfuUi locates the workspace @sqlfu/ui package when versions match
   const resolved = await resolveSqlfuUi({sqlfuVersion: packageJson.version});
   expect(resolved).toMatchObject({
     version: packageJson.version,
-    root: expect.stringContaining(`${path.sep}ui`) as unknown as string,
+    assets: {
+      '/index.html': expect.stringContaining('<!doctype html>') as unknown as string,
+    },
   });
 });
 

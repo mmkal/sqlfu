@@ -57,7 +57,11 @@ export const router = {
       await startSqlfuServer({
         port: input?.port,
         configPath: project.configPath,
-        ui: ui ? {root: ui.root} : undefined,
+        ui: ui
+          ? {
+              assets: ui.assets,
+            }
+          : undefined,
       });
 
       context.host.logger.log(

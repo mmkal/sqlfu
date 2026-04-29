@@ -17,7 +17,7 @@ const server = await startSqlfuServer({
   templateRoot,
   defaultProjectName: 'dev-project',
   allowUnknownHosts: true,
-  ui: {
+  uiDev: {
     root: uiRoot,
   },
 });

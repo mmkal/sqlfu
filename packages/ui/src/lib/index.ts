@@ -9,7 +9,7 @@ import bundledSqlfuUiAssets from '#serialized-assets';
 import packageJson from '../../package.json' with {type: 'json'};
 
 export const version: string = packageJson.version;
-export const sqlfuUiAssets: SqlfuUiAssets = bundledSqlfuUiAssets;
+export const sqlfuUiAssets: Record<string, string> = bundledSqlfuUiAssets;
 
 export type CreateSqlfuUiPartialFetchInput = Omit<BaseCreateSqlfuUiPartialFetchInput, 'assets'> & {
   assets?: SqlfuUiAssets;

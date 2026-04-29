@@ -2,6 +2,7 @@ import {RPCHandler} from '@orpc/server/fetch';
 
 import type {SqlfuUiHost} from '../host.js';
 import {uiRouter, type SqlfuUiProject} from './router.js';
+import {contentTypeForUiAssetPath} from './asset-content-type.js';
 
 export type SqlfuUiAssetBody = string | Uint8Array | ArrayBuffer | Blob | Response;
 export type SqlfuUiAsset = SqlfuUiAssetBody | (() => SqlfuUiAssetBody | Promise<SqlfuUiAssetBody>);
@@ -74,7 +75,7 @@ function assetResponse(assetPath: string, body: SqlfuUiAssetBody, head: boolean)
     const response = body.clone();
     const headers = new Headers(response.headers);
     if (!headers.has('content-type')) {
-      headers.set('content-type', contentTypeForPath(assetPath));
+      headers.set('content-type', contentTypeForUiAssetPath(assetPath));
     }
     return new Response(head ? null : response.body, {
       status: response.status,
@@ -85,7 +86,7 @@ function assetResponse(assetPath: string, body: SqlfuUiAssetBody, head: boolean)
 
   return new Response(head ? null : responseBody(body), {
     headers: {
-      'content-type': contentTypeForPath(assetPath),
+      'content-type': contentTypeForUiAssetPath(assetPath),
     },
   });
 }
@@ -116,34 +117,6 @@ function responseBody(body: Exclude<SqlfuUiAssetBody, Response>) {
     return new Uint8Array(body).buffer;
   }
   return body;
-}
-
-function contentTypeForPath(filePath: string) {
-  if (filePath.endsWith('.js') || filePath.endsWith('.mjs')) {
-    return 'text/javascript; charset=utf-8';
-  }
-  if (filePath.endsWith('.css')) {
-    return 'text/css; charset=utf-8';
-  }
-  if (filePath.endsWith('.html')) {
-    return 'text/html; charset=utf-8';
-  }
-  if (filePath.endsWith('.json')) {
-    return 'application/json; charset=utf-8';
-  }
-  if (filePath.endsWith('.svg')) {
-    return 'image/svg+xml';
-  }
-  if (filePath.endsWith('.png')) {
-    return 'image/png';
-  }
-  if (filePath.endsWith('.ico')) {
-    return 'image/x-icon';
-  }
-  if (filePath.endsWith('.wasm')) {
-    return 'application/wasm';
-  }
-  return 'application/octet-stream';
 }
 
 function apiPreflightResponse(request: Request) {

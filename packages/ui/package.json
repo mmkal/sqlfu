@@ -8,7 +8,7 @@
     "directory": "packages/ui"
   },
   "files": [
-    "dist"
+    "dist/lib"
   ],
   "type": "module",
   "imports": {

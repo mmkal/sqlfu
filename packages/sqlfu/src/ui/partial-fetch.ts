@@ -36,10 +36,7 @@ export function createSqlfuUiPartialFetch(input: CreateSqlfuUiPartialFetchInput)
 
       const {matched, response} = await rpcHandler.handle(request, {
         prefix: apiPrefix,
-        context: {
-          host: input.host,
-          project: input.project,
-        },
+        context: { host: input.host, project: input.project },
       });
       return withApiCors(request, matched ? response : new Response('Not found', {status: 404}));
     }

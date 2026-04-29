@@ -26,26 +26,20 @@ test('D1 worker partial fetch serves real UI assets while leaving app routes ava
   await using fixture = await createPartialFetchWorkerFixture({
     fetch: async (request, env) => {
       const db = createD1Client(env.DB);
-      await db.raw(dedent`
+      await db.sql`
         create table if not exists todos (
           id integer primary key,
           title text not null,
           completed integer not null default 0
         );
-      `);
+      `;
 
       const url = new URL(request.url);
-      if (url.pathname === '/hello') {
-        return new Response('<!doctype html><h1>Hello!</h1>', {
-          headers: {'content-type': 'text/html; charset=utf-8'},
-        });
-      }
-
-      if (url.pathname === '/todos/new') {
+      if (url.pathname === '/app') {
         return new Response(
           dedent`
             <!doctype html>
-            <form method="post" action="/todos">
+            <form method="post" action="/api/todos">
               <label>
                 Todo
                 <input name="title" />
@@ -57,13 +51,13 @@ test('D1 worker partial fetch serves real UI assets while leaving app routes ava
         );
       }
 
-      if (url.pathname === '/todos' && request.method === 'POST') {
+      if (url.pathname === '/api/todos' && request.method === 'POST') {
         const formData = await request.formData();
         await db.run({
           sql: 'insert into todos (title) values (?)',
           args: [String(formData.get('title') || '')],
         });
-        return new Response(null, {status: 303, headers: {location: '/todos/new'}});
+        return new Response(null, {status: 303, headers: {location: '/app'}});
       }
 
       const uiPartialFetch = createSqlfuUiPartialFetch({
@@ -72,28 +66,23 @@ test('D1 worker partial fetch serves real UI assets while leaving app routes ava
           projectRoot: '/partial-fetch-playwright',
         },
         host: {
-          async openDb() {
-            return {
-              client: db,
-              async [Symbol.asyncDispose]() {},
-            };
-          },
+          openDb: async () => ({
+            client: db,
+            async [Symbol.asyncDispose]() {},
+          }),
         },
       });
-      const partialResponse = await uiPartialFetch(request);
+      const sqlfuUiResponse = await uiPartialFetch(request);
 
-      if (partialResponse) {
-        return partialResponse;
+      if (sqlfuUiResponse) {
+        return sqlfuUiResponse;
       }
 
       return new Response('plain worker fallback', {status: 404});
     },
   });
 
-  await page.goto(`${fixture.origin}/hello`);
-  await expect(page.getByRole('heading', {name: 'Hello!'})).toBeVisible();
-
-  await page.goto(`${fixture.origin}/todos/new`);
+  await page.goto(`${fixture.origin}/app`);
   await page.getByLabel('Todo').fill('Feed snake');
   await page.getByRole('button', {name: 'Add'}).click();
 
@@ -119,50 +108,27 @@ test('partial fetch can serve the UI behind worker-owned prefix auth', async ({p
   await using fixture = await createPartialFetchWorkerFixture({
     fetch: async (request, env) => {
       const db = createD1Client(env.DB);
-      await db.raw(dedent`
+      await db.sql`
         create table if not exists todos (
           id integer primary key,
           title text not null,
           completed integer not null default 0
         );
-      `);
+      `;
 
       const url = new URL(request.url);
-      if (url.pathname === '/login') {
+
+      const sessionId = request.headers.get('cookie')?.match(/session_id=([^;]+)/u)?.[1] || '';
+
+      if (!sessionId && url.pathname !== '/login' && url.pathname !== '/api/login') {
+        return new Response(null, {status: 303, headers: {location: '/login'}});
+      }
+
+      if (url.pathname === '/app') {
         return new Response(
           dedent`
             <!doctype html>
-            <form method="post" action="/session">
-              <label>
-                Passphrase
-                <input name="passphrase" type="password" />
-              </label>
-              <button type="submit">Unlock</button>
-            </form>
-          `,
-          {headers: {'content-type': 'text/html; charset=utf-8'}},
-        );
-      }
-
-      if (url.pathname === '/session' && request.method === 'POST') {
-        const formData = await request.formData();
-        if (formData.get('passphrase') !== 'open sesame') {
-          return new Response('Nope', {status: 401});
-        }
-        return new Response(null, {
-          status: 303,
-          headers: {
-            location: '/my-db',
-            'set-cookie': 'partial_fetch_session=ok; HttpOnly; SameSite=Lax; Path=/',
-          },
-        });
-      }
-
-      if (url.pathname === '/todos/new') {
-        return new Response(
-          dedent`
-            <!doctype html>
-            <form method="post" action="/todos">
+            <form method="post" action="/api/todos">
               <label>
                 Todo
                 <input name="title" />
@@ -174,22 +140,45 @@ test('partial fetch can serve the UI behind worker-owned prefix auth', async ({p
         );
       }
 
-      if (url.pathname === '/todos' && request.method === 'POST') {
+      if (url.pathname === '/api/todos' && request.method === 'POST') {
         const formData = await request.formData();
-        await db.run({
-          sql: 'insert into todos (title) values (?)',
-          args: [String(formData.get('title') || '')],
-        });
-        return new Response(null, {status: 303, headers: {location: '/todos/new'}});
+        const title = String(formData.get('title') || '');
+        await db.sql`insert into todos (title) values (${title})`;
+        return new Response(null, {status: 303, headers: {location: '/app'}});
       }
 
-      if (url.pathname.startsWith('/my-db') && !request.headers.get('cookie')?.includes('partial_fetch_session=ok')) {
+      if (url.pathname === '/login') {
+        return new Response(
+          dedent`
+            <!doctype html>
+            <form method="post" action="/api/login">
+              <label>
+                Passphrase
+                <input name="passphrase" type="password" />
+              </label>
+              <button type="submit">Unlock</button>
+            </form>
+          `,
+          {headers: {'content-type': 'text/html; charset=utf-8'}},
+        );
+      }
+
+      if (url.pathname === '/api/login' && request.method === 'POST') {
+        const formData = await request.formData();
+        if (formData.get('passphrase') !== 'open sesame') {
+          return new Response('Nope', {status: 401});
+        }
         return new Response(null, {
           status: 303,
           headers: {
-            location: '/login',
+            location: '/my-db',
+            'set-cookie': `session_id=${crypto.randomUUID()}; HttpOnly; SameSite=Lax; Path=/`,
           },
         });
+      }
+
+      if (url.pathname.startsWith('/my-db') && !sessionId) {
+        return new Response('Unauthorized', {status: 401});
       }
 
       const uiPartialFetch = createSqlfuUiPartialFetch({
@@ -199,18 +188,16 @@ test('partial fetch can serve the UI behind worker-owned prefix auth', async ({p
           projectRoot: '/partial-fetch-playwright',
         },
         host: {
-          async openDb() {
-            return {
-              client: db,
-              async [Symbol.asyncDispose]() {},
-            };
-          },
+          openDb: async () => ({
+            client: db,
+            async [Symbol.asyncDispose]() {},
+          }),
         },
       });
-      const partialResponse = await uiPartialFetch(request);
+      const sqlfuUiResponse = await uiPartialFetch(request);
 
-      if (partialResponse) {
-        return partialResponse;
+      if (sqlfuUiResponse) {
+        return sqlfuUiResponse;
       }
 
       return new Response('plain worker fallback', {status: 404});
@@ -223,7 +210,7 @@ test('partial fetch can serve the UI behind worker-owned prefix auth', async ({p
   await page.getByRole('button', {name: 'Unlock'}).click();
   await expect(page).toHaveURL(`${fixture.origin}/my-db`);
 
-  await page.goto(`${fixture.origin}/todos/new`);
+  await page.goto(`${fixture.origin}/app`);
   await page.getByLabel('Todo').fill('Wash cloak');
   await page.getByRole('button', {name: 'Add'}).click();
 
@@ -266,29 +253,24 @@ test('partial fetch can serve separate worker and durable object UIs from one wo
         }
 
         async fetch(request: Request) {
-          const url = new URL(request.url);
-          const sessionMatch = url.pathname.match(/^\/session-([^/]+)/u);
-          const sessionId = sessionMatch?.[1] || 'unknown';
-          const sessionPrefix = `/session-${sessionId}`;
           const client = this.client;
-          const partialResponse = await createSqlfuUiPartialFetch({
-            prefixPath: `${sessionPrefix}/db-ui`,
+          const partialFetch = createSqlfuUiPartialFetch({
+            prefixPath: '/app/session-db',
             project: {
               initialized: true,
-              projectRoot: sessionPrefix,
+              projectRoot: '/app/session-db',
             },
             host: {
-              async openDb() {
-                return {
-                  client,
-                  async [Symbol.asyncDispose]() {},
-                };
-              },
+              openDb: async () => ({
+                client,
+                async [Symbol.asyncDispose]() {},
+              }),
             },
-          })(request);
+          });
+          const sqlfuUiResponse = await partialFetch(request);
 
-          if (partialResponse) {
-            return partialResponse;
+          if (sqlfuUiResponse) {
+            return sqlfuUiResponse;
           }
 
           return new Response('session not found', {status: 404});
@@ -297,52 +279,61 @@ test('partial fetch can serve separate worker and durable object UIs from one wo
     },
     fetch: async (request, env) => {
       const db = createD1Client(env.DB);
-      await db.raw(dedent`
+      const sql = db.sql;
+      await sql`
         create table if not exists todos (
           id integer primary key,
           title text not null,
           session_id text not null,
           completed integer not null default 0
         );
-      `);
+      `;
 
       const url = new URL(request.url);
       const cookie = request.headers.get('cookie') || '';
-      const authenticatedSessionId = cookie.match(/partial_fetch_session=([^;]+)/u)?.[1] || '';
-      const authenticatedSessionObject = authenticatedSessionId
-        ? env.SESSION_OBJECT.get(env.SESSION_OBJECT.idFromName(authenticatedSessionId))
-        : null;
+      const sessionId = cookie.match(/session_id=([^;]+)/u)?.[1] || '';
+      const sessionObj = sessionId ? env.SESSION_OBJECT.get(env.SESSION_OBJECT.idFromName(sessionId)) : null;
 
-      if (url.pathname.startsWith('/session-')) {
-        const sessionId = url.pathname.match(/^\/session-([^/]+)/u)?.[1] || '';
-        if (!sessionId) {
-          return new Response('missing session id', {status: 400});
-        }
-        const id = env.SESSION_OBJECT.idFromName(sessionId);
-        const sessionObject = env.SESSION_OBJECT.get(id);
-        const sessionPrefix = `/session-${sessionId}`;
+      if (!sessionObj && url.pathname !== '/login' && url.pathname !== '/api/login') {
+        return new Response(null, {status: 303, headers: {location: '/login'}});
+      }
 
-        if (url.pathname === sessionPrefix) {
-          const count = await sessionObject.getTodoAddedCount();
-          return new Response(
-            dedent`
-              <!doctype html>
-              <h1>Session ${sessionId}</h1>
-              <p>Todos added: ${count}</p>
-              <a href="/todos/new">Add todo</a>
-            `,
-            {headers: {'content-type': 'text/html; charset=utf-8'}},
-          );
-        }
+      if (url.pathname === '/app') {
+        const count = await sessionObj!.getTodoAddedCount();
+        return new Response(
+          dedent`
+            <!doctype html>
+            <form method="post" action="/api/todos">
+              <label>
+                Worker todo
+                <input name="title" />
+              </label>
+              <button type="submit">Add</button>
+            </form>
+            <form method="post" action="/api/logout">
+              <button type="submit">Logout</button>
+            </form>
+            <p>Todos added this session: ${count}</p>
+          `,
+          {headers: {'content-type': 'text/html; charset=utf-8'}},
+        );
+      }
 
-        return sessionObject.fetch(request);
+      if (url.pathname === '/api/todos' && request.method === 'POST') {
+        const formData = await request.formData();
+        await sql`
+          insert into todos (title, session_id)
+          values (${String(formData.get('title') || '')}, ${sessionId})
+        `;
+        await sessionObj!.incrementTodoAddedCount();
+        return new Response(null, {status: 303, headers: {location: '/app'}});
       }
 
       if (url.pathname === '/login') {
         return new Response(
           dedent`
             <!doctype html>
-            <form method="post" action="/session">
+            <form method="post" action="/api/login">
               <label>
                 Passphrase
                 <input name="passphrase" type="password" />
@@ -354,7 +345,7 @@ test('partial fetch can serve separate worker and durable object UIs from one wo
         );
       }
 
-      if (url.pathname === '/session' && request.method === 'POST') {
+      if (url.pathname === '/api/login' && request.method === 'POST') {
         const formData = await request.formData();
         if (formData.get('passphrase') !== 'open sesame') {
           return new Response('Nope', {status: 401});
@@ -362,43 +353,27 @@ test('partial fetch can serve separate worker and durable object UIs from one wo
         return new Response(null, {
           status: 303,
           headers: {
-            location: '/my-db',
-            'set-cookie': 'partial_fetch_session=alpha; HttpOnly; SameSite=Lax; Path=/',
+            location: '/app',
+            'set-cookie': `session_id=${crypto.randomUUID()}; HttpOnly; SameSite=Lax; Path=/`,
           },
         });
       }
 
-      if ((url.pathname === '/todos' || url.pathname === '/todos/new') && !authenticatedSessionObject) {
-        return new Response(null, {status: 303, headers: {location: '/login'}});
-      }
-
-      if (url.pathname === '/todos' && request.method === 'POST') {
-        const formData = await request.formData();
-        await db.run({
-          sql: 'insert into todos (title, session_id) values (?, ?)',
-          args: [String(formData.get('title') || ''), authenticatedSessionId],
+      if (url.pathname === '/api/logout' && request.method === 'POST') {
+        return new Response(null, {
+          status: 303,
+          headers: {
+            location: '/login',
+            'set-cookie': 'session_id=; Max-Age=0; HttpOnly; SameSite=Lax; Path=/',
+          },
         });
-        await authenticatedSessionObject!.incrementTodoAddedCount();
-        return new Response(null, {status: 303, headers: {location: '/todos/new'}});
       }
 
-      if (url.pathname === '/todos/new') {
-        return new Response(
-          dedent`
-            <!doctype html>
-            <form method="post" action="/todos">
-              <label>
-                Worker todo
-                <input name="title" />
-              </label>
-              <button type="submit">Add</button>
-            </form>
-          `,
-          {headers: {'content-type': 'text/html; charset=utf-8'}},
-        );
+      if (url.pathname.startsWith('/app/session-db')) {
+        return sessionObj!.fetch(request);
       }
 
-      if (url.pathname.startsWith('/my-db') && !authenticatedSessionObject) {
+      if (url.pathname.startsWith('/my-db') && !sessionObj) {
         return new Response(null, {status: 303, headers: {location: '/login'}});
       }
 
@@ -430,33 +405,33 @@ test('partial fetch can serve separate worker and durable object UIs from one wo
   await expect(page).toHaveURL(`${fixture.origin}/login`);
   await page.getByLabel('Passphrase').fill('open sesame');
   await page.getByRole('button', {name: 'Unlock'}).click();
-  await expect(page).toHaveURL(`${fixture.origin}/my-db`);
-
-  await page.goto(`${fixture.origin}/todos/new`);
+  await expect(page).toHaveURL(`${fixture.origin}/app`);
+  await expect(page.getByText('Todos added this session: 0')).toBeVisible();
   await page.getByLabel('Worker todo').fill('Feed snake');
   await page.getByRole('button', {name: 'Add'}).click();
-  await expect(page).toHaveURL(`${fixture.origin}/todos/new`);
+  await expect(page).toHaveURL(`${fixture.origin}/app`);
+  await expect(page.getByText('Todos added this session: 1')).toBeVisible();
 
   await page.goto(`${fixture.origin}/my-db/#table/todos`);
   await expect(page.getByRole('heading', {name: 'todos'})).toBeVisible();
   await expect(page.getByText('Feed snake')).toBeVisible();
 
-  await page.goto(`${fixture.origin}/session-alpha`);
-  await expect(page.getByRole('heading', {name: 'Session alpha'})).toBeVisible();
-  await expect(page.getByText('Todos added: 1')).toBeVisible();
-
-  await page.goto(`${fixture.origin}/session-alpha/db-ui/#table/events`);
-  await expect(page).toHaveURL(/\/session-alpha\/db-ui\/?#table\/events$/u);
+  await page.goto(`${fixture.origin}/app/session-db/#table/events`);
+  await expect(page).toHaveURL(/\/app\/session-db\/?#table\/events$/u);
   await expect(page.getByRole('heading', {name: 'events'})).toBeVisible();
   await expect(page.getByText('todo_added')).toBeVisible();
 
   await page.goto(`${fixture.origin}/my-db/#table/todos`);
   await expect(page.getByRole('heading', {name: 'todos'})).toBeVisible();
   await expect(page.getByText('Feed snake')).toBeVisible();
-  await expect(page.getByText('alpha')).toBeVisible();
 
-  await page.goto(`${fixture.origin}/session-bravo`);
-  await expect(page.getByText('Todos added: 0')).toBeVisible();
+  await page.goto(`${fixture.origin}/app`);
+  await page.getByRole('button', {name: 'Logout'}).click();
+  await expect(page).toHaveURL(`${fixture.origin}/login`);
+  await page.getByLabel('Passphrase').fill('open sesame');
+  await page.getByRole('button', {name: 'Unlock'}).click();
+  await expect(page).toHaveURL(`${fixture.origin}/app`);
+  await expect(page.getByText('Todos added this session: 0')).toBeVisible();
 });
 
 async function createPartialFetchWorkerFixture<DOs extends Record<string, new (...args: any[]) => object>>(

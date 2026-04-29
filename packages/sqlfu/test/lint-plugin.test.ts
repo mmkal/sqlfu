@@ -307,6 +307,41 @@ test('generated-query-freshness: reports a missing generated query manifest for 
     ruleId: 'sqlfu/generated-query-freshness',
     message: expect.stringContaining('generated query manifest is missing'),
   });
+  expect(result.messages[0]?.message).not.toContain('--config');
+});
+
+test('generated-query-freshness: includes the found config path when it is not the cwd default', async () => {
+  await using project = await makeAsyncProject({
+    'apps/counter/sqlfu.config.ts': `export default { queries: './sql' }`,
+    'apps/counter/sql/list-users.sql': 'select id, name\nfrom users\norder by name;\n',
+  });
+
+  const [result] = await lintSqlFile(project, 'apps/counter/sql/list-users.sql', {fix: false});
+
+  expect(result.messages).toHaveLength(1);
+  expect(result.messages[0]).toMatchObject({
+    ruleId: 'sqlfu/generated-query-freshness',
+    message: expect.stringContaining('run sqlfu generate --config apps/counter/sqlfu.config.ts'),
+  });
+});
+
+test('generated-query-freshness: includes the found config path for generated manifest reconciliation', async () => {
+  const querySql = 'select id, name\nfrom users\norder by name;\n';
+  await using project = await makeAsyncProject({
+    'apps/counter/sqlfu.config.ts': `export default { queries: './sql' }`,
+    'apps/counter/sql/list-users.sql': querySql,
+    'apps/counter/sql/.generated/queries.ts': queriesManifest([{sqlFile: 'list-users.sql', sourceSql: querySql}]),
+    'apps/counter/sql/.generated/list-users.sql.ts': 'export {};\n',
+    'apps/counter/sql/.generated/deleted-query.sql.ts': 'export {};\n',
+  });
+
+  const [result] = await lintProjectFile(project, 'apps/counter/sql/.generated/queries.ts', {fix: false});
+
+  expect(result.messages).toHaveLength(1);
+  expect(result.messages[0]).toMatchObject({
+    ruleId: 'sqlfu/generated-query-freshness',
+    message: expect.stringContaining('run sqlfu generate --config apps/counter/sqlfu.config.ts'),
+  });
 });
 
 test('generated-query-freshness: reports a missing generated wrapper for a query file', async () => {

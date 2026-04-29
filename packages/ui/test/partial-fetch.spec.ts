@@ -17,8 +17,47 @@ const uiRoot = path.resolve(currentDir, '..');
 
 let buildPromise: Promise<void> | undefined;
 
+declare const createD1Client: typeof import('sqlfu').createD1Client;
+declare const createSqlfuUiPartialFetch: typeof import('sqlfu/ui/browser').createSqlfuUiPartialFetch;
+declare const env: {DB: Parameters<typeof createD1Client>[0]};
+declare const uiAssets: import('sqlfu/ui/browser').SqlfuUiAssets;
+declare const project: import('sqlfu/ui/browser').CreateSqlfuUiPartialFetchInput['project'];
+declare const catalog: import('sqlfu').QueryCatalog;
+declare function ensureSeeded(database: Parameters<typeof createD1Client>[0]): Promise<void>;
+declare function createHost(input: {
+  project: typeof project;
+  catalog: typeof catalog;
+  openClient: () => ReturnType<typeof createD1Client>;
+}): import('sqlfu').SqlfuHost;
+
 test('D1 worker partial fetch serves real UI assets while leaving app routes available', async ({page}) => {
-  await using fixture = await createPartialFetchWorkerFixture();
+  await using fixture = await createPartialFetchWorkerFixture({
+    fetch: async (request) => {
+      const url = new URL(request.url);
+      if (url.pathname === '/hello') {
+        return new Response('<!doctype html><h1>Hello!</h1>', {
+          headers: {'content-type': 'text/html; charset=utf-8'},
+        });
+      }
+
+      await ensureSeeded(env.DB);
+
+      const partialResponse = await createSqlfuUiPartialFetch({
+        assets: uiAssets,
+        project,
+        host: createHost({
+          project,
+          catalog,
+          openClient: () => createD1Client(env.DB),
+        }),
+      })(request);
+      if (partialResponse) {
+        return partialResponse;
+      }
+
+      return new Response('plain worker fallback', {status: 404});
+    },
+  });
 
   await page.goto(`${fixture.origin}/hello`);
   await expect(page.getByRole('heading', {name: 'Hello!'})).toBeVisible();
@@ -53,7 +92,7 @@ test('D1 worker partial fetch serves real UI assets while leaving app routes ava
   await expect(page.getByText('Katherine Johnson')).toBeVisible();
 });
 
-async function createPartialFetchWorkerFixture() {
+async function createPartialFetchWorkerFixture(input: PartialFetchWorkerFixtureInput) {
   await ensureBuilt();
 
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'sqlfu-partial-fetch-playwright-'));
@@ -66,7 +105,7 @@ async function createPartialFetchWorkerFixture() {
     distDir: path.join(uiRoot, 'dist'),
     outPath: path.join(tempDir, 'ui-assets.generated.js'),
   });
-  await fs.writeFile(workerSourcePath, workerSource);
+  await fs.writeFile(workerSourcePath, createWorkerSource(input.fetch));
 
   await esbuild.build({
     entryPoints: [workerSourcePath],
@@ -222,7 +261,12 @@ interface WorkerFetcherLike {
   fetch(input: string, init?: RequestInit): Promise<Response>;
 }
 
-const workerSource = String.raw`
+interface PartialFetchWorkerFixtureInput {
+  fetch(request: Request): Promise<Response> | Response;
+}
+
+function createWorkerSource(fetch: PartialFetchWorkerFixtureInput['fetch']) {
+  return String.raw`
 import {createD1Client} from './runtime/adapters/d1.js';
 import {createSqlfuUiPartialFetch} from './runtime/ui/browser.js';
 import {sqlReturnsRows} from './runtime/sqlite-text.js';
@@ -247,33 +291,8 @@ const project = createProject({
   definitionsSql,
 });
 
-export default {
-  async fetch(request, env) {
-    const url = new URL(request.url);
-    if (url.pathname === '/hello') {
-      return new Response('<!doctype html><h1>Hello!</h1>', {
-        headers: {'content-type': 'text/html; charset=utf-8'},
-      });
-    }
-
-    await ensureSeeded(env.DB);
-
-    const partialResponse = await createSqlfuUiPartialFetch({
-      assets: uiAssets,
-      project,
-      host: createHost({
-        project,
-        catalog,
-        openClient: () => createD1Client(env.DB),
-      }),
-    })(request);
-    if (partialResponse) {
-      return partialResponse;
-    }
-
-    return new Response('plain worker fallback', {status: 404});
-  },
-};
+let env;
+const userFetch = ${toCallableFunctionExpressionSource(fetch.toString())};
 
 async function ensureSeeded(database) {
   const db = createD1Client(database);
@@ -464,4 +483,24 @@ async function digest(content) {
   const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(content));
   return Array.from(new Uint8Array(bytes), (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
+
+export default {
+  fetch(request, workerEnv) {
+    env = workerEnv;
+    return userFetch(request);
+  },
+};
 `;
+}
+
+function toCallableFunctionExpressionSource(source: string): string {
+  if (source.startsWith('async fetch(')) {
+    return source.replace(/^async fetch\(/u, 'async function fetch(');
+  }
+
+  if (source.startsWith('fetch(')) {
+    return source.replace(/^fetch\(/u, 'function fetch(');
+  }
+
+  return source;
+}

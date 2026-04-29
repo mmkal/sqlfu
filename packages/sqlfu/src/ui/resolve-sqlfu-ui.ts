@@ -52,7 +52,7 @@ export async function resolveSqlfuUi(input: {sqlfuVersion: string}): Promise<Res
     throw error;
   }
 
-  const {sqlfuUiAssets, version} = await import('@sqlfu/ui');
+  const {assets, version} = await import('@sqlfu/ui');
 
   if (version !== input.sqlfuVersion) {
     throw new SqlfuUiVersionMismatchError({
@@ -62,7 +62,7 @@ export async function resolveSqlfuUi(input: {sqlfuVersion: string}): Promise<Res
   }
 
   return {
-    assets: sqlfuUiAssets,
+    assets,
     version,
   };
 }

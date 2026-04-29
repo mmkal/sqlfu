@@ -9,7 +9,7 @@ import bundledSqlfuUiAssets from '#serialized-assets';
 import packageJson from '../../package.json' with {type: 'json'};
 
 export const version: string = packageJson.version;
-export const sqlfuUiAssets: Record<string, string> = bundledSqlfuUiAssets;
+export const assets: Record<string, string> = bundledSqlfuUiAssets;
 
 export type CreateSqlfuUiPartialFetchInput = Omit<BaseCreateSqlfuUiPartialFetchInput, 'assets'> & {
   assets?: SqlfuUiAssets;
@@ -25,7 +25,7 @@ export function createSqlfuUiPartialFetch(input: CreateSqlfuUiPartialFetchInput)
     partialFetchPromise ||= import('sqlfu/ui/browser').then(({createSqlfuUiPartialFetch}) =>
       createSqlfuUiPartialFetch({
         ...input,
-        assets: input.assets || sqlfuUiAssets,
+        assets: input.assets || assets,
       }),
     );
     partialFetch ||= await partialFetchPromise;

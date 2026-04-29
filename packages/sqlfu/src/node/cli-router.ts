@@ -56,7 +56,7 @@ export const router = {
       if (input?.ui) {
         const ui = await resolveSqlfuUi({sqlfuVersion: packageJson.version});
         await startSqlfuServer({...params, ui});
-        context.host.logger.log(`sqlfu ready at http://localhost:${params.port}`);
+        context.host.logger.log(`sqlfu ready at http://localhost:${params.port || 56081}`);
       } else {
         await startSqlfuServer(params);
         context.host.logger.log('sqlfu ready at https://sqlfu.dev/ui');

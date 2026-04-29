@@ -17,6 +17,11 @@ export type CreateSqlfuUiPartialFetchInput = {
   project: SqlfuUiProject;
 };
 
+/**
+ * A partial server-side `fetch` implementation. Gives you a function that maps a `Request` to:
+ * - a `Response` if the `@sqlfu/ui` can handle the request.
+ * - `undefined` if the `@sqlfu/ui` cannot handle the request - you can pass through to your own `fetch` implementation in this case.
+ */
 export function createSqlfuUiPartialFetch(input: CreateSqlfuUiPartialFetchInput): SqlfuUiPartialFetch {
   const rpcHandler = new RPCHandler(uiRouter);
   const prefixPath = normalizePrefixPath(input.prefixPath);

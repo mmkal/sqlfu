@@ -32,7 +32,7 @@ Optionally install the CLI globally so `sqlfu` is on your `PATH` anywhere:
 npm install -g sqlfu
 ```
 
-When you run `sqlfu` inside a project that already has it as a dependency, the global binary delegates to the project-local copy (`node_modules/sqlfu`). Each project runs the version it pinned — your global install never has to match, and upgrading globally is not required to unstick a project.
+When you run `sqlfu` inside a project that already has it as a dependency, the global binary delegates to the project-local copy (`node_modules/sqlfu`). Each project runs the version it pinned. Your global install never has to match, and upgrading globally is not required to unstick a project.
 
 ## Initialize the project
 

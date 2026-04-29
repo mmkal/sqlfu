@@ -6,7 +6,7 @@ Every error from a sqlfu adapter is a `SqlfuError` with a `.kind` discriminator 
 
 ## The mental model
 
-The code that cares about a database error rarely cares *which* driver threw it. "That email is already in use" is a product outcome — it should become a 409 response, or a red-squiggle in the UI — and the surrounding code shouldn't need to know that better-sqlite3 reports `SQLITE_CONSTRAINT_UNIQUE`, `node:sqlite` reports `errcode: 2067`, and `@libsql/client` wraps both behind a `LibsqlError`.
+The code that cares about a database error rarely cares *which* driver threw it. "That email is already in use" is a product outcome (a 409 response, or a red-squiggle in the UI). The surrounding code shouldn't need to know that better-sqlite3 reports `SQLITE_CONSTRAINT_UNIQUE`, `node:sqlite` reports `errcode: 2067`, and `@libsql/client` wraps both behind a `LibsqlError`.
 
 `SqlfuError.kind` closes that gap. You branch on the discriminator; sqlfu does the per-adapter mapping.
 
@@ -25,7 +25,7 @@ type SqlfuErrorKind =
   | 'unknown'                 // mapper didn't recognize; inspect `.cause`
 ```
 
-Names are SQLSTATE-aligned (matching the [PostgreSQL error codes](https://www.postgresql.org/docs/current/errcodes-appendix.html) convention) so that when a postgres adapter lands, mapping from `SQLSTATE` becomes a direct lookup rather than a second vocabulary. `missing_table` / `missing_column` are the two deliberate deviations — SQLSTATE's `undefined_table` / `undefined_column` collide with TypeScript's `undefined` at reading time.
+Names are SQLSTATE-aligned (matching the [PostgreSQL error codes](https://www.postgresql.org/docs/current/errcodes-appendix.html) convention) so that when a postgres adapter lands, mapping from `SQLSTATE` becomes a direct lookup rather than a second vocabulary. `missing_table` and `missing_column` are the two deliberate deviations: SQLSTATE's `undefined_table` and `undefined_column` collide with TypeScript's `undefined` at reading time.
 
 Primary-key violations collapse into `unique_violation`. From a product perspective both are "that row already exists"; code that needs to distinguish them can still read `.cause.code`.
 
@@ -34,14 +34,14 @@ Primary-key violations collapse into `unique_violation`. From a product perspect
 ```ts
 class SqlfuError extends Error {
   kind: SqlfuErrorKind;
-  query: SqlQuery;    // the query that failed — includes `.name` if named
+  query: SqlQuery;    // the query that failed; includes `.name` if named
   system: string;     // 'sqlite' (OTel db.system value)
   cause: unknown;     // the original driver error, byte-identical
 }
 ```
 
 - `.message` comes straight from the driver, so `console.error` and Sentry breadcrumbs still show the signal text (`"UNIQUE constraint failed: users.email"`).
-- `.stack` is preserved from the driver error — your call-site frame is the first useful frame, so stack traces point at where the query was actually issued rather than at sqlfu internals.
+- `.stack` is preserved from the driver error, so your call-site frame is the first useful frame: stack traces point at where the query was actually issued rather than at sqlfu internals.
 - `.query` stays nested as a `SqlQuery` (rather than flattened to `.sql`/`.args`) so handlers can still reach `error.query.name` for tagging, and so `error.query` can be passed as-is into logs or follow-up calls.
 
 ## Handling errors in application code
@@ -82,7 +82,7 @@ const client = instrument(
 );
 ```
 
-`kind` is a natural low-cardinality dimension for Sentry / PostHog / DataDog — high enough to tell a constraint violation from a transient lock, low enough not to explode your tag index.
+`kind` is a natural low-cardinality dimension for Sentry, PostHog, or DataDog: high enough to tell a constraint violation from a transient lock, low enough not to explode your tag index.
 
 ## Working with `.cause`
 
@@ -91,12 +91,12 @@ const client = instrument(
 ```ts
 catch (error) {
   if (error instanceof SqlfuError && error.kind === 'unknown') {
-    console.error('unrecognized DB error — please file an issue', error.cause);
+    console.error('unrecognized DB error, please file an issue', error.cause);
   }
 }
 ```
 
-If you see `kind: 'unknown'` in production, the right response is to file a bug with the driver + message — the mapper is library-owned, not per-user-configurable.
+If you see `kind: 'unknown'` in production, the right response is to file a bug with the driver and message. The mapper is library-owned, not per-user-configurable.
 
 ## Why not rethrow the driver error?
 
@@ -107,4 +107,4 @@ If you see `kind: 'unknown'` in production, the right response is to file a bug 
 
 - [SQLite result codes](https://www.sqlite.org/rescode.html)
 - [PostgreSQL SQLSTATE codes](https://www.postgresql.org/docs/current/errcodes-appendix.html) (for context on the naming convention)
-- [observability.md](./observability.md) — how `onError` composes with OpenTelemetry, Sentry, PostHog
+- [observability.md](./observability.md): how `onError` composes with OpenTelemetry, Sentry, PostHog

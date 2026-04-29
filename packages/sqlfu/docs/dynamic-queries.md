@@ -33,10 +33,10 @@ Pass `null` for "no filter", a value for "apply this filter". One compiled query
 
 ## When the pattern gets awkward
 
-- **More than a handful of optional filters.** With 8 optional filters you've got 256 possible active-combinations collapsed into one query plan. The SQL stays readable but performance can degrade in the long tail of combinations. At that point, consider splitting into a few named-query variants, or reach for a query builder (sqlfu is happy to share an app with Kysely or Drizzle — wrap the dynamic bits in whichever one you prefer and keep the static 90% in `.sql` files).
+- **More than a handful of optional filters.** With 8 optional filters you've got 256 possible active-combinations collapsed into one query plan. The SQL stays readable but performance can degrade in the long tail of combinations. At that point, consider splitting into a few named-query variants, or reach for a query builder (sqlfu is happy to share an app with Kysely or Drizzle: wrap the dynamic bits in whichever one you prefer and keep the static 90% in `.sql` files).
 - **Dynamic `order by` / column selection.** These don't fit the `IS NULL` trick at all. Users writing "build me a dashboard with sortable columns" is the canonical "you want a query builder" problem. No shame in using one.
 - **`IN (:list)` with a variable-length list.** Use JSON: `where id in (select value from json_each(:ids))`, passing `ids` as a JSON-encoded string. SQLite's `json_each` makes this ergonomic.
 
 ## What sqlfu doesn't try to do
 
-sqlfu won't build you a fluent API for composing SQL. That's a deliberate non-goal — if you want that, you want a query builder. Query builders are great at it, and there's no rule against mixing tools: a sqlfu app can import a query builder for the specific procedures that need runtime composition, and leave the rest of the queries as checked-in `.sql` files. The two models coexist cleanly.
+sqlfu won't build you a fluent API for composing SQL. That's a deliberate non-goal: if you want that, you want a query builder. Query builders are great at it, and there's no rule against mixing tools: a sqlfu app can import a query builder for the specific procedures that need runtime composition, and leave the rest of the queries as checked-in `.sql` files. The two models coexist cleanly.

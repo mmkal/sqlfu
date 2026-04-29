@@ -40,7 +40,7 @@ export default defineConfig({
 });
 ```
 
-With `prefix: 'four-digit'`, new migrations are named `0000_*.sql`, `0001_*.sql`, … — the next integer after the max of any existing files whose basename already starts with four digits. An empty directory starts at `0000`. Files that don't match `^\d{4}_` are ignored when picking the next integer, so a stray README or legacy timestamped migration won't push the counter up.
+With `prefix: 'four-digit'`, new migrations are named `0000_*.sql`, `0001_*.sql`, and so on. The next integer is one more than the max of any existing files whose basename already starts with four digits. An empty directory starts at `0000`. Files that don't match `^\d{4}_` are ignored when picking the next integer, so a stray README or legacy timestamped migration won't push the counter up.
 
 Don't mix prefix formats in the same directory. Lexicographic ordering between an ISO timestamp and a four-digit number isn't coherent; pick one.
 
@@ -99,13 +99,13 @@ The schema diff engine helps before deployment: `sqlfu draft` turns reviewed `de
 
 ## Authority Mismatches
 
-| Name | Comparison | Meaning | Usually Normal? | Likely Action |
-| --- | --- | --- | --- | --- |
-| Repo Drift | Desired Schema <> Migrations | Replaying migrations does not produce the desired current schema | Yes, during active schema work | `sqlfu draft` |
-| Pending Migrations | Migrations <> Migration History | The database has unapplied migrations | Yes | `sqlfu migrate` |
-| History Drift | Migrations <> Migration History | The database claims to have applied migrations that no longer match the known migration set | No | fix the repo first, or reconcile deliberately with `sqlfu baseline <target>` and `sqlfu goto <target>` |
-| Schema Drift | Migration History <> Live Schema | The database schema does not match what its recorded history implies | Normal on a dev db after `sqlfu sync` | `sqlfu baseline <target>` or `sqlfu goto <target>` |
-| Sync Drift | Desired Schema <> Live Schema | The database does not currently match the desired schema | Yes | depends on the other mismatches |
+| Name | Comparison | Direction | Meaning | Usually Normal? | Likely Action |
+| --- | --- | --- | --- | --- | --- |
+| Repo Drift | Desired Schema <> Migrations | n/a | Replaying migrations does not produce the desired current schema | Yes, during active schema work | `sqlfu draft` |
+| Pending Migrations | Migrations <> Migration History | new migrations not yet applied | The database has unapplied migrations | Yes | `sqlfu migrate` |
+| History Drift | Migrations <> Migration History | applied migrations no longer match the repo | The database claims to have applied migrations that no longer match the known migration set | No | fix the repo first, or reconcile deliberately with `sqlfu baseline <target>` and `sqlfu goto <target>` |
+| Schema Drift | Migration History <> Live Schema | n/a | The database schema does not match what its recorded history implies | Normal on a dev db after `sqlfu sync` | `sqlfu baseline <target>` or `sqlfu goto <target>` |
+| Sync Drift | Desired Schema <> Live Schema | n/a | The database does not currently match the desired schema | Yes | depends on the other mismatches |
 
 ## What Each Disagreement Means
 
@@ -289,18 +289,7 @@ Later, database-targeted checks may also validate:
 - Migration History vs Live Schema
 - Desired Schema vs Live Schema
 
-`sqlfu check` may also recommend a target migration when it can prove that the Live Schema exactly matches some replayed migration prefix.
-
-That recommendation should be derived mechanically by replaying:
-
-- migrations `1..1`
-- migrations `1..2`
-- migrations `1..3`
-- and so on
-
-and checking whether any of those resulting schemas exactly matches the Live Schema.
-
-If so, `sqlfu check` can recommend:
+`sqlfu check` also recommends a target migration when the Live Schema exactly matches some replayed migration prefix. The check replays migrations `1..1`, `1..2`, `1..3`, and so on, comparing each replayed schema to the live one (see `findRecommendedTarget` in `src/api.ts`). When a match is found, the recommendation is:
 
 - a Baseline target, when the database is ahead of Migration History
 - a Goto target, when the database should be reconciled to a known migration prefix
@@ -497,7 +486,7 @@ No row is ever written to `sqlfu_migrations` for a failed migration. That table 
 
 ## Migration Presets
 
-`sqlfu` tracks applied migrations in a bookkeeping table. By default that table is `sqlfu_migrations` with columns `(name, checksum, applied_at)`. Some projects want sqlfu to play nicely with an existing convention — most commonly Cloudflare D1 projects where alchemy or wrangler already owns a `d1_migrations` table.
+`sqlfu` tracks applied migrations in a bookkeeping table. By default that table is `sqlfu_migrations` with columns `(name, checksum, applied_at)`. Some projects want sqlfu to play nicely with an existing convention. The most common case is Cloudflare D1 projects where alchemy or wrangler already owns a `d1_migrations` table.
 
 The `migrations.preset` knob lets you switch the bookkeeping format without rewriting any migrations:
 
@@ -518,21 +507,21 @@ export default defineConfig({
 | `'sqlfu'` (default) | `sqlfu_migrations`| `name text pk, checksum text, applied_at text`         | `iso`                   | Yes               |
 | `'d1'`           | `d1_migrations`   | `id text pk, name text, applied_at text` (alchemy-compatible) | `four-digit`            | No                |
 
-`prefix` is defaulted from the preset but can still be set explicitly to override — e.g. `{ preset: 'd1', prefix: 'iso' }` is valid if you want alchemy's table with ISO-prefixed filenames.
+`prefix` is defaulted from the preset but can still be set explicitly to override. For example, `{ preset: 'd1', prefix: 'iso' }` is valid if you want alchemy's table with ISO-prefixed filenames.
 
 ### D1 and alchemy interoperability
 
 Under `preset: 'd1'` sqlfu reads and writes the same `d1_migrations` table alchemy and wrangler manage. The usual flow:
 
 1. Alchemy provisions the D1 database and runs its first migrations, creating `d1_migrations`.
-2. You add sqlfu to the project with `preset: 'd1'`. Keep every alchemy-era migration file in sqlfu's migrations directory — sqlfu uses them for drift detection and replay, even though alchemy already applied them.
+2. You add sqlfu to the project with `preset: 'd1'`. Keep every alchemy-era migration file in sqlfu's migrations directory; sqlfu uses them for drift detection and replay, even though alchemy already applied them.
 3. From this point on, `sqlfu migrate` is what applies new migrations. Alchemy's existing rows stay put; sqlfu appends new ones with alchemy-compatible id sequencing (`00001`, `00002`, …).
 
-Alchemy uses two different `d1_migrations` schemas — a 3-column remote shape in production D1 and a 4-column local shape (with a `type` column) when running against miniflare. Sqlfu introspects the existing table on first use and adapts its inserts, so the same `preset: 'd1'` config works in both environments.
+Alchemy uses two different `d1_migrations` schemas: a 3-column remote shape in production D1 and a 4-column local shape (with a `type` column) when running against miniflare. Sqlfu introspects the existing table on first use and adapts its inserts, so the same `preset: 'd1'` config works in both environments.
 
 #### Checksum downgrade
 
-Alchemy's `d1_migrations` schema has no checksum column, so under `preset: 'd1'` sqlfu cannot detect that an applied migration's content was edited after the fact. This is a deliberate tradeoff of alchemy compatibility — if you edit an already-applied migration file, `sqlfu migrate` and `sqlfu check` will treat it as a no-op rather than throwing.
+Alchemy's `d1_migrations` schema has no checksum column, so under `preset: 'd1'` sqlfu cannot detect that an applied migration's content was edited after the fact. This is a deliberate tradeoff of alchemy compatibility: if you edit an already-applied migration file, `sqlfu migrate` and `sqlfu check` will treat it as a no-op rather than throwing.
 
 Under `preset: 'sqlfu'` (the default) edited-after-apply is caught and reported as a checksum mismatch.
 

@@ -1,6 +1,6 @@
 # Adapters
 
-`sqlfu` doesn't ship its own database driver. It sits on top of whichever SQLite-compatible client you already use — local file, embedded engine, edge runtime, or a real remote database — and gives you the same typed client surface on top.
+`sqlfu` doesn't ship its own database driver. It sits on top of whichever SQLite-compatible client you already use (local file, embedded engine, edge runtime, or a real remote database) and gives you the same typed client surface on top.
 
 This page lists every adapter that ships in `sqlfu` today, with a copy-paste snippet for each.
 
@@ -8,7 +8,7 @@ If you already know which driver you want to use, jump to the section below. If 
 
 ## Sync stays sync
 
-Most query libraries force every database call to be `async`, even when the underlying driver is synchronous — the library is written async-first, and that colour leaks into your entire call stack.
+Most query libraries force every database call to be `async`, even when the underlying driver is synchronous. The library is written async-first, and that colour leaks into your entire call stack.
 
 `sqlfu` goes out of its way to preserve the sync-ness of the driver you bring:
 
@@ -23,7 +23,7 @@ Why this matters:
 
 - **Call sites stay honest.** `function saveUser(user)` calling a sync-backed sqlfu client doesn't silently become `async`. No "await-pollution" spreading through code that didn't actually do anything async.
 - **Runtimes that prefer sync stay fast.** Cloudflare Durable Objects' SQLite is synchronous by design. Scripts, CLI tools, and background jobs on `better-sqlite3` don't pay for microtask thrashing they don't need.
-- **Swapping drivers is a one-line change, as long as you stay in the same lane.** Going from `better-sqlite3` (sync) to `@tursodatabase/database` (async) does require awaiting, because the work actually did change. `sqlfu` doesn't hide that difference from the type system — it surfaces it.
+- **Swapping drivers is a one-line change, as long as you stay in the same lane.** Going from `better-sqlite3` (sync) to `@tursodatabase/database` (async) does require awaiting, because the work actually did change. `sqlfu` doesn't hide that difference from the type system; it surfaces it.
 
 In short: the client you get matches the driver you brought. sqlfu doesn't pretend a sync driver is async, and it doesn't pretend an async driver is sync.
 
@@ -141,7 +141,7 @@ const client = createTursoDatabaseClient(db);
 
 ## Remote / cloud
 
-### `@libsql/client` — Turso Cloud (or local `file:`)
+### `@libsql/client`: Turso Cloud (or local `file:`)
 
 ```ts
 import {createClient} from '@libsql/client';
@@ -156,7 +156,7 @@ const client = createLibsqlClient(raw);
 
 The same adapter works against a local file when `url` is `file:app.db`.
 
-### `@tursodatabase/serverless` — HTTP, no native deps
+### `@tursodatabase/serverless`: HTTP, no native deps
 
 ```ts
 import {connect} from '@tursodatabase/serverless';
@@ -169,9 +169,9 @@ const conn = connect({
 const client = createTursoServerlessClient(conn);
 ```
 
-No native bindings — runs on any runtime with `fetch()` (Vercel Edge, Cloudflare Workers, Deno Deploy, AWS Lambda).
+No native bindings: runs on any runtime with `fetch()` (Vercel Edge, Cloudflare Workers, Deno Deploy, AWS Lambda).
 
-### `@tursodatabase/sync` — local file, synced to Turso
+### `@tursodatabase/sync`: local file, synced to Turso
 
 Same adapter as `@tursodatabase/database`; the difference is at the driver level (the driver keeps a local file and knows how to `push()`/`pull()` to a remote Turso DB).
 
@@ -187,7 +187,7 @@ const db = await connect({
 await db.connect();
 const client = createTursoDatabaseClient(db);
 
-// sync at your own cadence — sqlfu doesn't own this
+// sync at your own cadence; sqlfu doesn't own this
 await db.push();
 await db.pull();
 ```

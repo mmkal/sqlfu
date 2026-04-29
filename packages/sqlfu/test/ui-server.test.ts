@@ -177,6 +177,48 @@ test('sqlfu server reports a useful error when the requested port is already in 
   ).rejects.toThrow(`Port ${port} is already in use.`);
 });
 
+test('sqlfu server uses an explicit config path instead of rediscovering the default config', async () => {
+  const root = await createTempFixtureRoot('ui-server-config-path');
+  await writeFixtureFiles(root, {
+    'sqlfu.config.ts': `
+      export default {
+        db: './default.db',
+        definitions: './default-definitions.sql',
+        queries: './default-sql',
+      };
+    `,
+    'sqlfu.config.prod.ts': `
+      export default {
+        db: './prod.db',
+        definitions: './prod-definitions.sql',
+        queries: './prod-sql',
+      };
+    `,
+    'default-definitions.sql': 'create table default_posts(id integer primary key);',
+    'prod-definitions.sql': 'create table prod_posts(id integer primary key);',
+    'default-sql/.gitkeep': '',
+    'prod-sql/.gitkeep': '',
+  });
+
+  const defaultDatabase = new DatabaseSync(path.join(root, 'default.db'));
+  const prodDatabase = new DatabaseSync(path.join(root, 'prod.db'));
+  try {
+    defaultDatabase.exec('create table default_posts(id integer primary key);');
+    prodDatabase.exec('create table prod_posts(id integer primary key);');
+  } finally {
+    defaultDatabase.close();
+    prodDatabase.close();
+  }
+
+  await using fixture = await createUiServerFixture({
+    projectRoot: root,
+    configPath: path.join(root, 'sqlfu.config.prod.ts'),
+  });
+
+  const schema = await fixture.client.schema.get();
+  expect(schema.relations.map((relation) => relation.name)).toEqual(['prod_posts']);
+});
+
 test('sqlfu server can initialize a fresh directory through the ui rpc', async () => {
   const root = await createTempFixtureRoot('ui-server-init');
   await using fixture = await createUiServerFixture({projectRoot: root});
@@ -229,6 +271,7 @@ async function createUiServerFixture(
     uiRoot?: string;
     allowUnknownHosts?: boolean;
     projectRoot?: string;
+    configPath?: string;
   } = {},
 ) {
   const root = input.projectRoot ?? (await createTempFixtureRoot('ui-server'));
@@ -271,9 +314,8 @@ async function createUiServerFixture(
     }
   }
 
-  const server = await startSqlfuServer({
+  const serverInput: Parameters<typeof startSqlfuServer>[0] = {
     port: 0,
-    projectRoot: root,
     allowUnknownHosts: input.allowUnknownHosts || false,
     dev: input.dev,
     ui: input.uiRoot
@@ -281,7 +323,14 @@ async function createUiServerFixture(
           root: input.uiRoot,
         }
       : undefined,
-  });
+  };
+  if (input.configPath) {
+    serverInput.configPath = input.configPath;
+  } else {
+    serverInput.projectRoot = root;
+  }
+
+  const server = await startSqlfuServer(serverInput);
   const baseUrl = `http://127.0.0.1:${server.port}`;
   const client: RouterClient<UiRouter> = createORPCClient(
     new RPCLink({

@@ -185,6 +185,7 @@ export const uiRouter = {
         runSqlfuCommand(
           {
             projectRoot: context.project.projectRoot,
+            configPath: context.project.initialized ? undefined : context.project.configPath,
             config: context.project.initialized ? context.project.config : undefined,
             host: context.host,
           },

@@ -6,7 +6,7 @@ import {fileURLToPath, pathToFileURL} from 'node:url';
 import {RPCHandler} from '@orpc/server/fetch';
 import type {ViteDevServer} from 'vite';
 import {resolveProjectConfig} from '../config.js';
-import {loadProjectStateFrom} from '../node/config.js';
+import {loadProjectStateFrom, loadProjectStateFromConfigPath} from '../node/config.js';
 import {PortInUseError, getListeningProcesses} from '../node/port-process.js';
 import {generateQueryTypesForConfig} from '../typegen/index.js';
 import type {SqlfuHost} from '../host.js';
@@ -31,6 +31,7 @@ type UiAssetOptions = {
 export type StartSqlfuServerOptions = {
   port?: number;
   projectRoot?: string;
+  configPath?: string;
   defaultProjectName?: string;
   allowUnknownHosts?: boolean;
   projectsRoot?: string;
@@ -48,16 +49,12 @@ export type * from './shared.js';
 export {ensureLocalhostCertificates} from './certs.js';
 
 export async function startSqlfuServer(input: StartSqlfuServerOptions = {}) {
+  if (input.projectRoot && input.configPath) {
+    throw new Error('Pass either projectRoot or configPath to startSqlfuServer, not both.');
+  }
+
   const host = await createNodeHost();
-  const resolveProject = input.projectRoot
-    ? createFixedProjectResolver(path.resolve(input.projectRoot))
-    : createSubdomainProjectResolver({
-        host,
-        projectsRoot: path.resolve(input.projectsRoot ?? path.join(packageRoot, 'test', 'projects')),
-        templateRoot: path.resolve(input.templateRoot ?? path.join(packageRoot, 'test', 'template-project')),
-        defaultProjectName: input.defaultProjectName ?? 'dev-project',
-        allowUnknownHosts: input.allowUnknownHosts || false,
-      });
+  const resolveProject = createProjectResolver(input, host);
   const rpcHandler = new RPCHandler(uiRouter);
   const httpServer = input.tls
     ? https.createServer({
@@ -148,12 +145,14 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
 
 async function runCliServer() {
   const projectRoot = readOption('--project-root');
+  const configPath = readOption('--config');
   const port = readOption('--port');
   const dev = process.argv.includes('--dev');
   const tlsKeyPath = readOption('--tls-key');
   const tlsCertPath = readOption('--tls-cert');
   const server = await startSqlfuServer({
     projectRoot,
+    configPath,
     defaultProjectName: readOption('--default-project') ?? undefined,
     projectsRoot: readOption('--projects-root') ?? undefined,
     templateRoot: readOption('--template-root') ?? undefined,
@@ -189,8 +188,28 @@ export async function generateCatalogForProject(projectRoot: string) {
   await generateQueryTypesForConfig(config, host);
 }
 
+function createProjectResolver(input: StartSqlfuServerOptions, host: SqlfuHost): ProjectResolver {
+  if (input.configPath) {
+    return createFixedConfigResolver(input.configPath, process.cwd());
+  }
+  if (input.projectRoot) {
+    return createFixedProjectResolver(path.resolve(input.projectRoot));
+  }
+  return createSubdomainProjectResolver({
+    host,
+    projectsRoot: path.resolve(input.projectsRoot ?? path.join(packageRoot, 'test', 'projects')),
+    templateRoot: path.resolve(input.templateRoot ?? path.join(packageRoot, 'test', 'template-project')),
+    defaultProjectName: input.defaultProjectName ?? 'dev-project',
+    allowUnknownHosts: input.allowUnknownHosts || false,
+  });
+}
+
 function createFixedProjectResolver(projectRoot: string): ProjectResolver {
   return async () => await loadProjectStateFrom(projectRoot);
+}
+
+function createFixedConfigResolver(configPath: string, cwd: string): ProjectResolver {
+  return async () => await loadProjectStateFromConfigPath(configPath, cwd);
 }
 
 function createSubdomainProjectResolver(input: {

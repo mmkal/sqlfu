@@ -1,5 +1,6 @@
 import {RPCHandler} from '@orpc/server/fetch';
 
+import {createD1Client, type D1DatabaseLike} from '../adapters/d1.js';
 import {createDurableObjectClient, type DurableObjectClientInput} from '../adapters/durable-object.js';
 import type {AdHocSqlParams, AdHocSqlResult, HostCatalog, HostFs, HostLogger, SqlfuHost} from '../host.js';
 import {basename, joinPath} from '../paths.js';
@@ -40,6 +41,24 @@ export type CreateDurableObjectSqlfuUiHostInput = {
   logger?: HostLogger;
 };
 
+export type CreateD1SqlfuUiFetchInput = {
+  database: D1DatabaseLike;
+  assets: SqlfuUiAssets;
+  projectName?: string;
+  definitionsSql?: string;
+  migrations?: MigrationBundle;
+  queries?: Record<string, string>;
+  catalog?: QueryCatalog;
+  logger?: HostLogger;
+};
+
+export type CreateD1SqlfuUiHostInput = {
+  database: D1DatabaseLike;
+  files?: Record<string, string>;
+  catalog?: QueryCatalog;
+  logger?: HostLogger;
+};
+
 export function createSqlfuUiPartialFetch(input: CreateSqlfuUiPartialFetchInput): SqlfuUiPartialFetch {
   const rpcHandler = new RPCHandler(uiRouter);
 
@@ -75,8 +94,12 @@ export function createSqlfuUiPartialFetch(input: CreateSqlfuUiPartialFetchInput)
 }
 
 export function createDurableObjectSqlfuUiFetch(input: CreateDurableObjectSqlfuUiFetchInput): SqlfuUiPartialFetch {
-  const project = createDurableObjectProject(input);
-  const files = createDurableObjectProjectFiles(project.config, input);
+  const project = createSqlitePartialFetchProject({
+    db: ':durable-object:',
+    defaultProjectName: 'durable-object',
+    projectName: input.projectName,
+  });
+  const files = createSqlitePartialFetchProjectFiles(project.config, input);
   const host = createDurableObjectSqlfuUiHost({
     storage: input.storage,
     files,
@@ -91,6 +114,53 @@ export function createDurableObjectSqlfuUiFetch(input: CreateDurableObjectSqlfuU
 }
 
 export function createDurableObjectSqlfuUiHost(input: CreateDurableObjectSqlfuUiHostInput): SqlfuHost {
+  return createDatabaseClientSqlfuUiHost({
+    files: input.files,
+    catalog: input.catalog,
+    logger: input.logger,
+    openClient() {
+      return createDurableObjectClient(input.storage) as unknown as AsyncClient;
+    },
+  });
+}
+
+export function createD1SqlfuUiFetch(input: CreateD1SqlfuUiFetchInput): SqlfuUiPartialFetch {
+  const project = createSqlitePartialFetchProject({
+    db: ':d1:',
+    defaultProjectName: 'd1',
+    projectName: input.projectName,
+  });
+  const files = createSqlitePartialFetchProjectFiles(project.config, input);
+  const host = createD1SqlfuUiHost({
+    database: input.database,
+    files,
+    catalog: input.catalog,
+    logger: input.logger,
+  });
+  return createSqlfuUiPartialFetch({
+    assets: input.assets,
+    host,
+    project,
+  });
+}
+
+export function createD1SqlfuUiHost(input: CreateD1SqlfuUiHostInput): SqlfuHost {
+  return createDatabaseClientSqlfuUiHost({
+    files: input.files,
+    catalog: input.catalog,
+    logger: input.logger,
+    openClient() {
+      return createD1Client(input.database);
+    },
+  });
+}
+
+function createDatabaseClientSqlfuUiHost(input: {
+  files?: Record<string, string>;
+  catalog?: QueryCatalog;
+  logger?: HostLogger;
+  openClient(): AsyncClient;
+}): SqlfuHost {
   const fs = createMemoryFs(input.files || {});
   const catalog = createStaticCatalog(input.catalog);
   const logger = input.logger || console;
@@ -98,14 +168,13 @@ export function createDurableObjectSqlfuUiHost(input: CreateDurableObjectSqlfuUi
   return {
     fs,
     async openDb() {
-      const client = createDurableObjectClient(input.storage);
       return {
-        client: client as unknown as AsyncClient,
+        client: input.openClient(),
         async [Symbol.asyncDispose]() {},
       };
     },
     async openScratchDb() {
-      throw new Error('sqlfu/ui Durable Object host does not provide scratch databases.');
+      throw new Error('sqlfu/ui partial fetch host does not provide scratch databases.');
     },
     execAdHocSql,
     async initializeProject(projectInput) {
@@ -121,12 +190,16 @@ export function createDurableObjectSqlfuUiHost(input: CreateDurableObjectSqlfuUi
   };
 }
 
-function createDurableObjectProject(input: {projectName?: string}): ResolvedUiProject & {initialized: true} {
-  const projectName = sanitizeProjectName(input.projectName || 'durable-object');
+function createSqlitePartialFetchProject(input: {
+  db: string;
+  defaultProjectName: string;
+  projectName?: string;
+}): ResolvedUiProject & {initialized: true} {
+  const projectName = sanitizeProjectName(input.projectName || input.defaultProjectName);
   const projectRoot = `/${projectName}`;
   const config: SqlfuProjectConfig = {
     projectRoot,
-    db: ':durable-object:',
+    db: input.db,
     definitions: joinPath(projectRoot, 'definitions.sql'),
     migrations: {
       path: joinPath(projectRoot, 'migrations'),
@@ -150,7 +223,7 @@ function createDurableObjectProject(input: {projectName?: string}): ResolvedUiPr
   };
 }
 
-function createDurableObjectProjectFiles(
+function createSqlitePartialFetchProjectFiles(
   config: SqlfuProjectConfig,
   input: {
     definitionsSql?: string;

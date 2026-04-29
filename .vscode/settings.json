@@ -1,4 +1,5 @@
 {
+  "eslint.validate": ["markdown", "javascript", "typescript", "sql"],
   "workbench.colorCustomizations": {
     "sideBar.background": "#123524",
     "sideBar.foreground": "#F3FFF3",

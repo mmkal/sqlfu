@@ -246,6 +246,15 @@ Optional fields:
 
 `sqlfu` manages its own temporary files under `.sqlfu/`, including scratch databases used for schema diffing. These are generally safe to delete at any time.
 
+If a repo has more than one sqlfu project, pass the config file explicitly:
+
+```sh
+sqlfu --config ./durable-objects/counter/sqlfu.config.ts generate
+sqlfu --config ./durable-objects/session/sqlfu.config.ts draft
+```
+
+Relative paths inside that config are resolved from the config file's directory, so each Durable Object can keep its own `definitions.sql`, `migrations/`, and `sql/` directories alongside the config.
+
 ### Pluggable `db`
 
 When your app talks to an adapter-mediated database (Cloudflare D1, Turso, libsql, a miniflare binding), point sqlfu at the same client your app uses by giving `db` a factory instead of a path. Every sqlfu command that touches the DB -- `migrate`, `check`, `sync`, `goto`, `baseline`, `generate`, the UI -- will then operate on the *real* database, not a scratch file.

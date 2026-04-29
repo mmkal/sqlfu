@@ -44,7 +44,7 @@ export interface SqlfuHost {
   openDb(config: SqlfuProjectConfig): Promise<DisposableAsyncClient>;
   openScratchDb(slug: string): Promise<DisposableAsyncClient>;
   execAdHocSql(client: AsyncClient, sql: string, params: AdHocSqlParams): Promise<AdHocSqlResult>;
-  initializeProject(input: {projectRoot: string; configContents: string}): Promise<void>;
+  initializeProject(input: {projectRoot: string; configContents: string; configPath?: string}): Promise<void>;
   digest(content: string): Promise<string>;
   now(): Date;
   uuid(): string;

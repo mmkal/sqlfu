@@ -1,18 +1,10 @@
-import {createSqliteWasmClient, sqlReturnsRows} from 'sqlfu';
+import {createSqliteWasmClient} from 'sqlfu';
 import {
   analyzeVendoredTypesqlQueriesWithClient,
   isInternalUnsupportedSqlAnalysisError,
   toSqlEditorDiagnostic,
 } from 'sqlfu/analyze';
-import type {
-  AdHocSqlResult,
-  DisposableAsyncClient,
-  HostCatalog,
-  HostFs,
-  QueryCatalog,
-  SqlfuHost,
-  SqlfuProjectConfig,
-} from 'sqlfu';
+import type {DisposableAsyncClient, HostCatalog, HostFs, QueryCatalog, SqlfuHost, SqlfuProjectConfig} from 'sqlfu';
 import type {SqlAnalysisResponse} from 'sqlfu/ui/browser';
 
 import {buildQueryCatalog} from './catalog.js';
@@ -83,29 +75,6 @@ export async function createBrowserHost(input: {
           scratchDatabase.close();
         },
       } as unknown as DisposableAsyncClient;
-    },
-    execAdHocSql: async (client, sqlText, params): Promise<AdHocSqlResult> => {
-      // Mirror the node host: route through `client.prepare` and use the
-      // shared `sqlReturnsRows` classifier to decide rows vs. metadata. The
-      // sqlite-wasm adapter handles named-param `Record` natively; we just
-      // pass `params` through.
-      await using stmt = client.prepare(sqlText);
-      if (sqlReturnsRows(sqlText)) {
-        // SELECTs don't mutate the db; skip the schema-change broadcast. The
-        // RelationQueryPanel's useQuery subscribes to this same endpoint, so
-        // an invalidateQueries() here would re-fire the query and loop.
-        const rows = await stmt.all(params);
-        return {mode: 'rows', rows};
-      }
-      const result = await stmt.run(params);
-      input.onSchemaChange();
-      return {mode: 'metadata', metadata: {
-        rowsAffected: result.rowsAffected,
-        lastInsertRowid: result.lastInsertRowid,
-      }};
-    },
-    initializeProject: async () => {
-      throw new Error('sqlfu init is not supported in demo mode');
     },
     digest: async (content) => {
       const bytes = new TextEncoder().encode(content);
@@ -279,4 +248,3 @@ function seedLiveDatabase(database: Database, definitionsSql: string) {
       ('draft-notes', 'Draft Notes', 'Unpublished notes', 0);
   `);
 }
-

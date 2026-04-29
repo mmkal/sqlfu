@@ -11,6 +11,7 @@ import {
   analyzeDatabase,
   autoAcceptConfirm,
   formatCheckFailure,
+  initializeProjectFiles,
   migrationsPresetOf,
   requireContextConfig,
 } from '../api.js';
@@ -82,7 +83,8 @@ export const router = {
         return 'Initialization cancelled.';
       }
 
-      await context.host.initializeProject({
+      await initializeProjectFiles({
+        fs: context.host.fs,
         projectRoot: context.projectRoot,
         configContents,
       });

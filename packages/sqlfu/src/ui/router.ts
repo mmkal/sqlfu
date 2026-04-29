@@ -12,11 +12,12 @@ import {
   type SqlfuCommandConfirmParams,
 } from '../api.js';
 import {SqlfuError, type SqlfuErrorKind} from '../errors.js';
-import {excludeReservedSqliteObjects, splitSqlStatements} from '../sqlite-text.js';
-import type {AdHocSqlParams, SqlfuHost} from '../host.js';
-import type {AsyncClient, QueryArg, SqlfuProjectConfig} from '../types.js';
+import {excludeReservedSqliteObjects, splitSqlStatements, sqlReturnsRows} from '../sqlite-text.js';
+import type {HostCatalog, HostFs, SqlfuHost, SqlfuUiHost} from '../host.js';
+import type {AsyncClient, PreparedStatementParams, QueryArg, SqlfuProjectConfig} from '../types.js';
 import {basename, joinPath} from '../paths.js';
 import type {QueryCatalogEntry} from '../typegen/query-catalog.js';
+import {sha256} from '../vendor/sha256.js';
 import type {
   QueryExecutionResponse,
   SchemaCheckCard,
@@ -39,14 +40,36 @@ export type ResolvedUiProject =
       configPath: string;
     };
 
-export type UiRouterContext = {
-  project: ResolvedUiProject;
-  host: SqlfuHost;
+export type SqlfuUiProjectConfig = Partial<Omit<SqlfuProjectConfig, 'generate'>> & {
+  generate?: Partial<SqlfuProjectConfig['generate']>;
 };
 
-const uiBase = os.$context<UiRouterContext>().use(async ({next}) => {
+export type SqlfuUiProject =
+  | {
+      initialized: true;
+      projectRoot: string;
+      config?: SqlfuUiProjectConfig;
+    }
+  | {
+      initialized: false;
+      projectRoot: string;
+      configPath?: string;
+    };
+
+export type UiRouterContext = {
+  project: SqlfuUiProject;
+  host: SqlfuUiHost;
+};
+
+const uiBase = os.$context<UiRouterContext>().use(async ({next, context}) => {
   try {
-    return await next();
+    return await next({
+      context: {
+        ...context,
+        project: applyUiProjectDefaults(context.project),
+        host: applyUiHostDefaults(context.host),
+      },
+    });
   } catch (error) {
     throw toOrpcError(error);
   }
@@ -66,6 +89,92 @@ const tableRowKeySchema = z.discriminatedUnion('kind', [
     value: z.number(),
   }),
 ]) satisfies z.ZodType<TableRowKey>;
+
+type SqlRunnerParams = PreparedStatementParams | undefined;
+
+function applyUiProjectDefaults(project: SqlfuUiProject): ResolvedUiProject {
+  if (!project.initialized) {
+    return {
+      initialized: false,
+      projectRoot: project.projectRoot,
+      configPath: project.configPath || joinPath(project.projectRoot, 'sqlfu.config.ts'),
+    };
+  }
+
+  const config = project.config || {};
+  const projectRoot = config.projectRoot || project.projectRoot;
+  const generate = config.generate || {};
+  return {
+    initialized: true,
+    projectRoot,
+    config: {
+      projectRoot,
+      db: config.db,
+      definitions: config.definitions || joinPath(projectRoot, 'definitions.sql'),
+      migrations: config.migrations,
+      queries: config.queries || joinPath(projectRoot, 'sql'),
+      generate: {
+        validator: generate.validator || null,
+        prettyErrors: generate.prettyErrors !== false,
+        sync: generate.sync === true,
+        importExtension: generate.importExtension || '.js',
+        authority: generate.authority || 'live_schema',
+      },
+    },
+  };
+}
+
+function applyUiHostDefaults(host: SqlfuUiHost): SqlfuHost {
+  const fs = host.fs || unsupportedFs;
+  return {
+    fs,
+    openDb: host.openDb,
+    openScratchDb: host.openScratchDb || unsupportedOpenScratchDb,
+    digest: host.digest || ((content) => Promise.resolve(sha256Hex(content))),
+    now: host.now || (() => new Date()),
+    uuid: host.uuid || (() => globalThis.crypto.randomUUID()),
+    logger: host.logger || console,
+    catalog: host.catalog || emptyCatalog,
+  };
+}
+
+const unsupportedFs: HostFs = {
+  readFile: unsupportedFileSystemOperation,
+  writeFile: unsupportedFileSystemOperation,
+  readdir: unsupportedFileSystemOperation,
+  mkdir: unsupportedFileSystemOperation,
+  rm: unsupportedFileSystemOperation,
+  rename: unsupportedFileSystemOperation,
+  exists: unsupportedFileSystemOperation,
+};
+
+async function unsupportedFileSystemOperation(): Promise<never> {
+  throw new UnsupportedUiHostFeatureError('File system operations are not supported by this sqlfu UI host');
+}
+
+async function unsupportedOpenScratchDb(): Promise<never> {
+  throw new UnsupportedUiHostFeatureError('Scratch databases are not supported by this sqlfu UI host');
+}
+
+const emptyCatalog: HostCatalog = {
+  async load() {
+    return {
+      generatedAt: new Date(0).toISOString(),
+      queries: [],
+    };
+  },
+  async refresh() {},
+  async analyzeSql() {
+    return {};
+  },
+};
+
+function sha256Hex(content: string) {
+  const bytes = sha256(new TextEncoder().encode(content));
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+class UnsupportedUiHostFeatureError extends Error {}
 
 export const uiRouter = {
   project: {
@@ -123,10 +232,18 @@ export const uiRouter = {
     }),
     authorities: {
       get: uiBase.handler(async ({context}) => {
-        const authorities = await getSchemaAuthorities({
-          config: requireProjectConfig(context.project),
-          host: context.host,
-        });
+        const authorities =
+          context.host.fs === unsupportedFs
+            ? {
+                desiredSchemaSql: '',
+                migrations: [],
+                migrationHistory: [],
+                liveSchemaSql: '',
+              }
+            : await getSchemaAuthorities({
+                config: requireProjectConfig(context.project),
+                host: context.host,
+              });
         return {
           desiredSchemaSql: authorities.desiredSchemaSql,
           migrations: authorities.migrations.map((migration) => ({
@@ -295,7 +412,7 @@ export const uiRouter = {
         const params = normalizeSqlRunnerParams(input.params);
         await using database = await context.host.openDb(config);
         try {
-          const result = await context.host.execAdHocSql(database.client, trimmedSql, params);
+          const result = await execAdHocSql(database.client, trimmedSql, params);
           if (result.mode === 'rows') {
             return {
               sql: trimmedSql,
@@ -484,9 +601,7 @@ function resolvePendingConfirmation(id: string, body: string | null) {
   pending.resolve(body);
 }
 
-type QueueItem =
-  | {kind: 'event'; event: CommandEvent}
-  | {kind: 'error'; error: unknown};
+type QueueItem = {kind: 'event'; event: CommandEvent} | {kind: 'error'; error: unknown};
 
 function createCommandEventQueue() {
   const pendingIds = new Set<string>();
@@ -735,10 +850,7 @@ function parseMigrationId(id: string) {
   };
 }
 
-function encodeArgument(
-  arg: Extract<QueryCatalogEntry, {kind: 'query'}>['args'][number],
-  value: unknown,
-): QueryArg[] {
+function encodeArgument(arg: Extract<QueryCatalogEntry, {kind: 'query'}>['args'][number], value: unknown): QueryArg[] {
   if (arg.isArray) {
     if (!Array.isArray(value)) {
       return [];
@@ -919,7 +1031,33 @@ function slugifyQueryName(value: string) {
     .replace(/^-+|-+$/g, '');
 }
 
-function normalizeSqlRunnerParams(value: unknown): AdHocSqlParams {
+async function execAdHocSql(client: AsyncClient, sql: string, params: SqlRunnerParams) {
+  const stmt = client.prepare(sql);
+  try {
+    if (sqlReturnsRows(sql)) {
+      return {
+        mode: 'rows' as const,
+        rows: await stmt.all(params),
+      };
+    }
+    return {
+      mode: 'metadata' as const,
+      metadata: await stmt.run(params),
+    };
+  } finally {
+    await disposePreparedStatement(stmt);
+  }
+}
+
+async function disposePreparedStatement(stmt: ReturnType<AsyncClient['prepare']>) {
+  if (Symbol.asyncDispose in stmt) {
+    await stmt[Symbol.asyncDispose]();
+    return;
+  }
+  (stmt as unknown as {[Symbol.dispose]?: () => void})[Symbol.dispose]?.();
+}
+
+function normalizeSqlRunnerParams(value: unknown): SqlRunnerParams {
   if (value == null || value === '') {
     return undefined;
   }
@@ -1025,11 +1163,7 @@ function buildExactRowMatchClause(row: Record<string, unknown>) {
   };
 }
 
-function buildInsertRowStatement(
-  relationName: string,
-  nextRow: Record<string, unknown>,
-  changedColumns: string[],
-) {
+function buildInsertRowStatement(relationName: string, nextRow: Record<string, unknown>, changedColumns: string[]) {
   const columns = changedColumns.map((column) => `"${escapeIdentifier(column)}"`).join(', ');
   const placeholders = changedColumns.map(() => '?').join(', ');
   return {

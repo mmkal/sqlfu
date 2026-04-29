@@ -14,17 +14,12 @@ import type {
   SqlQuery,
 } from '../types.js';
 import {bindAsyncSql} from '../sql.js';
-import {
-  rawSqlWithSqlSplittingAsync,
-  sqlReturnsRows,
-  surroundWithBeginCommitRollbackAsync,
-} from '../sqlite-text.js';
+import {rawSqlWithSqlSplittingAsync, surroundWithBeginCommitRollbackAsync} from '../sqlite-text.js';
 import type {QueryCatalog} from '../typegen/query-catalog.js';
-import {initializeProject} from './config.js';
 import {analyzeAdHocSqlForConfig, generateQueryTypesForConfig} from '../typegen/index.js';
 import type {SqlAnalysisResponse} from '../ui/shared.js';
 import {isInternalUnsupportedSqlAnalysisError, toSqlEditorDiagnostic} from '../sql-editor-diagnostic.js';
-import type {AdHocSqlResult, HostCatalog, HostFs, SqlfuHost} from '../host.js';
+import type {HostCatalog, HostFs, SqlfuHost} from '../host.js';
 
 type NodeSqliteModule = {DatabaseSync: typeof DatabaseSync};
 
@@ -109,27 +104,6 @@ export async function createNodeHost(): Promise<SqlfuHost> {
   const host: SqlfuHost = {
     fs: nodeFs,
     openDb: (config) => openConfigDb(config.db),
-    execAdHocSql: async (client, sql, params): Promise<AdHocSqlResult> => {
-      // Now that every adapter exposes `client.prepare`, execAdHocSql is a
-      // thin classifier-and-bind. The keyword classifier (`sqlReturnsRows`)
-      // stays — try/catch on `.all()` is unsafe because node:sqlite returns
-      // `[]` for writes silently and better-sqlite3 may execute partial side
-      // effects before throwing. Named-param translation is the adapter's
-      // job, not ours; we just pass `params` through.
-      await using stmt = client.prepare(sql);
-      if (sqlReturnsRows(sql)) {
-        const rows = await stmt.all(params);
-        return {mode: 'rows', rows};
-      }
-      const result = await stmt.run(params);
-      return {
-        mode: 'metadata',
-        metadata: {
-          rowsAffected: result.rowsAffected,
-          lastInsertRowid: result.lastInsertRowid,
-        },
-      };
-    },
     openScratchDb: async (slug) => {
       await fs.mkdir(scratchRoot, {recursive: true});
       const dbPath = path.join(scratchRoot, `${slug}-${randomUUID()}.db`);
@@ -146,7 +120,6 @@ export async function createNodeHost(): Promise<SqlfuHost> {
         },
       };
     },
-    initializeProject: (input) => initializeProject(input),
     digest: async (content) => createHash('sha256').update(content).digest('hex'),
     now: () => new Date(),
     uuid: () => randomUUID(),
@@ -233,7 +206,6 @@ const nodeFs: HostFs = {
     }
   },
 };
-
 
 type NodeSqliteDatabase = InstanceType<typeof DatabaseSync>;
 

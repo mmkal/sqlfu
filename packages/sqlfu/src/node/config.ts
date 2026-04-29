@@ -3,13 +3,7 @@ import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 
 import type {SqlfuConfig, SqlfuProjectConfig} from '../types.js';
-import {
-  assertConfigShape,
-  createDefaultInitPreview,
-  resolveProjectConfig,
-  type LoadedSqlfuProject,
-  type TsconfigPreferences,
-} from '../config.js';
+import {assertConfigShape, resolveProjectConfig, type LoadedSqlfuProject, type TsconfigPreferences} from '../config.js';
 
 const defaultConfigFileNames = ['sqlfu.config.ts', 'sqlfu.config.mjs', 'sqlfu.config.js', 'sqlfu.config.cjs'] as const;
 const defaultSqlfuConfigFileName = 'sqlfu.config.ts';
@@ -45,25 +39,6 @@ export async function loadProjectStateFrom(projectRoot: string): Promise<LoadedS
     configPath,
     config: resolveProjectConfig(fileConfig, configPath, tsconfigPreferences),
   };
-}
-
-export async function initializeProject(input: {projectRoot: string; configContents: string}) {
-  const preview = createDefaultInitPreview(input.projectRoot);
-  const state = await loadProjectStateFrom(input.projectRoot);
-  if (state.initialized) {
-    throw new Error(`sqlfu is already initialized in ${input.projectRoot}`);
-  }
-
-  await fs.mkdir(path.join(input.projectRoot, 'db'), {recursive: true});
-  await fs.mkdir(path.join(input.projectRoot, 'migrations'), {recursive: true});
-  await fs.mkdir(path.join(input.projectRoot, 'sql'), {recursive: true});
-  await fs.writeFile(preview.configPath, withTrailingNewline(input.configContents));
-  await fs.writeFile(
-    path.join(input.projectRoot, 'definitions.sql'),
-    '-- create table yourtable(id int, body text);\n',
-  );
-  await fs.writeFile(path.join(input.projectRoot, 'migrations', '.gitkeep'), '');
-  await fs.writeFile(path.join(input.projectRoot, 'sql', '.gitkeep'), '');
 }
 
 async function resolveConfigPath(cwd: string): Promise<string | undefined> {
@@ -160,8 +135,4 @@ function stripJsonComments(value: string): string {
 
 function stripTrailingCommas(value: string): string {
   return value.replace(/,\s*([}\]])/g, '$1');
-}
-
-function withTrailingNewline(value: string) {
-  return value.endsWith('\n') ? value : `${value}\n`;
 }

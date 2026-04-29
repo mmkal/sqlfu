@@ -1,7 +1,7 @@
 import {RPCHandler} from '@orpc/server/fetch';
 
-import type {SqlfuHost} from '../host.js';
-import {uiRouter, type ResolvedUiProject} from './router.js';
+import type {SqlfuUiHost} from '../host.js';
+import {uiRouter, type SqlfuUiProject} from './router.js';
 
 export type SqlfuUiAssetBody = string | Uint8Array | ArrayBuffer | Blob | Response;
 export type SqlfuUiAsset = SqlfuUiAssetBody | (() => SqlfuUiAssetBody | Promise<SqlfuUiAssetBody>);
@@ -11,8 +11,8 @@ export type SqlfuUiPartialFetch = (request: Request) => Promise<Response | undef
 
 export type CreateSqlfuUiPartialFetchInput = {
   assets: SqlfuUiAssets;
-  host: SqlfuHost;
-  project: ResolvedUiProject;
+  host: SqlfuUiHost;
+  project: SqlfuUiProject;
 };
 
 export function createSqlfuUiPartialFetch(input: CreateSqlfuUiPartialFetchInput): SqlfuUiPartialFetch {

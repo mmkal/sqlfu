@@ -123,6 +123,40 @@ order by type, name;`,
   expect(analysis).toMatchObject({diagnostics: []});
 });
 
+test('sql.run executes ad-hoc statements through the ui router', async () => {
+  await using fixture = await createUiServerFixture();
+
+  expect(
+    await fixture.client.sql.run({
+      sql: 'select id, slug from posts where slug = :slug',
+      params: {slug: 'hello-world'},
+    }),
+  ).toMatchObject({
+    mode: 'rows',
+    rows: [{id: 1, slug: 'hello-world'}],
+  });
+
+  expect(
+    await fixture.client.sql.run({
+      sql: `select 'a:b' as literal, :real as param`,
+      params: {real: 42},
+    }),
+  ).toMatchObject({
+    mode: 'rows',
+    rows: [{literal: 'a:b', param: 42}],
+  });
+
+  expect(
+    await fixture.client.sql.run({
+      sql: 'insert into posts (slug, title) values (:slug, :title)',
+      params: {slug: 'second-post', title: 'Second Post'},
+    }),
+  ).toMatchObject({
+    mode: 'metadata',
+    metadata: {rowsAffected: 1, lastInsertRowid: 2},
+  });
+});
+
 test('sqlfu server can serve the packages/ui Vite client in dev mode for ngrok-style hosts when opted in', async () => {
   await using fixture = await createUiServerFixture({
     dev: true,

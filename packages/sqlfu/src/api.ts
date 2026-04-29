@@ -1,5 +1,5 @@
 import type {Client, SqlfuMigrationPrefix, SqlfuMigrationPreset, SqlfuProjectConfig} from './types.js';
-import type {SqlfuHost} from './host.js';
+import type {HostFs, SqlfuHost} from './host.js';
 import {basename, joinPath} from './paths.js';
 import {createDefaultInitPreview} from './init-preview.js';
 import {migrationNickname} from './naming.js';
@@ -16,11 +16,7 @@ import {presetTableName} from './migrations/preset-queries.js';
 import {diffSchemaSql} from './schemadiff/index.js';
 import {inspectSqliteSchemaSql, schemasEqual} from './schemadiff/sqlite/index.js';
 
-import {
-  materializeDefinitionsSchemaFor,
-  materializeMigrationsSchemaFor,
-  readMigrationFiles,
-} from './materialize.js';
+import {materializeDefinitionsSchemaFor, materializeMigrationsSchemaFor, readMigrationFiles} from './materialize.js';
 
 export function migrationsPresetOf(context: SqlfuContext): SqlfuMigrationPreset {
   return context.config.migrations?.preset ?? 'sqlfu';
@@ -123,10 +119,7 @@ export async function getMigrationResultantSchema(
   if (targetMigrationIndex === -1) {
     throw new Error(`migration ${input.id} not found in repo`);
   }
-  const schemaSql = await materializeMigrationsSchemaForContext(
-    context,
-    migrations.slice(0, targetMigrationIndex + 1),
-  );
+  const schemaSql = await materializeMigrationsSchemaForContext(context, migrations.slice(0, targetMigrationIndex + 1));
   return `-- schema produced by sqlfu goto ${input.id}\n${schemaSql}`;
 }
 
@@ -164,7 +157,8 @@ export async function runSqlfuCommand(
     if (!configContents?.trim()) {
       return;
     }
-    await context.host.initializeProject({
+    await initializeProjectFiles({
+      fs: context.host.fs,
       projectRoot: context.projectRoot,
       configContents,
     });
@@ -221,6 +215,33 @@ export async function runSqlfuCommand(
   throw new Error(`Unsupported sqlfu command: ${command}`);
 }
 
+const configFileNames = ['sqlfu.config.ts', 'sqlfu.config.mjs', 'sqlfu.config.js', 'sqlfu.config.cjs'];
+
+export async function initializeProjectFiles(input: {fs: HostFs; projectRoot: string; configContents: string}) {
+  for (const configFileName of configFileNames) {
+    const configPath = joinPath(input.projectRoot, configFileName);
+    if (await input.fs.exists(configPath)) {
+      throw new Error(`sqlfu is already initialized in ${input.projectRoot}`);
+    }
+  }
+
+  const preview = createDefaultInitPreview(input.projectRoot);
+  await input.fs.mkdir(joinPath(input.projectRoot, 'db'));
+  await input.fs.mkdir(joinPath(input.projectRoot, 'migrations'));
+  await input.fs.mkdir(joinPath(input.projectRoot, 'sql'));
+  await input.fs.writeFile(preview.configPath, withTrailingNewline(input.configContents));
+  await input.fs.writeFile(
+    joinPath(input.projectRoot, 'definitions.sql'),
+    '-- create table yourtable(id int, body text);\n',
+  );
+  await input.fs.writeFile(joinPath(input.projectRoot, 'migrations', '.gitkeep'), '');
+  await input.fs.writeFile(joinPath(input.projectRoot, 'sql', '.gitkeep'), '');
+}
+
+function withTrailingNewline(value: string) {
+  return value.endsWith('\n') ? value : `${value}\n`;
+}
+
 export async function readMigrationsFromContext(context: SqlfuContext): Promise<Migration[]> {
   return readMigrationFiles(context.host, context.config);
 }
@@ -243,8 +264,7 @@ export async function applyDraftSql(
 ) {
   const migrations = await readMigrationsFromContext(context);
   const definitionsSql = await readDefinitionsSql(context.host, context.config.definitions);
-  const baselineSql =
-    migrations.length === 0 ? '' : await materializeMigrationsSchemaForContext(context, migrations);
+  const baselineSql = migrations.length === 0 ? '' : await materializeMigrationsSchemaForContext(context, migrations);
   const diffLines = await diffSchemaSql(context.host, {
     baselineSql,
     desiredSql: definitionsSql,
@@ -543,7 +563,11 @@ export async function applyBaselineSql(context: SqlfuContext, input: {target: st
     return;
   }
   await using database = await context.host.openDb(context.config);
-  await baselineMigrationHistory(database.client, {migrations, target: input.target, preset: migrationsPresetOf(context)});
+  await baselineMigrationHistory(database.client, {
+    migrations,
+    target: input.target,
+    preset: migrationsPresetOf(context),
+  });
 }
 
 export async function applyGotoSql(context: SqlfuContext, input: {target: string}, confirm: SqlfuCommandConfirm) {
@@ -944,14 +968,7 @@ export type CheckMismatch = {
 };
 
 export type CheckRecommendation = {
-  kind:
-    | 'draft'
-    | 'migrate'
-    | 'baseline'
-    | 'goto'
-    | 'sync'
-    | 'restoreMissingMigration'
-    | 'restoreOriginalMigration';
+  kind: 'draft' | 'migrate' | 'baseline' | 'goto' | 'sync' | 'restoreMissingMigration' | 'restoreOriginalMigration';
   command?: [string, ...string[]];
   label: string;
   rationale?: string;

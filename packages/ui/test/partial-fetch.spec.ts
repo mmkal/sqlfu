@@ -378,8 +378,8 @@ test('partial fetch can serve separate worker and durable object UIs from one wo
           sql: 'insert into todos (title, session_id) values (?, ?)',
           args: [String(formData.get('title') || ''), authenticatedSessionId],
         });
-        await authenticatedSessionObject.incrementTodoAddedCount();
-        return new Response(null, {status: 303, headers: {location: '/my-db'}});
+        await authenticatedSessionObject!.incrementTodoAddedCount();
+        return new Response(null, {status: 303, headers: {location: '/todos/new'}});
       }
 
       if (url.pathname === '/todos/new') {
@@ -435,6 +435,7 @@ test('partial fetch can serve separate worker and durable object UIs from one wo
   await page.goto(`${fixture.origin}/todos/new`);
   await page.getByLabel('Worker todo').fill('Feed snake');
   await page.getByRole('button', {name: 'Add'}).click();
+  await expect(page).toHaveURL(`${fixture.origin}/todos/new`);
 
   await page.goto(`${fixture.origin}/my-db/#table/todos`);
   await expect(page.getByRole('heading', {name: 'todos'})).toBeVisible();
@@ -458,7 +459,9 @@ test('partial fetch can serve separate worker and durable object UIs from one wo
   await expect(page.getByText('Todos added: 0')).toBeVisible();
 });
 
-async function createPartialFetchWorkerFixture(input: PartialFetchWorkerFixtureInput) {
+async function createPartialFetchWorkerFixture<DOs extends Record<string, new (...args: any[]) => object>>(
+  input: PartialFetchWorkerFixtureInput<DOs>,
+) {
   await ensureBuilt();
 
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'sqlfu-partial-fetch-playwright-'));
@@ -587,18 +590,28 @@ interface WorkerFetcherLike {
   fetch(input: string, init?: RequestInit): Promise<Response>;
 }
 
-interface PartialFetchWorkerFixtureInput {
-  durableObjects?: Record<string, new (...args: any[]) => object>;
+interface PartialFetchWorkerFixtureInput<DOs extends Record<string, new (...args: any[]) => object>> {
+  durableObjects?: DOs;
   fetch(
     request: Request,
     env: {
+      [K in keyof DOs]: {
+        get: (id: string & {_brand: 'id'}) => Asyncify<InstanceType<DOs[K]>>;
+        idFromName: (name: string) => string & {_brand: 'id'};
+      };
+    } & {
       DB: Parameters<typeof createD1Client>[0];
-      [binding: string]: any;
     },
   ): Promise<Response> | Response;
 }
 
-function createWorkerSource(input: PartialFetchWorkerFixtureInput) {
+type Asyncify<T> = {
+  [K in keyof T]: T[K] extends (...args: infer A) => infer R ? (...args: A) => Promise<R> : T[K];
+};
+
+function createWorkerSource<DOs extends Record<string, new (...args: any[]) => object>>(
+  input: PartialFetchWorkerFixtureInput<DOs>,
+) {
   return dedent`
 import {DurableObject} from 'cloudflare:workers';
 import {createD1Client, createDurableObjectClient, dedent} from 'sqlfu';

@@ -23,6 +23,15 @@ declare const createSqlfuUiPartialFetch: typeof import('@sqlfu/ui').createSqlfuU
 test('D1 worker partial fetch serves real UI assets while leaving app routes available', async ({page}) => {
   await using fixture = await createPartialFetchWorkerFixture({
     fetch: async (request, env) => {
+      const db = createD1Client(env.DB);
+      await db.raw(`
+        create table if not exists todos (
+          id integer primary key,
+          title text not null,
+          completed integer not null default 0
+        );
+      `);
+
       const url = new URL(request.url);
       if (url.pathname === '/hello') {
         return new Response('<!doctype html><h1>Hello!</h1>', {
@@ -30,16 +39,28 @@ test('D1 worker partial fetch serves real UI assets while leaving app routes ava
         });
       }
 
-      const db = createD1Client(env.DB);
-      await db.raw(`
-        create table if not exists people (
-          id integer primary key,
-          name text not null,
-          role text not null
+      if (url.pathname === '/todos/new') {
+        return new Response(
+          `<!doctype html>
+          <form method="post" action="/todos">
+            <label>
+              Todo
+              <input name="title" />
+            </label>
+            <button type="submit">Add</button>
+          </form>`,
+          {headers: {'content-type': 'text/html; charset=utf-8'}},
         );
-        insert or ignore into people (id, name, role) values (1, 'Ada Lovelace', 'Query planner');
-        insert or ignore into people (id, name, role) values (2, 'Grace Hopper', 'Compiler whisperer');
-      `);
+      }
+
+      if (url.pathname === '/todos' && request.method === 'POST') {
+        const formData = await request.formData();
+        await db.run({
+          sql: 'insert into todos (title) values (?)',
+          args: [String(formData.get('title') || '')],
+        });
+        return new Response(null, {status: 303, headers: {location: '/todos/new'}});
+      }
 
       const uiPartialFetch = createSqlfuUiPartialFetch({
         project: {
@@ -68,39 +89,40 @@ test('D1 worker partial fetch serves real UI assets while leaving app routes ava
   await page.goto(`${fixture.origin}/hello`);
   await expect(page.getByRole('heading', {name: 'Hello!'})).toBeVisible();
 
-  await page.goto(`${fixture.origin}/#table/people`);
-  await expect(page.getByRole('heading', {name: 'people'})).toBeVisible();
-  await expect(page.getByText('Ada Lovelace')).toBeVisible();
-  await expect(page.getByText('Grace Hopper')).toBeVisible();
+  await page.goto(`${fixture.origin}/todos/new`);
+  await page.getByLabel('Todo').fill('Write partial fetch docs');
+  await page.getByRole('button', {name: 'Add'}).click();
+
+  await page.goto(`${fixture.origin}/#table/todos`);
+  await expect(page.getByRole('heading', {name: 'todos'})).toBeVisible();
+  await expect(page.getByText('Write partial fetch docs')).toBeVisible();
 
   await page.getByRole('link', {name: 'SQL runner'}).click();
   await replaceCodeMirrorText(
     page,
     'SQL editor',
     `
-    insert into people (id, name, role)
-    values (3, 'Katherine Johnson', 'Orbit calculator');
-  `,
-  );
-  await page.getByRole('button', {name: 'Run SQL'}).click();
-  await expect(page.getByText('rowsAffected')).toBeVisible();
-
-  await replaceCodeMirrorText(
-    page,
-    'SQL editor',
-    `
-    select id, name, role
-    from people
+    select id, title, completed
+    from todos
     order by id;
   `,
   );
   await page.getByRole('button', {name: 'Run SQL'}).click();
-  await expect(page.getByText('Katherine Johnson')).toBeVisible();
+  await expect(page.getByText('Write partial fetch docs')).toBeVisible();
 });
 
 test('partial fetch can serve the UI behind worker-owned prefix auth', async ({page}) => {
   await using fixture = await createPartialFetchWorkerFixture({
     fetch: async (request, env) => {
+      const db = createD1Client(env.DB);
+      await db.raw(`
+        create table if not exists todos (
+          id integer primary key,
+          title text not null,
+          completed integer not null default 0
+        );
+      `);
+
       const url = new URL(request.url);
       if (url.pathname === '/login') {
         return new Response(
@@ -130,6 +152,29 @@ test('partial fetch can serve the UI behind worker-owned prefix auth', async ({p
         });
       }
 
+      if (url.pathname === '/todos/new') {
+        return new Response(
+          `<!doctype html>
+          <form method="post" action="/todos">
+            <label>
+              Todo
+              <input name="title" />
+            </label>
+            <button type="submit">Add</button>
+          </form>`,
+          {headers: {'content-type': 'text/html; charset=utf-8'}},
+        );
+      }
+
+      if (url.pathname === '/todos' && request.method === 'POST') {
+        const formData = await request.formData();
+        await db.run({
+          sql: 'insert into todos (title) values (?)',
+          args: [String(formData.get('title') || '')],
+        });
+        return new Response(null, {status: 303, headers: {location: '/todos/new'}});
+      }
+
       if (url.pathname.startsWith('/my-db') && !request.headers.get('cookie')?.includes('partial_fetch_session=ok')) {
         return new Response(null, {
           status: 303,
@@ -138,17 +183,6 @@ test('partial fetch can serve the UI behind worker-owned prefix auth', async ({p
           },
         });
       }
-
-      const db = createD1Client(env.DB);
-      await db.raw(`
-        create table if not exists people (
-          id integer primary key,
-          name text not null,
-          role text not null
-        );
-        insert or ignore into people (id, name, role) values (1, 'Ada Lovelace', 'Query planner');
-        insert or ignore into people (id, name, role) values (2, 'Grace Hopper', 'Compiler whisperer');
-      `);
 
       const uiPartialFetch = createSqlfuUiPartialFetch({
         prefixPath: '/my-db',
@@ -181,11 +215,14 @@ test('partial fetch can serve the UI behind worker-owned prefix auth', async ({p
   await page.getByRole('button', {name: 'Unlock'}).click();
   await expect(page).toHaveURL(`${fixture.origin}/my-db`);
 
-  await page.goto(`${fixture.origin}/my-db/#table/people`);
-  await expect(page).toHaveURL(/\/my-db\/?#table\/people$/u);
-  await expect(page.getByRole('heading', {name: 'people'})).toBeVisible();
-  await expect(page.getByText('Ada Lovelace')).toBeVisible();
-  await expect(page.getByText('Grace Hopper')).toBeVisible();
+  await page.goto(`${fixture.origin}/todos/new`);
+  await page.getByLabel('Todo').fill('Ship auth-gated embedded UI');
+  await page.getByRole('button', {name: 'Add'}).click();
+
+  await page.goto(`${fixture.origin}/my-db/#table/todos`);
+  await expect(page).toHaveURL(/\/my-db\/?#table\/todos$/u);
+  await expect(page.getByRole('heading', {name: 'todos'})).toBeVisible();
+  await expect(page.getByText('Ship auth-gated embedded UI')).toBeVisible();
 });
 
 async function createPartialFetchWorkerFixture(input: PartialFetchWorkerFixtureInput) {

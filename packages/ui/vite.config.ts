@@ -49,18 +49,11 @@ function sqlfuPartialFetchBundle(): Plugin {
 }
 
 async function listTextAssetFiles(dir: string): Promise<string[]> {
-  const entries = await fs.readdir(dir, {withFileTypes: true});
-  const files = await Promise.all(
-    entries.map((entry) => {
-      const entryPath = path.join(dir, entry.name);
-      return entry.isDirectory() ? listTextAssetFiles(entryPath) : [entryPath];
-    }),
-  );
+  const files = await Array.fromAsync(fs.glob('**/*.{html,js,css}', {cwd: dir}));
   return files
-    .flat()
-    .filter((filePath) => /\.(css|html|js)$/u.test(filePath))
-    .filter((filePath) => !filePath.endsWith('partial-fetch.js'))
-    .filter((filePath) => !filePath.endsWith('sqlfu-ui-assets.generated.js'))
+    .filter((filePath) => filePath !== 'partial-fetch.js')
+    .filter((filePath) => filePath !== 'sqlfu-ui-assets.generated.js')
+    .map((filePath) => path.join(dir, filePath))
     .sort();
 }
 

@@ -13,7 +13,7 @@
 
 import type {Client} from '../types.js';
 import type {SqlfuMigrationPreset} from '../types.js';
-import {type DualGenerator} from './dual-dispatch.js';
+import {awaited, type DualGenerator} from '../dual-dispatch.js';
 
 const SQLFU_TABLE = 'sqlfu_migrations';
 const D1_TABLE = 'd1_migrations';
@@ -40,11 +40,13 @@ export function* ensureMigrationTableGen(
   }
 
   // preset === 'd1'
-  const info = (yield client.all({
-    sql: `pragma table_info(${D1_TABLE})`,
-    args: [],
-    name: 'pragma-d1-migrations',
-  })) as Array<{name: string}>;
+  const info = yield* awaited(
+    client.all<{name: string}>({
+      sql: `pragma table_info(${D1_TABLE})`,
+      args: [],
+      name: 'pragma-d1-migrations',
+    }),
+  );
 
   if (info.length === 0) {
     // Fresh DB — create alchemy's "remote" shape. Alchemy itself creates this

@@ -63,3 +63,26 @@ by client factory.
   CLI tool, or demo-mode sqlite-wasm without spurious `async` creeping into
   the call site.
 - Cheap to do, small surface (only three methods).
+
+## 2026-04-28 implementation pass
+
+Branch: `outbox-polymorphic-sync`
+
+Status (for humans): done. Impl + sync sibling test landed. Full sqlfu suite (1399 tests) green. Typecheck clean.
+
+Plan:
+
+- Make `createOutbox` generic over `TClient extends Client` so `emit`, `claim`, `setup` return polymorphic types via a conditional on `TClient extends SyncClient`.
+- Implement two parallel internal code paths: an async path identical to today's, and a sync path that's a literal copy with `await`s stripped and using the `SyncClient` operations. The runtime branches on `client.sync`.
+- `tick()` stays async; handlers are async.
+- Add a sync sibling test (`outbox.sync.test.ts`) that uses the same `node:sqlite` driver via `SyncClient` and asserts plain (non-Promise) return values.
+- Run `pnpm --filter sqlfu test outbox` and `pnpm --filter sqlfu typecheck`.
+
+Checklist:
+
+- [x] type signatures: `createOutbox<TEvents, TClient extends Client = Client>` with conditional return types on `emit`/`claim`/`setup` _via `MaybeAsync<TClient, TSync, TAsync>` helper conditional in `outbox/index.ts`. Defaulted `TClient = Client` keeps the existing `Outbox<Events>` callsites working._
+- [x] runtime: split body into `createSyncOutbox` / `createAsyncOutbox` paths picked off `client.sync` _bodies are deliberately copy-pasted with `await`s stripped, per the task's recommendation; comment at the top of `createSyncOutbox` warns to keep them in sync._
+- [x] async tests still green _existing `outbox.test.ts` continues to pass unchanged._
+- [x] sync sibling test asserting non-Promise returns lands and passes _at `packages/sqlfu/test/outbox/outbox.sync.test.ts`. Mirrors the async file's scenario shape; uses `expect(...).not.toBeInstanceOf(Promise)` on the polymorphic methods (`setup`, `emit`, `claim`) plus a runtime `instanceof Promise` guard inside `signUp` to keep the contract observable from the test code itself._
+- [x] typecheck clean _`pnpm --filter sqlfu typecheck` passes._
+

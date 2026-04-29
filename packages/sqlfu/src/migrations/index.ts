@@ -2,7 +2,7 @@ import {sha256} from '../vendor/sha256.js';
 
 import type {AsyncClient, Client, SqlfuMigrationPreset, SyncClient} from '../types.js';
 import {basename} from '../paths.js';
-import {driveAsync, driveSync, type DualGenerator} from './dual-dispatch.js';
+import {awaited, driveAsync, driveSync, type DualGenerator} from '../dual-dispatch.js';
 import {
   deleteHistoryQuery,
   ensureMigrationTableGen,
@@ -70,7 +70,7 @@ export function readMigrationHistory(
 
 function* readMigrationHistoryGen(client: Client, preset: SqlfuMigrationPreset): DualGenerator<MigrationHistoryRow[]> {
   const shape = yield* ensureMigrationTableGen(client, preset);
-  const rows = (yield client.all<MigrationHistoryRow>(selectHistoryQuery(shape))) as MigrationHistoryRow[];
+  const rows = yield* awaited(client.all<MigrationHistoryRow>(selectHistoryQuery(shape)));
   return rows.map((row) => ({...row, name: normalizeHistoryName(shape, row.name)}));
 }
 
@@ -120,7 +120,7 @@ export function replaceMigrationHistory(client: Client, params: ReplaceParams): 
 function* applyMigrationsGen(client: Client, params: ApplyMigrationsParams): DualGenerator<void> {
   const preset = params.preset ?? 'sqlfu';
   const shape = yield* ensureMigrationTableGen(client, preset);
-  const appliedRaw = (yield client.all<MigrationHistoryRow>(selectHistoryQuery(shape))) as MigrationHistoryRow[];
+  const appliedRaw = yield* awaited(client.all<MigrationHistoryRow>(selectHistoryQuery(shape)));
   const applied = appliedRaw.map((row) => ({...row, name: normalizeHistoryName(shape, row.name)}));
   const byName = new Map(params.migrations.map((migration) => [migrationName(migration), migration]));
 

@@ -15,6 +15,15 @@ export default [
 
 The `recommended` preset runs `sqlfu/query-naming` and `sqlfu/format-sql` on TS/JS files, enables the `sqlfu/sql` processor so `.sql` files are lintable as well, and checks that generated query wrappers are fresh.
 
+If you use VS Code, make sure the ESLint extension validates `.sql` files as well as your JS/TS files. Without this, command-line linting works but SQL lint errors may not show in the editor:
+
+```json
+// .vscode/settings.json
+{
+  "eslint.validate": ["markdown", "javascript", "typescript", "sql"]
+}
+```
+
 ## Rules
 
 ### `sqlfu/query-naming`

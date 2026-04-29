@@ -84,7 +84,7 @@ test('D1 worker partial fetch serves real UI assets while leaving app routes ava
         return normalized.endsWith('/') ? normalized : `${normalized}/`;
       };
 
-      const partialResponse = await createSqlfuUiPartialFetch({
+      const uiPartialFetch = createSqlfuUiPartialFetch({
         assets: uiAssets,
         project,
         host: {
@@ -188,7 +188,8 @@ test('D1 worker partial fetch serves real UI assets while leaving app routes ava
             },
           },
         },
-      })(request);
+      });
+      const partialResponse = await uiPartialFetch(request);
 
       if (partialResponse) {
         return partialResponse;

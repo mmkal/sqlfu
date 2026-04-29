@@ -1,5 +1,4 @@
 import fs from 'node:fs';
-import crypto from 'node:crypto';
 import path from 'node:path';
 
 import {formatSql} from './formatter.js';
@@ -447,13 +446,12 @@ const SQL_FILE_TAG = '__sqlfuSqlFile';
 const SQL_FILE_WRAPPER_PREFIX = SQL_FILE_TAG + '`';
 const SQL_FILE_WRAPPER_SUFFIX = '`;\n';
 const QUERY_SOURCE_ENTRY_PATTERN =
-  /\{\s*sqlFile:\s*("(?:(?:\\.)|[^"\\])*")\s*,\s*generatedFile:\s*("(?:(?:\\.)|[^"\\])*")\s*,\s*sourceHash:\s*("(?:(?:\\.)|[^"\\])*")\s*,?\s*\}/g;
-const SOURCE_HASH_PATTERN = /^[a-f0-9]{64}$/u;
+  /\{\s*sqlFile:\s*("(?:(?:\\.)|[^"\\])*")\s*,\s*generatedFile:\s*("(?:(?:\\.)|[^"\\])*")\s*,\s*sourceSql:\s*("(?:(?:\\.)|[^"\\])*")\s*,?\s*\}/g;
 
 type QuerySourceManifestEntry = {
   sqlFile: string;
   generatedFile: string;
-  sourceHash: string;
+  sourceSql: string;
 };
 
 const generatedQueryFreshness: Rule.RuleModule = {
@@ -553,10 +551,10 @@ function reportSourceQueryFreshnessProblem(
     return;
   }
 
-  if (entry.sourceHash !== sourceSqlFileHash(sourceSqlFile)) {
+  if (entry.sourceSql !== fs.readFileSync(sourceSqlFile, 'utf8')) {
     context.report({
       node,
-      message: `generated query manifest hash for '${relativePath}' is stale; run sqlfu generate.`,
+      message: `generated query manifest SQL for '${relativePath}' is stale; run sqlfu generate.`,
     });
   }
 }
@@ -610,10 +608,10 @@ function reportGeneratedQueriesManifestProblems(
       continue;
     }
 
-    if (entry.sourceHash !== sourceSqlFileHash(file.absolutePath)) {
+    if (entry.sourceSql !== fs.readFileSync(file.absolutePath, 'utf8')) {
       context.report({
         node,
-        message: `generated query manifest hash for '${file.relativePath}' is stale; run sqlfu generate.`,
+        message: `generated query manifest SQL for '${file.relativePath}' is stale; run sqlfu generate.`,
       });
     }
 
@@ -643,10 +641,6 @@ function reportGeneratedQueriesManifestProblems(
   }
 }
 
-function sourceSqlFileHash(sourceSqlFile: string): string {
-  return crypto.createHash('sha256').update(fs.readFileSync(sourceSqlFile)).digest('hex');
-}
-
 function generatedFileForSqlFile(relativeSqlFile: string): string {
   return `${relativeSqlFile.slice(0, -'.sql'.length)}.sql.ts`;
 }
@@ -660,11 +654,11 @@ function readQuerySourceManifest(generatedDir: string): QuerySourceManifestEntry
     const entry = {
       sqlFile: JSON.parse(match[1]!),
       generatedFile: JSON.parse(match[2]!),
-      sourceHash: JSON.parse(match[3]!),
+      sourceSql: JSON.parse(match[3]!),
     };
     if (typeof entry.sqlFile !== 'string') continue;
     if (typeof entry.generatedFile !== 'string') continue;
-    if (typeof entry.sourceHash !== 'string' || !SOURCE_HASH_PATTERN.test(entry.sourceHash)) continue;
+    if (typeof entry.sourceSql !== 'string') continue;
     entries.push(entry);
   }
   return entries;

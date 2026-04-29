@@ -96,7 +96,7 @@ export namespace findPostBySlug {
 export * from "./posts.sql.js";
 
 export const sqlfuQuerySources = [
-	{ sqlFile: "posts.sql", generatedFile: "posts.sql.ts", sourceHash: "c594ea837d32f0c16660427f18029dc2ca5abb70d55742272aa5843841218345" },
+	{ sqlFile: "posts.sql", generatedFile: "posts.sql.ts", sourceSql: "/** @name listPosts */\nselect id, slug, title from posts order by id;\n\n/** @name findPostBySlug */\nselect id, slug, title from posts where slug = :slug;\n" },
 ];
 ```
 
@@ -176,7 +176,7 @@ export namespace listPostsByIds {
 export * from "./posts-by-ids.sql.js";
 
 export const sqlfuQuerySources = [
-	{ sqlFile: "posts-by-ids.sql", generatedFile: "posts-by-ids.sql.ts", sourceHash: "ddc8948c1ee94f596039cdc758a425ac843323dd3252d38227ab86d20defb7d5" },
+	{ sqlFile: "posts-by-ids.sql", generatedFile: "posts-by-ids.sql.ts", sourceSql: "/** @name listPostsByIds */\nselect id, slug from posts where id in (:ids) order by id;\n" },
 ];
 ```
 
@@ -259,7 +259,7 @@ export namespace listPostsByKeys {
 export * from "./posts-by-keys.sql.js";
 
 export const sqlfuQuerySources = [
-	{ sqlFile: "posts-by-keys.sql", generatedFile: "posts-by-keys.sql.ts", sourceHash: "1568ef43431b704cc11613c3a72397a5198ab9b6c54927ee8f604e6a0da1167d" },
+	{ sqlFile: "posts-by-keys.sql", generatedFile: "posts-by-keys.sql.ts", sourceSql: "/** @name listPostsByKeys */\nselect id, slug, title from posts where (slug, title) in (:keys) order by id;\n" },
 ];
 ```
 
@@ -338,7 +338,7 @@ export namespace insertPost {
 export * from "./insert-post.sql.js";
 
 export const sqlfuQuerySources = [
-	{ sqlFile: "insert-post.sql", generatedFile: "insert-post.sql.ts", sourceHash: "f16c06ac1e46bcb1266f37ff35a219ede5d973786ad0b7f6fd8c614a7fa7b09d" },
+	{ sqlFile: "insert-post.sql", generatedFile: "insert-post.sql.ts", sourceSql: "/** @name insertPost */\ninsert into posts (slug, title) values (:post.slug, :post.title) returning id, slug, title;\n" },
 ];
 ```
 
@@ -415,7 +415,7 @@ export namespace insertPosts {
 export * from "./insert-posts.sql.js";
 
 export const sqlfuQuerySources = [
-	{ sqlFile: "insert-posts.sql", generatedFile: "insert-posts.sql.ts", sourceHash: "75d5484ee8ca86774e6db3448b819bb00f8f367fc01860a698f1c93bab455034" },
+	{ sqlFile: "insert-posts.sql", generatedFile: "insert-posts.sql.ts", sourceSql: "/** @name insertPosts */\ninsert into posts (slug, title) values :posts;\n" },
 ];
 ```
 
@@ -535,7 +535,7 @@ export namespace insertPosts {
 export * from "./insert-posts.sql.js";
 
 export const sqlfuQuerySources = [
-	{ sqlFile: "insert-posts.sql", generatedFile: "insert-posts.sql.ts", sourceHash: "75d5484ee8ca86774e6db3448b819bb00f8f367fc01860a698f1c93bab455034" },
+	{ sqlFile: "insert-posts.sql", generatedFile: "insert-posts.sql.ts", sourceSql: "/** @name insertPosts */\ninsert into posts (slug, title) values :posts;\n" },
 ];
 ```
 
@@ -637,7 +637,7 @@ export namespace listPostsByIds {
 export * from "./posts-by-ids.sql.js";
 
 export const sqlfuQuerySources = [
-	{ sqlFile: "posts-by-ids.sql", generatedFile: "posts-by-ids.sql.ts", sourceHash: "ddc8948c1ee94f596039cdc758a425ac843323dd3252d38227ab86d20defb7d5" },
+	{ sqlFile: "posts-by-ids.sql", generatedFile: "posts-by-ids.sql.ts", sourceSql: "/** @name listPostsByIds */\nselect id, slug from posts where id in (:ids) order by id;\n" },
 ];
 ```
 

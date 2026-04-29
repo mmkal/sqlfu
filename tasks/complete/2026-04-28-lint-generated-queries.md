@@ -7,15 +7,15 @@ size: medium
 
 ## Status Summary
 
-Done after follow-up. The freshness contract now lives in a generated `.generated/queries.ts` query barrel/manifest instead of per-wrapper hash comments, so wrapper files stay clean and lint can detect orphaned generated wrappers too.
+Done after exact-SQL follow-up. The freshness contract now lives in a generated `.generated/queries.ts` query barrel/manifest with the exact source SQL text, so wrapper files stay clean, source edits are compared directly, and lint can detect orphaned generated wrappers too.
 
 ## Checklist
 
-- [x] Add generated metadata containing a full SHA-256 hex hash of the exact source `.sql` file bytes. *Moved from per-wrapper comments to `sql/.generated/queries.ts`, which also exports every generated query wrapper.*
+- [x] Add generated metadata containing the exact source `.sql` file text. *Implemented as `sourceSql` entries in `sql/.generated/queries.ts`, which also exports every generated query wrapper.*
 - [x] Add `sqlfu/generated-query-freshness` to the lint plugin. *Implemented in `packages/sqlfu/src/lint-plugin.ts`.*
 - [x] Make the rule run for standalone `.sql` files through the existing SQL processor virtual file path. *Enabled in the recommended `**/*.sql/**/*.js` config block and uses `context.physicalFilename` for the source file.*
 - [x] Report a clear lint error when the expected generated wrapper is missing, including when `.generated/` does not exist. *Covered by `generated-query-freshness: reports a missing generated wrapper for a query file`.*
-- [x] Report a clear lint error when the generated query manifest is missing, does not list the source, or has a stale hash. *Covered by manifest-missing, entry-missing, and stale-hash lint tests.*
+- [x] Report a clear lint error when the generated query manifest is missing, does not list the source, or has stale SQL. *Covered by manifest-missing, entry-missing, and stale-SQL lint tests.*
 - [x] Add the rule to `sqlfu.configs.recommended` in the `**/*.sql/**/*.js` block. *Updated in `packages/sqlfu/src/lint-plugin.ts`.*
 - [x] Document the new rule in the lint plugin docs. *Updated `packages/sqlfu/docs/lint-plugin.md`.*
 - [x] Cover the behavior with TDD-style integration tests, one behavior at a time. *Added red/green tests in `test/lint-plugin.test.ts` and `test/generate/runtime.test.ts`; regenerated generate fixtures.*
@@ -33,7 +33,7 @@ Generated output should include a stable query manifest/barrel, for example:
 export * from "./list-posts.sql.js";
 
 export const sqlfuQuerySources = [
-	{ sqlFile: "list-posts.sql", generatedFile: "list-posts.sql.ts", sourceHash: "<sha256-of-source-sql-bytes>" },
+	{ sqlFile: "list-posts.sql", generatedFile: "list-posts.sql.ts", sourceSql: "select id, slug from posts;\n" },
 ];
 ```
 
@@ -41,12 +41,12 @@ The lint rule should:
 
 - Find the sqlfu project root using the existing `sqlfu.config.*` discovery.
 - Resolve the queries directory using the existing cheap config parser and `sql` fallback.
-- For each linted source `.sql` file outside `.generated`, derive the wrapper path under `.generated/<relative>.sql.ts`.
-- Compute SHA-256 over the current source file bytes.
+- Ignore linted `.sql` files that are outside the configured `queries` directory or inside `.generated`.
+- For each linted source `.sql` file under `queries`, derive the wrapper path under `.generated/<relative>.sql.ts`.
 - Report when the generated query manifest does not exist.
 - Report when the source query is missing from the manifest.
 - Report when the wrapper file listed by the manifest does not exist.
-- Report when the manifest hash differs from the current source hash.
+- Report when the manifest `sourceSql` differs byte-for-byte from the current source SQL.
 - When linting `.generated/queries.ts`, report orphaned generated wrapper files that no longer have manifest entries.
 - Avoid autofix. Running generation can require schema analysis and writes multiple files.
 
@@ -55,13 +55,11 @@ The lint rule should:
 - Do not make ESLint run `sqlfu generate`.
 - Do not check `tables.ts`, `index.ts`, migration bundles, or schema freshness.
 - Do not execute arbitrary `sqlfu.config.ts` from the lint plugin.
-- Do not introduce a central generated manifest unless per-wrapper metadata proves unworkable.
 - Do not redesign the existing SQL processor.
 
 ## Guesses and Assumptions
 
-- Exact source bytes are the right hash input because the rule answers whether generation happened after the file changed, not whether the SQL semantics changed.
-- A full SHA-256 hash is preferable to a short hash because it avoids collision explanations in a generated metadata contract.
+- Exact source SQL is the right comparison because the rule answers whether generation happened after the file changed, not whether the SQL semantics changed.
 - Strict reporting when `.generated/` is absent is acceptable because users can disable this rule if they only want SQL formatting.
 
 ## Decision Trail
@@ -72,8 +70,8 @@ See `tasks/complete/2026-04-28-lint-generated-queries.interview.md` for the gril
 
 - Worktree: `../worktrees/sqlfu/lint-generated-queries`
 - Branch: `lint-generated-queries`
-- Added red tests for missing generated wrappers, wrapper source hash output, stale hash detection, missing hash metadata, and matching hash acceptance.
-- Follow-up moved the source hash from wrapper headers to `queries.ts`, added global manifest reconciliation, and regenerated generate snapshot fixtures again.
+- Added red tests for missing generated wrappers, exact source SQL output, stale SQL detection, missing manifest entries, and matching SQL acceptance.
+- Follow-up moved the freshness metadata from wrapper headers to `queries.ts`, replaced hashes with exact source SQL, added global manifest reconciliation, and regenerated generate snapshot fixtures again.
 - Verification:
   - `pnpm --filter sqlfu exec vitest test/lint-plugin.test.ts`
   - `pnpm --filter sqlfu exec vitest test/generate/runtime.test.ts`

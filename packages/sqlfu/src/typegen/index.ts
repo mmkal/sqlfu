@@ -1,4 +1,3 @@
-import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
@@ -146,10 +145,6 @@ function renderQueryDocument(input: {
   }
 
   return combineRenderedQueryModules(renderedQueries);
-}
-
-function sourceSqlHash(sqlContent: string): string {
-  return crypto.createHash('sha256').update(sqlContent).digest('hex');
 }
 
 function combineRenderedQueryModules(renderedQueries: string[]): string {
@@ -1119,7 +1114,7 @@ async function writeGeneratedQueriesFile(
     `export const sqlfuQuerySources = [`,
     ...sortedQueryFiles.map(
       (queryFile) =>
-        `\t{ sqlFile: ${JSON.stringify(`${queryFile.relativePath}.sql`)}, generatedFile: ${JSON.stringify(`${queryFile.relativePath}.sql.ts`)}, sourceHash: ${JSON.stringify(sourceSqlHash(queryFile.sqlContent))} },`,
+        `\t{ sqlFile: ${JSON.stringify(`${queryFile.relativePath}.sql`)}, generatedFile: ${JSON.stringify(`${queryFile.relativePath}.sql.ts`)}, sourceSql: ${JSON.stringify(queryFile.sqlContent)} },`,
     ),
     `];`,
   ];

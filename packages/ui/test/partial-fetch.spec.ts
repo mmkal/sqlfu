@@ -18,8 +18,7 @@ const uiRoot = path.resolve(currentDir, '..');
 let buildPromise: Promise<void> | undefined;
 
 declare const createD1Client: typeof import('sqlfu').createD1Client;
-declare const createSqlfuUiPartialFetch: typeof import('sqlfu/ui/browser').createSqlfuUiPartialFetch;
-declare const uiAssets: import('sqlfu/ui/browser').SqlfuUiAssets;
+declare const createSqlfuUiPartialFetch: typeof import('@sqlfu/ui/partial-fetch').createSqlfuUiPartialFetch;
 
 test('D1 worker partial fetch serves real UI assets while leaving app routes available', async ({page}) => {
   await using fixture = await createPartialFetchWorkerFixture({
@@ -43,7 +42,6 @@ test('D1 worker partial fetch serves real UI assets while leaving app routes ava
       `);
 
       const uiPartialFetch = createSqlfuUiPartialFetch({
-        assets: uiAssets,
         project: {
           initialized: true,
           projectRoot: '/partial-fetch-playwright',
@@ -107,12 +105,6 @@ async function createPartialFetchWorkerFixture(input: PartialFetchWorkerFixtureI
   const workerSourcePath = path.join(tempDir, 'worker-source.js');
   const workerPath = path.join(tempDir, 'worker.js');
 
-  await fs.cp(path.join(sqlfuRoot, 'dist'), path.join(tempDir, 'runtime'), {recursive: true});
-  await fs.copyFile(path.join(sqlfuRoot, 'package.json'), path.join(tempDir, 'package.json'));
-  await writeUiAssetsModule({
-    distDir: path.join(uiRoot, 'dist'),
-    outPath: path.join(tempDir, 'ui-assets.generated.js'),
-  });
   await fs.writeFile(workerSourcePath, createWorkerSource(input.fetch));
 
   await esbuild.build({
@@ -220,45 +212,6 @@ function headersFromIncomingRequest(request: http.IncomingMessage) {
   return headers;
 }
 
-async function writeUiAssetsModule(input: {distDir: string; outPath: string}) {
-  const files = await listFiles(input.distDir);
-  const lines = ['export const uiAssets = {'];
-  for (const filePath of files) {
-    const relativePath = path.relative(input.distDir, filePath).split(path.sep).join('/');
-    const assetPath = `/${relativePath}`;
-    const body = await assetLiteral(filePath);
-    lines.push(`  ${JSON.stringify(assetPath)}: ${body},`);
-  }
-  lines.push('};');
-  lines.push('');
-  lines.push('function bytes(base64) {');
-  lines.push('  const binary = atob(base64);');
-  lines.push('  const out = new Uint8Array(binary.length);');
-  lines.push('  for (let index = 0; index < binary.length; index += 1) out[index] = binary.charCodeAt(index);');
-  lines.push('  return out;');
-  lines.push('}');
-  await fs.writeFile(input.outPath, `${lines.join('\n')}\n`);
-}
-
-async function listFiles(dir: string): Promise<string[]> {
-  const entries = await fs.readdir(dir, {withFileTypes: true});
-  const files = await Promise.all(
-    entries.map((entry) => {
-      const entryPath = path.join(dir, entry.name);
-      return entry.isDirectory() ? listFiles(entryPath) : [entryPath];
-    }),
-  );
-  return files.flat().sort();
-}
-
-async function assetLiteral(filePath: string) {
-  const body = await fs.readFile(filePath);
-  if (/\.(css|html|js|json|svg|txt)$/u.test(filePath)) {
-    return JSON.stringify(body.toString('utf8'));
-  }
-  return `bytes(${JSON.stringify(body.toString('base64'))})`;
-}
-
 async function replaceCodeMirrorText(page: Page, ariaLabel: string, value: string) {
   const content = page.locator(`[aria-label="${ariaLabel}"] .cm-content`);
   await content.click();
@@ -280,9 +233,8 @@ interface PartialFetchWorkerFixtureInput {
 
 function createWorkerSource(fetch: PartialFetchWorkerFixtureInput['fetch']) {
   return String.raw`
-import {createD1Client} from './runtime/adapters/d1.js';
-import {createSqlfuUiPartialFetch} from './runtime/ui/browser.js';
-import {uiAssets} from './ui-assets.generated.js';
+import {createD1Client} from 'sqlfu';
+import {createSqlfuUiPartialFetch} from '@sqlfu/ui/partial-fetch';
 
 const userFetch = ${toCallableFunctionExpressionSource(fetch.toString())};
 

@@ -11,8 +11,22 @@
     "dist"
   ],
   "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    "./partial-fetch": {
+      "types": "./src/partial-fetch.ts",
+      "default": "./dist/partial-fetch.js"
+    }
+  },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "exports": {
+      "./package.json": "./package.json",
+      "./partial-fetch": {
+        "types": "./dist/partial-fetch.d.ts",
+        "default": "./dist/partial-fetch.js"
+      }
+    }
   },
   "scripts": {
     "dev": "pnpm exec tsx test/start-server.ts dev-project --dev",
@@ -71,5 +85,8 @@
     "typescript": "^5.9.3",
     "vite": "^7.1.12",
     "vitest": "^4.1.1"
+  },
+  "peerDependencies": {
+    "sqlfu": "workspace:*"
   }
 }

@@ -25,6 +25,7 @@ import type * as ESTree from 'estree';
  */
 
 const CLIENT_METHODS = new Set(['all', 'run', 'iterate']);
+const SQLFU_CONFIG_FILE_NAMES = ['sqlfu.config.ts', 'sqlfu.config.mjs', 'sqlfu.config.js', 'sqlfu.config.cjs'];
 
 function normalizeSqlForMatch(sql: string): string {
   const lines = sql.split('\n');
@@ -45,6 +46,11 @@ interface LoadQueriesOptions {
   queriesDir?: string;
 }
 
+interface ProjectConfigLocation {
+  projectRoot: string;
+  configPath: string;
+}
+
 interface Cache {
   projectRoot: string;
   queriesDir: string;
@@ -55,16 +61,16 @@ interface Cache {
 const caches = new Map<string, Cache>();
 
 function loadQueriesForFile(fromFile: string, options: LoadQueriesOptions): LoadedQuery[] | null {
-  const projectRoot = findProjectRoot(fromFile);
-  if (!projectRoot) return null;
+  const project = findProjectConfig(fromFile);
+  if (!project) return null;
 
   const queriesDir = options.queriesDir
-    ? path.resolve(projectRoot, options.queriesDir)
-    : resolveQueriesDir(projectRoot);
+    ? path.resolve(project.projectRoot, options.queriesDir)
+    : resolveQueriesDir(project.projectRoot);
 
   if (!queriesDir || !fs.existsSync(queriesDir)) return null;
 
-  const cacheKey = `${projectRoot}::${queriesDir}`;
+  const cacheKey = `${project.projectRoot}::${queriesDir}`;
   const mtimeMs = directoryMtime(queriesDir);
   const cached = caches.get(cacheKey);
   if (cached && cached.mtimeMs === mtimeMs) return cached.queries;
@@ -80,16 +86,17 @@ function loadQueriesForFile(fromFile: string, options: LoadQueriesOptions): Load
     };
   });
 
-  caches.set(cacheKey, {projectRoot, queriesDir, queries, mtimeMs});
+  caches.set(cacheKey, {projectRoot: project.projectRoot, queriesDir, queries, mtimeMs});
   return queries;
 }
 
-function findProjectRoot(fromFile: string): string | null {
+function findProjectConfig(fromFile: string): ProjectConfigLocation | null {
   let dir = path.dirname(path.resolve(fromFile));
   const root = path.parse(dir).root;
   while (true) {
-    for (const name of ['sqlfu.config.ts', 'sqlfu.config.mjs', 'sqlfu.config.js', 'sqlfu.config.cjs']) {
-      if (fs.existsSync(path.join(dir, name))) return dir;
+    for (const name of SQLFU_CONFIG_FILE_NAMES) {
+      const configPath = path.join(dir, name);
+      if (fs.existsSync(configPath)) return {projectRoot: dir, configPath};
     }
     if (dir === root) return null;
     dir = path.dirname(dir);
@@ -97,7 +104,7 @@ function findProjectRoot(fromFile: string): string | null {
 }
 
 function resolveQueriesDir(projectRoot: string): string | null {
-  for (const name of ['sqlfu.config.ts', 'sqlfu.config.mjs', 'sqlfu.config.js', 'sqlfu.config.cjs']) {
+  for (const name of SQLFU_CONFIG_FILE_NAMES) {
     const configPath = path.join(projectRoot, name);
     if (!fs.existsSync(configPath)) continue;
     // Cheap text parse — executing the config synchronously would need a
@@ -445,6 +452,302 @@ function unescapeWrappedSql(raw: string): string {
 const SQL_FILE_TAG = '__sqlfuSqlFile';
 const SQL_FILE_WRAPPER_PREFIX = SQL_FILE_TAG + '`';
 const SQL_FILE_WRAPPER_SUFFIX = '`;\n';
+const QUERY_SOURCE_ENTRY_PATTERN =
+  /\{\s*sqlFile:\s*("(?:(?:\\.)|[^"\\])*")\s*,\s*generatedFile:\s*("(?:(?:\\.)|[^"\\])*")\s*,\s*sourceSql:\s*("(?:(?:\\.)|[^"\\])*")\s*,?\s*\}/g;
+
+type QuerySourceManifestEntry = {
+  sqlFile: string;
+  generatedFile: string;
+  sourceSql: string;
+};
+
+const generatedQueryFreshness: Rule.RuleModule = {
+  meta: {
+    type: 'problem',
+    docs: {
+      description: 'flag .sql files whose generated query wrapper is missing or stale; run sqlfu generate.',
+    },
+    schema: [
+      {
+        type: 'object',
+        properties: {
+          queriesDir: {type: 'string'},
+        },
+        additionalProperties: false,
+      },
+    ],
+  },
+  create(context) {
+    const options = (context.options[0] || {}) as {queriesDir?: string};
+    const filename = context.physicalFilename || context.filename || context.getFilename();
+    if (!filename || filename === '<input>' || filename === '<text>') return {};
+
+    const generatedQueriesFile = generatedQueriesFileFromFilename(filename);
+    if (generatedQueriesFile) {
+      const queriesDir = path.dirname(path.dirname(generatedQueriesFile));
+      const project = findProjectConfig(generatedQueriesFile);
+      const generateCommand = generateCommandForConfigPath(context, project ? project.configPath : null);
+      return {
+        Program(node) {
+          reportGeneratedQueriesManifestProblems(context, node, queriesDir, generatedQueriesFile, generateCommand);
+        },
+      };
+    }
+
+    const sourceSqlFile = sourceSqlFileFromProcessorFilename(filename);
+    if (!sourceSqlFile) return {};
+
+    const project = findProjectConfig(sourceSqlFile);
+    if (!project) return {};
+
+    const queriesDir = options.queriesDir
+      ? path.resolve(project.projectRoot, options.queriesDir)
+      : resolveQueriesDir(project.projectRoot);
+    if (!queriesDir) return {};
+
+    const relativePath = relativeSqlPathInQueriesDir(queriesDir, sourceSqlFile);
+    if (!relativePath) return {};
+    const generateCommand = generateCommandForConfigPath(context, project.configPath);
+
+    return {
+      TaggedTemplateExpression(node) {
+        if (node.tag.type !== 'Identifier' || node.tag.name !== SQL_FILE_TAG) return;
+        if (node.quasi.expressions.length > 0) return;
+        const sourceSql = unescapeWrappedSql(readTemplateRawSql(node.quasi));
+        reportSourceQueryFreshnessProblem(context, node, queriesDir, relativePath, sourceSql, generateCommand);
+      },
+    };
+  },
+};
+
+function reportSourceQueryFreshnessProblem(
+  context: Rule.RuleContext,
+  node: ESTree.Node,
+  queriesDir: string,
+  relativePath: string,
+  sourceSql: string,
+  generateCommand: string,
+): void {
+  const generatedDir = path.join(queriesDir, '.generated');
+  const manifest = readQuerySourceManifest(generatedDir);
+  if (!manifest) {
+    context.report({
+      node,
+      message: `generated query manifest is missing; ${runGenerateInstruction(generateCommand)}`,
+    });
+    return;
+  }
+
+  const entry = manifest.find((candidate) => candidate.sqlFile === relativePath);
+  if (!entry) {
+    context.report({
+      node,
+      message: `generated query manifest does not include '${relativePath}'; ${runGenerateInstruction(generateCommand)}`,
+    });
+    return;
+  }
+
+  const expectedGeneratedFile = generatedFileForSqlFile(relativePath);
+  if (entry.generatedFile !== expectedGeneratedFile) {
+    context.report({
+      node,
+      message: `generated query manifest has the wrong wrapper path for '${relativePath}'; ${runGenerateInstruction(generateCommand)}`,
+    });
+    return;
+  }
+
+  if (!fs.existsSync(path.join(generatedDir, entry.generatedFile))) {
+    context.report({
+      node,
+      message: `generated wrapper for '${relativePath}' is missing; ${runGenerateInstruction(generateCommand)}`,
+    });
+    return;
+  }
+
+  if (entry.sourceSql !== sourceSql) {
+    context.report({
+      node,
+      message: `generated query manifest SQL for '${relativePath}' is stale; ${runGenerateInstruction(generateCommand)}`,
+    });
+  }
+}
+
+function reportGeneratedQueriesManifestProblems(
+  context: Rule.RuleContext,
+  node: ESTree.Node,
+  queriesDir: string,
+  generatedQueriesFile: string,
+  generateCommand: string,
+): void {
+  const generatedDir = path.dirname(generatedQueriesFile);
+  const entries = readQuerySourceManifest(generatedDir) || [];
+  const sourceSqlFiles = walkSqlFiles(queriesDir)
+    .map((absolutePath) => ({
+      absolutePath,
+      relativePath: relativeSqlPathInQueriesDir(queriesDir, absolutePath),
+    }))
+    .filter((entry): entry is {absolutePath: string; relativePath: string} => Boolean(entry.relativePath));
+  const sourceByRelativePath = new Map(sourceSqlFiles.map((file) => [file.relativePath, file]));
+  const entriesBySqlFile = new Map<string, QuerySourceManifestEntry>();
+  const entryGeneratedFiles = new Set<string>();
+
+  for (const entry of entries) {
+    if (entriesBySqlFile.has(entry.sqlFile)) {
+      context.report({
+        node,
+        message: `generated query manifest has duplicate entries for '${entry.sqlFile}'; ${runGenerateInstruction(generateCommand)}`,
+      });
+      continue;
+    }
+    entriesBySqlFile.set(entry.sqlFile, entry);
+    entryGeneratedFiles.add(entry.generatedFile);
+  }
+
+  for (const file of sourceSqlFiles) {
+    const entry = entriesBySqlFile.get(file.relativePath);
+    if (!entry) {
+      context.report({
+        node,
+        message: `generated query manifest does not include '${file.relativePath}'; ${runGenerateInstruction(generateCommand)}`,
+      });
+      continue;
+    }
+
+    const expectedGeneratedFile = generatedFileForSqlFile(file.relativePath);
+    if (entry.generatedFile !== expectedGeneratedFile) {
+      context.report({
+        node,
+        message: `generated query manifest has the wrong wrapper path for '${file.relativePath}'; ${runGenerateInstruction(generateCommand)}`,
+      });
+      continue;
+    }
+
+    if (entry.sourceSql !== fs.readFileSync(file.absolutePath, 'utf8')) {
+      context.report({
+        node,
+        message: `generated query manifest SQL for '${file.relativePath}' is stale; ${runGenerateInstruction(generateCommand)}`,
+      });
+    }
+
+    if (!fs.existsSync(path.join(generatedDir, entry.generatedFile))) {
+      context.report({
+        node,
+        message: `generated wrapper for '${file.relativePath}' is missing; ${runGenerateInstruction(generateCommand)}`,
+      });
+    }
+  }
+
+  for (const entry of entries) {
+    if (!sourceByRelativePath.has(entry.sqlFile)) {
+      context.report({
+        node,
+        message: `generated query manifest still lists deleted source '${entry.sqlFile}'; ${runGenerateInstruction(generateCommand)}`,
+      });
+    }
+  }
+
+  for (const generatedFile of walkGeneratedQueryWrapperFiles(generatedDir)) {
+    if (entryGeneratedFiles.has(generatedFile)) continue;
+    context.report({
+      node,
+      message: `orphaned generated query wrapper '${generatedFile}'; ${runGenerateInstruction(generateCommand)}`,
+    });
+  }
+}
+
+function generateCommandForConfigPath(context: Rule.RuleContext, configPath: string | null): string {
+  if (!configPath) return 'sqlfu generate';
+  const cwd = lintContextCwd(context);
+  const absoluteConfigPath = path.resolve(configPath);
+  if (absoluteConfigPath === path.join(cwd, 'sqlfu.config.ts')) return 'sqlfu generate';
+  return `sqlfu generate --config ${shellQuote(commandPathForConfig(cwd, absoluteConfigPath))}`;
+}
+
+function lintContextCwd(context: Rule.RuleContext): string {
+  const cwd = (context as unknown as {cwd?: string}).cwd || process.cwd();
+  return path.resolve(cwd);
+}
+
+function commandPathForConfig(cwd: string, configPath: string): string {
+  const relativePath = path.relative(cwd, configPath).replace(/\\/g, '/');
+  if (relativePath === '..' || relativePath.startsWith('../') || path.isAbsolute(relativePath)) return configPath;
+  return relativePath || configPath;
+}
+
+function shellQuote(value: string): string {
+  if (/^[A-Za-z0-9_./:@+-]+$/u.test(value)) return value;
+  return "'" + value.replace(/'/g, "'\\''") + "'";
+}
+
+function runGenerateInstruction(generateCommand: string): string {
+  return `run ${generateCommand}.`;
+}
+
+function generatedFileForSqlFile(relativeSqlFile: string): string {
+  return `${relativeSqlFile.slice(0, -'.sql'.length)}.sql.ts`;
+}
+
+function readQuerySourceManifest(generatedDir: string): QuerySourceManifestEntry[] | null {
+  const manifestPath = path.join(generatedDir, 'queries.ts');
+  if (!fs.existsSync(manifestPath)) return null;
+  const text = fs.readFileSync(manifestPath, 'utf8');
+  const entries: QuerySourceManifestEntry[] = [];
+  for (const match of text.matchAll(QUERY_SOURCE_ENTRY_PATTERN)) {
+    const entry = {
+      sqlFile: JSON.parse(match[1]!),
+      generatedFile: JSON.parse(match[2]!),
+      sourceSql: JSON.parse(match[3]!),
+    };
+    if (typeof entry.sqlFile !== 'string') continue;
+    if (typeof entry.generatedFile !== 'string') continue;
+    if (typeof entry.sourceSql !== 'string') continue;
+    entries.push(entry);
+  }
+  return entries;
+}
+
+function generatedQueriesFileFromFilename(filename: string): string | null {
+  const absolutePath = path.resolve(filename);
+  if (path.basename(absolutePath) !== 'queries.ts') return null;
+  if (path.basename(path.dirname(absolutePath)) !== '.generated') return null;
+  return absolutePath;
+}
+
+function sourceSqlFileFromProcessorFilename(filename: string): string | null {
+  if (filename.endsWith('.sql')) return path.resolve(filename);
+  const forwardIndex = filename.indexOf('.sql/');
+  const backwardIndex = filename.indexOf('.sql\\');
+  const markerIndex =
+    forwardIndex === -1 ? backwardIndex : backwardIndex === -1 ? forwardIndex : Math.min(forwardIndex, backwardIndex);
+  return markerIndex === -1 ? null : path.resolve(filename.slice(0, markerIndex + '.sql'.length));
+}
+
+function relativeSqlPathInQueriesDir(queriesDir: string, sourceSqlFile: string): string | null {
+  const relative = path.relative(queriesDir, sourceSqlFile).replace(/\\/g, '/');
+  if (relative.startsWith('../') || relative === '..' || path.isAbsolute(relative)) return null;
+  if (relative.startsWith('.generated/')) return null;
+  if (!relative.endsWith('.sql')) return null;
+  return relative;
+}
+
+function walkGeneratedQueryWrapperFiles(generatedDir: string): string[] {
+  const out: string[] = [];
+  if (!fs.existsSync(generatedDir)) return out;
+
+  function walk(currentDir: string): void {
+    for (const entry of fs.readdirSync(currentDir, {withFileTypes: true})) {
+      const absolutePath = path.join(currentDir, entry.name);
+      if (entry.isDirectory()) {
+        walk(absolutePath);
+      } else if (entry.isFile() && entry.name.endsWith('.sql.ts')) {
+        out.push(path.relative(generatedDir, absolutePath).replace(/\\/g, '/'));
+      }
+    }
+  }
+
+  walk(generatedDir);
+  return out.sort((left, right) => left.localeCompare(right));
+}
 
 /**
  * Processor that lets ESLint lint standalone `.sql` files by wrapping their
@@ -491,6 +794,7 @@ const plugin: ESLint.Plugin = {
   rules: {
     'query-naming': queryNaming,
     'format-sql': formatSqlRule,
+    'generated-query-freshness': generatedQueryFreshness,
   },
   processors: {
     sql: sqlFileProcessor,
@@ -524,6 +828,7 @@ const recommended: Linter.Config[] = [
     rules: {
       'sqlfu/query-naming': 'error',
       'sqlfu/format-sql': 'error',
+      'sqlfu/generated-query-freshness': 'error',
     },
   },
   {
@@ -544,6 +849,7 @@ const recommended: Linter.Config[] = [
     plugins: {sqlfu: plugin},
     rules: {
       'sqlfu/format-sql': 'error',
+      'sqlfu/generated-query-freshness': 'error',
     },
   },
 ];

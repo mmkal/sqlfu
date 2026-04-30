@@ -62,7 +62,7 @@ export namespace findPostBySlug {
 
 ```ts (sql/.generated/index.ts)
 export * from "./tables.js";
-export * from "./find-post-by-slug.sql.js";
+export * from "./queries.js";
 ```
 
 ```ts (sql/.generated/tables.ts)
@@ -119,7 +119,7 @@ export namespace findPostPreview {
 
 ```ts (sql/.generated/index.ts)
 export * from "./tables.js";
-export * from "./find-post-preview.sql.js";
+export * from "./queries.js";
 ```
 
 ```ts (sql/.generated/tables.ts)
@@ -178,7 +178,7 @@ export namespace findPublishedPostBySlug {
 
 ```ts (sql/.generated/index.ts)
 export * from "./tables.js";
-export * from "./find-published-post-by-slug.sql.js";
+export * from "./queries.js";
 ```
 
 ```ts (sql/.generated/tables.ts)
@@ -235,7 +235,7 @@ export namespace listPostSummaries {
 
 ```ts (sql/.generated/index.ts)
 export * from "./tables.js";
-export * from "./list-post-summaries.sql.js";
+export * from "./queries.js";
 ```
 
 ```ts (sql/.generated/tables.ts)
@@ -280,7 +280,7 @@ export {};
 
 ```ts (sql/.generated/index.ts)
 export * from "./tables.js";
-export * from "./list-post-cards.sql.js";
+export * from "./queries.js";
 ```
 
 ```ts (sql/.generated/tables.ts)

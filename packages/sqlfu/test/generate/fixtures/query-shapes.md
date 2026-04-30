@@ -56,7 +56,7 @@ export namespace insertPost {
 
 ```ts (sql/.generated/index.ts)
 export * from "./tables.js";
-export * from "./insert-post.sql.js";
+export * from "./queries.js";
 ```
 
 ```ts (sql/.generated/tables.ts)
@@ -118,7 +118,7 @@ export namespace addUser {
 
 ```ts (sql/.generated/index.ts)
 export * from "./tables.js";
-export * from "./add-user.sql.js";
+export * from "./queries.js";
 ```
 
 ```ts (sql/.generated/tables.ts)
@@ -177,7 +177,7 @@ export namespace updatePost {
 
 ```ts (sql/.generated/index.ts)
 export * from "./tables.js";
-export * from "./update-post.sql.js";
+export * from "./queries.js";
 ```
 
 ```ts (sql/.generated/tables.ts)
@@ -232,7 +232,7 @@ export namespace deletePost {
 
 ```ts (sql/.generated/index.ts)
 export * from "./tables.js";
-export * from "./delete-post.sql.js";
+export * from "./queries.js";
 ```
 
 ```ts (sql/.generated/tables.ts)
@@ -288,7 +288,7 @@ export namespace countPosts {
 
 ```ts (sql/.generated/index.ts)
 export * from "./tables.js";
-export * from "./count-posts.sql.js";
+export * from "./queries.js";
 ```
 
 ```ts (sql/.generated/tables.ts)
@@ -328,7 +328,7 @@ export {};
 
 ```ts (sql/.generated/index.ts)
 export * from "./tables.js";
-export * from "./list-normalized-slugs.sql.js";
+export * from "./queries.js";
 ```
 
 ```ts (sql/.generated/tables.ts)
@@ -382,7 +382,7 @@ export {};
 
 ```ts (sql/.generated/index.ts)
 export * from "./tables.js";
-export * from "./sync-post-from-cte.sql.js";
+export * from "./queries.js";
 ```
 
 ```ts (sql/.generated/tables.ts)

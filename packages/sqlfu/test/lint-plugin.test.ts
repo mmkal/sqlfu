@@ -291,6 +291,174 @@ test('format-sql (sql processor): round-trips backticks and ${} without corrupti
 });
 
 // ---------------------------------------------------------------------------
+// generated-query-freshness over the `sql` processor
+// ---------------------------------------------------------------------------
+
+test('generated-query-freshness: reports a missing generated query manifest for a query file', async () => {
+  await using project = await makeAsyncProject({
+    'sqlfu.config.ts': `export default { queries: './sql' }`,
+    'sql/list-users.sql': 'select id, name\nfrom users\norder by name;\n',
+  });
+
+  const [result] = await lintSqlFile(project, 'sql/list-users.sql', {fix: false});
+
+  expect(result.messages).toHaveLength(1);
+  expect(result.messages[0]).toMatchObject({
+    ruleId: 'sqlfu/generated-query-freshness',
+    message: expect.stringContaining('generated query manifest is missing'),
+  });
+  expect(result.messages[0]?.message).not.toContain('--config');
+});
+
+test('generated-query-freshness: includes the found config path when it is not the cwd default', async () => {
+  await using project = await makeAsyncProject({
+    'apps/counter/sqlfu.config.ts': `export default { queries: './sql' }`,
+    'apps/counter/sql/list-users.sql': 'select id, name\nfrom users\norder by name;\n',
+  });
+
+  const [result] = await lintSqlFile(project, 'apps/counter/sql/list-users.sql', {fix: false});
+
+  expect(result.messages).toHaveLength(1);
+  expect(result.messages[0]).toMatchObject({
+    ruleId: 'sqlfu/generated-query-freshness',
+    message: expect.stringContaining('run sqlfu generate --config apps/counter/sqlfu.config.ts'),
+  });
+});
+
+test('generated-query-freshness: includes the found config path for generated manifest reconciliation', async () => {
+  const querySql = 'select id, name\nfrom users\norder by name;\n';
+  await using project = await makeAsyncProject({
+    'apps/counter/sqlfu.config.ts': `export default { queries: './sql' }`,
+    'apps/counter/sql/list-users.sql': querySql,
+    'apps/counter/sql/.generated/queries.ts': queriesManifest([{sqlFile: 'list-users.sql', sourceSql: querySql}]),
+    'apps/counter/sql/.generated/list-users.sql.ts': 'export {};\n',
+    'apps/counter/sql/.generated/deleted-query.sql.ts': 'export {};\n',
+  });
+
+  const [result] = await lintProjectFile(project, 'apps/counter/sql/.generated/queries.ts', {fix: false});
+
+  expect(result.messages).toHaveLength(1);
+  expect(result.messages[0]).toMatchObject({
+    ruleId: 'sqlfu/generated-query-freshness',
+    message: expect.stringContaining('run sqlfu generate --config apps/counter/sqlfu.config.ts'),
+  });
+});
+
+test('generated-query-freshness: reports a missing generated wrapper for a query file', async () => {
+  const querySql = 'select id, name\nfrom users\norder by name;\n';
+  await using project = await makeAsyncProject({
+    'sqlfu.config.ts': `export default { queries: './sql' }`,
+    'sql/list-users.sql': querySql,
+    'sql/.generated/queries.ts': queriesManifest([{sqlFile: 'list-users.sql', sourceSql: querySql}]),
+  });
+
+  const [result] = await lintSqlFile(project, 'sql/list-users.sql', {fix: false});
+
+  expect(result.messages).toHaveLength(1);
+  expect(result.messages[0]).toMatchObject({
+    ruleId: 'sqlfu/generated-query-freshness',
+    message: expect.stringContaining('run sqlfu generate'),
+  });
+});
+
+test('generated-query-freshness: reports stale generated query manifest SQL', async () => {
+  const querySql = 'select id, name\nfrom users\norder by name;\n';
+  await using project = await makeAsyncProject({
+    'sqlfu.config.ts': `export default { queries: './sql' }`,
+    'sql/list-users.sql': querySql,
+    'sql/.generated/queries.ts': queriesManifest([{sqlFile: 'list-users.sql', sourceSql: 'select stale;\n'}]),
+    'sql/.generated/list-users.sql.ts': 'export {};\n',
+  });
+
+  const [result] = await lintSqlFile(project, 'sql/list-users.sql', {fix: false});
+
+  expect(result.messages).toHaveLength(1);
+  expect(result.messages[0]).toMatchObject({
+    ruleId: 'sqlfu/generated-query-freshness',
+    message: expect.stringContaining('stale'),
+  });
+});
+
+test('generated-query-freshness: compares source query against the linted SQL text', async () => {
+  const generatedSql = 'select id, name\nfrom users\norder by name;\n';
+  const lintedSql = 'select id, name\nfrom users\nwhere active = 1\norder by name;\n';
+  await using project = await makeAsyncProject({
+    'sqlfu.config.ts': `export default { queries: './sql' }`,
+    'sql/list-users.sql': generatedSql,
+    'sql/.generated/queries.ts': queriesManifest([{sqlFile: 'list-users.sql', sourceSql: generatedSql}]),
+    'sql/.generated/list-users.sql.ts': 'export {};\n',
+  });
+
+  const [result] = await lintSqlText(project, 'sql/list-users.sql', lintedSql, {fix: false});
+
+  expect(result.messages).toHaveLength(1);
+  expect(result.messages[0]).toMatchObject({
+    ruleId: 'sqlfu/generated-query-freshness',
+    message: expect.stringContaining('stale'),
+  });
+});
+
+test('generated-query-freshness: reports a source query missing from the generated query manifest', async () => {
+  await using project = await makeAsyncProject({
+    'sqlfu.config.ts': `export default { queries: './sql' }`,
+    'sql/list-users.sql': 'select id, name\nfrom users\norder by name;\n',
+    'sql/.generated/queries.ts': queriesManifest([]),
+  });
+
+  const [result] = await lintSqlFile(project, 'sql/list-users.sql', {fix: false});
+
+  expect(result.messages).toHaveLength(1);
+  expect(result.messages[0]).toMatchObject({
+    ruleId: 'sqlfu/generated-query-freshness',
+    message: expect.stringContaining('does not include'),
+  });
+});
+
+test('generated-query-freshness: accepts a generated query manifest with matching source SQL and wrapper', async () => {
+  const querySql = 'select id, name\nfrom users\norder by name;\n';
+  await using project = await makeAsyncProject({
+    'sqlfu.config.ts': `export default { queries: './sql' }`,
+    'sql/list-users.sql': querySql,
+    'sql/.generated/queries.ts': queriesManifest([{sqlFile: 'list-users.sql', sourceSql: querySql}]),
+    'sql/.generated/list-users.sql.ts': 'export {};\n',
+  });
+
+  const [result] = await lintSqlFile(project, 'sql/list-users.sql', {fix: false});
+
+  expect(result.messages).toHaveLength(0);
+});
+
+test('generated-query-freshness: reports orphaned generated wrappers from the generated query manifest', async () => {
+  const querySql = 'select id, name\nfrom users\norder by name;\n';
+  await using project = await makeAsyncProject({
+    'sqlfu.config.ts': `export default { queries: './sql' }`,
+    'sql/list-users.sql': querySql,
+    'sql/.generated/queries.ts': queriesManifest([{sqlFile: 'list-users.sql', sourceSql: querySql}]),
+    'sql/.generated/list-users.sql.ts': 'export {};\n',
+    'sql/.generated/deleted-query.sql.ts': 'export {};\n',
+  });
+
+  const [result] = await lintProjectFile(project, 'sql/.generated/queries.ts', {fix: false});
+
+  expect(result.messages).toHaveLength(1);
+  expect(result.messages[0]).toMatchObject({
+    ruleId: 'sqlfu/generated-query-freshness',
+    message: expect.stringContaining("orphaned generated query wrapper 'deleted-query.sql.ts'"),
+  });
+});
+
+test('generated-query-freshness: ignores sql files outside the configured queries directory', async () => {
+  await using project = await makeAsyncProject({
+    'sqlfu.config.ts': `export default { queries: './sql' }`,
+    'other/list-users.sql': 'select id, name\nfrom users\norder by name;\n',
+  });
+
+  const [result] = await lintSqlFile(project, 'other/list-users.sql', {fix: false});
+
+  expect(result.messages).toHaveLength(0);
+});
+
+// ---------------------------------------------------------------------------
 // helpers
 // ---------------------------------------------------------------------------
 
@@ -348,11 +516,41 @@ async function makeAsyncProject(files: Record<string, string>): Promise<AsyncPro
 }
 
 async function lintSqlFile(project: AsyncProject, relativePath: string, {fix}: {fix: boolean}) {
+  return lintProjectFile(project, relativePath, {fix});
+}
+
+async function lintSqlText(project: AsyncProject, relativePath: string, text: string, {fix}: {fix: boolean}) {
+  const eslint = createProjectEslint(project, {fix});
+  return eslint.lintText(text, {filePath: path.join(project.root, relativePath)});
+}
+
+async function lintProjectFile(project: AsyncProject, relativePath: string, {fix}: {fix: boolean}) {
+  const eslint = createProjectEslint(project, {fix});
+  return eslint.lintFiles([path.join(project.root, relativePath)]);
+}
+
+function createProjectEslint(project: AsyncProject, {fix}: {fix: boolean}) {
   const eslint = new ESLint({
     cwd: project.root,
     overrideConfigFile: true,
     overrideConfig: [...(plugin.configs?.recommended as any[])],
     fix,
   });
-  return eslint.lintFiles([path.join(project.root, relativePath)]);
+  return eslint;
+}
+
+function queriesManifest(entries: {sqlFile: string; sourceSql: string}[]): string {
+  return [
+    '// Generated by `sqlfu generate`. Do not edit.',
+    '',
+    ...entries.map((entry) => `export * from "./${entry.sqlFile}.js";`),
+    ...(entries.length === 0 ? [] : ['']),
+    'export const sqlfuQuerySources = [',
+    ...entries.map(
+      (entry) =>
+        `\t{ sqlFile: ${JSON.stringify(entry.sqlFile)}, generatedFile: ${JSON.stringify(`${entry.sqlFile}.ts`)}, sourceSql: ${JSON.stringify(entry.sourceSql)} },`,
+    ),
+    '];',
+    '',
+  ].join('\n');
 }

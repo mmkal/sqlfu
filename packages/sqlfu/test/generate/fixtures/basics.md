@@ -81,7 +81,7 @@ export const ensureMigrationTable = Object.assign(
 
 ```ts (sql/.generated/index.ts)
 export * from "./tables.js";
-export * from "./ensure-migration-table.sql.js";
+export * from "./queries.js";
 ```
 
 ```ts (sql/.generated/tables.ts)
@@ -149,6 +149,7 @@ export type PostsRow = {
 
 ```ts (sql/.generated/index.ts)
 export * from "./tables.js";
+export * from "./queries.js";
 ```
 
 </details>
@@ -229,8 +230,7 @@ export namespace listPostSummaries {
 
 ```ts (sql/.generated/index.ts)
 export * from "./tables.js";
-export * from "./find-post-by-slug.sql.js";
-export * from "./list-post-summaries.sql.js";
+export * from "./queries.js";
 ```
 
 ```ts (sql/.generated/tables.ts)

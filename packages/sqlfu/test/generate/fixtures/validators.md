@@ -91,7 +91,7 @@ export namespace findPostBySlug {
 
 ```ts (sql/.generated/index.ts)
 export * from "./tables.js";
-export * from "./find-post-by-slug.sql.js";
+export * from "./queries.js";
 ```
 
 ```ts (sql/.generated/tables.ts)
@@ -180,7 +180,7 @@ export namespace findPostBySlug {
 
 ```ts (sql/.generated/index.ts)
 export * from "./tables.js";
-export * from "./find-post-by-slug.sql.js";
+export * from "./queries.js";
 ```
 
 ```ts (sql/.generated/tables.ts)
@@ -263,7 +263,7 @@ export namespace findPostBySlug {
 
 ```ts (sql/.generated/index.ts)
 export * from "./tables.js";
-export * from "./find-post-by-slug.sql.js";
+export * from "./queries.js";
 ```
 
 ```ts (sql/.generated/tables.ts)
@@ -337,7 +337,7 @@ export namespace findPostBySlug {
 
 ```ts (sql/.generated/index.ts)
 export * from "./tables.js";
-export * from "./find-post-by-slug.sql.js";
+export * from "./queries.js";
 ```
 
 ```ts (sql/.generated/tables.ts)
@@ -417,7 +417,7 @@ export namespace findPostBySlug {
 
 ```ts (sql/.generated/index.ts)
 export * from "./tables.js";
-export * from "./find-post-by-slug.sql.js";
+export * from "./queries.js";
 ```
 
 ```ts (sql/.generated/tables.ts)
@@ -497,7 +497,7 @@ export namespace findPostBySlug {
 
 ```ts (sql/.generated/index.ts)
 export * from "./tables.js";
-export * from "./find-post-by-slug.sql.js";
+export * from "./queries.js";
 ```
 
 ```ts (sql/.generated/tables.ts)
@@ -584,7 +584,7 @@ export namespace findPostBySlug {
 
 ```ts (sql/.generated/index.ts)
 export * from "./tables.js";
-export * from "./find-post-by-slug.sql.js";
+export * from "./queries.js";
 ```
 
 ```ts (sql/.generated/tables.ts)
@@ -666,7 +666,7 @@ export namespace findPostBySlug {
 
 ```ts (sql/.generated/index.ts)
 export * from "./tables.js";
-export * from "./find-post-by-slug.sql.js";
+export * from "./queries.js";
 ```
 
 ```ts (sql/.generated/tables.ts)
@@ -794,7 +794,7 @@ export namespace insertPost {
 
 ```ts (sql/.generated/index.ts)
 export * from "./tables.js";
-export * from "./insert-post.sql.js";
+export * from "./queries.js";
 ```
 
 ```ts (sql/.generated/tables.ts)
@@ -850,7 +850,7 @@ export namespace listPosts {
 
 ```ts (sql/.generated/index.ts)
 export * from "./tables.js";
-export * from "./list-posts.sql.js";
+export * from "./queries.js";
 ```
 
 ```ts (sql/.generated/tables.ts)

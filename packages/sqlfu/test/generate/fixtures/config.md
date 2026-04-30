@@ -142,7 +142,7 @@ select id, slug from posts;
 
 ```ts (sql/.generated/index.ts)
 export * from "./tables.ts";
-export * from "./list-posts.sql.ts";
+export * from "./queries.ts";
 ```
 
 ```ts (sql/.generated/list-posts.sql.ts)
@@ -201,7 +201,7 @@ select id, slug from posts;
 
 ```ts (sql/.generated/index.ts)
 export * from "./tables.ts";
-export * from "./list-posts.sql.ts";
+export * from "./queries.ts";
 ```
 
 </details>
@@ -240,7 +240,7 @@ select id, slug from posts;
 
 ```ts (sql/.generated/index.ts)
 export * from "./tables.js";
-export * from "./list-posts.sql.js";
+export * from "./queries.js";
 ```
 
 </details>
@@ -279,8 +279,7 @@ select id, total from orders;
 
 ```ts (sql/.generated/index.ts)
 export * from "./tables.js";
-export * from "./orders/list-orders.sql.js";
-export * from "./users/list-profiles.sql.js";
+export * from "./queries.js";
 ```
 
 ```ts (sql/.generated/users/list-profiles.sql.ts)

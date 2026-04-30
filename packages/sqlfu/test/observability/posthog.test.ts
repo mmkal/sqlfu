@@ -31,37 +31,34 @@ test('queries emit db_query events on success and $exception + db_query on failu
   db.exec(`create table profiles (id integer primary key, name text not null);`);
   db.exec(`insert into profiles (id, name) values (1, 'ada'), (2, 'linus');`);
 
-  const client = instrument(createNodeSqliteClient(db), ({context, execute, processResult}) => {
+  const client = instrument(createNodeSqliteClient(db), ({context, execute}) => {
     const start = Date.now();
     const distinctId = 'app';
     const baseProps = {
-      'db.query.summary': context.query.name ?? 'sql',
+      'db.query.summary': context.query.name || 'sql',
       'db.system.name': context.system,
       operation: context.operation,
     };
-    return processResult(
-      execute,
-      (value) => {
-        posthog.client.capture({
-          distinctId,
-          event: 'db_query',
-          properties: {...baseProps, duration_ms: Date.now() - start, outcome: 'success'},
-        });
-        return value;
-      },
-      (error) => {
-        posthog.client.capture({
-          distinctId,
-          event: 'db_query',
-          properties: {...baseProps, duration_ms: Date.now() - start, outcome: 'error'},
-        });
-        posthog.client.captureException(error, distinctId, {
-          ...baseProps,
-          'db.query.text': context.query.sql,
-        });
-        throw error;
-      },
-    );
+    try {
+      const value = execute();
+      posthog.client.capture({
+        distinctId,
+        event: 'db_query',
+        properties: {...baseProps, duration_ms: Date.now() - start, outcome: 'success'},
+      });
+      return value;
+    } catch (error) {
+      posthog.client.capture({
+        distinctId,
+        event: 'db_query',
+        properties: {...baseProps, duration_ms: Date.now() - start, outcome: 'error'},
+      });
+      posthog.client.captureException(error, distinctId, {
+        ...baseProps,
+        'db.query.text': context.query.sql,
+      });
+      throw error;
+    }
   });
 
   client.all({sql: 'select id, name from profiles order by id', args: [], name: 'listProfiles'});

@@ -25,7 +25,7 @@ test('query errors forward to Sentry with db.query.summary as a tag', async () =
     instrument.onError(({context, error}) => {
       Sentry.captureException(error, {
         tags: {
-          'db.query.summary': context.query.name ?? 'sql',
+          'db.query.summary': context.query.name || 'sql',
           'db.system.name': context.system,
         },
         extra: {

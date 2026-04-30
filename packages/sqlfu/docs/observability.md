@@ -33,17 +33,28 @@ const client = instrument(
 );
 ```
 
-`instrument(client, ...hooks)` wraps a client so every `all` / `run` flows through the hooks in order. Hooks are functions matching `QueryExecutionHook`:
+`instrument(client, ...hooks)` wraps a client so every `all` / `run` flows through the hooks in order. Sync clients take sync hooks; async clients take async hooks:
 
 ```ts
-type QueryExecutionHook = <TResult>(args: {
+type SyncQueryExecutionHook = <TResult>(args: {
   context: QueryExecutionContext;   // {query, operation, system}
   execute: () => TResult;           // call the next hook / the underlying adapter
-  processResult: ProcessResult;     // sync/async-agnostic helper
 }) => TResult;
+
+type AsyncQueryExecutionHook = <TResult>(args: {
+  context: QueryExecutionContext;
+  execute: () => Promise<TResult>;
+}) => Promise<TResult>;
 ```
 
-`processResult(execute, onSuccess, onError?)` runs `execute` and dispatches to the right handler regardless of whether the underlying client is sync or async. Synchronous throws and promise rejections both go to `onError`; if `onError` is omitted, errors propagate.
+For a sync client, use normal `try` / `catch`. For an async client, make the hook `async` and `await execute()` inside that same shape. Helper hooks that work with either client kind, like `instrument.otel()` and `instrument.onError()`, return a paired `QueryExecutionHook`:
+
+```ts
+type QueryExecutionHook = {
+  sync: SyncQueryExecutionHook;
+  async: AsyncQueryExecutionHook;
+};
+```
 
 `instrument.otel` and `instrument.onError` are reference implementations. `QueryExecutionHook` is the stable contract, not these helpers. Copy their bodies and edit them if your team has different conventions.
 
@@ -65,7 +76,7 @@ Calls `report({context, error})` whenever a query throws or its promise rejects,
 
 ```ts
 instrument.onError(({context, error}) => {
-  console.error(`query ${context.query.name ?? 'sql'} failed:`, error);
+  console.error(`query ${context.query.name || 'sql'} failed:`, error);
 });
 ```
 
@@ -101,7 +112,7 @@ const client = instrument(baseClient,
   instrument.onError(({context, error}) => {
     Sentry.captureException(error, {
       tags: {
-        'db.query.summary': context.query.name ?? 'sql',
+        'db.query.summary': context.query.name || 'sql',
         'db.system.name': context.system,
       },
       extra: {'db.query.text': context.query.sql},
@@ -125,33 +136,31 @@ import {instrument} from 'sqlfu';
 const posthog = new PostHog(process.env.POSTHOG_KEY!, {host: 'https://us.i.posthog.com'});
 
 const client = instrument(baseClient,
-  ({context, execute, processResult}) => {
+  ({context, execute}) => {
     const start = Date.now();
     const distinctId = currentUserId();
     const baseProps = {
-      'db.query.summary': context.query.name ?? 'sql',
+      'db.query.summary': context.query.name || 'sql',
       'db.system.name': context.system,
       operation: context.operation,
     };
-    return processResult(execute,
-      (value) => {
-        posthog.capture({
-          distinctId,
-          event: 'db_query',
-          properties: {...baseProps, duration_ms: Date.now() - start, outcome: 'success'},
-        });
-        return value;
-      },
-      (error) => {
-        posthog.capture({
-          distinctId,
-          event: 'db_query',
-          properties: {...baseProps, duration_ms: Date.now() - start, outcome: 'error'},
-        });
-        posthog.captureException(error, distinctId, {...baseProps, 'db.query.text': context.query.sql});
-        throw error;
-      },
-    );
+    try {
+      const value = execute();
+      posthog.capture({
+        distinctId,
+        event: 'db_query',
+        properties: {...baseProps, duration_ms: Date.now() - start, outcome: 'success'},
+      });
+      return value;
+    } catch (error) {
+      posthog.capture({
+        distinctId,
+        event: 'db_query',
+        properties: {...baseProps, duration_ms: Date.now() - start, outcome: 'error'},
+      });
+      posthog.captureException(error, distinctId, {...baseProps, 'db.query.text': context.query.sql});
+      throw error;
+    }
   },
 );
 ```
@@ -172,24 +181,22 @@ const statsd = new StatsD({host: 'localhost', port: 8125});
 
 const client = instrument(
   baseClient,
-  ({context, execute, processResult}) => {
+  ({context, execute}) => {
     const start = Date.now();
     const tags = [
-      `db.query.summary:${context.query.name ?? 'sql'}`,
+      `db.query.summary:${context.query.name || 'sql'}`,
       `db.system.name:${context.system}`,
       `operation:${context.operation}`,
     ];
-    return processResult(execute,
-      (value) => {
-        statsd.timing('db.query.duration', Date.now() - start, tags);
-        statsd.increment('db.query.count', tags);
-        return value;
-      },
-      (error) => {
-        statsd.increment('db.query.count', [...tags, 'outcome:error']);
-        throw error;
-      },
-    );
+    try {
+      const value = execute();
+      statsd.timing('db.query.duration', Date.now() - start, tags);
+      statsd.increment('db.query.count', tags);
+      return value;
+    } catch (error) {
+      statsd.increment('db.query.count', [...tags, 'outcome:error']);
+      throw error;
+    }
   },
 );
 ```
@@ -217,7 +224,7 @@ const myClient = instrument(instrument(baseClient, innerHook), outerHook)
 All available from `sqlfu`:
 
 - `instrument`: callable, plus `.otel` and `.onError`
+- `SyncQueryExecutionHook`, `SyncQueryExecutionHookArgs`, `AsyncQueryExecutionHook`, `AsyncQueryExecutionHookArgs`
 - `QueryExecutionHook`, `QueryExecutionHookArgs`, `QueryExecutionContext`, `QueryOperation`
-- `ProcessResult`
 - `QueryErrorReport`
 - `TracerLike`, `SpanLike`

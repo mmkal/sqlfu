@@ -35,29 +35,48 @@ export function createOtelHook(options: {tracer: TracerLike}): QueryExecutionHoo
   const OTEL_STATUS_ERROR = 2;
 
   const {tracer} = options;
-  return ({context, execute, processResult}) => {
-    const name = spanNameFor(context.query);
-    return tracer.startActiveSpan(name, (span) => {
-      if (context.query.name) {
-        span.setAttribute('db.query.summary', context.query.name);
-      }
-      span.setAttribute('db.query.text', context.query.sql);
-      span.setAttribute('db.system.name', context.system);
-
-      return processResult(
-        execute,
-        (value) => {
+  return {
+    sync: ({context, execute}) => {
+      const name = spanNameFor(context.query);
+      return tracer.startActiveSpan(name, (span) => {
+        setQueryAttributes(span, context);
+        try {
+          const value = execute();
           span.setStatus({code: OTEL_STATUS_OK});
           span.end();
           return value;
-        },
-        (error) => {
+        } catch (error) {
           span.recordException(error);
           span.setStatus({code: OTEL_STATUS_ERROR, message: String(error)});
           span.end();
           throw error;
-        },
-      );
-    });
+        }
+      });
+    },
+    async: ({context, execute}) => {
+      const name = spanNameFor(context.query);
+      return tracer.startActiveSpan(name, async (span) => {
+        setQueryAttributes(span, context);
+        try {
+          const value = await execute();
+          span.setStatus({code: OTEL_STATUS_OK});
+          span.end();
+          return value;
+        } catch (error) {
+          span.recordException(error);
+          span.setStatus({code: OTEL_STATUS_ERROR, message: String(error)});
+          span.end();
+          throw error;
+        }
+      });
+    },
   };
+}
+
+function setQueryAttributes(span: SpanLike, context: {query: {name?: string; sql: string}; system: string}): void {
+  if (context.query.name) {
+    span.setAttribute('db.query.summary', context.query.name);
+  }
+  span.setAttribute('db.query.text', context.query.sql);
+  span.setAttribute('db.system.name', context.system);
 }

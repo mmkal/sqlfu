@@ -11,12 +11,17 @@ export * from './util.js';
 export * from './errors.js';
 export * from './instrument.js';
 export type {
-  ProcessResult,
+  AsyncQueryExecutionHook,
+  AsyncQueryExecutionHookArgs,
+  AsyncQueryExecutionHookInput,
   QueryErrorReport,
   QueryExecutionContext,
   QueryExecutionHook,
   QueryExecutionHookArgs,
   QueryOperation,
+  SyncQueryExecutionHook,
+  SyncQueryExecutionHookArgs,
+  SyncQueryExecutionHookInput,
 } from './instrument.js';
 export type {SpanLike, TracerLike} from './otel.js';
 export * from './adapters/d1.js';

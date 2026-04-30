@@ -2,6 +2,7 @@
 status: needs-design-validation
 size: large
 branch: better-auth-adapter-create-schema
+pr: https://github.com/mmkal/sqlfu/pull/73
 ---
 
 # Better Auth adapter that lets sqlfu own schema diffs
@@ -165,3 +166,4 @@ await fixture.exec('auth generate --output definitions.sql --yes');
 ## Implementation Log
 
 - 2026-04-30: Created the worktree/spec-only task. No product files changed yet.
+- 2026-04-30: Opened draft PR https://github.com/mmkal/sqlfu/pull/73 for design review.

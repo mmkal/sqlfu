@@ -18,6 +18,7 @@
     ".": "./src/index.ts",
     "./analyze": "./src/analyze.ts",
     "./api": "./src/api.ts",
+    "./better-auth": "./src/better-auth.ts",
     "./lint-plugin": "./src/lint-plugin.ts",
     "./outbox": "./src/outbox/index.ts",
     "./ui": "./src/ui/server.ts",
@@ -36,6 +37,10 @@
       "./api": {
         "types": "./dist/api.d.ts",
         "default": "./dist/api.js"
+      },
+      "./better-auth": {
+        "types": "./dist/better-auth.d.ts",
+        "default": "./dist/better-auth.js"
       },
       "./lint-plugin": {
         "types": "./dist/lint-plugin.d.ts",
@@ -74,10 +79,14 @@
     "zod": "^4.3.6"
   },
   "peerDependencies": {
-    "@sqlfu/ui": "workspace:*"
+    "@sqlfu/ui": "workspace:*",
+    "better-auth": "^1.6.9"
   },
   "peerDependenciesMeta": {
     "@sqlfu/ui": {
+      "optional": true
+    },
+    "better-auth": {
       "optional": true
     }
   },
@@ -98,6 +107,8 @@
     "@types/node": "^24.5.2",
     "@typescript/native-preview": "^7.0.0-dev.20260414.1",
     "arktype": "^2.2.0",
+    "auth": "1.6.9",
+    "better-auth": "1.6.9",
     "better-sqlite3": "^12.8.0",
     "dedent": "^1.7.2",
     "devalue": "^5.7.1",

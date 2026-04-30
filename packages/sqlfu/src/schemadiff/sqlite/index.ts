@@ -89,15 +89,19 @@ async function applySchemaSql(client: AsyncClient, sql: string): Promise<void> {
 }
 
 function isCreateTableStatement(statement: string): boolean {
-  return /^\s*create\s+table\b/iu.test(statement);
+  return /^create\s+table\b/iu.test(stripLeadingComments(statement));
 }
 
 function isCreateIndexStatement(statement: string): boolean {
-  return /^\s*create\s+(?:unique\s+)?index\b/iu.test(statement);
+  return /^create\s+(?:unique\s+)?index\b/iu.test(stripLeadingComments(statement));
 }
 
 function isCreateViewStatement(statement: string): boolean {
-  return /^\s*create\s+view\b/iu.test(statement);
+  return /^create\s+view\b/iu.test(stripLeadingComments(statement));
+}
+
+function stripLeadingComments(statement: string): string {
+  return statement.replace(/^(?:\s+|--[^\n]*(?:\n|$)|\/\*[\s\S]*?\*\/)+/u, '');
 }
 
 function stableStringify(value: unknown): string {

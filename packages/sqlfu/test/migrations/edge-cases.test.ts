@@ -8,6 +8,24 @@ import {extractSchema} from '../../src/sqlite-text.js';
 import {createMigrationsFixture} from './fixture.js';
 
 describe('draft edge cases', () => {
+  test('drafts first migration when leading section comments precede table DDL with indexes', async () => {
+    await using fixture = await createMigrationsFixture('draft-commented-table-with-index', {
+      desiredSchema: dedent`
+        -- generated schema section
+        create table project(id integer primary key);
+        create index project_id_idx on project(id);
+      `,
+    });
+
+    await fixture.api.draft();
+
+    expect(await fixture.readMigration('create_table_project')).toMatchInlineSnapshot(`
+      "create table project(id integer primary key);
+      create index project_id_idx on project(id);
+      "
+    `);
+  });
+
   test('drafts destructive changes', async () => {
     await using fixture = await createMigrationsFixture('draft-destructive-change', {
       desiredSchema: `create table person(name text)`,
@@ -504,6 +522,23 @@ describe('goto edge cases', () => {
 });
 
 describe('sync edge cases', () => {
+  test('syncs empty database when leading section comments precede table DDL with indexes', async () => {
+    await using fixture = await createMigrationsFixture('sync-commented-table-with-index', {
+      desiredSchema: dedent`
+        -- generated schema section
+        create table project(id integer primary key);
+        create index project_id_idx on project(id);
+      `,
+    });
+
+    await fixture.api.sync();
+
+    await expect(extractSchema(fixture.db)).resolves.toMatchInlineSnapshot(`
+      "create table project(id integer primary key);
+      create index project_id_idx on project(id);"
+    `);
+  });
+
   test('rolls back live schema changes if sync fails partway through', async () => {
     await using fixture = await createMigrationsFixture('sync-transaction', {
       desiredSchema: `create table person(name text, nickname text, birthdate text not null)`,

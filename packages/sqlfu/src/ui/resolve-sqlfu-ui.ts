@@ -1,4 +1,7 @@
+import {existsSync} from 'node:fs';
 import {createRequire} from 'node:module';
+import path from 'node:path';
+import {pathToFileURL} from 'node:url';
 
 /**
  * Lookup result for a locally-installed `@sqlfu/ui`. `version` is its declared version.
@@ -43,8 +46,10 @@ export class SqlfuUiVersionMismatchError extends Error {
 
 export async function resolveSqlfuUi(input: {sqlfuVersion: string}): Promise<ResolvedSqlfuUi> {
   const require = createRequire(import.meta.url);
+  const packageName = '@sqlfu/ui';
+  let packageJsonPath: string;
   try {
-    require.resolve('@sqlfu/ui');
+    packageJsonPath = require.resolve(`${packageName}/package.json`);
   } catch (error) {
     if (error instanceof Error && 'code' in error && error.code === 'MODULE_NOT_FOUND') {
       throw new SqlfuUiNotInstalledError({expectedVersion: input.sqlfuVersion});
@@ -52,7 +57,9 @@ export async function resolveSqlfuUi(input: {sqlfuVersion: string}): Promise<Res
     throw error;
   }
 
-  const {assets, version} = await import('@sqlfu/ui');
+  const workspaceBuildEntry = path.join(path.dirname(packageJsonPath), 'dist/lib/index.js');
+  const importPath = existsSync(workspaceBuildEntry) ? pathToFileURL(workspaceBuildEntry).href : packageName;
+  const {assets, version} = (await import(importPath)) as ResolvedSqlfuUi;
 
   if (version !== input.sqlfuVersion) {
     throw new SqlfuUiVersionMismatchError({

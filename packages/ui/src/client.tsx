@@ -1,5 +1,5 @@
 import {Component, Suspense, useCallback, useRef, useState, useSyncExternalStore} from 'react';
-import type {ReactNode} from 'react';
+import type {MouseEvent, ReactNode} from 'react';
 import {createRoot} from 'react-dom/client';
 import {createORPCClient} from '@orpc/client';
 import {RPCLink} from '@orpc/client/fetch';
@@ -122,6 +122,7 @@ const orpcClient: RouterClient<UiRouter> = demoMode
       }),
     );
 const orpc = createTanstackQueryUtils(orpcClient);
+const mobileSidebarMediaQuery = '(max-width: 720px)';
 
 type ConfirmationRequest = {
   title: string;
@@ -556,64 +557,88 @@ function Studio() {
   const selectedQuery = selectQuery(route, catalogQuery.data.queries);
   const isTableView =
     route.kind !== 'schema' && route.kind !== 'sql' && !(route.kind === 'query' && selectedQuery) && !!selectedTable;
+  const sidebarToggleLabel = getSidebarToggleLabel({route, selectedTable, selectedQuery});
+  const isMobileSidebarLayout = useMediaQuery(mobileSidebarMediaQuery);
 
   return (
     <Shell>
-      <aside className="sidebar">
-        <div className="sidebar-block sidebar-header">
-          <div className="sidebar-title">
-            <h1>sqlfu/ui</h1>
-            <p className="lede">{schemaQuery.data.projectName}</p>
+      <details className="sidebar-shell" open={!isMobileSidebarLayout}>
+        <summary className="sidebar-toggle" aria-label="Toggle navigation">
+          <span className="sidebar-toggle-icon" aria-hidden="true">
+            <span />
+          </span>
+          <span className="sidebar-toggle-copy">
+            <span className="sidebar-toggle-title">sqlfu/ui</span>
+            <span className="sidebar-toggle-location">{sidebarToggleLabel}</span>
+          </span>
+        </summary>
+
+        <aside className="sidebar">
+          <div className="sidebar-block sidebar-header">
+            <div className="sidebar-title">
+              <h1>sqlfu/ui</h1>
+              <p className="lede">{schemaQuery.data.projectName}</p>
+            </div>
+            <ThemeToggle />
           </div>
-          <ThemeToggle />
-        </div>
 
-        <nav className="sidebar-block">
-          <div className="section-title">Tools</div>
-          <a className={route.kind === 'schema' ? 'nav-link active' : 'nav-link'} href="#schema">
-            Schema
-          </a>
-          <a className={route.kind === 'sql' ? 'nav-link active' : 'nav-link'} href="#sql">
-            SQL runner
-          </a>
-        </nav>
-
-        <nav className="sidebar-block">
-          <div className="section-title">Relations</div>
-          {schemaQuery.data.relations.map((relation: StudioRelation) => (
+          <nav className="sidebar-block">
+            <div className="section-title">Tools</div>
             <a
-              key={relation.name}
-              className={
-                route.kind === 'table' && selectedTable?.name === relation.name ? 'nav-link active' : 'nav-link'
-              }
-              href={`#table/${encodeURIComponent(relation.name)}`}
-              title={relation.name}
+              className={route.kind === 'schema' ? 'nav-link active' : 'nav-link'}
+              href="#schema"
+              onClick={collapseSidebarAfterNavigation}
             >
-              <RelationKindIcon kind={relation.kind} />
-              <span className="nav-link-label">{relation.name}</span>
-              {typeof relation.rowCount === 'number' ? (
-                <span className="nav-link-count">{formatRowCount(relation.rowCount)}</span>
-              ) : null}
+              Schema
             </a>
-          ))}
-        </nav>
-
-        <nav className="sidebar-block">
-          <div className="section-title">Queries</div>
-          {catalogQuery.data.queries.map((query) => (
             <a
-              key={query.id}
-              className={route.kind === 'query' && selectedQuery?.id === query.id ? 'nav-link active' : 'nav-link'}
-              href={`#query/${encodeURIComponent(query.id)}`}
-              title={query.id}
+              className={route.kind === 'sql' ? 'nav-link active' : 'nav-link'}
+              href="#sql"
+              onClick={collapseSidebarAfterNavigation}
             >
-              <QueryIcon />
-              <span className="nav-link-label">{query.id}</span>
-              {query.kind !== 'query' ? <small>error</small> : null}
+              SQL runner
             </a>
-          ))}
-        </nav>
-      </aside>
+          </nav>
+
+          <nav className="sidebar-block">
+            <div className="section-title">Relations</div>
+            {schemaQuery.data.relations.map((relation: StudioRelation) => (
+              <a
+                key={relation.name}
+                className={
+                  route.kind === 'table' && selectedTable?.name === relation.name ? 'nav-link active' : 'nav-link'
+                }
+                href={`#table/${encodeURIComponent(relation.name)}`}
+                title={relation.name}
+                onClick={collapseSidebarAfterNavigation}
+              >
+                <RelationKindIcon kind={relation.kind} />
+                <span className="nav-link-label">{relation.name}</span>
+                {typeof relation.rowCount === 'number' ? (
+                  <span className="nav-link-count">{formatRowCount(relation.rowCount)}</span>
+                ) : null}
+              </a>
+            ))}
+          </nav>
+
+          <nav className="sidebar-block">
+            <div className="section-title">Queries</div>
+            {catalogQuery.data.queries.map((query) => (
+              <a
+                key={query.id}
+                className={route.kind === 'query' && selectedQuery?.id === query.id ? 'nav-link active' : 'nav-link'}
+                href={`#query/${encodeURIComponent(query.id)}`}
+                title={query.id}
+                onClick={collapseSidebarAfterNavigation}
+              >
+                <QueryIcon />
+                <span className="nav-link-label">{query.id}</span>
+                {query.kind !== 'query' ? <small>error</small> : null}
+              </a>
+            ))}
+          </nav>
+        </aside>
+      </details>
 
       <main className={isTableView ? 'main table-main' : 'main'}>
         {route.kind === 'schema' ? (
@@ -2420,6 +2445,42 @@ function QueryIcon() {
       <path d="M3 8c0 1.1 2.24 2 5 2s5-.9 5-2" fill="none" stroke="currentColor" strokeWidth="1.2" />
     </svg>
   );
+}
+
+function getSidebarToggleLabel(input: {
+  route: Route;
+  selectedTable: StudioRelation | undefined;
+  selectedQuery: QueryCatalogEntry | undefined;
+}) {
+  if (input.route.kind === 'sql') {
+    return 'SQL runner';
+  }
+  if (input.route.kind === 'table') {
+    return input.selectedTable ? input.selectedTable.name : input.route.name;
+  }
+  if (input.route.kind === 'query') {
+    return input.selectedQuery ? input.selectedQuery.id : input.route.id;
+  }
+  return 'Schema';
+}
+
+function collapseSidebarAfterNavigation(event: MouseEvent<HTMLAnchorElement>) {
+  if (window.matchMedia(mobileSidebarMediaQuery).matches) {
+    event.currentTarget.closest('details.sidebar-shell')?.removeAttribute('open');
+  }
+}
+
+function useMediaQuery(query: string) {
+  const subscribe = useCallback(
+    (onStoreChange: () => void) => {
+      const queryList = window.matchMedia(query);
+      queryList.addEventListener('change', onStoreChange);
+      return () => queryList.removeEventListener('change', onStoreChange);
+    },
+    [query],
+  );
+  const getSnapshot = useCallback(() => window.matchMedia(query).matches, [query]);
+  return useSyncExternalStore(subscribe, getSnapshot, () => false);
 }
 
 const compactNumberFormatter = new Intl.NumberFormat('en', {notation: 'compact', maximumFractionDigits: 1});

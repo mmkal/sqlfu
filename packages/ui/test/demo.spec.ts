@@ -55,6 +55,27 @@ test('demo mode keeps scrolling inside the sidebar and main panes', async ({page
   expect(layout.mainScrollHeight).toBeGreaterThan(layout.mainClientHeight);
 });
 
+test('demo mode collapses the sidebar on phone-sized screens', async ({page}) => {
+  await page.setViewportSize({width: 390, height: 700});
+  await page.goto('http://127.0.0.1:3218/?demo=1#schema');
+
+  await expect(page.getByRole('heading', {name: 'Schema', exact: true})).toBeVisible();
+  await expect(page.locator('.sidebar')).toBeHidden();
+
+  const mainBox = await page.locator('.main').boundingBox();
+  if (!mainBox) {
+    throw new Error('Expected main pane to be visible');
+  }
+  expect(mainBox.y).toBeLessThan(150);
+  expect(await page.locator('.main').evaluate((element) => element.scrollWidth)).toBeLessThanOrEqual(
+    Math.ceil(mainBox.width),
+  );
+
+  await page.locator('.sidebar-toggle').click();
+  await expect(page.locator('.sidebar')).toBeVisible();
+  await expect(page.locator('.nav-link[href="#table/products"]')).toBeVisible();
+});
+
 test('demo mode table columns resize from the visible header edge', async ({page}) => {
   await page.setViewportSize({width: 1100, height: 640});
   await page.goto('http://127.0.0.1:3218/?demo=1#table/products');

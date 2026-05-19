@@ -6,9 +6,9 @@ clawpatch_finding: fnd_sig-feat-config-7528cb5b98-913b2_958e290ecc
 
 # Include pg tests in the root test gate
 
-Status summary: Implementation is in place and locally validated for the
-focused guard plus the pg package suite. The remaining step is Clawpatch
-revalidation after the implementation commit is pushed.
+Status summary: Done. The root test gate now includes `@sqlfu/pg`, a focused
+workspace-script regression check guards that coverage, and Clawpatch
+revalidation marked the finding fixed.
 
 ## Assumptions
 
@@ -24,7 +24,7 @@ revalidation after the implementation commit is pushed.
 - [x] Add a readable regression check for root package-script coverage. _Added `scripts/workspace-package-scripts.test.mjs`, which fails when a built package with a test script is missing from the expanded root `test` gate._
 - [x] Update the root test scripts so `@sqlfu/pg` is not skipped. _Split the root test gate into `test:workspace-scripts`, `test:sqlfu`, `test:pg`, and `test:ui`, with `test` calling all four._
 - [x] Validate the focused script check and relevant package test commands. _Ran `node --test scripts/workspace-package-scripts.test.mjs`, `pnpm test:workspace-scripts`, and `pnpm test:pg` with the pg docker compose service._
-- [ ] Revalidate the clawpatch finding with the shared state directory.
+- [x] Revalidate the clawpatch finding with the shared state directory. _`clawpatch --state-dir /Users/mmkal/src/sqlfu/.clawpatch revalidate --finding fnd_sig-feat-config-7528cb5b98-913b2_958e290ecc` returned `outcome: fixed`._
 
 ## Implementation Notes
 
@@ -37,3 +37,4 @@ revalidation after the implementation commit is pushed.
   - `docker compose -f packages/pg/test/docker-compose.yml up -d --wait`
   - `pnpm test:pg`
   - `docker compose -f packages/pg/test/docker-compose.yml down`
+- Clawpatch revalidation outcome: `fixed`.

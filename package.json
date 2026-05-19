@@ -1,9 +1,6 @@
 {
   "name": "sqlfu-workspace",
   "private": true,
-  "engines": {
-    "node": ">=22"
-  },
   "repository": {
     "type": "git",
     "url": "https://github.com/iterate/sqlfu"
@@ -25,7 +22,11 @@
     "destroy": "pnpm exec alchemy destroy alchemy.run.mts",
     "build": "pnpm --filter sqlfu build && pnpm --filter @sqlfu/pg build && pnpm --filter @sqlfu/ui build && pnpm --filter sqlfu-website build",
     "build:website": "pnpm --filter sqlfu-website build",
-    "test": "pnpm --filter sqlfu test && pnpm --filter @sqlfu/ui test",
+    "test": "pnpm test:workspace-scripts && pnpm test:sqlfu && pnpm test:pg && pnpm test:ui",
+    "test:workspace-scripts": "node --test scripts/workspace-package-scripts.test.mjs",
+    "test:sqlfu": "pnpm --filter sqlfu test",
+    "test:pg": "pnpm --filter @sqlfu/pg exec vitest --run",
+    "test:ui": "pnpm --filter @sqlfu/ui test",
     "typecheck": "pnpm --filter sqlfu typecheck && pnpm --filter @sqlfu/pg typecheck && pnpm --filter @sqlfu/ui typecheck",
     "generate": "pnpm --filter sqlfu generate",
     "cli": "pnpm --filter sqlfu cli",
@@ -44,6 +45,9 @@
   },
   "simple-git-hooks": {
     "pre-commit": "pnpm sync:root-readme:pre-commit"
+  },
+  "engines": {
+    "node": ">=22"
   },
   "packageManager": "pnpm@10.30.1"
 }

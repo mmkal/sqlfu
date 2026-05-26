@@ -167,10 +167,10 @@ test('runtime sync orders commented quoted create definitions by statement kind'
   sync(fixture.client, {
     definitions: `
       /* index intentionally appears before its table */
-      create index "select_slug" on "select" (slug);
+      create /* before kind */ index "select_slug" on "select" (slug);
 
       -- quoted keyword identifier
-      create table "select" (
+      create /* before kind */ table "select" (
         slug text not null
       );
     `,

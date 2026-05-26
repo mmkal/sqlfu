@@ -2,7 +2,12 @@ import {quoteIdentifier} from '../schemadiff/sqlite/identifiers.js';
 import {inspectSqliteSchema} from '../schemadiff/sqlite/inspect.js';
 import {planSchemaDiff} from '../schemadiff/sqlite/plan.js';
 import type {SqliteInspectedDatabase} from '../schemadiff/sqlite/types.js';
-import {classifySqliteCreateStatement, type SqliteCreateStatement} from '../sqlite-parser.js';
+import {
+  classifySqliteCreateStatement,
+  replaceSqliteIdentifierSpan,
+  type SqliteCreateStatement,
+  type SqliteIdentifierSpan,
+} from '../sqlite-parser.js';
 import {splitSqlStatements} from '../sqlite-text.js';
 import type {SyncClient} from '../types.js';
 
@@ -158,120 +163,95 @@ function hasCreateKind(createStatement: SqliteCreateStatement | null, kind: Sqli
 }
 
 function prefixCreateObjectName(statement: string, kind: 'table' | 'view'): string {
-  return replaceMatchedIdentifier(
-    statement,
-    new RegExp(
-      `^(${leadingCommentPattern}create\\s+(?:(?:temp|temporary)\\s+)?${kind}\\s+(?:if\\s+not\\s+exists\\s+)?)(?<name>${identifierPattern})`,
-      'iu',
-    ),
-    'name',
-    (name) => quoteIdentifier(`${syncObjectPrefix}${name}`),
+  const createStatement = expectCreateStatement(statement, kind);
+  return replaceRequiredIdentifier(statement, createStatement.name, (name) =>
+    quoteIdentifier(`${syncObjectPrefix}${name}`),
   );
 }
 
 function prefixCreateIndexStatement(statement: string): string {
-  return replaceMatchedIdentifier(
-    replaceMatchedIdentifier(
-      statement,
-      new RegExp(
-        `^(${leadingCommentPattern}create\\s+(?:unique\\s+)?index\\s+(?:if\\s+not\\s+exists\\s+)?)(?<name>${identifierPattern})(?<tail>\\s+on\\s+)(?<table>${identifierPattern})`,
-        'iu',
-      ),
-      'name',
-      (name) => quoteIdentifier(`${syncObjectPrefix}${name}`),
-    ),
-    new RegExp(
-      `^(${leadingCommentPattern}create\\s+(?:unique\\s+)?index\\s+(?:if\\s+not\\s+exists\\s+)?${identifierPattern}\\s+on\\s+)(?<table>${identifierPattern})`,
-      'iu',
-    ),
-    'table',
-    (name) => quoteIdentifier(`${syncObjectPrefix}${name}`),
-  );
+  const createStatement = expectCreateStatement(statement, 'index');
+  return replaceRequiredIdentifiers(statement, [
+    {identifier: createStatement.name, replacement: (name) => quoteIdentifier(`${syncObjectPrefix}${name}`)},
+    {identifier: createStatement.onName, replacement: (name) => quoteIdentifier(`${syncObjectPrefix}${name}`)},
+  ]);
 }
 
 function prefixCreateTriggerStatement(statement: string): string {
-  return replaceMatchedIdentifier(
-    replaceMatchedIdentifier(
-      statement,
-      new RegExp(
-        `^(${leadingCommentPattern}create\\s+(?:(?:temp|temporary)\\s+)?trigger\\s+(?:if\\s+not\\s+exists\\s+)?)(?<name>${identifierPattern})`,
-        'iu',
-      ),
-      'name',
-      (name) => quoteIdentifier(`${syncObjectPrefix}${name}`),
-    ),
-    new RegExp(
-      `^(${leadingCommentPattern}create\\s+(?:(?:temp|temporary)\\s+)?trigger\\s+(?:if\\s+not\\s+exists\\s+)?${identifierPattern}[\\s\\S]*?\\bon\\s+)(?<table>${identifierPattern})`,
-      'iu',
-    ),
-    'table',
-    (name) => quoteIdentifier(`${syncObjectPrefix}${name}`),
-  );
+  const createStatement = expectCreateStatement(statement, 'trigger');
+  return replaceRequiredIdentifiers(statement, [
+    {identifier: createStatement.name, replacement: (name) => quoteIdentifier(`${syncObjectPrefix}${name}`)},
+    {identifier: createStatement.onName, replacement: (name) => quoteIdentifier(`${syncObjectPrefix}${name}`)},
+  ]);
 }
 
 function qualifyCreateObjectName(statement: string, kind: 'table' | 'view', schemaName: string): string {
-  return replaceMatchedIdentifier(
+  const createStatement = expectCreateStatement(statement, kind);
+  return replaceRequiredIdentifier(
     statement,
-    new RegExp(
-      `^(${leadingCommentPattern}create\\s+${kind}\\s+(?:if\\s+not\\s+exists\\s+)?)(?<name>${identifierPattern})`,
-      'iu',
-    ),
-    'name',
+    createStatement.name,
     (name) => `${quoteIdentifier(schemaName)}.${quoteIdentifier(name)}`,
   );
 }
 
 function qualifyCreateIndexStatement(statement: string, schemaName: string): string {
-  return replaceMatchedIdentifier(
+  const createStatement = expectCreateStatement(statement, 'index');
+  return replaceRequiredIdentifier(
     statement,
-    new RegExp(
-      `^(${leadingCommentPattern}create\\s+(?:unique\\s+)?index\\s+(?:if\\s+not\\s+exists\\s+)?)(?<name>${identifierPattern})`,
-      'iu',
-    ),
-    'name',
+    createStatement.name,
     (name) => `${quoteIdentifier(schemaName)}.${quoteIdentifier(name)}`,
   );
 }
 
 function qualifyCreateTriggerStatement(statement: string, schemaName: string): string {
-  return replaceMatchedIdentifier(
+  const createStatement = expectCreateStatement(statement, 'trigger');
+  return replaceRequiredIdentifier(
     statement,
-    new RegExp(
-      `^(${leadingCommentPattern}create\\s+trigger\\s+(?:if\\s+not\\s+exists\\s+)?)(?<name>${identifierPattern})`,
-      'iu',
-    ),
-    'name',
+    createStatement.name,
     (name) => `${quoteIdentifier(schemaName)}.${quoteIdentifier(name)}`,
   );
 }
 
-function replaceMatchedIdentifier(
-  statement: string,
-  pattern: RegExp,
-  groupName: string,
-  replacement: (name: string) => string,
-): string {
-  const match = pattern.exec(statement);
-  const rawIdentifier = match?.groups?.[groupName];
-  const beforeIdentifier = match?.[1];
-  if (!match || !rawIdentifier || !beforeIdentifier) {
+function expectCreateStatement(statement: string, kind: SqliteCreateStatement['kind']): SqliteCreateStatement {
+  const createStatement = classifySqliteCreateStatement(statement);
+  if (!createStatement || createStatement.kind !== kind) {
     throw new Error(`runtime sync could not parse schema definition statement: ${statement}`);
   }
-  const start = match.index + beforeIdentifier.length;
-  return `${statement.slice(0, start)}${replacement(parseIdentifierName(rawIdentifier))}${statement.slice(start + rawIdentifier.length)}`;
+  return createStatement;
 }
 
-function parseIdentifierName(rawIdentifier: string): string {
-  if (rawIdentifier.startsWith('"') && rawIdentifier.endsWith('"')) {
-    return rawIdentifier.slice(1, -1).replaceAll('""', '"');
+function replaceRequiredIdentifier(
+  statement: string,
+  identifier: SqliteIdentifierSpan | null,
+  replacement: (name: string) => string,
+): string {
+  if (!identifier) {
+    throw new Error(`runtime sync could not parse schema definition statement: ${statement}`);
   }
-  if (rawIdentifier.startsWith('`') && rawIdentifier.endsWith('`')) {
-    return rawIdentifier.slice(1, -1).replaceAll('``', '`');
+  return replaceSqliteIdentifierSpan(statement, identifier, replacement(identifier.name));
+}
+
+function replaceRequiredIdentifiers(
+  statement: string,
+  replacements: {
+    identifier: SqliteIdentifierSpan | null;
+    replacement: (name: string) => string;
+  }[],
+): string {
+  let output = statement;
+  const sorted = replacements
+    .map((replacement) => {
+      if (!replacement.identifier) {
+        throw new Error(`runtime sync could not parse schema definition statement: ${statement}`);
+      }
+      return {identifier: replacement.identifier, value: replacement.replacement(replacement.identifier.name)};
+    })
+    .sort((left, right) => right.identifier.start - left.identifier.start);
+
+  for (const replacement of sorted) {
+    output = replaceSqliteIdentifierSpan(output, replacement.identifier, replacement.value);
   }
-  if (rawIdentifier.startsWith('[') && rawIdentifier.endsWith(']')) {
-    return rawIdentifier.slice(1, -1);
-  }
-  return rawIdentifier;
+  return output;
 }
 
 function unprefixInspectedSchema(schema: SqliteInspectedDatabase): SqliteInspectedDatabase {
@@ -399,6 +379,3 @@ function isObject(value: unknown): value is Record<string, unknown> {
 
 const syncObjectPrefix = '__sqlfu_sync_';
 const runtimeSyncExcludedTables = new Set(['sqlfu_migrations', 'd1_migrations']);
-const leadingCommentPattern = String.raw`(?:\s+|--[^\n]*(?:\n|$)|\/\*[\s\S]*?\*\/)*`;
-const identifierPattern =
-  String.raw`(?:"(?:[^"]|"")+"|` + '`(?:[^`]|``)+`' + String.raw`|\[[^\]]+\]|[a-z_][a-z0-9_$]*)`;

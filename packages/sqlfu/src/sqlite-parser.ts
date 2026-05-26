@@ -1,4 +1,4 @@
-import {SqlTokenizerError, tokenize, type Token} from './vendor/sqlfu-sqlite-parser/tokenizer.js';
+import {isIdentLike, SqlTokenizerError, tokenize, type Token} from './vendor/sqlfu-sqlite-parser/tokenizer.js';
 
 export type SqliteToken = Token;
 
@@ -8,6 +8,14 @@ export type SqliteCreateStatement = {
   kind: SqliteCreateStatementKind;
   temporary: boolean;
   unique: boolean;
+  name: SqliteIdentifierSpan | null;
+  onName: SqliteIdentifierSpan | null;
+};
+
+export type SqliteIdentifierSpan = {
+  name: string;
+  start: number;
+  end: number;
 };
 
 export function tokenizeSqlite(sql: string): SqliteToken[] {
@@ -40,19 +48,47 @@ export function classifySqliteCreateStatement(sql: string): SqliteCreateStatemen
   const unique = cursor.matchKeyword('UNIQUE');
   if (unique) {
     if (!cursor.matchKeyword('INDEX')) return null;
-    return {kind: 'index', temporary, unique};
+    cursor.matchIfNotExists();
+    const name = cursor.readIdentifier(sql);
+    const onName = cursor.readOnName(sql);
+    return {kind: 'index', temporary, unique, name, onName};
   }
 
   if (cursor.matchKeyword('VIRTUAL')) {
     if (!cursor.matchKeyword('TABLE')) return null;
-    return {kind: 'virtual-table', temporary, unique: false};
+    cursor.matchIfNotExists();
+    return {kind: 'virtual-table', temporary, unique: false, name: cursor.readIdentifier(sql), onName: null};
   }
 
-  if (cursor.matchKeyword('TABLE')) return {kind: 'table', temporary, unique: false};
-  if (cursor.matchKeyword('INDEX')) return {kind: 'index', temporary, unique: false};
-  if (cursor.matchKeyword('VIEW')) return {kind: 'view', temporary, unique: false};
-  if (cursor.matchKeyword('TRIGGER')) return {kind: 'trigger', temporary, unique: false};
+  if (cursor.matchKeyword('TABLE')) {
+    cursor.matchIfNotExists();
+    return {kind: 'table', temporary, unique: false, name: cursor.readIdentifier(sql), onName: null};
+  }
+  if (cursor.matchKeyword('INDEX')) {
+    cursor.matchIfNotExists();
+    const name = cursor.readIdentifier(sql);
+    const onName = cursor.readOnName(sql);
+    return {kind: 'index', temporary, unique: false, name, onName};
+  }
+  if (cursor.matchKeyword('VIEW')) {
+    cursor.matchIfNotExists();
+    return {kind: 'view', temporary, unique: false, name: cursor.readIdentifier(sql), onName: null};
+  }
+  if (cursor.matchKeyword('TRIGGER')) {
+    cursor.matchIfNotExists();
+    const name = cursor.readIdentifier(sql);
+    const onName = cursor.readOnName(sql);
+    return {kind: 'trigger', temporary, unique: false, name, onName};
+  }
   return null;
+}
+
+export function replaceSqliteIdentifierSpan(
+  sql: string,
+  identifier: SqliteIdentifierSpan,
+  replacement: string,
+): string {
+  return `${sql.slice(0, identifier.start)}${replacement}${sql.slice(identifier.end)}`;
 }
 
 function tryTokenizeSqlite(sql: string): SqliteToken[] | null {
@@ -75,6 +111,53 @@ class TokenCursor {
     this.index += 1;
     return true;
   }
+
+  matchIfNotExists(): void {
+    const startIndex = this.index;
+    if (this.matchKeyword('IF') && this.matchKeyword('NOT') && this.matchKeyword('EXISTS')) return;
+    this.index = startIndex;
+  }
+
+  readIdentifier(sql: string): SqliteIdentifierSpan | null {
+    const first = this.tokens[this.index];
+    if (!isIdentLike(first)) return null;
+    this.index += 1;
+
+    let nameToken = first;
+    if (this.tokens[this.index]?.kind === 'DOT' && isIdentLike(this.tokens[this.index + 1])) {
+      this.index += 1;
+      nameToken = this.tokens[this.index]!;
+      this.index += 1;
+    }
+
+    const raw = sql.slice(nameToken.start, nameToken.stop + 1);
+    return {
+      name: parseSqliteIdentifierName(raw),
+      start: nameToken.start,
+      end: nameToken.stop + 1,
+    };
+  }
+
+  readOnName(sql: string): SqliteIdentifierSpan | null {
+    while (this.index < this.tokens.length) {
+      if (this.matchKeyword('ON')) return this.readIdentifier(sql);
+      this.index += 1;
+    }
+    return null;
+  }
+}
+
+export function parseSqliteIdentifierName(rawIdentifier: string): string {
+  if (rawIdentifier.startsWith('"') && rawIdentifier.endsWith('"')) {
+    return rawIdentifier.slice(1, -1).replaceAll('""', '"');
+  }
+  if (rawIdentifier.startsWith('`') && rawIdentifier.endsWith('`')) {
+    return rawIdentifier.slice(1, -1).replaceAll('``', '`');
+  }
+  if (rawIdentifier.startsWith('[') && rawIdentifier.endsWith(']')) {
+    return rawIdentifier.slice(1, -1);
+  }
+  return rawIdentifier;
 }
 
 function fallbackFirstKeyword(sql: string): string | null {
@@ -105,15 +188,17 @@ function fallbackClassifyCreateStatement(sql: string): SqliteCreateStatement | n
   if (uniqueMatch) {
     unique = true;
     rest = rest.slice(uniqueMatch[0].length).trimStart();
-    if (/^index\b/iu.test(rest)) return {kind: 'index', temporary, unique};
+    if (/^index\b/iu.test(rest)) return {kind: 'index', temporary, unique, name: null, onName: null};
     return null;
   }
 
-  if (/^virtual\s+table\b/iu.test(rest)) return {kind: 'virtual-table', temporary, unique: false};
-  if (/^table\b/iu.test(rest)) return {kind: 'table', temporary, unique: false};
-  if (/^index\b/iu.test(rest)) return {kind: 'index', temporary, unique: false};
-  if (/^view\b/iu.test(rest)) return {kind: 'view', temporary, unique: false};
-  if (/^trigger\b/iu.test(rest)) return {kind: 'trigger', temporary, unique: false};
+  if (/^virtual\s+table\b/iu.test(rest)) {
+    return {kind: 'virtual-table', temporary, unique: false, name: null, onName: null};
+  }
+  if (/^table\b/iu.test(rest)) return {kind: 'table', temporary, unique: false, name: null, onName: null};
+  if (/^index\b/iu.test(rest)) return {kind: 'index', temporary, unique: false, name: null, onName: null};
+  if (/^view\b/iu.test(rest)) return {kind: 'view', temporary, unique: false, name: null, onName: null};
+  if (/^trigger\b/iu.test(rest)) return {kind: 'trigger', temporary, unique: false, name: null, onName: null};
   return null;
 }
 

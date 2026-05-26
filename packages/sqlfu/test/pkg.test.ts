@@ -61,12 +61,14 @@ async function createPackedPackageFixture() {
       import fs from 'node:fs';
       import path from 'node:path';
       import {findMiniflareD1Path} from 'sqlfu/cloudflare';
+      import {sync} from 'sqlfu/api/sync';
 
       const miniflareV3Root = path.join(process.cwd(), '.alchemy', 'miniflare', 'v3');
       fs.mkdirSync(miniflareV3Root, {recursive: true});
       const dbPath = findMiniflareD1Path('my-dev-app-slug', {miniflareV3Root});
       assert.equal(path.dirname(path.dirname(path.dirname(dbPath))), miniflareV3Root);
       assert.match(dbPath, /\\.sqlite$/);
+      assert.equal(typeof sync, 'function');
     `,
   });
 

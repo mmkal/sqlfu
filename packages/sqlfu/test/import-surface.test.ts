@@ -47,6 +47,12 @@ test('built api core entry exposes the host-explicit facade', async () => {
   expect(Object.keys(api).sort()).toEqual(['autoAcceptConfirm', 'createSqlfuApi']);
 });
 
+test('built api sync entry exposes the runtime sync primitive', async () => {
+  const syncEntry = path.join(packageRoot, 'dist/api/sync.js');
+  const api = await import(pathToFileURL(syncEntry).href);
+  expect(Object.keys(api).sort()).toEqual(['sync']);
+});
+
 test('built cloudflare entry exposes the D1 helpers', async () => {
   const cloudflareEntry = path.join(packageRoot, 'dist/cloudflare/exports.js');
   const cloudflare = await import(pathToFileURL(cloudflareEntry).href);

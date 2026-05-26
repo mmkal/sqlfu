@@ -22,6 +22,7 @@
     "./analyze": "./src/analyze.ts",
     "./api": "./src/api/exports.ts",
     "./api/core": "./src/api/core.ts",
+    "./api/sync": "./src/api/sync.ts",
     "./cloudflare": "./src/cloudflare/exports.ts",
     "./better-auth": "./src/better-auth.ts",
     "./lint-plugin": "./src/lint-plugin.ts",
@@ -46,6 +47,10 @@
       "./api/core": {
         "types": "./dist/api/core.d.ts",
         "default": "./dist/api/core.js"
+      },
+      "./api/sync": {
+        "types": "./dist/api/sync.d.ts",
+        "default": "./dist/api/sync.js"
       },
       "./cloudflare": {
         "types": "./dist/cloudflare/exports.d.ts",

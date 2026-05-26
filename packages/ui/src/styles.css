@@ -803,6 +803,7 @@ h3 {
 }
 
 .cell-relation-button {
+  right: calc(6px + 1.45rem);
   color: var(--accent);
 }
 
@@ -1052,6 +1053,12 @@ h3 {
 .reactgrid-content .rg-pane .rg-cell.cell-expand-active,
 .reactgrid-content .rg-pane .rg-cell:has(.cell-expand-button[data-state='open']) {
   padding-right: 2rem;
+}
+
+.reactgrid-content .rg-pane .rg-cell:hover:has(.cell-relation-button),
+.reactgrid-content .rg-pane .rg-cell.cell-expand-active:has(.cell-relation-button),
+.reactgrid-content .rg-pane .rg-cell:has(.cell-relation-button[data-state='open']) {
+  padding-right: 3.5rem;
 }
 
 .reactgrid-content .rg-pane .rg-cell > * {

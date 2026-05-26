@@ -165,6 +165,11 @@ test('demo mode opens the referenced parent row from a foreign-key cell', async 
 
   const productIdCell = page.locator('.reactgrid [data-cell-rowidx="1"][data-cell-colidx="2"]');
   await productIdCell.hover();
+  await expect(productIdCell.getByRole('button', {name: 'Cell: product_id, row 1'})).toBeVisible();
+  await productIdCell.getByRole('button', {name: 'Cell: product_id, row 1'}).click();
+  await expect(page.getByRole('dialog', {name: 'Cell detail'})).toBeVisible();
+  await page.keyboard.press('Escape');
+  await productIdCell.hover();
   await productIdCell.getByRole('button', {name: 'Open products row for product_id 11'}).click();
 
   await expect(page.getByRole('heading', {name: 'products where product_id = 11'})).toBeVisible();

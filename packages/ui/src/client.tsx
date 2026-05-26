@@ -1782,11 +1782,7 @@ class DataTextCellTemplate extends reactGrid.TextCellTemplate {
     return (
       <span className="cell-content-wrap">
         {inner}
-        {cell.meta.relationActions?.length ? (
-          <DataCellRelationTrigger actions={cell.meta.relationActions} />
-        ) : (
-          <DataCellExpandTrigger meta={cell.meta} />
-        )}
+        <DataCellTriggers meta={cell.meta} />
       </span>
     );
   }
@@ -1809,11 +1805,7 @@ class DataNumberCellTemplate extends reactGrid.NumberCellTemplate {
     return (
       <span className="cell-content-wrap">
         {inner}
-        {cell.meta.relationActions?.length ? (
-          <DataCellRelationTrigger actions={cell.meta.relationActions} />
-        ) : (
-          <DataCellExpandTrigger meta={cell.meta} />
-        )}
+        <DataCellTriggers meta={cell.meta} />
       </span>
     );
   }
@@ -2084,6 +2076,15 @@ function DataCellExpandTrigger(input: {meta: DataCellMeta}) {
         </Popover.Content>
       </Popover.Portal>
     </Popover.Root>
+  );
+}
+
+function DataCellTriggers(input: {meta: DataCellMeta}) {
+  return (
+    <>
+      <DataCellExpandTrigger meta={input.meta} />
+      {input.meta.relationActions?.length ? <DataCellRelationTrigger actions={input.meta.relationActions} /> : null}
+    </>
   );
 }
 

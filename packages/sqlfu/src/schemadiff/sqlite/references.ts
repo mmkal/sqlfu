@@ -4,6 +4,7 @@
  */
 import {parseStmt} from 'sqlite3-parser';
 import type {
+  CreateIndexStmt,
   CreateTableStmt,
   CreateTriggerStmt,
   CreateViewStmt,
@@ -27,6 +28,10 @@ import {splitTopLevelCommaList, sqlIdentifierTokens} from './sqltext.js';
 
 export type SqliteReferenceFacts = {
   referencedTables: string[];
+  referencedColumns: string[];
+};
+
+export type SqliteIndexWhereReferenceFacts = {
   referencedColumns: string[];
 };
 
@@ -58,6 +63,23 @@ export function createTableCheckReferencesDroppedColumns(createSql: string, colu
 
   const facts = collectCreateTableCheckReferences(stmt);
   return [...columnNames].some((columnName) => facts.referencedColumns.has(normalizeName(columnName)));
+}
+
+export function indexWhereReferenceFacts(createSql: string, whereSql: string | null): SqliteIndexWhereReferenceFacts {
+  const stmt = parseSingleStmt(createSql);
+  if (stmt?.type !== 'CreateIndexStmt') {
+    return fallbackIndexWhereReferenceFacts(whereSql);
+  }
+  return sortedIndexWhereFacts(collectCreateIndexWhereReferences(stmt));
+}
+
+export function indexWhereReferencesDroppedColumns(input: {
+  createSql: string;
+  whereSql: string | null;
+  columnNames: ReadonlySet<string>;
+}): boolean {
+  const facts = indexWhereReferenceFacts(input.createSql, input.whereSql);
+  return [...input.columnNames].some((columnName) => facts.referencedColumns.includes(normalizeName(columnName)));
 }
 
 function parseSingleStmt(sql: string): Stmt | null {
@@ -277,6 +299,13 @@ function collectCreateTableCheckReferences(stmt: CreateTableStmt): MutableRefere
   }
 
   return facts;
+}
+
+function collectCreateIndexWhereReferences(stmt: CreateIndexStmt): MutableReferenceFacts {
+  if (!stmt.whereClause) {
+    return mutableFacts();
+  }
+  return collectExprReferences(stmt.whereClause, emptyScope());
 }
 
 function collectSelect(select: Select, scope: ReferenceScope): MutableReferenceFacts {
@@ -691,6 +720,12 @@ function fallbackReferenceFacts(sql: string): SqliteReferenceFacts {
   };
 }
 
+function fallbackIndexWhereReferenceFacts(whereSql: string | null): SqliteIndexWhereReferenceFacts {
+  return {
+    referencedColumns: whereSql ? sortedStrings(sqlIdentifierTokens(whereSql)) : [],
+  };
+}
+
 function fallbackCheckReferencesDroppedColumns(createSql: string, columnNames: ReadonlySet<string>): boolean {
   const match = createSql.match(/\(([\s\S]*)\)$/u);
   if (!match) {
@@ -717,6 +752,12 @@ function fallbackCheckReferencesDroppedColumns(createSql: string, columnNames: R
 function sortedFacts(facts: MutableReferenceFacts): SqliteReferenceFacts {
   return {
     referencedTables: sortedStrings(facts.referencedTables),
+    referencedColumns: sortedStrings(facts.referencedColumns),
+  };
+}
+
+function sortedIndexWhereFacts(facts: MutableReferenceFacts): SqliteIndexWhereReferenceFacts {
+  return {
     referencedColumns: sortedStrings(facts.referencedColumns),
   };
 }

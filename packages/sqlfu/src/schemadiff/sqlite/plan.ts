@@ -17,7 +17,8 @@ import {
   triggerSelectableNames,
 } from './analysis.js';
 import {maybeQuoteIdentifier, renderTableName} from './identifiers.js';
-import {normalizeComparableSql, sqlMentionsIdentifier} from './sqltext.js';
+import {indexWhereReferencesDroppedColumns} from './references.js';
+import {normalizeComparableSql} from './sqltext.js';
 import type {
   SqliteDependencyFact,
   SchemadiffOperation,
@@ -519,7 +520,11 @@ function canUseDirectDropColumn(input: {
 
   if (
     Object.values(baselineTable.indexes).some((index) =>
-      removedColumns.some((column) => index.where != null && sqlMentionsIdentifier(index.where, column.name)),
+      indexWhereReferencesDroppedColumns({
+        createSql: index.createSql,
+        whereSql: index.where,
+        columnNames: removedColumnNames,
+      }),
     )
   ) {
     return false;

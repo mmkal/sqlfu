@@ -56,6 +56,42 @@ create index t_x_partial on t(x) where 'y' <> '';
 alter table t drop column y;
 -- #endregion
 
+-- #region: partial index function name matching dropped column should not block unrelated drop
+-- baseline:
+create table t(x text, lower text);
+create index t_x_partial on t(x) where lower(x) = 'a';
+-- desired:
+create table t(x text);
+create index t_x_partial on t(x) where lower(x) = 'a';
+-- output:
+alter table t drop column lower;
+-- #endregion
+
+-- #region: partial index collation name matching dropped column should not block unrelated drop
+-- baseline:
+create table t(x text, nocase text);
+create index t_x_partial on t(x) where x collate nocase = 'a';
+-- desired:
+create table t(x text);
+create index t_x_partial on t(x) where x collate nocase = 'a';
+-- output:
+alter table t drop column nocase;
+-- #endregion
+
+-- #region: partial index where reference to dropped column falls back to rebuild
+-- baseline:
+create table t(x int, y int);
+create index t_x_partial on t(x) where y > 0;
+-- desired:
+create table t(x int);
+-- output:
+-- rebuilding table "t": column "y" dropped (cannot drop in place)
+alter table t rename to __sqlfu_old_t;
+create table t(x int);
+insert into t(x) select x from __sqlfu_old_t;
+drop table __sqlfu_old_t;
+-- #endregion
+
 -- #region: foreign key column removal falls back to rebuild
 -- baseline:
 create table parent(id int primary key);

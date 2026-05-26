@@ -698,6 +698,30 @@ test('relation query actions confirm before leaving dirty editable rows', async 
   await expect(page.getByText('Hello World Dirty')).toHaveCount(0);
 });
 
+test('url-backed relation sub views hide dirty table draft save controls', async ({page}) => {
+  await page.goto('/#table/posts');
+
+  await fillGridTextCell(page, 1, 3, 'Hello World Dirty');
+  await expect(page.getByRole('button', {name: 'Save changes'})).toBeVisible();
+
+  const sql = encodeURIComponent('select * from "posts" limit 100');
+  await page.goto(`/#table/posts?sql=${sql}`);
+
+  await expect(page.getByText('Sub view query')).toBeVisible();
+  await expect(page.getByRole('button', {name: 'Save changes'})).toHaveCount(0);
+  await expect(page.getByRole('button', {name: 'Discard changes'})).toHaveCount(0);
+  await expect(page.locator('.reactgrid').getByText('hello-world')).toBeVisible();
+});
+
+test('invalid table routes ignore stale sub view SQL when falling back to a known relation', async ({page}) => {
+  const sql = encodeURIComponent('select * from "posts" limit 100');
+  await page.goto(`/#table/does-not-exist?sql=${sql}`);
+
+  await expect(page.locator('.nav-link.active')).toContainText('posts');
+  await expect(page.getByText('Sub view query')).toHaveCount(0);
+  await expect(page.locator('.reactgrid').getByText('hello-world')).toBeVisible();
+});
+
 test('stale relation draft state is ignored when it does not match the fetched table shape', async ({page}) => {
   await page.addInitScript(() => {
     // Table drafts live in sessionStorage so they clear on tab close.

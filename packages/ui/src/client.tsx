@@ -556,6 +556,8 @@ function Studio() {
 
   const selectedTable = selectTable(route, schemaQuery.data.relations);
   const selectedQuery = selectQuery(route, catalogQuery.data.queries);
+  const selectedTableSubviewSql =
+    route.kind === 'table' && selectedTable?.name === route.name ? route.subviewSql : undefined;
   const isTableView =
     route.kind !== 'schema' && route.kind !== 'sql' && !(route.kind === 'query' && selectedQuery) && !!selectedTable;
   const sidebarToggleLabel = getSidebarToggleLabel({route, selectedTable, selectedQuery});
@@ -656,7 +658,7 @@ function Studio() {
           <TablePanel
             key={selectedTable.name}
             relation={selectedTable}
-            subviewSql={route.kind === 'table' ? route.subviewSql : undefined}
+            subviewSql={selectedTableSubviewSql}
             onSubViewSqlChange={(sql) => {
               window.location.hash = buildRelationSubviewHash(selectedTable.name, sql);
             }}
@@ -1279,21 +1281,25 @@ function TablePanel(input: {
           onSubViewSqlChange={input.onSubViewSqlChange}
           onClearSubView={input.onClearSubView}
           runSql={(runInput) => orpcClient.sql.run(runInput)}
-          rowEditing={{
-            editable: rowsData.editable,
-            dirty: rowsDirty,
-            saving: saveRowsMutation.isPending,
-            onConfirmDiscard: async () => {
-              const result = await confirmationDialogStore.confirm({
-                title: 'Discard unsaved row edits?',
-                body: 'This query action switches the table into read-only SQL results. Discard the unsaved row edits and continue?',
-                bodyType: 'markdown',
-              });
-              return result.confirmed;
-            },
-            onSave: handleSaveRows,
-            onDiscard: handleDiscardRows,
-          }}
+          rowEditing={
+            input.subviewSql
+              ? undefined
+              : {
+                  editable: rowsData.editable,
+                  dirty: rowsDirty,
+                  saving: saveRowsMutation.isPending,
+                  onConfirmDiscard: async () => {
+                    const result = await confirmationDialogStore.confirm({
+                      title: 'Discard unsaved row edits?',
+                      body: 'This query action switches the table into read-only SQL results. Discard the unsaved row edits and continue?',
+                      bodyType: 'markdown',
+                    });
+                    return result.confirmed;
+                  },
+                  onSave: handleSaveRows,
+                  onDiscard: handleDiscardRows,
+                }
+          }
           renderDefaultDataTable={({toolbar}) => (
             <DataTable
               storageKey={`relation/${input.relation.name}`}

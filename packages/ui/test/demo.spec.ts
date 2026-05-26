@@ -157,6 +157,26 @@ test('demo mode default 100/page table view actually fetches 100 rows', async ({
   await expect(page.locator('.reactgrid').getByText('Wolski  Zajazd')).toBeVisible();
 });
 
+test('demo mode keeps sticky table headers opaque while scrolling data underneath', async ({page}) => {
+  await page.setViewportSize({width: 1100, height: 360});
+  await page.goto('http://127.0.0.1:3218/?demo=1#table/customers');
+
+  await expect(page.locator('.reactgrid').getByText('Alfreds Futterkiste')).toBeVisible();
+
+  await page.locator('.table-scroll').evaluate((element) => {
+    element.scrollTop = 260;
+  });
+
+  const alpha = await page.locator('.reactgrid [data-cell-rowidx="0"][data-cell-colidx="2"]').evaluate((element) => {
+    const match = getComputedStyle(element).backgroundColor.match(/^rgba?\((.*)\)$/);
+    if (!match) return null;
+    const parts = match[1]!.split(',').map((part) => part.trim());
+    return parts.length === 4 ? Number(parts[3]) : 1;
+  });
+
+  expect(alpha).toBe(1);
+});
+
 test('demo mode opens the referenced parent row from a foreign-key cell', async ({page}) => {
   await page.setViewportSize({width: 1180, height: 720});
   await page.goto('/?demo=1#table/order_details');
@@ -172,9 +192,23 @@ test('demo mode opens the referenced parent row from a foreign-key cell', async 
   await productIdCell.hover();
   await productIdCell.getByRole('button', {name: 'Open products row for product_id 11'}).click();
 
+  await expect(page.getByText('products where product_id = 11')).toBeVisible();
+  await expect(page.getByRole('heading', {name: 'products where product_id = 11'})).not.toBeVisible();
+  await page.getByText('products where product_id = 11').click();
   await expect(page.getByRole('heading', {name: 'products where product_id = 11'})).toBeVisible();
   await expect(page.getByText('Queso Cabrales')).toBeVisible();
   await expect(page.getByText('select * from "products" where "product_id" = ?')).toBeVisible();
+
+  const relationPreview = page.getByRole('dialog', {name: 'Relation preview'});
+  await relationPreview.click();
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+C' : 'Control+C');
+  await expect(relationPreview).toBeVisible();
+
+  await page.getByRole('link', {name: 'Open products where product_id = 11 in sub view'}).click();
+  await expect(page).toHaveURL(/#table\/products\?sql=/);
+  await expect(page.getByText('Sub view query')).toBeVisible();
+  await expect(page.getByText('select * from "products" where "product_id" = 11 limit 100')).toBeVisible();
+  await expect(page.locator('.reactgrid').getByText('Queso Cabrales')).toBeVisible();
 });
 
 test('demo mode opens child rows from a referenced primary-key cell', async ({page}) => {
@@ -187,9 +221,30 @@ test('demo mode opens child rows from a referenced primary-key cell', async ({pa
   await productIdCell.hover();
   await productIdCell.getByRole('button', {name: 'Open related order_details rows for product_id 1'}).click();
 
+  await expect(page.getByText('order_details where product_id = 1')).toBeVisible();
+  await page.getByText('order_details where product_id = 1').click();
   await expect(page.getByRole('heading', {name: 'order_details where product_id = 1'})).toBeVisible();
   await expect(page.getByText('select * from "order_details" where "product_id" = ?')).toBeVisible();
   await expect(page.getByText('10285').first()).toBeVisible();
+});
+
+test('demo mode shows multiple reverse relations as collapsed relation options', async ({page}) => {
+  await page.setViewportSize({width: 1180, height: 720});
+  await page.goto('/?demo=1#table/employees');
+
+  await expect(page.locator('.reactgrid').getByText('Davolio')).toBeVisible();
+
+  const employeeIdCell = page.locator('.reactgrid [data-cell-rowidx="1"][data-cell-colidx="1"]');
+  await employeeIdCell.hover();
+  await employeeIdCell.getByRole('button', {name: 'Open 3 related row views'}).click();
+
+  await expect(page.getByText('employees where reports_to = 1')).toBeVisible();
+  await expect(page.getByText('employee_territories where employee_id = 1')).toBeVisible();
+  await expect(page.getByText('orders where employee_id = 1')).toBeVisible();
+  await expect(page.getByRole('heading', {name: 'orders where employee_id = 1'})).not.toBeVisible();
+
+  await page.getByText('orders where employee_id = 1').click();
+  await expect(page.getByRole('heading', {name: 'orders where employee_id = 1'})).toBeVisible();
 });
 
 test('demo mode keeps relation actions after relation query sorting', async ({page}) => {
@@ -207,6 +262,7 @@ test('demo mode keeps relation actions after relation query sorting', async ({pa
   await productIdCell.hover();
   await productIdCell.getByRole('button', {name: 'Open related order_details rows for product_id 1'}).click();
 
+  await page.getByText('order_details where product_id = 1').click();
   await expect(page.getByRole('heading', {name: 'order_details where product_id = 1'})).toBeVisible();
   await expect(page.getByText('10285').first()).toBeVisible();
 });

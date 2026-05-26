@@ -627,7 +627,14 @@ function Studio() {
         ) : route.kind === 'query' && selectedQuery ? (
           <QueryPanel entry={selectedQuery} relations={schemaQuery.data.relations} />
         ) : selectedTable ? (
-          <TablePanel key={selectedTable.name} relation={selectedTable} />
+          <TablePanel
+            key={selectedTable.name}
+            relation={selectedTable}
+            subviewSql={route.kind === 'table' ? route.subviewSql : undefined}
+            onClearSubView={() => {
+              window.location.hash = buildTableHash(selectedTable.name);
+            }}
+          />
         ) : (
           <EmptyState />
         )}
@@ -1119,7 +1126,7 @@ function MigrationDetail(input: {
   );
 }
 
-function TablePanel(input: {relation: StudioRelation}) {
+function TablePanel(input: {relation: StudioRelation; subviewSql?: string; onClearSubView?: () => void}) {
   const getRelationActions = (actionInput: {row: Record<string, unknown>; column: string}) =>
     buildRelationActions(input.relation, actionInput.row, actionInput.column);
   const tableListOptions = orpc.table.list.queryOptions({
@@ -1238,6 +1245,8 @@ function TablePanel(input: {relation: StudioRelation}) {
         {tableMutationError ? <ErrorView error={tableMutationError} /> : null}
         <RelationQueryPanel
           relation={input.relation}
+          subviewSql={input.subviewSql}
+          onClearSubView={input.onClearSubView}
           runSql={(runInput) => orpcClient.sql.run(runInput)}
           rowEditing={{
             editable: rowsData.editable,
@@ -1760,6 +1769,7 @@ type DataCellRelationAction = {
   label: string;
   heading: string;
   sql: string;
+  href: string;
   params: QueryArg[];
 };
 
@@ -2043,6 +2053,7 @@ function DataTable(input: {
 
 function DataCellExpandTrigger(input: {meta: DataCellMeta}) {
   const [mode, setMode] = useState<'diff' | 'original' | 'draft'>('diff');
+  const contentRef = useRef<HTMLDivElement>(null);
   const showDiffTabs = input.meta.dirty && input.meta.originalText !== 'null' && input.meta.originalText !== '';
   return (
     <Popover.Root>
@@ -2059,10 +2070,17 @@ function DataCellExpandTrigger(input: {meta: DataCellMeta}) {
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Content
+          ref={contentRef}
+          tabIndex={-1}
           className="rqp-popover rqp-popover-wide"
           align="end"
           sideOffset={6}
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            contentRef.current?.focus();
+          }}
           onClick={(e) => e.stopPropagation()}
+          onKeyDownCapture={(e) => e.stopPropagation()}
           onMouseDown={(e) => e.stopPropagation()}
           onPointerDown={(e) => e.stopPropagation()}
         >
@@ -2091,6 +2109,7 @@ function DataCellTriggers(input: {meta: DataCellMeta}) {
 
 function DataCellRelationTrigger(input: {actions: DataCellRelationAction[]}) {
   const label = input.actions.length === 1 ? input.actions[0]!.label : `Open ${input.actions.length} related row views`;
+  const contentRef = useRef<HTMLDivElement>(null);
   return (
     <Popover.Root>
       <Popover.Trigger asChild>
@@ -2106,21 +2125,49 @@ function DataCellRelationTrigger(input: {actions: DataCellRelationAction[]}) {
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Content
+          ref={contentRef}
+          tabIndex={-1}
           className="rqp-popover rqp-popover-wide relation-preview-popover"
           align="end"
           sideOffset={6}
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            contentRef.current?.focus();
+          }}
           onClick={(e) => e.stopPropagation()}
+          onKeyDownCapture={(e) => e.stopPropagation()}
           onMouseDown={(e) => e.stopPropagation()}
           onPointerDown={(e) => e.stopPropagation()}
         >
           <div className="relation-preview-stack">
             {input.actions.map((action) => (
-              <RelationPreviewPopoverBody key={`${action.heading}:${action.sql}`} action={action} />
+              <RelationPreviewAccordion key={`${action.heading}:${action.sql}`} action={action} />
             ))}
           </div>
         </Popover.Content>
       </Popover.Portal>
     </Popover.Root>
+  );
+}
+
+function RelationPreviewAccordion(input: {action: DataCellRelationAction}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <details className="relation-preview-action" open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
+      <summary className="relation-preview-summary">
+        <span className="relation-preview-summary-label">{input.action.heading}</span>
+        <a
+          className="relation-preview-open"
+          href={input.action.href}
+          aria-label={`Open ${input.action.heading} in sub view`}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <RelationJumpIcon />
+          <span>Open in sub view</span>
+        </a>
+      </summary>
+      {open ? <RelationPreviewPopoverBody action={input.action} /> : null}
+    </details>
   );
 }
 
@@ -2421,10 +2468,12 @@ function buildForwardRelationActions(
   return foreignKeys.map((foreignKey) => {
     const referencedColumn = foreignKey.referencedColumns[0]!;
     const heading = `${foreignKey.referencedRelation} where ${referencedColumn} = ${formatCellText(value)}`;
+    const subviewSql = buildRelationSubviewSql(foreignKey.referencedRelation, referencedColumn, queryArg);
     return {
       label: `Open ${foreignKey.referencedRelation} row for ${column} ${formatCellText(value)}`,
       heading,
       sql: `select * from ${quoteSqlIdentifier(foreignKey.referencedRelation)} where ${quoteSqlIdentifier(referencedColumn)} = ? limit 100`,
+      href: buildRelationSubviewHash(foreignKey.referencedRelation, subviewSql),
       params: [queryArg],
     };
   });
@@ -2449,13 +2498,33 @@ function buildReverseRelationActions(
   return reverseRelations.map((reverse) => {
     const childColumn = reverse.columns[0]!;
     const heading = `${reverse.relation} where ${childColumn} = ${formatCellText(value)}`;
+    const subviewSql = buildRelationSubviewSql(reverse.relation, childColumn, queryArg);
     return {
       label: `Open related ${reverse.relation} rows for ${column} ${formatCellText(value)}`,
       heading,
       sql: `select * from ${quoteSqlIdentifier(reverse.relation)} where ${quoteSqlIdentifier(childColumn)} = ? limit 100`,
+      href: buildRelationSubviewHash(reverse.relation, subviewSql),
       params: [queryArg],
     };
   });
+}
+
+function buildRelationSubviewSql(relationName: string, column: string, value: QueryArg) {
+  return `select * from ${quoteSqlIdentifier(relationName)} where ${quoteSqlIdentifier(column)} = ${formatSqlLiteral(value)} limit 100`;
+}
+
+function buildRelationSubviewHash(relationName: string, sql: string) {
+  return `${buildTableHash(relationName)}?sql=${encodeURIComponent(sql)}`;
+}
+
+function formatSqlLiteral(value: QueryArg) {
+  if (typeof value === 'string') return `'${value.replaceAll("'", "''")}'`;
+  if (typeof value === 'number') return Number.isFinite(value) ? String(value) : 'null';
+  if (typeof value === 'bigint') return String(value);
+  if (typeof value === 'boolean') return value ? '1' : '0';
+  if (value instanceof Uint8Array)
+    return `x'${Array.from(value, (byte) => byte.toString(16).padStart(2, '0')).join('')}'`;
+  return 'null';
 }
 
 function toQueryArg(value: unknown): QueryArg | undefined {
@@ -2766,7 +2835,8 @@ function parseHash(hash: string): Route {
     return {kind: 'schema'};
   }
 
-  const [kind, first] = value.split('/').map(decodeURIComponent);
+  const [path, query = ''] = value.split('?');
+  const [kind, first] = path.split('/').map(decodeURIComponent);
   if (kind === 'schema') {
     return {kind: 'schema'};
   }
@@ -2774,12 +2844,17 @@ function parseHash(hash: string): Route {
     return {kind: 'sql'};
   }
   if (kind === 'table' && first) {
-    return {kind: 'table', name: first};
+    const params = new URLSearchParams(query);
+    return {kind: 'table', name: first, subviewSql: params.get('sql') || undefined};
   }
   if (kind === 'query' && first) {
     return {kind: 'query', id: first};
   }
   return {kind: 'home'};
+}
+
+function buildTableHash(name: string) {
+  return `#table/${encodeURIComponent(name)}`;
 }
 
 function selectTable(route: Route, relations: StudioRelation[]) {
@@ -3024,6 +3099,7 @@ type Route =
   | {
       kind: 'table';
       name: string;
+      subviewSql?: string;
     }
   | {
       kind: 'query';

@@ -35,6 +35,8 @@ export type RelationRowEditing = {
 
 export type RelationQueryPanelProps = {
   relation: StudioRelation;
+  subviewSql?: string;
+  onClearSubView?: () => void;
   runSql: (input: {sql: string}) => Promise<RelationQuerySqlResult>;
   rowEditing?: RelationRowEditing;
   renderDefaultDataTable: (input: {toolbar: React.ReactNode}) => React.ReactNode;
@@ -60,8 +62,9 @@ export function RelationQueryPanel(input: RelationQueryPanelProps) {
 
   const safeState = reconcileState(state, relation.name, allColumns);
   const generatedSql = buildRelationQuery(safeState);
-  const effectiveSql = customSql ?? generatedSql;
-  const isStructured = customSql === null;
+  const subviewSql = input.subviewSql || null;
+  const effectiveSql = subviewSql || customSql || generatedSql;
+  const isStructured = !subviewSql && customSql === null;
   const isDefault = isStructured && isDefaultRelationQueryState(safeState);
   const activeFilterCount = safeState.filters.length;
   const hiddenCount = safeState.hiddenColumns.length;
@@ -98,7 +101,10 @@ export function RelationQueryPanel(input: RelationQueryPanelProps) {
     if (!(await confirmBeforeReadOnlyMode(willEnterReadOnlyMode))) {
       return;
     }
-    if (!isStructured) setCustomSql(null);
+    if (!isStructured) {
+      input.onClearSubView?.();
+      setCustomSql(null);
+    }
     setState(next);
   };
 
@@ -137,6 +143,7 @@ export function RelationQueryPanel(input: RelationQueryPanelProps) {
   const handlePrev = () => void mutate((s) => ({...s, offset: Math.max(0, s.offset - s.limit)}));
   const handleNext = () => void mutate((s) => ({...s, offset: s.offset + s.limit}));
   const handleReset = () => {
+    input.onClearSubView?.();
     setState(defaultRelationQueryState({tableName: relation.name, allColumns}));
     setCustomSql(null);
   };
@@ -145,6 +152,7 @@ export function RelationQueryPanel(input: RelationQueryPanelProps) {
     if (!(await confirmBeforeReadOnlyMode(nextCustomSql !== null))) {
       return;
     }
+    input.onClearSubView?.();
     setCustomSql(nextCustomSql);
   };
 
@@ -177,7 +185,23 @@ export function RelationQueryPanel(input: RelationQueryPanelProps) {
 
   const rows = extractRows(runQuery.data);
   const columns = extractColumns(runQuery.data, safeState);
-  const storageKey = `relation-query/${relation.name}`;
+  const storageKey = subviewSql ? `relation-subview/${relation.name}/${subviewSql}` : `relation-query/${relation.name}`;
+  const toolbarContent = subviewSql ? (
+    <div className="relation-toolbar-stack">
+      {toolbar}
+      <div className="relation-subview-query">
+        <div className="card-title-row">
+          <div className="card-title">Sub view query</div>
+          <button type="button" className="rqp-pill-button" onClick={input.onClearSubView}>
+            Close sub view
+          </button>
+        </div>
+        <code className="relation-preview-sql">{subviewSql}</code>
+      </div>
+    </div>
+  ) : (
+    toolbar
+  );
 
   return (
     <div className="rqp">
@@ -185,16 +209,16 @@ export function RelationQueryPanel(input: RelationQueryPanelProps) {
         input.renderDefaultDataTable({toolbar})
       ) : runQuery.error ? (
         <>
-          <div className="data-toolbar">{toolbar}</div>
+          <div className="data-toolbar">{toolbarContent}</div>
           <div className="error-view">{String((runQuery.error as Error).message ?? runQuery.error)}</div>
         </>
       ) : runQuery.isFetching && rows.length === 0 ? (
         <>
-          <div className="data-toolbar">{toolbar}</div>
+          <div className="data-toolbar">{toolbarContent}</div>
           <p className="muted">Loading…</p>
         </>
       ) : (
-        input.renderSqlDataTable({rows, columns, storageKey, toolbar})
+        input.renderSqlDataTable({rows, columns, storageKey, toolbar: toolbarContent})
       )}
     </div>
   );

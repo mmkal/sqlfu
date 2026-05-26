@@ -1,7 +1,7 @@
 import {expect, test} from '@playwright/test';
 
 test('demo mode shows inline analysis diagnostics for syntax errors', async ({page}) => {
-  await page.goto('http://localhost:3218/?demo=1#sql');
+  await page.goto('/?demo=1#sql');
 
   const editor = page.locator('[aria-label="SQL editor"] .cm-content');
   await expect(editor).toBeVisible();
@@ -12,7 +12,7 @@ test('demo mode shows inline analysis diagnostics for syntax errors', async ({pa
 });
 
 test('demo mode shows inline analysis diagnostics for unknown columns', async ({page}) => {
-  await page.goto('http://localhost:3218/?demo=1#sql');
+  await page.goto('/?demo=1#sql');
 
   const editor = page.locator('[aria-label="SQL editor"] .cm-content');
   await expect(editor).toBeVisible();

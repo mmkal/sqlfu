@@ -16,7 +16,7 @@ import {test as base} from '@playwright/test';
 const currentDir = import.meta.dirname;
 const projectsRoot = path.join(currentDir, 'projects');
 const templateRoot = path.join(currentDir, 'template-project-pg');
-const serverOrigin = 'http://localhost:3218';
+const serverOrigin = `http://localhost:${process.env.SQLFU_UI_TEST_PORT || '3218'}`;
 
 const ADMIN_URL =
   process.env.SQLFU_UI_PG_ADMIN_URL ?? 'postgresql://postgres:postgres@127.0.0.1:5544/postgres';

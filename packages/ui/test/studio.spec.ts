@@ -6,7 +6,7 @@ import type {Locator, Page} from '@playwright/test';
 import {expect, test} from './fixture.ts';
 
 test('shows a helpful startup error page when the local backend is unreachable', async ({page}) => {
-  await page.goto('http://127.0.0.1:3218?apiOrigin=http://127.0.0.1:9');
+  await page.goto('/?apiOrigin=http://127.0.0.1:9');
 
   await expect(page.getByRole('heading', {name: 'sqlfu', exact: true})).toBeVisible();
   await expect(page.getByText('Connecting to the sqlfu backend on 127.0.0.1:9')).toBeVisible();

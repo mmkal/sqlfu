@@ -1,7 +1,7 @@
 import {expect, test} from '@playwright/test';
 
 test('demo mode runs fully in-browser', async ({page}) => {
-  await page.goto('http://127.0.0.1:3218/?demo=1');
+  await page.goto('/?demo=1');
 
   await expect(page.getByText('Demo mode', {exact: true})).toBeVisible();
   await expect(page.getByRole('link', {name: 'Back to sqlfu.dev/ui'})).toBeVisible();
@@ -25,7 +25,7 @@ test('demo mode runs fully in-browser', async ({page}) => {
 
 test('demo mode keeps scrolling inside the sidebar and main panes', async ({page}) => {
   await page.setViewportSize({width: 900, height: 320});
-  await page.goto('http://127.0.0.1:3218/?demo=1#schema');
+  await page.goto('/?demo=1#schema');
 
   await expect(page.getByRole('heading', {name: 'Schema', exact: true})).toBeVisible();
 
@@ -57,7 +57,7 @@ test('demo mode keeps scrolling inside the sidebar and main panes', async ({page
 
 test('demo mode table columns resize from the visible header edge', async ({page}) => {
   await page.setViewportSize({width: 1100, height: 640});
-  await page.goto('http://127.0.0.1:3218/?demo=1#table/products');
+  await page.goto('/?demo=1#table/products');
 
   await expect(page.locator('.reactgrid').getByText('Chai')).toBeVisible();
 
@@ -82,7 +82,7 @@ test('demo mode table columns resize from the visible header edge', async ({page
 
 test('demo mode shows a readable column width hint below the header while resizing', async ({page}) => {
   await page.setViewportSize({width: 1100, height: 640});
-  await page.goto('http://127.0.0.1:3218/?demo=1#table/products');
+  await page.goto('/?demo=1#table/products');
 
   await expect(page.locator('.reactgrid').getByText('Chai')).toBeVisible();
 
@@ -110,7 +110,7 @@ test('demo mode shows a readable column width hint below the header while resizi
 
 test('demo mode leaves drag room after the rightmost column', async ({page}) => {
   await page.setViewportSize({width: 1100, height: 640});
-  await page.goto('http://127.0.0.1:3218/?demo=1#table/products');
+  await page.goto('/?demo=1#table/products');
 
   await expect(page.locator('.reactgrid').getByText('Chai')).toBeVisible();
 
@@ -145,7 +145,7 @@ test('demo mode leaves drag room after the rightmost column', async ({page}) => 
 
 test('demo mode default 100/page table view actually fetches 100 rows', async ({page}) => {
   await page.setViewportSize({width: 1100, height: 640});
-  await page.goto('http://127.0.0.1:3218/?demo=1#table/customers');
+  await page.goto('/?demo=1#table/customers');
 
   await expect(page.getByRole('button', {name: '100 rows per page'})).toBeVisible();
 
@@ -159,7 +159,7 @@ test('demo mode default 100/page table view actually fetches 100 rows', async ({
 
 test('demo mode keeps sticky table headers opaque while scrolling data underneath', async ({page}) => {
   await page.setViewportSize({width: 1100, height: 360});
-  await page.goto('http://127.0.0.1:3218/?demo=1#table/customers');
+  await page.goto('/?demo=1#table/customers');
 
   await expect(page.locator('.reactgrid').getByText('Alfreds Futterkiste')).toBeVisible();
 
@@ -228,6 +228,34 @@ test('demo mode opens child rows from a referenced primary-key cell', async ({pa
   await expect(page.getByText('10285').first()).toBeVisible();
 });
 
+test('demo mode keeps the relation sub view filter while paging', async ({page}) => {
+  await page.setViewportSize({width: 1180, height: 720});
+  await page.goto('/?demo=1#table/products');
+
+  await expect(page.locator('.reactgrid').getByText('Chai')).toBeVisible();
+
+  const productIdCell = page.locator('.reactgrid [data-cell-rowidx="1"][data-cell-colidx="1"]');
+  await productIdCell.hover();
+  await productIdCell.getByRole('button', {name: 'Open related order_details rows for product_id 1'}).click();
+
+  await page.getByText('order_details where product_id = 1').click();
+  await page.getByRole('link', {name: 'Open order_details where product_id = 1 in sub view'}).click();
+
+  await expect(page).toHaveURL(/#table\/order_details\?sql=/);
+  await expect(page.getByText('select * from "order_details" where "product_id" = 1 limit 100')).toBeVisible();
+
+  await page.getByRole('button', {name: 'Next page'}).click();
+  await expect(page.getByText('Sub view query')).toBeVisible();
+  await expect(
+    page.getByText('select * from "order_details" where "product_id" = 1 limit 100 offset 100'),
+  ).toBeVisible();
+
+  await page.getByRole('button', {name: '100 rows per page'}).click();
+  await page.getByRole('button', {name: '25', exact: true}).click();
+  await expect(page.getByText('Sub view query')).toBeVisible();
+  await expect(page.getByText('select * from "order_details" where "product_id" = 1 limit 25')).toBeVisible();
+});
+
 test('demo mode shows multiple reverse relations as collapsed relation options', async ({page}) => {
   await page.setViewportSize({width: 1180, height: 720});
   await page.goto('/?demo=1#table/employees');
@@ -268,7 +296,7 @@ test('demo mode keeps relation actions after relation query sorting', async ({pa
 });
 
 test('demo mode: clicking the same sort column 3 times (asc → desc → off) does not freeze', async ({page}) => {
-  await page.goto('http://127.0.0.1:3218/?demo=1#table/products');
+  await page.goto('/?demo=1#table/products');
   await expect(page.locator('.reactgrid').getByText('Chai')).toBeVisible();
 
   // Click 1: sort by product_id asc (default → SQL mode)

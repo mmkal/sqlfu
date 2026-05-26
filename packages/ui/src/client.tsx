@@ -39,6 +39,7 @@ import type {UiRouter} from 'sqlfu/ui/browser';
 import {SqlCodeMirror, TextCodeMirror, TextDiffCodeMirror, type CodeMirrorAction} from './sql-codemirror.js';
 import {RelationQueryPanel} from './relation-query-panel.js';
 import {DEFAULT_LIMIT} from './relation-query-builder.js';
+import {buildRelationSubviewSql, quoteSqlIdentifier} from './relation-subview-sql.js';
 import * as Popover from '@radix-ui/react-popover';
 import {
   Dialog,
@@ -631,6 +632,9 @@ function Studio() {
             key={selectedTable.name}
             relation={selectedTable}
             subviewSql={route.kind === 'table' ? route.subviewSql : undefined}
+            onSubViewSqlChange={(sql) => {
+              window.location.hash = buildRelationSubviewHash(selectedTable.name, sql);
+            }}
             onClearSubView={() => {
               window.location.hash = buildTableHash(selectedTable.name);
             }}
@@ -1126,7 +1130,12 @@ function MigrationDetail(input: {
   );
 }
 
-function TablePanel(input: {relation: StudioRelation; subviewSql?: string; onClearSubView?: () => void}) {
+function TablePanel(input: {
+  relation: StudioRelation;
+  subviewSql?: string;
+  onSubViewSqlChange: (sql: string) => void;
+  onClearSubView?: () => void;
+}) {
   const getRelationActions = (actionInput: {row: Record<string, unknown>; column: string}) =>
     buildRelationActions(input.relation, actionInput.row, actionInput.column);
   const tableListOptions = orpc.table.list.queryOptions({
@@ -1246,6 +1255,7 @@ function TablePanel(input: {relation: StudioRelation; subviewSql?: string; onCle
         <RelationQueryPanel
           relation={input.relation}
           subviewSql={input.subviewSql}
+          onSubViewSqlChange={input.onSubViewSqlChange}
           onClearSubView={input.onClearSubView}
           runSql={(runInput) => orpcClient.sql.run(runInput)}
           rowEditing={{
@@ -2509,22 +2519,8 @@ function buildReverseRelationActions(
   });
 }
 
-function buildRelationSubviewSql(relationName: string, column: string, value: QueryArg) {
-  return `select * from ${quoteSqlIdentifier(relationName)} where ${quoteSqlIdentifier(column)} = ${formatSqlLiteral(value)} limit 100`;
-}
-
 function buildRelationSubviewHash(relationName: string, sql: string) {
   return `${buildTableHash(relationName)}?sql=${encodeURIComponent(sql)}`;
-}
-
-function formatSqlLiteral(value: QueryArg) {
-  if (typeof value === 'string') return `'${value.replaceAll("'", "''")}'`;
-  if (typeof value === 'number') return Number.isFinite(value) ? String(value) : 'null';
-  if (typeof value === 'bigint') return String(value);
-  if (typeof value === 'boolean') return value ? '1' : '0';
-  if (value instanceof Uint8Array)
-    return `x'${Array.from(value, (byte) => byte.toString(16).padStart(2, '0')).join('')}'`;
-  return 'null';
 }
 
 function toQueryArg(value: unknown): QueryArg | undefined {
@@ -2545,10 +2541,6 @@ function toQueryKeyParam(value: QueryArg) {
   if (typeof value === 'bigint') return `bigint:${String(value)}`;
   if (value instanceof Uint8Array) return `bytes:${Array.from(value).join(',')}`;
   return value;
-}
-
-function quoteSqlIdentifier(value: string) {
-  return `"${value.replaceAll('"', '""')}"`;
 }
 
 function toGridCell(

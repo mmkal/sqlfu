@@ -48,9 +48,9 @@ export async function ensureFixtureRoles(): Promise<void> {
   await admin.connect();
   try {
     await admin.query(`do $$ begin
-      if not exists (select 1 from pg_roles where rolname = 'schemainspect_test_role') then
-        create role schemainspect_test_role;
-      end if;
+      create role schemainspect_test_role;
+    exception
+      when duplicate_object or unique_violation then null;
     end $$`);
   } finally {
     await admin.end();

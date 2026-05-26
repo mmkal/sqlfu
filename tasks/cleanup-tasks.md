@@ -7,11 +7,44 @@ size: small
 
 ## Status summary
 
+2026-05-17 pass is done. One completed active task file was filed for merged PR #125, and eleven clean local worktrees for merged or stale compare branches were removed. Open, dirty, ahead, ambiguous, and evergreen worktrees/tasks were left in place.
+
 2026-05-15 pass is done. PRs #115 and #116 were evergreen logs that stay active, so no task files moved. Eight clean local worktrees for merged, closed, or stale compare branches were removed; open, dirty, and ambiguous worktrees were left in place.
 
 Sometimes agents forget to move their task files to "done". Look at recent commits and see if that's happened. If it has, open a housekeeping PR to do just that. While you're there, you can also add to Implementation Notes if there's anything you spot in the change that wasn't tidied up properly that also wasn't documented in the task file.
 
 Make sure local worktrees are cleaned up too.
+
+## 2026-05-17 pass
+
+Branch: `bedtime/2026-05-17-cleanup-tasks`.
+
+Scope:
+
+- Inspect recent merged, closed, and open PRs against active task files.
+- Move active task files to `tasks/complete/` only when the matching work is clearly merged or otherwise done on `origin/main`.
+- Keep evergreen tasks open.
+- Remove only clean, clearly stale local worktrees; preserve dirty, ambiguous, active review, local, and remote branches.
+- Record skipped candidates with enough context for the next cleanup pass.
+
+Checklist:
+
+- [x] Create the requested isolated worktree from `origin/main` and commit this status note first. _worktree is `/Users/mmkal/src/worktrees/sqlfu/bedtime-2026-05-17-cleanup-tasks` on branch `bedtime/2026-05-17-cleanup-tasks`._
+- [x] Open the early PR after the task-only commit. _PR #130 opened from first commit `fe0af32`._
+- [x] Inspect recent merged, closed, and open PRs, active task files, and local worktrees. _recent merged candidates were #120 through #126; open PRs #111, #127, #128, #129, and #130 stay active. PRs #131 and #132 opened after this cleanup snapshot and are noted below._
+- [x] File completed active task files into `tasks/complete/` only when the matching work is clearly done on `origin/main`. _moved `tasks/architecture-2026-05-15.md` to `tasks/complete/2026-05-16-architecture-2026-05-15.md` after PR #125 merged._
+- [x] Remove safe clean local worktrees, or record why each candidate was left alone. _removed eleven clean merged/stale worktrees; left open, dirty, ahead, ambiguous, evergreen, and out-of-scope worktrees in place._
+- [x] Verify the final task tree, worktree list, and git status. _checked `find tasks -maxdepth 2 -type f | sort`, `git worktree list --porcelain`, and `git status --short`; only the task move and this cleanup log remain before the final commit._
+
+Implementation notes:
+
+- 2026-05-17: This pass starts from `origin/main` at `27c0875` and intentionally does not touch the main checkout.
+- 2026-05-17: Merged PRs #122, #124, and #126 already filed their task files under `tasks/complete/`. PR #121 and this task are evergreen logs, so they stay active. PR #120 updated `tasks/landing-demo-maintainability.md`, which intentionally stays active for the deferred Outbox demo. PR #123 updated broader `tasks/pg.md`, which still tracks later `@sqlfu/pg` work.
+- 2026-05-17: Filed `tasks/architecture-2026-05-15.md` because PR #125 merged on 2026-05-16 and its checklist was complete. The completed file now lives at `tasks/complete/2026-05-16-architecture-2026-05-15.md`.
+- 2026-05-17: Removed local worktree checkouts only; local and remote branches were preserved. Removed: `bedtime-2026-05-14-generate-preflight`, `bedtime-2026-05-14-query-identity-manifest`, `bedtime-2026-05-15-architecture`, `bedtime-2026-05-15-cleanup-tasks`, `bedtime-2026-05-15-db-base-directory`, `bedtime-2026-05-15-default-db-gitignore`, `bedtime-2026-05-15-improve-docs`, `bedtime-2026-05-15-landing-trace`, `bedtime-2026-05-15-pg-docs-followup`, `compat-existing-tools`, and `query-identity-refresh-pr-114`.
+- 2026-05-17: Left open PR worktrees in place: `issue-110-sqlite3-parser-schemadiff` (#111), `do-inline-sync-tests` (#127), `review-pr-127` (local review checkout for #127), `ui-relations` (#128), `bedtime-2026-05-17-improve-docs` (#129), and this cleanup worktree (#130).
+- 2026-05-17: Left active/ambiguous or user-edit worktrees alone: `api-extractor` and `detect-spurious-definitions` still have active root task files; `query-identity-refresh-pr-111` and `improve-codebase-architecture-2026-05-14-pr-111` are still associated with open draft PR #111; `drizzle-benchmark-sqlfu` is ahead of its remote; `effect-client-interop` and `typesql-ddl-support` are dirty; `sqlfu-vendor-sqlite3def` is outside the usual `../worktrees/sqlfu/` cleanup set.
+- 2026-05-17: After the cleanup snapshot, `bedtime-2026-05-17-clawpatch` opened PR #131 and `bedtime-2026-05-17-parser-spike` opened PR #132. They should be treated as open active worktrees by the next cleanup pass.
 
 ## 2026-05-15 pass
 

@@ -8,8 +8,9 @@
  * idea of representing the database as a typed inspected object tree before diffing, rather than diffing SQL text directly.
  */
 import {excludeReservedSqliteObjects} from '../../sqlite-text.js';
-import type {Client} from '../../types.js';
-import {quoteSqlString} from './identifiers.js';
+import {awaited, driveAsync, driveSync, type DualGenerator} from '../../dual-dispatch.js';
+import type {AsyncClient, Client, SyncClient} from '../../types.js';
+import {quoteIdentifier, quoteSqlString} from './identifiers.js';
 import {
   extractWhereClause,
   normalizeComparableSql,
@@ -27,23 +28,41 @@ import type {
   SqliteUniqueConstraint,
 } from './types.js';
 
-export async function inspectSqliteSchema(client: Client, schemaName = 'main'): Promise<SqliteInspectedDatabase> {
-  await assertNoUnsupportedSchemaFeatures(client, schemaName);
+export function inspectSqliteSchema(client: SyncClient, schemaName?: string): SqliteInspectedDatabase;
+export function inspectSqliteSchema(client: AsyncClient, schemaName?: string): Promise<SqliteInspectedDatabase>;
+export function inspectSqliteSchema(
+  client: Client,
+  schemaName?: string,
+): SqliteInspectedDatabase | Promise<SqliteInspectedDatabase>;
+export function inspectSqliteSchema(
+  client: Client,
+  schemaName = 'main',
+): SqliteInspectedDatabase | Promise<SqliteInspectedDatabase> {
+  const gen = inspectSqliteSchemaGen(client, schemaName);
+  return client.sync ? driveSync(gen) : driveAsync(gen);
+}
 
-  const objects = await client.all<{
-    type: 'table' | 'view';
-    name: string;
-    sql: string | null;
-  }>({
-    sql: `
+function* inspectSqliteSchemaGen(client: Client, schemaName: string): DualGenerator<SqliteInspectedDatabase> {
+  yield* assertNoUnsupportedSchemaFeatures(client, schemaName);
+  const schemaIdentifier = quoteIdentifier(schemaName);
+  const schemaNameLiteral = quoteSqlString(schemaName);
+
+  const objects = yield* awaited(
+    client.all<{
+      type: 'table' | 'view';
+      name: string;
+      sql: string | null;
+    }>({
+      sql: `
       select type, name, sql
-      from ${schemaName}.sqlite_schema
+      from ${schemaIdentifier}.sqlite_schema
       where type in ('table', 'view')
         and ${excludeReservedSqliteObjects}
       order by type, name
     `,
-    args: [],
-  });
+      args: [],
+    }),
+  );
 
   const tables: SqliteInspectedDatabase['tables'] = {};
   const views: SqliteInspectedDatabase['views'] = {};
@@ -61,39 +80,45 @@ export async function inspectSqliteSchema(client: Client, schemaName = 'main'): 
     }
 
     const tableNameLiteral = quoteSqlString(object.name);
-    const columns = await client.all<{
-      name: string;
-      type: string;
-      notnull: number;
-      dflt_value: string | null;
-      pk: number;
-      hidden: number;
-    }>({
-      sql: `select name, type, "notnull", dflt_value, pk, hidden from pragma_table_xinfo(${tableNameLiteral}) order by cid`,
-      args: [],
-    });
-    const indexList = await client.all<{
-      name: string;
-      unique: number;
-      origin: string;
-      partial: number;
-    }>({
-      sql: `select name, "unique", origin, partial from pragma_index_list(${tableNameLiteral}) order by name`,
-      args: [],
-    });
-    const foreignKeyRows = await client.all<{
-      id: number;
-      seq: number;
-      table: string;
-      from: string;
-      to: string | null;
-      on_update: string;
-      on_delete: string;
-      match: string;
-    }>({
-      sql: `select id, seq, "table", "from", "to", on_update, on_delete, match from pragma_foreign_key_list(${tableNameLiteral}) order by id, seq`,
-      args: [],
-    });
+    const columns = yield* awaited(
+      client.all<{
+        name: string;
+        type: string;
+        notnull: number;
+        dflt_value: string | null;
+        pk: number;
+        hidden: number;
+      }>({
+        sql: `select name, type, "notnull", dflt_value, pk, hidden from pragma_table_xinfo(${tableNameLiteral}, ${schemaNameLiteral}) order by cid`,
+        args: [],
+      }),
+    );
+    const indexList = yield* awaited(
+      client.all<{
+        name: string;
+        unique: number;
+        origin: string;
+        partial: number;
+      }>({
+        sql: `select name, "unique", origin, partial from pragma_index_list(${tableNameLiteral}, ${schemaNameLiteral}) order by name`,
+        args: [],
+      }),
+    );
+    const foreignKeyRows = yield* awaited(
+      client.all<{
+        id: number;
+        seq: number;
+        table: string;
+        from: string;
+        to: string | null;
+        on_update: string;
+        on_delete: string;
+        match: string;
+      }>({
+        sql: `select id, seq, "table", "from", "to", on_update, on_delete, match from pragma_foreign_key_list(${tableNameLiteral}, ${schemaNameLiteral}) order by id, seq`,
+        args: [],
+      }),
+    );
 
     const explicitIndexes: SqliteInspectedDatabase['tables'][string]['indexes'] = {};
     const uniqueConstraints: SqliteUniqueConstraint[] = [];
@@ -104,19 +129,23 @@ export async function inspectSqliteSchema(client: Client, schemaName = 'main'): 
 
     for (const index of indexList) {
       const indexNameLiteral = quoteSqlString(index.name);
-      const indexColumns = await client.all<{
-        seqno: number;
-        cid: number;
-        name: string | null;
-        key: number;
-      }>({
-        sql: `select seqno, cid, name, key from pragma_index_xinfo(${indexNameLiteral}) where key = 1 order by seqno`,
-        args: [],
-      });
-      const createSqlRow = await client.all<{sql: string | null}>({
-        sql: `select sql from ${schemaName}.sqlite_schema where type = 'index' and name = ${indexNameLiteral}`,
-        args: [],
-      });
+      const indexColumns = yield* awaited(
+        client.all<{
+          seqno: number;
+          cid: number;
+          name: string | null;
+          key: number;
+        }>({
+          sql: `select seqno, cid, name, key from pragma_index_xinfo(${indexNameLiteral}, ${schemaNameLiteral}) where key = 1 order by seqno`,
+          args: [],
+        }),
+      );
+      const createSqlRow = yield* awaited(
+        client.all<{sql: string | null}>({
+          sql: `select sql from ${schemaIdentifier}.sqlite_schema where type = 'index' and name = ${indexNameLiteral}`,
+          args: [],
+        }),
+      );
       const indexCreateSql = normalizeStoredSqlWithIdentifiers(createSqlRow[0]?.sql || '', [
         index.name,
         object.name,
@@ -163,20 +192,22 @@ export async function inspectSqliteSchema(client: Client, schemaName = 'main'): 
     };
   }
 
-  const triggerRows = await client.all<{
-    name: string;
-    tbl_name: string;
-    sql: string | null;
-  }>({
-    sql: `
+  const triggerRows = yield* awaited(
+    client.all<{
+      name: string;
+      tbl_name: string;
+      sql: string | null;
+    }>({
+      sql: `
       select name, tbl_name, sql
-      from ${schemaName}.sqlite_schema
+      from ${schemaIdentifier}.sqlite_schema
       where type = 'trigger'
         and name not like 'sqlite_%'
       order by name
     `,
-    args: [],
-  });
+      args: [],
+    }),
+  );
 
   for (const trigger of triggerRows) {
     const createSql = normalizeStoredSql(trigger.sql || '');
@@ -191,21 +222,24 @@ export async function inspectSqliteSchema(client: Client, schemaName = 'main'): 
   return {tables, views, triggers};
 }
 
-async function assertNoUnsupportedSchemaFeatures(client: Client, schemaName: string): Promise<void> {
-  const unsupportedSqlRows = await client.all<{
-    type: string;
-    name: string;
-    sql: string | null;
-  }>({
-    sql: `
+function* assertNoUnsupportedSchemaFeatures(client: Client, schemaName: string): DualGenerator<void> {
+  const schemaIdentifier = quoteIdentifier(schemaName);
+  const unsupportedSqlRows = yield* awaited(
+    client.all<{
+      type: string;
+      name: string;
+      sql: string | null;
+    }>({
+      sql: `
       select type, name, sql
-      from ${schemaName}.sqlite_schema
+      from ${schemaIdentifier}.sqlite_schema
       where sql is not null
         and name not like 'sqlite_%'
       order by type, name
     `,
-    args: [],
-  });
+      args: [],
+    }),
+  );
 
   for (const row of unsupportedSqlRows) {
     const normalizedSql = row.sql?.toLowerCase() || '';

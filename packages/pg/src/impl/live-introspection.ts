@@ -91,3 +91,37 @@ export const pgGetRelationColumns: Dialect['getRelationColumns'] = async (client
     primaryKey: row.primary_key,
   }));
 };
+
+export const pgGetRelationForeignKeys: Dialect['getRelationForeignKeys'] = async (client, relationName) => {
+  const rows = await client.all<{
+    columns: string[];
+    referenced_relation: string;
+    referenced_columns: string[];
+  }>({
+    sql: `
+      select array_agg(source_attribute.attname order by keys.ordinality) as columns,
+             referenced_class.relname as referenced_relation,
+             array_agg(referenced_attribute.attname order by keys.ordinality) as referenced_columns
+      from pg_constraint constraint_info
+      join pg_class source_class on source_class.oid = constraint_info.conrelid
+      join pg_namespace source_namespace on source_namespace.oid = source_class.relnamespace
+      join pg_class referenced_class on referenced_class.oid = constraint_info.confrelid
+      join unnest(constraint_info.conkey, constraint_info.confkey) with ordinality as keys(source_attnum, referenced_attnum, ordinality) on true
+      join pg_attribute source_attribute on source_attribute.attrelid = source_class.oid
+        and source_attribute.attnum = keys.source_attnum
+      join pg_attribute referenced_attribute on referenced_attribute.attrelid = referenced_class.oid
+        and referenced_attribute.attnum = keys.referenced_attnum
+      where source_namespace.nspname = 'public'
+        and source_class.relname = ?
+        and constraint_info.contype = 'f'
+      group by constraint_info.oid, referenced_class.relname
+      order by constraint_info.conname
+    `,
+    args: [relationName],
+  });
+  return rows.map((row) => ({
+    columns: row.columns,
+    referencedRelation: row.referenced_relation,
+    referencedColumns: row.referenced_columns,
+  }));
+};

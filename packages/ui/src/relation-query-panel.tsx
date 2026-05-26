@@ -15,6 +15,7 @@ import {
   type RelationQuerySort,
   type RelationQueryState,
 } from './relation-query-builder.js';
+import {readRelationSubviewPage, rewriteRelationSubviewPage} from './relation-subview-sql.js';
 import {SqlCodeMirror} from './sql-codemirror.js';
 
 const PAGE_SIZE_OPTIONS = [25, 50, 100, 250, 500, 1000];
@@ -35,6 +36,9 @@ export type RelationRowEditing = {
 
 export type RelationQueryPanelProps = {
   relation: StudioRelation;
+  subviewSql?: string;
+  onSubViewSqlChange: (sql: string) => void;
+  onClearSubView?: () => void;
   runSql: (input: {sql: string}) => Promise<RelationQuerySqlResult>;
   rowEditing?: RelationRowEditing;
   renderDefaultDataTable: (input: {toolbar: React.ReactNode}) => React.ReactNode;
@@ -60,11 +64,16 @@ export function RelationQueryPanel(input: RelationQueryPanelProps) {
 
   const safeState = reconcileState(state, relation.name, allColumns);
   const generatedSql = buildRelationQuery(safeState);
-  const effectiveSql = customSql ?? generatedSql;
-  const isStructured = customSql === null;
+  const subviewSql = input.subviewSql || null;
+  const effectiveSql = subviewSql || customSql || generatedSql;
+  const isStructured = !subviewSql && customSql === null;
   const isDefault = isStructured && isDefaultRelationQueryState(safeState);
-  const activeFilterCount = safeState.filters.length;
-  const hiddenCount = safeState.hiddenColumns.length;
+  const subviewPage = subviewSql ? readRelationSubviewPage(subviewSql) : null;
+  const toolbarState = subviewPage
+    ? {...safeState, filters: [], sorts: [], hiddenColumns: [], limit: subviewPage.limit, offset: subviewPage.offset}
+    : safeState;
+  const activeFilterCount = toolbarState.filters.length;
+  const hiddenCount = toolbarState.hiddenColumns.length;
   const visibleColumnCount = allColumns.length - hiddenCount;
 
   const limitMissing = !hasLimitClause(effectiveSql);
@@ -98,8 +107,20 @@ export function RelationQueryPanel(input: RelationQueryPanelProps) {
     if (!(await confirmBeforeReadOnlyMode(willEnterReadOnlyMode))) {
       return;
     }
-    if (!isStructured) setCustomSql(null);
+    if (!isStructured) {
+      input.onClearSubView?.();
+      setCustomSql(null);
+    }
     setState(next);
+  };
+
+  const mutateSubViewPage = (
+    updater: (previous: {limit: number; offset: number}) => {limit: number; offset: number},
+  ) => {
+    if (!subviewSql) return false;
+    const previous = subviewPage || {limit: safeState.limit, offset: safeState.offset};
+    input.onSubViewSqlChange(rewriteRelationSubviewPage(subviewSql, updater(previous)));
+    return true;
   };
 
   const handleSortToggle = (column: string) => {
@@ -132,11 +153,25 @@ export function RelationQueryPanel(input: RelationQueryPanelProps) {
   const handleColumnsShowAll = () => void mutate((s) => ({...s, hiddenColumns: []}));
 
   const handleLimitChange = (value: number) => {
+    if (mutateSubViewPage(() => ({limit: Math.max(1, value), offset: 0}))) {
+      return;
+    }
     void mutate((s) => ({...s, limit: Math.max(1, value), offset: 0}));
   };
-  const handlePrev = () => void mutate((s) => ({...s, offset: Math.max(0, s.offset - s.limit)}));
-  const handleNext = () => void mutate((s) => ({...s, offset: s.offset + s.limit}));
+  const handlePrev = () => {
+    if (mutateSubViewPage((s) => ({...s, offset: Math.max(0, s.offset - s.limit)}))) {
+      return;
+    }
+    void mutate((s) => ({...s, offset: Math.max(0, s.offset - s.limit)}));
+  };
+  const handleNext = () => {
+    if (mutateSubViewPage((s) => ({...s, offset: s.offset + s.limit}))) {
+      return;
+    }
+    void mutate((s) => ({...s, offset: s.offset + s.limit}));
+  };
   const handleReset = () => {
+    input.onClearSubView?.();
     setState(defaultRelationQueryState({tableName: relation.name, allColumns}));
     setCustomSql(null);
   };
@@ -145,6 +180,7 @@ export function RelationQueryPanel(input: RelationQueryPanelProps) {
     if (!(await confirmBeforeReadOnlyMode(nextCustomSql !== null))) {
       return;
     }
+    input.onClearSubView?.();
     setCustomSql(nextCustomSql);
   };
 
@@ -152,7 +188,7 @@ export function RelationQueryPanel(input: RelationQueryPanelProps) {
     <RelationToolbar
       relation={relation}
       allColumns={allColumns}
-      state={safeState}
+      state={toolbarState}
       isStructured={isStructured}
       isDefault={isDefault}
       activeFilterCount={activeFilterCount}
@@ -176,8 +212,24 @@ export function RelationQueryPanel(input: RelationQueryPanelProps) {
   );
 
   const rows = extractRows(runQuery.data);
-  const columns = extractColumns(runQuery.data, safeState);
-  const storageKey = `relation-query/${relation.name}`;
+  const columns = extractColumns(runQuery.data, toolbarState);
+  const storageKey = subviewSql ? `relation-subview/${relation.name}/${subviewSql}` : `relation-query/${relation.name}`;
+  const toolbarContent = subviewSql ? (
+    <div className="relation-toolbar-stack">
+      {toolbar}
+      <div className="relation-subview-query">
+        <div className="card-title-row">
+          <div className="card-title">Sub view query</div>
+          <button type="button" className="rqp-pill-button" onClick={input.onClearSubView}>
+            Close sub view
+          </button>
+        </div>
+        <code className="relation-preview-sql">{subviewSql}</code>
+      </div>
+    </div>
+  ) : (
+    toolbar
+  );
 
   return (
     <div className="rqp">
@@ -185,16 +237,16 @@ export function RelationQueryPanel(input: RelationQueryPanelProps) {
         input.renderDefaultDataTable({toolbar})
       ) : runQuery.error ? (
         <>
-          <div className="data-toolbar">{toolbar}</div>
+          <div className="data-toolbar">{toolbarContent}</div>
           <div className="error-view">{String((runQuery.error as Error).message ?? runQuery.error)}</div>
         </>
       ) : runQuery.isFetching && rows.length === 0 ? (
         <>
-          <div className="data-toolbar">{toolbar}</div>
+          <div className="data-toolbar">{toolbarContent}</div>
           <p className="muted">Loading…</p>
         </>
       ) : (
-        input.renderSqlDataTable({rows, columns, storageKey, toolbar})
+        input.renderSqlDataTable({rows, columns, storageKey, toolbar: toolbarContent})
       )}
     </div>
   );

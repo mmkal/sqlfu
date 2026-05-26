@@ -56,6 +56,8 @@ export type StudioRelation = {
   name: string;
   kind: 'table' | 'view';
   columns: StudioColumn[];
+  foreignKeys: StudioForeignKey[];
+  referencedBy: StudioReverseForeignKey[];
   rowCount?: number;
   sql?: string;
 };
@@ -65,6 +67,18 @@ export type StudioColumn = {
   type: string;
   notNull: boolean;
   primaryKey: boolean;
+};
+
+export type StudioForeignKey = {
+  columns: string[];
+  referencedRelation: string;
+  referencedColumns: string[];
+};
+
+export type StudioReverseForeignKey = {
+  relation: string;
+  columns: string[];
+  referencedColumns: string[];
 };
 
 export type TableRowsResponse = {

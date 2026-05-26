@@ -22,7 +22,7 @@ import {
 } from '@tanstack/react-query';
 
 import {queryNickname} from 'sqlfu';
-import type {QueryCatalogEntry} from 'sqlfu';
+import type {QueryArg, QueryCatalogEntry} from 'sqlfu';
 import {formatSqlFileContents} from 'sqlfu/analyze';
 import type {
   QueryExecutionResponse,
@@ -39,6 +39,7 @@ import type {UiRouter} from 'sqlfu/ui/browser';
 import {SqlCodeMirror, TextCodeMirror, TextDiffCodeMirror, type CodeMirrorAction} from './sql-codemirror.js';
 import {RelationQueryPanel} from './relation-query-panel.js';
 import {DEFAULT_LIMIT} from './relation-query-builder.js';
+import {buildRelationSubviewSql, quoteSqlIdentifier} from './relation-subview-sql.js';
 import * as Popover from '@radix-ui/react-popover';
 import {
   Dialog,
@@ -652,7 +653,17 @@ function Studio() {
         ) : route.kind === 'query' && selectedQuery ? (
           <QueryPanel entry={selectedQuery} relations={schemaQuery.data.relations} />
         ) : selectedTable ? (
-          <TablePanel key={selectedTable.name} relation={selectedTable} />
+          <TablePanel
+            key={selectedTable.name}
+            relation={selectedTable}
+            subviewSql={route.kind === 'table' ? route.subviewSql : undefined}
+            onSubViewSqlChange={(sql) => {
+              window.location.hash = buildRelationSubviewHash(selectedTable.name, sql);
+            }}
+            onClearSubView={() => {
+              window.location.hash = buildTableHash(selectedTable.name);
+            }}
+          />
         ) : (
           <EmptyState />
         )}
@@ -1140,7 +1151,14 @@ function MigrationDetail(input: {
   );
 }
 
-function TablePanel(input: {relation: StudioRelation}) {
+function TablePanel(input: {
+  relation: StudioRelation;
+  subviewSql?: string;
+  onSubViewSqlChange: (sql: string) => void;
+  onClearSubView?: () => void;
+}) {
+  const getRelationActions = (actionInput: {row: Record<string, unknown>; column: string}) =>
+    buildRelationActions(input.relation, actionInput.row, actionInput.column);
   const tableListOptions = orpc.table.list.queryOptions({
     input: {
       relationName: input.relation.name,
@@ -1257,6 +1275,9 @@ function TablePanel(input: {relation: StudioRelation}) {
         {tableMutationError ? <ErrorView error={tableMutationError} /> : null}
         <RelationQueryPanel
           relation={input.relation}
+          subviewSql={input.subviewSql}
+          onSubViewSqlChange={input.onSubViewSqlChange}
+          onClearSubView={input.onClearSubView}
           runSql={(runInput) => orpcClient.sql.run(runInput)}
           rowEditing={{
             editable: rowsData.editable,
@@ -1288,6 +1309,7 @@ function TablePanel(input: {relation: StudioRelation}) {
               onAppendRow={() => setDraftRows([...displayedRows, {...emptyRowTemplate}])}
               onDeleteRow={handleDeleteRow}
               showSelectedCellDetail
+              getRelationActions={getRelationActions}
               toolbar={toolbar}
             />
           )}
@@ -1297,6 +1319,7 @@ function TablePanel(input: {relation: StudioRelation}) {
               columns={args.columns}
               rows={args.rows}
               showSelectedCellDetail
+              getRelationActions={getRelationActions}
               toolbar={args.toolbar}
             />
           )}
@@ -1770,6 +1793,15 @@ type DataCellMeta = {
   originalText: string;
   label: string;
   dirty: boolean;
+  relationActions?: DataCellRelationAction[];
+};
+
+type DataCellRelationAction = {
+  label: string;
+  heading: string;
+  sql: string;
+  href: string;
+  params: QueryArg[];
 };
 
 type DataTextCell = reactGrid.TextCell & {meta?: DataCellMeta};
@@ -1791,7 +1823,7 @@ class DataTextCellTemplate extends reactGrid.TextCellTemplate {
     return (
       <span className="cell-content-wrap">
         {inner}
-        <DataCellExpandTrigger meta={cell.meta} />
+        <DataCellTriggers meta={cell.meta} />
       </span>
     );
   }
@@ -1813,7 +1845,7 @@ class DataNumberCellTemplate extends reactGrid.NumberCellTemplate {
     return (
       <span className="cell-content-wrap">
         {inner}
-        <DataCellExpandTrigger meta={cell.meta} />
+        <DataCellTriggers meta={cell.meta} />
       </span>
     );
   }
@@ -1839,6 +1871,11 @@ function DataTable(input: {
   onAppendRow?: () => void;
   onDeleteRow?: (rowIndex: number) => void;
   showSelectedCellDetail?: boolean;
+  getRelationActions?: (input: {
+    row: Record<string, unknown>;
+    rowIndex: number;
+    column: string;
+  }) => DataCellRelationAction[];
   toolbar?: ReactNode;
 }) {
   if (input.rows.length === 0 && !(input.editable && input.onAppendRow)) {
@@ -1924,6 +1961,7 @@ function DataTable(input: {
                 originalText: formatCellText(original),
                 label: `Cell: ${column}, row ${rowIndex + 1}`,
                 dirty,
+                relationActions: input.getRelationActions?.({row, rowIndex, column}),
               }
             : undefined;
           return toGridCell(
@@ -2044,6 +2082,7 @@ function DataTable(input: {
 
 function DataCellExpandTrigger(input: {meta: DataCellMeta}) {
   const [mode, setMode] = useState<'diff' | 'original' | 'draft'>('diff');
+  const contentRef = useRef<HTMLDivElement>(null);
   const showDiffTabs = input.meta.dirty && input.meta.originalText !== 'null' && input.meta.originalText !== '';
   return (
     <Popover.Root>
@@ -2060,10 +2099,17 @@ function DataCellExpandTrigger(input: {meta: DataCellMeta}) {
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Content
+          ref={contentRef}
+          tabIndex={-1}
           className="rqp-popover rqp-popover-wide"
           align="end"
           sideOffset={6}
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            contentRef.current?.focus();
+          }}
           onClick={(e) => e.stopPropagation()}
+          onKeyDownCapture={(e) => e.stopPropagation()}
           onMouseDown={(e) => e.stopPropagation()}
           onPointerDown={(e) => e.stopPropagation()}
         >
@@ -2081,6 +2127,79 @@ function DataCellExpandTrigger(input: {meta: DataCellMeta}) {
   );
 }
 
+function DataCellTriggers(input: {meta: DataCellMeta}) {
+  return (
+    <>
+      <DataCellExpandTrigger meta={input.meta} />
+      {input.meta.relationActions?.length ? <DataCellRelationTrigger actions={input.meta.relationActions} /> : null}
+    </>
+  );
+}
+
+function DataCellRelationTrigger(input: {actions: DataCellRelationAction[]}) {
+  const label = input.actions.length === 1 ? input.actions[0]!.label : `Open ${input.actions.length} related row views`;
+  const contentRef = useRef<HTMLDivElement>(null);
+  return (
+    <Popover.Root>
+      <Popover.Trigger asChild>
+        <button
+          type="button"
+          className="cell-expand-button cell-relation-button"
+          aria-label={label}
+          onMouseDown={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <RelationJumpIcon />
+        </button>
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content
+          ref={contentRef}
+          tabIndex={-1}
+          className="rqp-popover rqp-popover-wide relation-preview-popover"
+          align="end"
+          sideOffset={6}
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            contentRef.current?.focus();
+          }}
+          onClick={(e) => e.stopPropagation()}
+          onKeyDownCapture={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <div className="relation-preview-stack">
+            {input.actions.map((action) => (
+              <RelationPreviewAccordion key={`${action.heading}:${action.sql}`} action={action} />
+            ))}
+          </div>
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
+  );
+}
+
+function RelationPreviewAccordion(input: {action: DataCellRelationAction}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <details className="relation-preview-action" open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
+      <summary className="relation-preview-summary">
+        <span className="relation-preview-summary-label">{input.action.heading}</span>
+        <a
+          className="relation-preview-open"
+          href={input.action.href}
+          aria-label={`Open ${input.action.heading} in sub view`}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <RelationJumpIcon />
+          <span>Open in sub view</span>
+        </a>
+      </summary>
+      {open ? <RelationPreviewPopoverBody action={input.action} /> : null}
+    </details>
+  );
+}
+
 function CellExpandIcon() {
   return (
     <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
@@ -2089,6 +2208,61 @@ function CellExpandIcon() {
       <path d="M6 13H3v-3" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
       <path d="M10 3h3v3" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
     </svg>
+  );
+}
+
+function RelationJumpIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
+      <path d="M5 4h6v6" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      <path d="M11 4 4 11" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function RelationPreviewPopoverBody(input: {action: DataCellRelationAction}) {
+  const query = useQuery({
+    queryKey: ['relation-preview', input.action.sql, input.action.params.map(toQueryKeyParam)],
+    queryFn: () =>
+      orpcClient.sql.run({
+        sql: input.action.sql,
+        params: input.action.params,
+      }),
+  });
+  const columns = query.data?.rows?.[0] ? Object.keys(query.data.rows[0]) : [];
+
+  return (
+    <div className="rqp-popover-body relation-preview-body" role="dialog" aria-label="Relation preview">
+      <div className="card-title-row">
+        <h2 className="card-title">{input.action.heading}</h2>
+      </div>
+      <code className="relation-preview-sql">{input.action.sql}</code>
+      {query.error ? <ErrorView error={query.error} /> : null}
+      {query.isLoading ? <p className="muted">Loading…</p> : null}
+      {query.data?.rows?.length === 0 ? <p className="muted">No rows.</p> : null}
+      {query.data?.rows?.length ? (
+        <div className="relation-preview-table-wrap">
+          <table className="relation-preview-table">
+            <thead>
+              <tr>
+                {columns.map((column) => (
+                  <th key={column}>{column}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {query.data.rows.map((row, rowIndex) => (
+                <tr key={rowIndex}>
+                  {columns.map((column) => (
+                    <td key={column}>{renderCell(row[column])}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -2300,6 +2474,92 @@ function renderCell(value: unknown) {
     return JSON.stringify(value);
   }
   return String(value);
+}
+
+function buildRelationActions(relation: StudioRelation, row: Record<string, unknown>, column: string) {
+  return [...buildForwardRelationActions(relation, row, column), ...buildReverseRelationActions(relation, row, column)];
+}
+
+function buildForwardRelationActions(
+  relation: StudioRelation,
+  row: Record<string, unknown>,
+  column: string,
+): DataCellRelationAction[] {
+  const foreignKeys = relation.foreignKeys.filter(
+    (candidate) =>
+      candidate.columns.length === 1 && candidate.referencedColumns.length === 1 && candidate.columns[0] === column,
+  );
+  const value = row[column];
+  const queryArg = toQueryArg(value);
+  if (queryArg === undefined) {
+    return [];
+  }
+  return foreignKeys.map((foreignKey) => {
+    const referencedColumn = foreignKey.referencedColumns[0]!;
+    const heading = `${foreignKey.referencedRelation} where ${referencedColumn} = ${formatCellText(value)}`;
+    const subviewSql = buildRelationSubviewSql(foreignKey.referencedRelation, referencedColumn, queryArg);
+    return {
+      label: `Open ${foreignKey.referencedRelation} row for ${column} ${formatCellText(value)}`,
+      heading,
+      sql: `select * from ${quoteSqlIdentifier(foreignKey.referencedRelation)} where ${quoteSqlIdentifier(referencedColumn)} = ? limit 100`,
+      href: buildRelationSubviewHash(foreignKey.referencedRelation, subviewSql),
+      params: [queryArg],
+    };
+  });
+}
+
+function buildReverseRelationActions(
+  relation: StudioRelation,
+  row: Record<string, unknown>,
+  column: string,
+): DataCellRelationAction[] {
+  const reverseRelations = relation.referencedBy.filter(
+    (candidate) =>
+      candidate.columns.length === 1 &&
+      candidate.referencedColumns.length === 1 &&
+      candidate.referencedColumns[0] === column,
+  );
+  const value = row[column];
+  const queryArg = toQueryArg(value);
+  if (queryArg === undefined) {
+    return [];
+  }
+  return reverseRelations.map((reverse) => {
+    const childColumn = reverse.columns[0]!;
+    const heading = `${reverse.relation} where ${childColumn} = ${formatCellText(value)}`;
+    const subviewSql = buildRelationSubviewSql(reverse.relation, childColumn, queryArg);
+    return {
+      label: `Open related ${reverse.relation} rows for ${column} ${formatCellText(value)}`,
+      heading,
+      sql: `select * from ${quoteSqlIdentifier(reverse.relation)} where ${quoteSqlIdentifier(childColumn)} = ? limit 100`,
+      href: buildRelationSubviewHash(reverse.relation, subviewSql),
+      params: [queryArg],
+    };
+  });
+}
+
+function buildRelationSubviewHash(relationName: string, sql: string) {
+  return `${buildTableHash(relationName)}?sql=${encodeURIComponent(sql)}`;
+}
+
+function toQueryArg(value: unknown): QueryArg | undefined {
+  if (value == null) return undefined;
+  if (
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'bigint' ||
+    typeof value === 'boolean'
+  ) {
+    return value;
+  }
+  if (value instanceof Uint8Array) return value;
+  return undefined;
+}
+
+function toQueryKeyParam(value: QueryArg) {
+  if (typeof value === 'bigint') return `bigint:${String(value)}`;
+  if (value instanceof Uint8Array) return `bytes:${Array.from(value).join(',')}`;
+  return value;
 }
 
 function toGridCell(
@@ -2622,7 +2882,8 @@ function parseHash(hash: string): Route {
     return {kind: 'schema'};
   }
 
-  const [kind, first] = value.split('/').map(decodeURIComponent);
+  const [path, query = ''] = value.split('?');
+  const [kind, first] = path.split('/').map(decodeURIComponent);
   if (kind === 'schema') {
     return {kind: 'schema'};
   }
@@ -2630,12 +2891,17 @@ function parseHash(hash: string): Route {
     return {kind: 'sql'};
   }
   if (kind === 'table' && first) {
-    return {kind: 'table', name: first};
+    const params = new URLSearchParams(query);
+    return {kind: 'table', name: first, subviewSql: params.get('sql') || undefined};
   }
   if (kind === 'query' && first) {
     return {kind: 'query', id: first};
   }
   return {kind: 'home'};
+}
+
+function buildTableHash(name: string) {
+  return `#table/${encodeURIComponent(name)}`;
 }
 
 function selectTable(route: Route, relations: StudioRelation[]) {
@@ -2880,6 +3146,7 @@ type Route =
   | {
       kind: 'table';
       name: string;
+      subviewSql?: string;
     }
   | {
       kind: 'query';

@@ -33,6 +33,8 @@ import type {
   SchemaCheckRecommendation,
   SqlEditorDiagnostic,
   StudioColumn,
+  StudioForeignKey,
+  StudioReverseForeignKey,
   TableRowKey,
   TableRowsResponse,
 } from './shared.js';
@@ -215,6 +217,10 @@ export const uiRouter = {
       await using database = await context.host.openDb(config);
       const client = database.client;
       const relations = await config.dialect.listLiveRelations(client);
+      const foreignKeysByRelation = new Map<string, StudioForeignKey[]>();
+      for (const relation of relations) {
+        foreignKeysByRelation.set(relation.name, await config.dialect.getRelationForeignKeys(client, relation.name));
+      }
 
       return {
         projectName: basename(config.projectRoot),
@@ -225,6 +231,8 @@ export const uiRouter = {
             kind: relation.kind,
             rowCount: await getRelationCount(client, config.dialect, relation.name),
             columns: await config.dialect.getRelationColumns(client, relation.name),
+            foreignKeys: foreignKeysByRelation.get(relation.name) || [],
+            referencedBy: buildReverseForeignKeys(relation.name, foreignKeysByRelation),
             sql: relation.sql,
           })),
         ),
@@ -921,6 +929,26 @@ async function getRelationCount(client: Client, dialect: Dialect, relationName: 
     args: [],
   });
   return Number(rows[0]?.count ?? 0);
+}
+
+function buildReverseForeignKeys(
+  relationName: string,
+  foreignKeysByRelation: Map<string, StudioForeignKey[]>,
+): StudioReverseForeignKey[] {
+  const reverse: StudioReverseForeignKey[] = [];
+  for (const [sourceRelation, foreignKeys] of foreignKeysByRelation) {
+    for (const foreignKey of foreignKeys) {
+      if (foreignKey.referencedRelation !== relationName) {
+        continue;
+      }
+      reverse.push({
+        relation: sourceRelation,
+        columns: foreignKey.columns,
+        referencedColumns: foreignKey.referencedColumns,
+      });
+    }
+  }
+  return reverse;
 }
 
 async function getTableRows(

@@ -1,5 +1,7 @@
 import {defineConfig} from '@playwright/test';
 
+const port = Number(process.env.SQLFU_UI_TEST_PORT || 3218);
+
 export default defineConfig({
   testDir: './test',
   timeout: 30_000,
@@ -15,15 +17,15 @@ export default defineConfig({
   reporter: process.env.CI ? [['list'], ['html', {open: 'never'}]] : 'list',
   globalSetup: './test/global-setup.ts',
   use: {
-    baseURL: 'http://127.0.0.1:3218',
+    baseURL: `http://127.0.0.1:${port}`,
     headless: true,
     launchOptions: {
       args: ['--host-resolver-rules=MAP *.localhost 127.0.0.1, MAP localhost 127.0.0.1'],
     },
   },
   webServer: {
-    command: 'pnpm exec tsx test/start-server.ts --dev --port 3218',
-    port: 3218,
+    command: `pnpm exec tsx test/start-server.ts --dev --port ${port}`,
+    port,
     reuseExistingServer: false,
     stdout: 'pipe',
     stderr: 'pipe',

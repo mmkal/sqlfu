@@ -4,7 +4,8 @@
 // Hitting the server once here gets that one-off cost out of the way so every
 // individual test has a warm server to assert against.
 export default async function globalSetup() {
-  const baseURL = 'http://127.0.0.1:3218';
+  const port = process.env.SQLFU_UI_TEST_PORT || '3218';
+  const baseURL = `http://127.0.0.1:${port}`;
   const deadline = Date.now() + 60_000;
 
   while (Date.now() < deadline) {

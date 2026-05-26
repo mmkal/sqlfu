@@ -16,7 +16,7 @@ test('hosted UI simulation is reachable through ngrok on top of the normal UI te
 
 async function startNgrokForUiServer() {
   const tunnel = await ensureNgrokTunnel({
-    port: 3218,
+    port: Number(process.env.SQLFU_UI_TEST_PORT || 3218),
     domain: process.env.SQLFU_NGROK_DOMAIN || '',
     url: process.env.SQLFU_NGROK_URL || '',
   });

@@ -45,7 +45,7 @@
   --semantic-error-border: rgba(178, 76, 43, 0.28);
   --semantic-error-text: #7a1d0d;
 
-  --rg-header-bg: rgba(239, 226, 203, 0.8);
+  --rg-header-bg: #efe2cb;
   --rg-append-bg: rgba(239, 226, 203, 0.18);
   --rg-append-fg: rgba(117, 97, 71, 0.6);
   --rg-shadow: rgba(65, 47, 18, 0.08);
@@ -111,7 +111,7 @@
   --semantic-error-border: rgba(232, 120, 90, 0.4);
   --semantic-error-text: #f7b9a2;
 
-  --rg-header-bg: rgba(52, 38, 26, 0.9);
+  --rg-header-bg: #34261a;
   --rg-append-bg: rgba(52, 38, 26, 0.5);
   --rg-append-fg: rgba(184, 164, 132, 0.55);
   --rg-shadow: rgba(0, 0, 0, 0.5);
@@ -168,7 +168,7 @@
     --semantic-error-border: rgba(232, 120, 90, 0.4);
     --semantic-error-text: #f7b9a2;
 
-    --rg-header-bg: rgba(52, 38, 26, 0.9);
+    --rg-header-bg: #34261a;
     --rg-append-bg: rgba(52, 38, 26, 0.5);
     --rg-append-fg: rgba(184, 164, 132, 0.55);
     --rg-shadow: rgba(0, 0, 0, 0.5);
@@ -829,6 +829,142 @@ h3 {
   border-color: var(--accent-border-mid);
 }
 
+.cell-relation-button {
+  right: calc(6px + 1.45rem);
+  color: var(--accent);
+}
+
+.relation-preview-popover {
+  width: min(44rem, calc(100vw - 2rem));
+  max-height: calc(100vh - 2rem);
+  overflow: hidden;
+}
+
+.relation-preview-stack {
+  display: grid;
+  gap: 0.6rem;
+  max-height: calc(100vh - 3.4rem);
+  overflow: auto;
+  min-width: 0;
+}
+
+.relation-preview-action {
+  border: 1px solid var(--line);
+  border-radius: 0.45rem;
+  background: var(--panel-tint-faint);
+  overflow: hidden;
+}
+
+.relation-preview-summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.65rem 0.75rem;
+  cursor: pointer;
+  color: var(--text);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.relation-preview-summary::marker {
+  content: '';
+}
+
+.relation-preview-summary::-webkit-details-marker {
+  display: none;
+}
+
+.relation-preview-summary::before {
+  content: '';
+  width: 0.42rem;
+  height: 0.42rem;
+  border-right: 1.5px solid var(--muted);
+  border-bottom: 1.5px solid var(--muted);
+  transform: rotate(-45deg);
+}
+
+.relation-preview-action[open] .relation-preview-summary::before {
+  transform: rotate(45deg);
+}
+
+.relation-preview-summary-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.relation-preview-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex: 0 0 auto;
+  color: var(--accent);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.relation-preview-open:hover,
+.relation-preview-open:focus-visible {
+  color: var(--accent-strong);
+  text-decoration: underline;
+}
+
+.relation-preview-body {
+  gap: 0.75rem;
+  min-width: 0;
+  padding: 0.75rem;
+  border-top: 1px solid var(--line);
+}
+
+.relation-preview-sql {
+  display: block;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 0.35rem;
+  background: var(--panel-tint-faint);
+  color: var(--muted);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 8rem;
+  overflow: auto;
+}
+
+.relation-preview-table-wrap {
+  overflow: auto;
+  max-height: 18rem;
+  border: 1px solid var(--line);
+  border-radius: 0.4rem;
+}
+
+.relation-preview-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: 'IBM Plex Mono', 'SFMono-Regular', 'Menlo', monospace;
+  font-size: 0.8rem;
+}
+
+.relation-preview-table th,
+.relation-preview-table td {
+  padding: 0.45rem 0.55rem;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  white-space: nowrap;
+  max-width: 24rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.relation-preview-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--panel-tint-mid);
+  color: var(--muted);
+}
+
 .cm-host {
   position: relative;
 }
@@ -1012,6 +1148,12 @@ h3 {
   padding-right: 2rem;
 }
 
+.reactgrid-content .rg-pane .rg-cell:hover:has(.cell-relation-button),
+.reactgrid-content .rg-pane .rg-cell.cell-expand-active:has(.cell-relation-button),
+.reactgrid-content .rg-pane .rg-cell:has(.cell-relation-button[data-state='open']) {
+  padding-right: 3.5rem;
+}
+
 .reactgrid-content .rg-pane .rg-cell > * {
   min-width: 0;
   overflow: hidden;
@@ -1034,6 +1176,19 @@ h3 {
   text-transform: none;
   letter-spacing: 0.04em;
   font-size: 0.78rem;
+}
+
+.relation-toolbar-stack {
+  display: grid;
+  gap: 0.65rem;
+  width: 100%;
+  min-width: 0;
+}
+
+.relation-subview-query {
+  display: grid;
+  gap: 0.45rem;
+  min-width: 0;
 }
 
 .reactgrid-content .rg-pane .rg-cell .rg-touch-column-resize-handle {

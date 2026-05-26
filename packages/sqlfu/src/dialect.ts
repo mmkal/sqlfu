@@ -102,6 +102,12 @@ export type RelationInfo = {
   sql?: string;
 };
 
+export type DialectForeignKey = {
+  columns: string[];
+  referencedRelation: string;
+  referencedColumns: string[];
+};
+
 /**
  * Opaque handle representing a materialized schema ready for typegen lookups +
  * analysis. Each dialect knows its own concrete shape; the value MUST only be
@@ -210,6 +216,13 @@ export type Dialect = {
     client: Client,
     relationName: string,
   ): Promise<Array<{name: string; type: string; notNull: boolean; primaryKey: boolean}>>;
+
+  /**
+   * Foreign keys declared by one relation. Used by the studio to build
+   * forward and reverse row-navigation affordances. Views normally return
+   * an empty list.
+   */
+  getRelationForeignKeys(client: Client, relationName: string): Promise<DialectForeignKey[]>;
 
   /**
    * Apply pre-read schema source SQL to a fresh dialect-specific scratch
@@ -337,11 +350,107 @@ export function sqliteDialect(): Dialect {
         }));
     },
 
+    getRelationForeignKeys: async (client, relationName) => {
+      const rows = await client.all<Record<string, unknown>>({
+        sql: `PRAGMA foreign_key_list(${sqliteQuoteIdentifier(relationName)})`,
+        args: [],
+      });
+      return resolveSqliteForeignKeyReferences(client, groupSqliteForeignKeys(rows));
+    },
+
     materializeTypegenSchema:
       sqliteTypegenImpls?.materializeTypegenSchema ?? (() => typegenStub('materializeTypegenSchema')),
     loadSchemaForTypegen: sqliteTypegenImpls?.loadSchemaForTypegen ?? (() => typegenStub('loadSchemaForTypegen')),
     analyzeQueries: sqliteTypegenImpls?.analyzeQueries ?? (() => typegenStub('analyzeQueries')),
   };
+}
+
+type GroupedSqliteForeignKey = {
+  columns: string[];
+  referencedRelation: string;
+  referencedColumns: Array<string | null>;
+  seq: number[];
+};
+
+function groupSqliteForeignKeys(rows: Record<string, unknown>[]): GroupedSqliteForeignKey[] {
+  const grouped = new Map<number, GroupedSqliteForeignKey>();
+  for (const row of rows) {
+    const id = Number(row.id);
+    const seq = Number(row.seq);
+    const referencedRelation = String(row.table);
+    const column = String(row.from);
+    const referencedColumn = typeof row.to === 'string' && row.to ? row.to : null;
+    const existing = grouped.get(id);
+    if (!existing) {
+      grouped.set(id, {
+        columns: [column],
+        referencedRelation,
+        referencedColumns: [referencedColumn],
+        seq: [seq],
+      });
+      continue;
+    }
+    existing.columns.push(column);
+    existing.referencedColumns.push(referencedColumn);
+    existing.seq.push(seq);
+  }
+  return Array.from(grouped.values()).map((foreignKey) => {
+    const ordered = foreignKey.seq
+      .map((seq, index) => ({
+        seq,
+        column: foreignKey.columns[index]!,
+        referencedColumn: foreignKey.referencedColumns[index],
+      }))
+      .sort((left, right) => left.seq - right.seq);
+    return {
+      columns: ordered.map((entry) => entry.column),
+      referencedRelation: foreignKey.referencedRelation,
+      referencedColumns: ordered.map((entry) => entry.referencedColumn || null),
+      seq: ordered.map((entry) => entry.seq),
+    };
+  });
+}
+
+async function resolveSqliteForeignKeyReferences(
+  client: Client,
+  foreignKeys: GroupedSqliteForeignKey[],
+): Promise<DialectForeignKey[]> {
+  const primaryKeysByRelation = new Map<string, Promise<string[]>>();
+  const getPrimaryKeyColumns = (relationName: string) => {
+    const existing = primaryKeysByRelation.get(relationName);
+    if (existing) {
+      return existing;
+    }
+    const promise = getSqlitePrimaryKeyColumns(client, relationName);
+    primaryKeysByRelation.set(relationName, promise);
+    return promise;
+  };
+
+  return Promise.all(
+    foreignKeys.map(async (foreignKey) => {
+      const hasImplicitReference = foreignKey.referencedColumns.some((column) => !column);
+      const primaryKeyColumns = hasImplicitReference ? await getPrimaryKeyColumns(foreignKey.referencedRelation) : [];
+      return {
+        columns: foreignKey.columns,
+        referencedRelation: foreignKey.referencedRelation,
+        referencedColumns: foreignKey.referencedColumns.flatMap((column, index) => {
+          const referencedColumn = column || primaryKeyColumns[index];
+          return referencedColumn ? [referencedColumn] : [];
+        }),
+      };
+    }),
+  );
+}
+
+async function getSqlitePrimaryKeyColumns(client: Client, relationName: string): Promise<string[]> {
+  const rows = await client.all<Record<string, unknown>>({
+    sql: `PRAGMA table_xinfo(${sqliteQuoteIdentifier(relationName)})`,
+    args: [],
+  });
+  return rows
+    .filter((row) => Number(row.pk || 0) >= 1)
+    .sort((left, right) => Number(left.pk || 0) - Number(right.pk || 0))
+    .map((row) => String(row.name));
 }
 
 /**

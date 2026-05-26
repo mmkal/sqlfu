@@ -7,7 +7,7 @@ import {test as base} from '@playwright/test';
 const currentDir = import.meta.dirname;
 const projectsRoot = path.join(currentDir, 'projects');
 const templateRoot = path.join(currentDir, 'template-project');
-const serverOrigin = 'http://localhost:3218';
+const serverOrigin = `http://localhost:${process.env.SQLFU_UI_TEST_PORT || '3218'}`;
 
 export const test = base.extend<{
   slug: string;

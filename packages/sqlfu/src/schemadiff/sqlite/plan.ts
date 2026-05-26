@@ -92,6 +92,7 @@ export function planSchemaDiff(input: {
       for (const column of classification.columns) {
         statements.push(`alter table ${maybeQuoteIdentifier(tableName)} add column ${columnDefinition(column)};`);
       }
+      collectExplicitIndexChanges(baselineTable, desiredTable, explicitIndexDrops, explicitIndexCreates);
       continue;
     }
 
@@ -170,21 +171,7 @@ export function planSchemaDiff(input: {
     }
     const baselineTable = input.baseline.tables[tableName]!;
     const desiredTable = input.desired.tables[tableName]!;
-    const baselineIndexes = baselineTable.indexes;
-    const desiredIndexes = desiredTable.indexes;
-
-    for (const indexName of sortedRemovedKeys(baselineIndexes, desiredIndexes)) {
-      explicitIndexDrops.push(`drop index ${maybeQuoteIdentifier(indexName)};`);
-    }
-
-    for (const indexName of sortedModifiedKeys(baselineIndexes, desiredIndexes, indexEquals)) {
-      explicitIndexDrops.push(`drop index ${maybeQuoteIdentifier(indexName)};`);
-      explicitIndexCreates.push(withSemicolon(desiredIndexes[indexName]!.createSql));
-    }
-
-    for (const indexName of sortedAddedKeys(baselineIndexes, desiredIndexes)) {
-      explicitIndexCreates.push(withSemicolon(desiredIndexes[indexName]!.createSql));
-    }
+    collectExplicitIndexChanges(baselineTable, desiredTable, explicitIndexDrops, explicitIndexCreates);
   }
 
   const needsDestructive =
@@ -287,6 +274,29 @@ export function planSchemaDiff(input: {
   }
 
   return [...prefixes, ...statements].flatMap(splitStatementForOutput).filter(Boolean);
+}
+
+function collectExplicitIndexChanges(
+  baselineTable: SqliteInspectedTable,
+  desiredTable: SqliteInspectedTable,
+  explicitIndexDrops: string[],
+  explicitIndexCreates: string[],
+): void {
+  const baselineIndexes = baselineTable.indexes;
+  const desiredIndexes = desiredTable.indexes;
+
+  for (const indexName of sortedRemovedKeys(baselineIndexes, desiredIndexes)) {
+    explicitIndexDrops.push(`drop index ${maybeQuoteIdentifier(indexName)};`);
+  }
+
+  for (const indexName of sortedModifiedKeys(baselineIndexes, desiredIndexes, indexEquals)) {
+    explicitIndexDrops.push(`drop index ${maybeQuoteIdentifier(indexName)};`);
+    explicitIndexCreates.push(withSemicolon(desiredIndexes[indexName]!.createSql));
+  }
+
+  for (const indexName of sortedAddedKeys(baselineIndexes, desiredIndexes)) {
+    explicitIndexCreates.push(withSemicolon(desiredIndexes[indexName]!.createSql));
+  }
 }
 
 function classifyTableChange(input: {

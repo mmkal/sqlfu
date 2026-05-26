@@ -61,6 +61,26 @@ await sqlfu.draft({confirm});
 This path has the same command-shaped methods as `sqlfu/api`, but you provide
 the `SqlfuHost` and config/project loading context yourself.
 
+## `sqlfu/api/sync`
+
+Use `sqlfu/api/sync` when you only want the runtime `sync()` primitive, without
+pulling in the full command facade from `sqlfu/api`.
+
+```ts
+import {sync} from 'sqlfu/api/sync';
+
+sync(client, {
+  definitions: `
+    create table posts(slug text primary key, body text);
+  `,
+  scratchSchema: 'prefix',
+});
+```
+
+Durable Objects should use `scratchSchema: 'prefix'` because they cannot create
+normal scratch databases. Other sync SQLite clients use
+`scratchSchema: 'scratch-db'` by default.
+
 ## `sqlfu/cloudflare`
 
 Use `sqlfu/cloudflare` for config-time helpers that point sqlfu at a

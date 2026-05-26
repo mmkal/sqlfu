@@ -4,11 +4,12 @@
   "type": "module",
   "scripts": {
     "prebuild": "node scripts/build-social-image.mjs && node scripts/sync-docs.mjs && node scripts/sync-llms.mjs",
-    "build": "astro build && node scripts/make-portable.mjs && node scripts/sync-ui.mjs && pnpm test",
+    "build": "astro build && node scripts/make-portable.mjs && node scripts/sync-ui.mjs && pnpm test:dist",
     "dev": "node scripts/build-social-image.mjs && node scripts/sync-docs.mjs && node scripts/sync-llms.mjs && astro dev",
     "preview": "astro preview",
     "astro": "astro",
-    "test": "node --test test/*.test.mjs"
+    "test": "pnpm --filter @sqlfu/ui build && pnpm build",
+    "test:dist": "node --test test/*.test.mjs"
   },
   "devDependencies": {
     "@astrojs/starlight": "^0.37.0",

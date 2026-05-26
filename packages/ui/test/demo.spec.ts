@@ -192,6 +192,25 @@ test('demo mode opens child rows from a referenced primary-key cell', async ({pa
   await expect(page.getByText('10285').first()).toBeVisible();
 });
 
+test('demo mode keeps relation actions after relation query sorting', async ({page}) => {
+  await page.setViewportSize({width: 1180, height: 720});
+  await page.goto('/?demo=1#table/products');
+
+  await expect(page.locator('.reactgrid').getByText('Chai')).toBeVisible();
+
+  await page.getByRole('button', {name: 'Sort', exact: true}).click();
+  await page.getByRole('button', {name: 'Sort by product_id'}).click();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('button', {name: /^Sort — product_id asc/})).toBeVisible();
+
+  const productIdCell = page.locator('.reactgrid [data-cell-rowidx="1"][data-cell-colidx="1"]');
+  await productIdCell.hover();
+  await productIdCell.getByRole('button', {name: 'Open related order_details rows for product_id 1'}).click();
+
+  await expect(page.getByRole('heading', {name: 'order_details where product_id = 1'})).toBeVisible();
+  await expect(page.getByText('10285').first()).toBeVisible();
+});
+
 test('demo mode: clicking the same sort column 3 times (asc → desc → off) does not freeze', async ({page}) => {
   await page.goto('http://127.0.0.1:3218/?demo=1#table/products');
   await expect(page.locator('.reactgrid').getByText('Chai')).toBeVisible();

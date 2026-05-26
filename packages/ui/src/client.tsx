@@ -1279,6 +1279,7 @@ function TablePanel(input: {relation: StudioRelation}) {
               columns={args.columns}
               rows={args.rows}
               showSelectedCellDetail
+              getRelationActions={getRelationActions}
               toolbar={args.toolbar}
             />
           )}

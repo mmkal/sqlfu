@@ -1,31 +1,32 @@
 ---
 title: "introducing sqlfu"
 slug: "introducing-sqlfu"
-date: "2026-04-23"
+date: "2026-05-28"
 description: "sqlfu is a SQLite-first toolkit for writing schema, migrations, and queries in SQL, then generating the TypeScript around them."
 heroImage: "/assets/blog/friendship-regain-sqlfu.png"
 heroAlt: "SQL is back with sqlfu"
 ---
 
-`sqlfu` is a collection of complementary tools for writing typescript applications using plain SQL.
+`sqlfu` is a library which lets you write *plain SQL* for your typescript application.
 
 >all you need is sql.
 
-The basic idea is: SQL is a decades-old language, and it's something you need for your schema, your data layer and your migrations. So, you do need SQL, but the aim of sqlfu is to make it so you don't need anything *more* than SQL.
+The basic idea is: SQL is a decades-old language, and it's something you need for your schema, your data layer and your migrations. So, you do need SQL, but the aim of sqlfu is to make it so you don't need an ORM, a query-builder, or anything *more* than SQL.
 
-This isn't something against ORMs really, and definitely nothing against any specific ORMs. The hope is that by adopting sqlfu, you can avoid the need for them (in exchange for certain tradeoffs - there's no free lunch).
+This is nothing against ORMs, and definitely nothing against any specific ones. The hope is that by adopting sqlfu, you can eliminate the need for them (in exchange for certain tradeoffs - there's no free lunch).
 
 What sqlfu includes:
 
 - a migrations system:
-   - which assumes you have a single `definitions.sql` expressing your "Desired Schema"
+   - which assumes you have a single `definitions.sql` containing DDL statements expressing your "Desired Schema"
    - a smart schema-diffing tool, which calculates how to get from your current state to the desired state
    - a dead-simple migrations runner ([with no down migrations](https://sqlfu.dev/blog/down-considered-harmful))
 - a typescript generation command:
-   - this assumes you write your data-access layer as `.sql` files
+   - this assumes you write your data-access layer as `.sql` files (mostly containing paramterised select, insert, udpate, delete statements)
    - creates generated typescript files which you can call using a runtime client from your application
 - a runtime client:
    - razor thin adapters - *wrapper* around existing, [battle-tested clients](https://sqlfu.dev/docs/adapters)
+   - these adapters are the only thing an application using sqlfu depends on in production
 - a formatter:
    - opinionated vendored fork of [sql-formatter](https://npmjs.com/package/sql-formatter)
 - a CLI and UI:
@@ -37,13 +38,13 @@ All of the above is in one small package: `npm install sqlfu`
 
 It's roughly divided into "dev-time" and "runtime".
 
-"dev-time" is the CLI, the UI and the API. It runs heavy-ish-weight procedures like schema inspection (which involves spawning scratch databases) and type generation.
+"runtime" is the client and migrator. It's *very* lightweight - there's almost nothing to it. It wraps existing database clients in a library-agnostic interface and just... runs SQL. You can freely import this in your application code.
 
-"runtime" is the client and migrator. There's almost nothing to this. It wraps existing database clients in a library-agnostic interface and just... runs SQL. You can freely import this in your application code.
+"dev-time" is the CLI, the UI and the API. It runs heavy-ish-weight procedures like schema inspection (which involves spawning scratch databases) and type generation.
 
 ## Why you might want this
 
-ORMs are great. They solve real problems and I have no interest in trying to piss on them. Lots of smart people are very productive with them. I created sqlfu because I wanted to solve the same problems that ORMs do, while trying to avoid having another thing. The thing itself isn't bad, but fewer things can be better than more things.
+ORMs are great. They solve real problems and I have no interest in trying to piss on them. Lots of smart people are very productive with them. I created sqlfu because I wanted to solve the same problems that ORMs do, while trying to avoid having *another thing*. The thing itself isn't bad, but fewer things can be better than more things.
 
 Assuming you don't want an ORM (which I think is the right neutral assumption, in the same way you don't particularly want a falconry glove, unless you have a falcon), before sqlfu, you're left in a tricky situation. You have to use a hodge-podge of disparate tools which don't know about each other:
 
@@ -53,104 +54,125 @@ Assuming you don't want an ORM (which I think is the right neutral assumption, i
 - type safety: `typesql` or `pgkit` (postgres), or `pgtyped` (postgres), or `drizzle` to write queries directly in typescript
 - formatting: `sql-formatter` or `drizzle` (since you don't write SQL with drizzle, so you can use prettier/oxfmt)
 
-If you are eagle-eyed, you'll see that `drizzle` is an option in *all* of those bullet points. The same applies to `prisma`. That's because they are really great! They solve loads of problems really well! But, they also impose an opinion on you: that you should be using their library to write your crown-jewels - the way your application interacts with your database. `sqlfu` aims to be a one-stop shop to achieve the above, and all you need to do is write in a beautiful language for structured querying.
+If you are eagle-eyed, you'll see that `drizzle` is an option in *all* of those bullet points. The same applies to `prisma`. That's because these are really great tools! They solve loads of problems really well! But, they also impose an opinion on you: that you should be using their library to write your crown-jewels - the way your application interacts with your database. `sqlfu` aims to be a one-stop shop to achieve the above, and all you need to do is write in a beautiful language for structured querying.
 
-## An example
+What about [query builders like knex, kysely (or drizzle)](/blog/what-about-query-builders).
 
-`sqlfu` is a SQLite-first toolkit for teams that want the data layer to stay in SQL.
+## A todo app
 
-The project starts from a blunt premise: if your schema is SQL, your migrations are SQL, and the query that runs in production is SQL, the source language of your database layer should probably be SQL too. TypeScript should still help. It should give you generated wrappers, typed params, typed rows, runtime validation if you ask for it, and a client that feels natural in application code. It just should not be the language you translate every query into before SQLite ever sees it.
-
-At [iterate](https://iterate.com), this is partly about agents. Agents are good at SQL because SQL is old, stable, heavily documented, and explicit. They are much less reliable when they have to route a query through a library-specific DSL, infer the actual SQL from a long method chain, then guess what migration tool will generate from a separate schema language. A `.sql` file is a better review artifact. The diff is the query.
-
-## The shape
-
-A sqlfu project has four plain artifacts:
-
-```
-.
-├── definitions.sql
-├── migrations/
-│   └── 20260422120000_add_posts.sql
-├── sql/
-│   ├── queries.sql
-│   └── .generated/
-│       └── queries.sql.ts
-└── sqlfu.config.ts
-```
-
-`definitions.sql` is the schema you want. `migrations/` is the ordered history of how real databases got there. `sql/` contains checked-in queries. `.generated/` contains the TypeScript output you do not edit.
-
-Write the query:
-
-```sql
-/** @name findPostBySlug */
-select id, title, body, published
-from posts
-where slug = :slug;
-```
-
-Run `sqlfu generate`, then call the generated wrapper:
+Here's what a sqlfu todo app might look like. First write a `sqlfu.config.ts` (either manually or by running `sqlfu init`):
 
 ```ts
-import {findPostBySlug} from './sql/.generated/queries.sql.ts';
+import {defineConfig} from 'sqlfu';
 
-const post = await findPostBySlug(client, {slug: 'hello-world'});
-//    ^? {id: number; title: string; body: string; published: number} | undefined
+export default defineConfig({
+   db: 'app.sqlite',
+   definitions: 'db/definitions.sql',
+   queries: 'db/sql',
+   migrations: 'db/migrations',
+});
 ```
 
-That is the core promise: SQL in, TypeScript out, no query DSL between you and the database.
+Then you'd write your database schema *by hand* (or let your agent do it, if you trust them with your app's core schema):
 
-## Why not an ORM?
+```sql [filename=db/definitions.sql]
+create table todos(
+   id int primary key,
+   text text not null,
+   completed_at int
+);
+```
 
-The pitch for an ORM is that you work in objects and the database is an implementation detail. In practice, [as Neon puts it](https://neon.com/blog/orms-vs-query-builders-for-your-typescript-application), it's a leaky abstraction: "while the theory is that you can treat the database as an implementation detail and work in TypeScript, in practice you need to know SQL, TypeScript, and how to use the ORM itself." You end up with three mental models instead of one.
+And the queries your app will use at runtime:
 
-That trade can still make sense. It is the wrong trade for sqlfu. If you are already going to review query plans, add indexes, debug migrations, and ask agents to modify schema, hiding SQL mostly moves the hard parts out of sight. sqlfu makes the opposite bet: put the database artifacts in files you can read.
+```sql [filename=db/queries.sql]
+/** @name addTodo */
+insert into todos (text) values (:text);
 
-This is also why sqlfu keeps `definitions.sql` as the target schema. You can ask an agent to add `published_at` to `posts`; it changes the SQL schema, `sqlfu draft` generates a SQL migration, and you review the actual file that will run. There is no model declaration plus generated migration plus hope that the two still mean the same thing.
+/** @name listTodos */
+select * from todos limit :limit offset :offset;
 
-## Why not a query builder?
+/** @name findTodos */
+select * from todos where text like :value;
+```
 
-Drizzle and Kysely are good tools. We use Drizzle at iterate, and [drizzle-kit studio](https://orm.drizzle.team/kit-docs/overview) directly influenced the [sqlfu UI](https://sqlfu.dev/ui). Query builders are much closer to sqlfu's taste than ORMs are: they respect SQL, expose composition, and have excellent TypeScript ergonomics.
+You can then run `sqlfu generate` to get strongly-typed query helpers:
 
-The cost is transliteration. A `.select().from().innerJoin().where()` chain is SQL rewritten as method calls. That can be worth it for truly dynamic queries: search screens with many optional filters, user-configurable reporting, dynamic `order by`, dynamic projections. sqlfu is not trying to win those cases. Use a query builder there.
+<details>
+<summary>db/.generated/queries.sql.ts</summary>
 
-Most application queries are not like that. They are named operations with a stable shape: `findPostBySlug`, `listRecentInvoices`, `markJobStarted`. For those, sqlfu's answer is simpler. Put the SQL in a file, name it, generate a wrapper, and let the diff show the thing that will hit the database.
+```ts
+// fill this in...
+```
 
-When a little dynamism is enough, sqlfu supports the same nullable-filter pattern that [PgTyped documents](https://pgtyped.dev/docs/dynamic-queries): express optional filters inside one static SQL query. When that gets ugly, stop and use the right tool for that one procedure.
+</details>
 
-## Migrations from the schema you want
+Which you can use in your app:
 
-sqlfu's [approach](https://sqlfu.dev/docs/migration-model) is closer to [Atlas](https://atlasgo.io/versioned/diff) or [Skeema](https://www.skeema.io): the desired schema is a real artifact. It's `definitions.sql`, one file, read top to bottom. It is what the database *should* look like. Migrations are the ordered record of how you got there.
+```ts
+// fix up the pseudocode in this
+import {DatabaseSync} from 'node:sqlite';
+import {createNodeSqliteClient} from 'sqlfu';
 
-When `definitions.sql` changes, `sqlfu draft` replays the existing migrations into a scratch database, compares that replayed schema with the desired schema, and writes the migration that closes the gap. You read it, edit it for renames or backfills, and commit it. The generated migration is not a decree. It is a draft in the language the database will execute.
+import * as queries from '../db/.generated/queries.sql.ts';
 
-This is the part that made sqlfu feel worth packaging. Once schema, migrations, and queries are all SQL, the same tool can answer useful questions: does the live database match the repo, what would need to change, which migration files have already run, and what TypeScript should a query return?
+const db = createNodeSqliteClient(new DatbaseSync('app.sqlite'));
 
-## What ships
+app.get("/", async () => {
+  const todos = await queries.listTodos(db, { limit: 10 });
+  const bullets = todos.map(t => `- ${escapeHTML(text)}`).join('\n');
+  const html = `
+    <form action="post('/add-todo', m.value)">
+      <input name="m" />
+      <button action="submit">add</button>
+    </form>
+    <pre>${bullets}</pre>
+  `;
+  return c.text(html);
+});
 
-`sqlfu` includes:
+app.post("/add-todo", async (c) => {
+   const text = await c.req.raw.text();
+   await queries.addTodo(db, { text });
+   return c.json({ ok: true });
+});
+```
 
-- a runtime client over SQLite-compatible drivers, including `better-sqlite3`, `node:sqlite`, libsql/Turso, Cloudflare D1, Durable Objects, Expo SQLite, and `sqlite-wasm`
-- `sqlfu draft`, `migrate`, `check`, `sync`, `goto`, and `baseline` for schema work
-- `sqlfu generate` for TypeScript wrappers from `.sql` files
-- runtime validation output for ArkType, Valibot, Zod, or Zod Mini
-- typed SQL errors with stable `SqlfuError.kind` values
-- an opinionated SQLite formatter and eslint rule
-- observability hooks for OpenTelemetry, Sentry, PostHog, and Datadog-style metrics
-- an Admin UI for inspecting schema, migrations, queries, and data
-- an experimental transactional outbox
-- an agent skill that teaches coding agents the project layout
+To sync your dev database to match `definitions.sql`, you can run `sqlfu sync` to write to it directly or `sqlfu draft && sqlfu migrate` to generate and run a migration. The first migration will just look like the initial schema, and have a name like `00001_create-table-todos.sql`. Then let's say you add a column to the table:
 
-The runtime client deliberately stays thin. sqlfu does not ship a database driver; it adapts the driver you already use. Sync drivers stay sync, async drivers stay async, and generated wrappers follow the same shape.
+```diff
+create table todos(
+   id int primary key,
+   text text not null,
+   completed_at int,
++  completion_note text
+)
+```
 
-## What it is not for
+When you run `sqlfu draft` again, a new migration file `00002_alter-table-todos.sql` will be created:
 
-sqlfu is pre-alpha. The runtime surface is intentionally small, but the toolchain will still change.
+```sql
+alter table todos
+add colummn completion_note text;
+```
 
-It is also SQLite-first. There is a thin Node Postgres runtime adapter now, and [pgkit](https://github.com/mmkal/pgkit) is the Postgres-shaped predecessor, but the broader `@sqlfu/pg` dialect/toolchain story still needs fuller docs and examples before this stops being a SQLite-first project.
+From then, you just... build your app. If you want to change your schema, update definitions.sql. Write/edit/delete your queries freely. sqlfu will make sure they're correct and give you strong types for them.
 
-You should not adopt it to avoid learning SQL. That is the opposite of the point. sqlfu is for projects where SQL is welcome, reviewable, and central.
+## More
+
+There's lots more packed into sqlfu:
+
+- a CLI
+- a web-based admin UI (`npx sqlfu` - [demo](https://sqlfu.dev/ui?demo=1))
+- an [oxlint/eslint plugin](https://sqlfu.dev/docs/lint-plugin) for validating, formatting and naming queries
+- an [opinionated sql formatter](https://sqlfu.dev/docs/formatter) that produces nicer-looking sql than most others
+- [opentelemetry support](https://sqlfu.dev/docs/observability)
+
+With even more experimental and upcoming features:
+
+- postgres support
+- an outbox system
+- an inline-typescript mini-app config
 
 ## Prior art and thanks
 
@@ -167,3 +189,21 @@ The package leans on a lot of existing work:
 Vendored directories in the repo include attribution notes and local-change summaries so future updates can be applied deliberately.
 
 Try it with `npm install sqlfu`. Docs are at [sqlfu.dev](https://sqlfu.dev). Source is at [github.com/iterate/sqlfu](https://github.com/iterate/sqlfu).
+
+---
+
+## Migrations from the schema you want
+
+sqlfu's [approach](https://sqlfu.dev/docs/migration-model) is closer to [Atlas](https://atlasgo.io/versioned/diff) or [Skeema](https://www.skeema.io): the desired schema is a real artifact. It's `definitions.sql`, one file, read top to bottom. It is what the database *should* look like. Migrations are the ordered record of how you got there.
+
+When `definitions.sql` changes, `sqlfu draft` replays the existing migrations into a scratch database, compares that replayed schema with the desired schema, and writes the migration that closes the gap. You read it, edit it for renames or backfills, and commit it. The generated migration is not a decree. It is a draft in the language the database will execute.
+
+This is the part that made sqlfu feel worth packaging. Once schema, migrations, and queries are all SQL, the same tool can answer useful questions: does the live database match the repo, what would need to change, which migration files have already run, and what TypeScript should a query return?
+
+## What it is not for
+
+sqlfu is pre-alpha. The runtime surface is intentionally small, but the toolchain will still change.
+
+It is also SQLite-first. There is a thin Node Postgres runtime adapter now, and [pgkit](https://github.com/mmkal/pgkit) is the Postgres-shaped predecessor, but the broader `@sqlfu/pg` dialect/toolchain story still needs fuller docs and examples before this stops being a SQLite-first project.
+
+You should not adopt it to avoid learning SQL. That is the opposite of the point. sqlfu is for projects where SQL is welcome, reviewable, and central.

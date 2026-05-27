@@ -1,4 +1,4 @@
-import {applyMigrations, migrationName, type Migration} from '../migrations/index.js';
+import {applyMigrations, type Migration} from '../migrations/index.js';
 import {sqlReturnsRows} from '../sqlite-text.js';
 import type {
   Client,
@@ -109,8 +109,4 @@ function runInlineQuery<TClient extends Client>(
     return stmt.all(params).finally(() => stmt[Symbol.asyncDispose]());
   }
   return stmt.run(params).finally(() => stmt[Symbol.asyncDispose]());
-}
-
-export function inlineMigrationName(migration: InlineSqlfuMigration): string {
-  return migrationName({path: `${migration.name}.sql`});
 }

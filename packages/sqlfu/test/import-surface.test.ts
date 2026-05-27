@@ -26,7 +26,6 @@ test('built api entry exposes commands plus inline module helpers', async () => 
     'baseline',
     'check',
     'config',
-    'createSqlfuApi',
     'draft',
     'find',
     'format',

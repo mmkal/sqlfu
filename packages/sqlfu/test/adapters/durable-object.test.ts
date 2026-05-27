@@ -257,14 +257,16 @@ test('inlineSqlfu modules generate, draft, and migrate durable object storage ac
 
   const generatedV1 = await fixture.readWorkerSource();
   expect(generatedV1).toContain('createPost: sql<{ parameters: { slug: string } }>`');
-  expect(generatedV1).toContain('listPosts: sql<{ parameters: { limit: number }; result: { slug: string } }>`');
+  expect(generatedV1).toContain(
+    'listPosts: sql<{ parameters: { limit: number }; result: { slug: string; published_at: string | null } }>`',
+  );
   expect(generatedV1).toMatch(
-    /\{ name: '\d{4}-\d{2}-\d{2}T\d{2}\.\d{2}\.\d{2}\.\d{3}Z_create_posts', content: sql`create table posts\(slug text primary key\);` \}/u,
+    /\{ name: '\d{4}-\d{2}-\d{2}T\d{2}\.\d{2}\.\d{2}\.\d{3}Z_create_posts', content: sql`create table posts\(slug text primary key, published_at text\);` \}/u,
   );
 
   const initial = await fixture.deploy();
   await initial.stub.createPost('hello-world');
-  expect(await initial.stub.listPosts(10)).toMatchObject([{slug: 'hello-world'}]);
+  expect(await initial.stub.listPosts(10)).toMatchObject([{slug: 'hello-world', published_at: null}]);
 
   await fixture.writeWorkerSource(toWorkerSourceV2(generatedV1));
   await fixture.draft('add body');
@@ -272,24 +274,104 @@ test('inlineSqlfu modules generate, draft, and migrate durable object storage ac
 
   const generatedV2 = await fixture.readWorkerSource();
   expect(generatedV2).toContain(
-    'listPosts: sql<{ parameters: { limit: number }; result: { slug: string; body: string } }>`',
+    'listPosts: sql<{ parameters: { limit: number }; result: { slug: string; published_at: string | null; body: string | null } }>`',
   );
   expect(generatedV2).toMatch(
     /\{ name: '\d{4}-\d{2}-\d{2}T\d{2}\.\d{2}\.\d{2}\.\d{3}Z_add_body', content: sql`alter table posts add column body text;` \}/u,
   );
 
   const upgraded = await fixture.deploy();
-  expect(await upgraded.stub.listPosts(10)).toMatchObject([{slug: 'hello-world', body: null}]);
+  expect(await upgraded.stub.listPosts(10)).toMatchObject([
+    {slug: 'hello-world', published_at: null, body: null},
+  ]);
 
   await upgraded.stub.createPost('second-post', 'durable inline sql');
   expect(await upgraded.stub.listPosts(10)).toMatchObject([
-    {slug: 'hello-world', body: null},
-    {slug: 'second-post', body: 'durable inline sql'},
+    {slug: 'hello-world', published_at: null, body: null},
+    {slug: 'second-post', published_at: null, body: 'durable inline sql'},
   ]);
   expect(await upgraded.stub.appliedMigrations()).toMatchObject([
     {name: expect.stringContaining('_create_posts')},
     {name: expect.stringContaining('_add_body')},
   ]);
+});
+
+test('inlineSqlfu generation rejects query shapes that need generated wrapper runtime expansion', async () => {
+  await using fixture = await createInlineSqlfuDORedeployFixture();
+
+  await fixture.writeWorkerSource(dedent`
+    import {createDurableObjectClient} from 'sqlfu';
+    import {inlineSqlfu, sql} from 'sqlfu/api';
+
+    const app = inlineSqlfu({
+      definitions: sql\`
+        create table posts(slug text primary key);
+      \`,
+      migrations: [],
+      queries: {
+        listPosts: sql\`
+          select slug
+          from posts
+          where slug in (:slugs)
+        \`,
+      },
+    });
+
+    export class FixtureObject {
+      client: ReturnType<typeof createDurableObjectClient>;
+      db: typeof app.$type;
+
+      constructor(state: any) {
+        this.client = createDurableObjectClient(state.storage);
+        this.db = app(this.client);
+        this.db.migrate();
+      }
+    }
+  `);
+
+  await expect(fixture.generate()).rejects.toThrow(
+    'inlineSqlfu query listPosts cannot use scalar-array parameter "slugs" because inline runtime binds the SQL template directly.',
+  );
+});
+
+test('inlineSqlfu generation combines update data and where parameters into one runtime parameter object', async () => {
+  await using fixture = await createInlineSqlfuDORedeployFixture();
+
+  await fixture.writeWorkerSource(dedent`
+    import {createDurableObjectClient} from 'sqlfu';
+    import {inlineSqlfu, sql} from 'sqlfu/api';
+
+    const app = inlineSqlfu({
+      definitions: sql\`
+        create table posts(slug text primary key, body text not null);
+      \`,
+      migrations: [],
+      queries: {
+        updatePost: sql\`
+          update posts
+          set body = :body
+          where slug = :slug
+        \`,
+      },
+    });
+
+    export class FixtureObject {
+      client: ReturnType<typeof createDurableObjectClient>;
+      db: typeof app.$type;
+
+      constructor(state: any) {
+        this.client = createDurableObjectClient(state.storage);
+        this.db = app(this.client);
+        this.db.migrate();
+      }
+    }
+  `);
+
+  await fixture.generate();
+
+  expect(await fixture.readWorkerSource()).toContain(
+    'updatePost: sql<{ parameters: { body: string; slug: string } }>`',
+  );
 });
 
 test('createDurableObjectClient uses transactionSync when given durable object storage', async () => {
@@ -577,7 +659,7 @@ async function createInlineSqlfuDORedeployFixture() {
 
 type InlineSqlfuFixtureObject = {
   createPost(slug: string, body?: string | null): Promise<unknown>;
-  listPosts(limit: number): Promise<{slug: string; body?: string | null}[]>;
+  listPosts(limit: number): Promise<{slug: string; published_at: string | null; body?: string | null}[]>;
   appliedMigrations(): Promise<{name: string}[]>;
 };
 
@@ -609,13 +691,13 @@ function workerSourceV1() {
 
     const app = inlineSqlfu({
       definitions: sql\`
-        create table posts(slug text primary key);
+        create table posts(slug text primary key, published_at text);
       \`,
       migrations: [],
       queries: {
         createPost: sql\`insert into posts(slug) values (:slug)\`,
         listPosts: sql\`
-          select slug
+          select slug, published_at
           from posts
           order by slug
           limit :limit
@@ -672,9 +754,12 @@ function workerSourceV1() {
 
 function toWorkerSourceV2(source: string) {
   return source
-    .replace('create table posts(slug text primary key);', 'create table posts(slug text primary key, body text);')
+    .replace(
+      'create table posts(slug text primary key, published_at text);',
+      'create table posts(slug text primary key, published_at text, body text);',
+    )
     .replace('insert into posts(slug) values (:slug)', 'insert into posts(slug, body) values (:slug, :body)')
-    .replace(/select slug\n(\s+from posts)/u, 'select slug, body\n$1')
+    .replace(/select slug, published_at\n(\s+from posts)/u, 'select slug, published_at, body\n$1')
     .replace('async createPost(slug: string) {', 'async createPost(slug: string, body: string | null) {')
     .replace('return this.db.createPost({slug});', 'return this.db.createPost({slug, body});');
 }

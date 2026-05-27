@@ -8,7 +8,7 @@ branch: bedtime/2026-05-27-durable-object-inline-sqlfu
 
 ## Status
 
-Implementation is complete on the branch. Durable Objects can keep definitions, migrations, and queries in one `inlineSqlfu({...})` TypeScript module; `draft` appends inline migrations, `generate` writes inline query types, and Miniflare covers migration across redeployed object storage. The main remaining work is normal PR review, not known missing implementation.
+Implementation is complete on the branch. Durable Objects can keep definitions, migrations, and queries in one `inlineSqlfu({...})` TypeScript module; `draft` appends inline migrations, `generate` writes inline query types, and Miniflare covers migration across redeployed object storage. PR review found type/runtime divergence for inline row shapes and expansion-style parameters; those are now covered by tests and fixed.
 
 ## Assumptions
 
@@ -116,3 +116,5 @@ To do this it requires a fair amount of constraints on the source code. The rule
 - Inline modules are recognized without importing the configured module, so Worker globals and user module side effects do not run in the Node CLI.
 - The browser-safe TypeSQL analyzer path was split from the Node sqlite client loader so `sqlfu/analyze` keeps passing the strict import-surface check.
 - The vendor bundler now preserves the PostgreSQL formatter bundle as well as SQLite because `format(sql, {language: 'postgresql'})` imports it from `dist/formatter.js`.
+- PR review follow-up made inline result types match raw Durable Object rows (`published_at`, nullable columns) and rejects query shapes such as `in (:ids)` that would need generated wrapper runtime expansion.
+- The inline source reader no longer needs `ts-morph` at runtime, keeping `sqlfu/api` importable in Worker bundles and moving `ts-morph` back to dev-only tooling.

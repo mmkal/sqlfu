@@ -14,10 +14,8 @@ import type {
 import {formatSql} from '../formatter.js';
 import type {LoadedSqlfuProject} from '../config.js';
 import type {SqlfuHost} from '../host.js';
-import type {StartSqlfuServerOptions} from '../ui/server.js';
 import packageJson from '../../package.json' with {type: 'json'};
 
-export {createSqlfuApi} from './core.js';
 export type {Confirm, SqlfuApi} from './core.js';
 export {inlineSqlfu} from './inline.js';
 export {sql} from '../sql.js';
@@ -55,19 +53,25 @@ export async function sync(input: SyncOptions & NodeApiOptions): Promise<void> {
 }
 
 export async function draft(input: DraftOptions & NodeApiOptions) {
-  const inline = await loadInlineNodeProject(input);
-  if (inline) {
+  const {project, host} = await loadInitializedNodeProject(input);
+  if ('inline' in project) {
     const {draftInlineSqlfuMigration} =
       await load<typeof import('../node/inline-commands.js')>('../node/inline-commands.js');
     return draftInlineSqlfuMigration({
-      modulePath: inline.project.inline.modulePath,
-      projectRoot: inline.project.projectRoot,
-      host: inline.host,
+      modulePath: project.inline.modulePath,
+      projectRoot: project.projectRoot,
+      host,
       name: input.name,
       confirm: input.confirm,
     });
   }
-  return (await createNodeSqlfuApi(input)).draft(input);
+  const {createSqlfuApi} = await load<typeof import('./core.js')>('./core.js');
+  return createSqlfuApi({
+    projectRoot: project.projectRoot,
+    configPath: project.configPath,
+    config: project.config,
+    host,
+  }).draft(input);
 }
 
 export async function migrate(input: MigrateOptions & NodeApiOptions): Promise<void> {
@@ -117,9 +121,9 @@ export function format(sql: string, options: {language?: 'sqlite' | 'postgresql'
   return formatSql(sql, {language: options.language});
 }
 
-export async function serve(input: ServeOptions = {}) {
+export async function serve(input: ServeOptions = {}): Promise<unknown> {
   const project = await loadNodeProjectState(input);
-  const params: StartSqlfuServerOptions = {port: input.port, configPath: project.configPath};
+  const params = {port: input.port, configPath: project.configPath};
   if (input.ui) {
     const {resolveSqlfuUi} = await load<typeof import('../ui/resolve-sqlfu-ui.js')>(
       '../ui/resolve-sqlfu-ui.js',
@@ -170,16 +174,6 @@ async function loadInitializedNodeProject(
       throw new Error(`No sqlfu config found at ${project.configPath}. Run 'sqlfu init' first.`);
     }
     throw new Error(`No sqlfu config found in ${project.projectRoot}. Run 'sqlfu init' first.`);
-  }
-  return {project, host};
-}
-
-async function loadInlineNodeProject(
-  input: NodeApiOptions,
-): Promise<{project: Extract<LoadedSqlfuProject, {initialized: true; inline: unknown}>; host: SqlfuHost} | null> {
-  const {project, host} = await loadInitializedNodeProject(input);
-  if (!('inline' in project)) {
-    return null;
   }
   return {project, host};
 }

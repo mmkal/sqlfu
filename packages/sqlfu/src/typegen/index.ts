@@ -167,7 +167,8 @@ export async function generateInlineSqlfuTypes(input: {
       explicitParameterExpansions: querySource.parameterExpansions,
       sourceSql: querySource.sqlContent,
     });
-    queryTypes.set(querySource.functionName, renderInlineSqlfuQueryType(prepared.descriptor, 'camel'));
+    assertInlineSqlfuRuntimeSupported(querySource, prepared.descriptor, prepared.parameterExpansions);
+    queryTypes.set(querySource.functionName, renderInlineSqlfuQueryType(prepared.descriptor, 'preserve'));
   }
 
   await writeInlineQueryTypes(input.modulePath, queryTypes);
@@ -195,11 +196,9 @@ function renderInlineSqlfuQueryType(
 ): string {
   const {descriptor: cased} = applyGeneratedInputCasing(descriptor, casing);
   const parts: string[] = [];
-  if ((cased.data?.length ?? 0) > 0) {
-    parts.push(`data: ${renderInlineTypeLiteral(cased.data!, 'parameter')}`);
-  }
-  if (cased.parameters.length > 0) {
-    parts.push(`parameters: ${renderInlineTypeLiteral(cased.parameters, 'parameter')}`);
+  const parameterFields = [...(cased.data || []), ...cased.parameters];
+  if (parameterFields.length > 0) {
+    parts.push(`parameters: ${renderInlineTypeLiteral(parameterFields, 'parameter')}`);
   }
   if (getResultMode(cased) !== 'metadata') {
     const resultFields = mapColumnDerivedFields(getResultFields(cased), casing).publicFields;
@@ -211,9 +210,39 @@ function renderInlineSqlfuQueryType(
 function renderInlineTypeLiteral(fields: GeneratedField[], fieldKind: 'parameter' | 'result'): string {
   const properties = fields.map((field) => {
     const optional = fieldKind === 'parameter' && Boolean(field.optional);
-    return `${field.name}${optional ? '?' : ''}: ${fieldTypeExpression(field, fieldKind)}`;
+    return `${field.name}${optional ? '?' : ''}: ${inlineFieldTypeExpression(field, fieldKind)}`;
   });
   return `{ ${properties.join('; ')} }`;
+}
+
+function inlineFieldTypeExpression(field: GeneratedField, fieldKind: 'parameter' | 'result'): string {
+  const typeExpression = fieldTypeExpression(field, fieldKind);
+  if (fieldKind === 'result' && !field.notNull) {
+    return `${typeExpression} | null`;
+  }
+  return typeExpression;
+}
+
+function assertInlineSqlfuRuntimeSupported(
+  querySource: QuerySource,
+  descriptor: GeneratedQueryDescriptor,
+  parameterExpansions: ParameterExpansion[],
+): void {
+  const expansion = parameterExpansions[0];
+  if (expansion) {
+    throw new Error(
+      `inlineSqlfu query ${querySource.functionName} cannot use ${expansion.kind} parameter "${expansion.name}" because inline runtime binds the SQL template directly.`,
+    );
+  }
+
+  const convertedParameter = [...(descriptor.data || []), ...descriptor.parameters].find(
+    (field) => inferDriverEncoding(field) !== 'identity',
+  );
+  if (convertedParameter) {
+    throw new Error(
+      `inlineSqlfu query ${querySource.functionName} cannot use non-identity driver parameter "${convertedParameter.name}" because inline runtime binds the SQL template directly.`,
+    );
+  }
 }
 
 function projectRelativePath(config: Pick<SqlfuProjectConfig, 'projectRoot'>, filePath: string) {

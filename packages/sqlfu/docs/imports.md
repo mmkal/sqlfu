@@ -30,11 +30,13 @@ Use `sqlfu/api` for programmatic access to the functionality behind `npx sqlfu` 
 
 ```ts
 import {check, draft, format, migrate} from 'sqlfu/api';
+import {createSqlfuApi} from 'sqlfu/api/core';
 
 await check();
 await draft({name: 'add-posts', confirm: (params) => params.body});
 await migrate({confirm: (params) => params.body});
 const formatted = format('SELECT * FROM users WHERE id=1;');
+const api = createSqlfuApi({projectRoot, config, host});
 ```
 
 Note: Mutating commands require a `confirm` callback anywhere the CLI would ask the
@@ -43,7 +45,15 @@ returning `null` or empty string cancels. For "yolo" mode just return `params.bo
 
 `format('select foo from bar')` is slightly different to the `npx sqlfu format` command: instead of modifying files in place, it just formats the sql you pass to it.
 
-`sqlfu/api` *does* import from some `node:*` modules. It uses simple filesystem and path functions, so can be used from Bun too. Right now, because of the filesystem access, it should not be used from the browser, or from Cloudflare Workers, even with nodejs_compat. See `sqlfu/api/core` below for that. Aside from `format()`, it loads project config from the current process, creates the default Node host, and may import command, server, typegen, and file system code.
+The inline helpers exported from `sqlfu/api`, such as `inlineSqlfu` and `sql`,
+are safe to import in Workers. The command functions (`draft`, `generate`,
+`migrate`, `serve`, etc.) dynamically load Node-only project/config code when
+called, so call those from Node or Bun tooling, not from runtime Worker request
+handlers.
+
+`createSqlfuApi` lives on `sqlfu/api/core` rather than `sqlfu/api` because it is
+the host-explicit command facade. Use it when you are embedding sqlfu operations
+behind your own host, UI, tests, or runtime boundary.
 
 ## `sqlfu/api/core`
 

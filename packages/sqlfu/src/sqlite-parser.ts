@@ -136,7 +136,7 @@ class TokenCursor {
     const raw = sql.slice(nameToken.start, nameToken.stop + 1);
     return {
       name: parseSqliteIdentifierName(raw),
-      start: nameToken.start,
+      start: first.start,
       end: nameToken.stop + 1,
     };
   }

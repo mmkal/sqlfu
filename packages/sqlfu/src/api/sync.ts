@@ -5,7 +5,6 @@ import type {SqliteInspectedDatabase} from '../schemadiff/sqlite/types.js';
 import {
   classifySqliteCreateStatement,
   replaceSqliteIdentifierSpan,
-  type SqliteCreateStatement,
   type SqliteIdentifierSpan,
 } from '../sqlite-parser.js';
 import {splitSqlStatements} from '../sqlite-text.js';
@@ -103,121 +102,73 @@ function orderedSchemaStatements(sql: string): string[] {
     createStatement: classifySqliteCreateStatement(statement),
   }));
   return [
-    ...statements.filter((entry) => hasCreateKind(entry.createStatement, 'table')),
-    ...statements.filter((entry) => hasCreateKind(entry.createStatement, 'index')),
-    ...statements.filter((entry) => hasCreateKind(entry.createStatement, 'view')),
+    ...statements.filter((entry) => entry.createStatement?.kind === 'table'),
+    ...statements.filter((entry) => entry.createStatement?.kind === 'index'),
+    ...statements.filter((entry) => entry.createStatement?.kind === 'view'),
     ...statements.filter(
       (entry) =>
-        !hasCreateKind(entry.createStatement, 'table') &&
-        !hasCreateKind(entry.createStatement, 'index') &&
-        !hasCreateKind(entry.createStatement, 'view'),
+        entry.createStatement?.kind !== 'table' &&
+        entry.createStatement?.kind !== 'index' &&
+        entry.createStatement?.kind !== 'view',
     ),
   ].map((entry) => entry.statement);
 }
 
 function toPrefixedSchemaStatement(statement: string): string {
   const createStatement = classifySqliteCreateStatement(statement);
-  if (hasCreateKind(createStatement, 'virtual-table')) {
-    throw new Error('runtime sync does not support sqlite virtual tables yet');
+  if (!createStatement) {
+    throw new Error(
+      'runtime sync definitions only support create table, create index, create view, and create trigger',
+    );
   }
-  if (hasCreateKind(createStatement, 'table')) {
-    return prefixCreateObjectName(statement, 'table');
+  switch (createStatement.kind) {
+    case 'virtual-table':
+      throw new Error('runtime sync does not support sqlite virtual tables yet');
+    case 'table':
+    case 'view':
+      return replaceRequiredIdentifier(statement, createStatement.name, (name) =>
+        quoteIdentifier(`${syncObjectPrefix}${name}`),
+      );
+    case 'index':
+    case 'trigger':
+      return replaceRequiredIdentifiers(statement, [
+        {identifier: createStatement.name, replacement: (name) => quoteIdentifier(`${syncObjectPrefix}${name}`)},
+        {identifier: createStatement.onName, replacement: (name) => quoteIdentifier(`${syncObjectPrefix}${name}`)},
+      ]);
   }
-  if (hasCreateKind(createStatement, 'index')) {
-    return prefixCreateIndexStatement(statement);
-  }
-  if (hasCreateKind(createStatement, 'view')) {
-    return prefixCreateObjectName(statement, 'view');
-  }
-  if (hasCreateKind(createStatement, 'trigger')) {
-    return prefixCreateTriggerStatement(statement);
-  }
-  throw new Error('runtime sync definitions only support create table, create index, create view, and create trigger');
 }
 
 function toAttachedSchemaStatement(statement: string, schemaName: string): string {
   const createStatement = classifySqliteCreateStatement(statement);
-  if (hasCreateKind(createStatement, 'virtual-table')) {
+  if (!createStatement) {
+    throw new Error(
+      'runtime sync definitions only support create table, create index, create view, and create trigger',
+    );
+  }
+  if (createStatement.kind === 'virtual-table') {
     throw new Error('runtime sync does not support sqlite virtual tables yet');
   }
-  if (createStatement && createStatement.temporary) {
+  if (createStatement.temporary) {
     throw new Error('runtime sync scratch-db definitions do not support temp schema objects');
   }
-  if (hasCreateKind(createStatement, 'table')) {
-    return qualifyCreateObjectName(statement, 'table', schemaName);
+  switch (createStatement.kind) {
+    case 'table':
+    case 'view':
+      return replaceRequiredIdentifier(
+        statement,
+        createStatement.name,
+        (name) => `${quoteIdentifier(schemaName)}.${quoteIdentifier(name)}`,
+      );
+    case 'index':
+    case 'trigger':
+      return replaceRequiredIdentifiers(statement, [
+        {
+          identifier: createStatement.name,
+          replacement: (name) => `${quoteIdentifier(schemaName)}.${quoteIdentifier(name)}`,
+        },
+        {identifier: createStatement.onName, replacement: (name) => quoteIdentifier(name)},
+      ]);
   }
-  if (hasCreateKind(createStatement, 'index')) {
-    return qualifyCreateIndexStatement(statement, schemaName);
-  }
-  if (hasCreateKind(createStatement, 'view')) {
-    return qualifyCreateObjectName(statement, 'view', schemaName);
-  }
-  if (hasCreateKind(createStatement, 'trigger')) {
-    return qualifyCreateTriggerStatement(statement, schemaName);
-  }
-  throw new Error('runtime sync definitions only support create table, create index, create view, and create trigger');
-}
-
-function hasCreateKind(createStatement: SqliteCreateStatement | null, kind: SqliteCreateStatement['kind']): boolean {
-  return !!createStatement && createStatement.kind === kind;
-}
-
-function prefixCreateObjectName(statement: string, kind: 'table' | 'view'): string {
-  const createStatement = expectCreateStatement(statement, kind);
-  return replaceRequiredIdentifier(statement, createStatement.name, (name) =>
-    quoteIdentifier(`${syncObjectPrefix}${name}`),
-  );
-}
-
-function prefixCreateIndexStatement(statement: string): string {
-  const createStatement = expectCreateStatement(statement, 'index');
-  return replaceRequiredIdentifiers(statement, [
-    {identifier: createStatement.name, replacement: (name) => quoteIdentifier(`${syncObjectPrefix}${name}`)},
-    {identifier: createStatement.onName, replacement: (name) => quoteIdentifier(`${syncObjectPrefix}${name}`)},
-  ]);
-}
-
-function prefixCreateTriggerStatement(statement: string): string {
-  const createStatement = expectCreateStatement(statement, 'trigger');
-  return replaceRequiredIdentifiers(statement, [
-    {identifier: createStatement.name, replacement: (name) => quoteIdentifier(`${syncObjectPrefix}${name}`)},
-    {identifier: createStatement.onName, replacement: (name) => quoteIdentifier(`${syncObjectPrefix}${name}`)},
-  ]);
-}
-
-function qualifyCreateObjectName(statement: string, kind: 'table' | 'view', schemaName: string): string {
-  const createStatement = expectCreateStatement(statement, kind);
-  return replaceRequiredIdentifier(
-    statement,
-    createStatement.name,
-    (name) => `${quoteIdentifier(schemaName)}.${quoteIdentifier(name)}`,
-  );
-}
-
-function qualifyCreateIndexStatement(statement: string, schemaName: string): string {
-  const createStatement = expectCreateStatement(statement, 'index');
-  return replaceRequiredIdentifier(
-    statement,
-    createStatement.name,
-    (name) => `${quoteIdentifier(schemaName)}.${quoteIdentifier(name)}`,
-  );
-}
-
-function qualifyCreateTriggerStatement(statement: string, schemaName: string): string {
-  const createStatement = expectCreateStatement(statement, 'trigger');
-  return replaceRequiredIdentifier(
-    statement,
-    createStatement.name,
-    (name) => `${quoteIdentifier(schemaName)}.${quoteIdentifier(name)}`,
-  );
-}
-
-function expectCreateStatement(statement: string, kind: SqliteCreateStatement['kind']): SqliteCreateStatement {
-  const createStatement = classifySqliteCreateStatement(statement);
-  if (!createStatement || createStatement.kind !== kind) {
-    throw new Error(`runtime sync could not parse schema definition statement: ${statement}`);
-  }
-  return createStatement;
 }
 
 function replaceRequiredIdentifier(

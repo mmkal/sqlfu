@@ -1,6 +1,11 @@
 import {expect, test} from 'vitest';
 
-import {classifySqliteCreateStatement, containsSqliteKeyword, firstSqliteKeyword} from '../src/sqlite-parser.js';
+import {
+  classifySqliteCreateStatement,
+  containsSqliteKeyword,
+  firstSqliteKeyword,
+  replaceSqliteIdentifierSpan,
+} from '../src/sqlite-parser.js';
 
 test('sqlite parser facade classifies create statements through comments', () => {
   expect(
@@ -64,4 +69,17 @@ test('sqlite parser facade does not treat strings or quoted identifiers as keywo
       'returning',
     ),
   ).toBe(true);
+});
+
+test('sqlite parser facade spans the full qualified identifier when naming the final segment', () => {
+  const sql = `create table main.posts (id integer);`;
+  const createStatement = classifySqliteCreateStatement(sql);
+
+  expect(createStatement).toMatchObject({
+    kind: 'table',
+    name: {name: 'posts', start: 13, end: 23},
+  });
+  expect(replaceSqliteIdentifierSpan(sql, createStatement!.name!, `"scratch"."posts"`)).toBe(
+    `create table "scratch"."posts" (id integer);`,
+  );
 });

@@ -8,7 +8,7 @@
  * inspected models, emit ordered statements" shape.
  */
 import type {SqlfuHost} from '../../host.js';
-import {classifySqliteCreateStatement, type SqliteCreateStatement} from '../../sqlite-parser.js';
+import {classifySqliteCreateStatement} from '../../sqlite-parser.js';
 import {splitSqlStatements} from '../../sqlite-text.js';
 import type {AsyncClient} from '../../types.js';
 import {inspectSqliteSchema} from './inspect.js';
@@ -65,7 +65,7 @@ export function schemasEqual(left: SqliteInspectedDatabase, right: SqliteInspect
 
 function assertNoUnsupportedSqlText(sql: string, source: 'baselineSql' | 'desiredSql'): void {
   for (const statement of splitSqlStatements(sql)) {
-    if (hasCreateKind(classifySqliteCreateStatement(statement), 'virtual-table')) {
+    if (classifySqliteCreateStatement(statement)?.kind === 'virtual-table') {
       throw new Error(
         `sqlite virtual tables are not supported by the native schema diff engine yet: found virtual table sql in ${source}`,
       );
@@ -79,24 +79,20 @@ async function applySchemaSql(client: AsyncClient, sql: string): Promise<void> {
     createStatement: classifySqliteCreateStatement(statement),
   }));
   const orderedStatements = [
-    ...statements.filter((entry) => hasCreateKind(entry.createStatement, 'table')),
-    ...statements.filter((entry) => hasCreateKind(entry.createStatement, 'index')),
-    ...statements.filter((entry) => hasCreateKind(entry.createStatement, 'view')),
+    ...statements.filter((entry) => entry.createStatement?.kind === 'table'),
+    ...statements.filter((entry) => entry.createStatement?.kind === 'index'),
+    ...statements.filter((entry) => entry.createStatement?.kind === 'view'),
     ...statements.filter(
       (entry) =>
-        !hasCreateKind(entry.createStatement, 'table') &&
-        !hasCreateKind(entry.createStatement, 'index') &&
-        !hasCreateKind(entry.createStatement, 'view'),
+        entry.createStatement?.kind !== 'table' &&
+        entry.createStatement?.kind !== 'index' &&
+        entry.createStatement?.kind !== 'view',
     ),
   ];
 
   for (const entry of orderedStatements) {
     await client.raw(entry.statement);
   }
-}
-
-function hasCreateKind(createStatement: SqliteCreateStatement | null, kind: SqliteCreateStatement['kind']): boolean {
-  return !!createStatement && createStatement.kind === kind;
 }
 
 function stableStringify(value: unknown): string {

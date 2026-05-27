@@ -55,7 +55,7 @@ async function createPackedPackageFixture() {
       import {createSqlfuApi} from 'sqlfu/api/core';
 
       assert.equal(typeof createSqlfuApi, 'function');
-      assert.equal(format('SELECT * FROM users WHERE id=1;'), 'select *\\nfrom users\\nwhere id = 1;');
+      assert.equal(await format('SELECT * FROM users WHERE id=1;'), 'select *\\nfrom users\\nwhere id = 1;');
     `,
     'cloudflare-import.mjs': `
       import assert from 'node:assert/strict';

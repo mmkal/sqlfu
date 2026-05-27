@@ -35,7 +35,7 @@ import {createSqlfuApi} from 'sqlfu/api/core';
 await check();
 await draft({name: 'add-posts', confirm: (params) => params.body});
 await migrate({confirm: (params) => params.body});
-const formatted = format('SELECT * FROM users WHERE id=1;');
+const formatted = await format('SELECT * FROM users WHERE id=1;');
 const api = createSqlfuApi({projectRoot, config, host});
 ```
 
@@ -43,7 +43,7 @@ Note: Mutating commands require a `confirm` callback anywhere the CLI would ask 
 user to review SQL or generated file contents. Returning the body (or a modified body) accepts it;
 returning `null` or empty string cancels. For "yolo" mode just return `params.body`, or you can insert your own approval/modification workflow.
 
-`format('select foo from bar')` is slightly different to the `npx sqlfu format` command: instead of modifying files in place, it just formats the sql you pass to it.
+`await format('select foo from bar')` is slightly different to the `npx sqlfu format` command: instead of modifying files in place, it just formats the sql you pass to it.
 
 The inline helpers exported from `sqlfu/api`, such as `inlineSqlfu` and `sql`,
 are safe to import in Workers. The command functions (`draft`, `generate`,

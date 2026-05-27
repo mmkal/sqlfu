@@ -11,7 +11,6 @@ import type {
   PendingOptions,
   SyncOptions,
 } from './core.js';
-import {formatSql} from '../formatter.js';
 import type {LoadedSqlfuProject} from '../config.js';
 import type {SqlfuHost} from '../host.js';
 import packageJson from '../../package.json' with {type: 'json'};
@@ -117,7 +116,8 @@ export async function generate(input: GenerateOptions = {}) {
   return generateQueryTypesForConfig(project.config, host);
 }
 
-export function format(sql: string, options: {language?: 'sqlite' | 'postgresql'} = {}) {
+export async function format(sql: string, options: {language?: 'sqlite' | 'postgresql'} = {}) {
+  const {formatSql} = await load<typeof import('../formatter.js')>('../formatter.js');
   return formatSql(sql, {language: options.language});
 }
 

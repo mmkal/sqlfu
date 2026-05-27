@@ -246,7 +246,7 @@ create table todos(
    id integer primary key,
    text text not null,
    completed_at int,
-+  completion_note text
++   completion_note text
 )
 ```
 

@@ -26,8 +26,11 @@ export function firstSqliteKeyword(sql: string): string | null {
   const tokens = tryTokenizeSqlite(sql);
   if (!tokens) return fallbackFirstKeyword(sql);
   const first = tokens[0];
-  if (!first || first.kind !== 'KEYWORD') return null;
-  return first.value.toLowerCase();
+  if (!first) return null;
+  if (first.kind === 'KEYWORD') return first.value.toLowerCase();
+  const fallback = fallbackFirstKeyword(sql);
+  if (fallback && fallback === first.value.toLowerCase()) return fallback;
+  return null;
 }
 
 export function containsSqliteKeyword(sql: string, keyword: string): boolean {

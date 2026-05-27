@@ -189,6 +189,27 @@ test('runtime sync orders commented quoted create definitions by statement kind'
   ]);
 });
 
+test('runtime sync rewrites bare identifiers that contain dollar signs', () => {
+  using fixture = createRuntimeSyncFixture();
+
+  sync(fixture.client, {
+    definitions: `
+      create table foo$bar (
+        id integer primary key
+      );
+    `,
+  });
+
+  expect(
+    fixture.client.all<{name: string}>(sql`
+      select name
+      from sqlite_schema
+      where type = 'table'
+        and name = 'foo$bar'
+    `),
+  ).toMatchObject([{name: 'foo$bar'}]);
+});
+
 function createRuntimeSyncFixture() {
   const db = new BetterSqlite3(':memory:');
   return {

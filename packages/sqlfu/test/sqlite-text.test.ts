@@ -24,4 +24,6 @@ test('sql row-return classification ignores comments, strings, and quoted identi
   expect(sqlReturnsRows(`update "returning" set note = 'returning'`)).toBe(false);
   expect(sqlReturnsRows(`insert into posts (note) values ('saved') returning id`)).toBe(true);
   expect(sqlReturnsRows(`select value::json from events`)).toBe(true);
+  expect(sqlReturnsRows(`show timezone`)).toBe(true);
+  expect(sqlReturnsRows(`fetch all from cursor_name`)).toBe(true);
 });

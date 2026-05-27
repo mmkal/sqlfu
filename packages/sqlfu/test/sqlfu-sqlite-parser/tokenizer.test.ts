@@ -154,6 +154,25 @@ test('handles all parameter marker flavors', () => {
 	`);
 });
 
+test('allows dollar signs inside bare identifiers without confusing parameter starts', () => {
+  expect(simplify(tokenize(`create table foo$bar (id integer, value text default $default)`))).toMatchInlineSnapshot(`
+		[
+		  "KEYWORD CREATE",
+		  "KEYWORD TABLE",
+		  "IDENTIFIER foo$bar",
+		  "OPEN_PAR (",
+		  "IDENTIFIER id",
+		  "IDENTIFIER integer",
+		  "COMMA ,",
+		  "IDENTIFIER value",
+		  "IDENTIFIER text",
+		  "KEYWORD DEFAULT",
+		  "BIND_PARAMETER $default",
+		  "CLOSE_PAR )",
+		]
+	`);
+});
+
 test('handles string literals with doubled-quote escape', () => {
   // The value includes the opening/closing quotes verbatim — the parser is
   // responsible for stripping/unescaping later, matching ANTLR behavior.

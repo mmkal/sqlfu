@@ -414,7 +414,7 @@ function isIdentStart(ch: number): boolean {
 }
 
 function isIdentCont(ch: number): boolean {
-	return isIdentStart(ch) || isDigit(ch);
+	return isIdentStart(ch) || isDigit(ch) || ch === 0x24 /* $ */;
 }
 
 function isDigit(ch: number): boolean {

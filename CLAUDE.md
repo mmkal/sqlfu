@@ -3,6 +3,8 @@ Note: this library is in pre-pre-pre-alpha. There are zero users. It is EXTREMEL
 
 Prefer lowercase SQL keywords.
 
+Do not parse SQL with fragile regexes; use `packages/sqlfu/src/sqlite-parser.ts` for SQLite parser-shaped work.
+
 ## Docs examples
 
 For small docs, examples, and guides, put query examples in a catch-all

@@ -18,10 +18,6 @@ export type SqliteIdentifierSpan = {
   end: number;
 };
 
-export function tokenizeSqlite(sql: string): SqliteToken[] {
-  return tokenize(sql);
-}
-
 export function firstSqliteKeyword(sql: string): string | null {
   const tokens = tryTokenizeSqlite(sql);
   if (!tokens) return fallbackFirstKeyword(sql);

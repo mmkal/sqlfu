@@ -11,7 +11,7 @@ base: main
 
 - Done: internal facade, caller migrations, focused tests, package typecheck, and formatter check are complete.
 - Main completed pieces: token-backed keyword helpers and CREATE header spans now drive runtime sync, schemadiff SQL application/virtual-table detection, and row-return classification.
-- Main missing pieces: named-parameter scanning still uses its existing scanner; PR review/CI remain external follow-up.
+- Main missing pieces: named-parameter scanning still uses its existing scanner.
 
 ## Goal
 
@@ -33,7 +33,7 @@ Replace a meaningful set of ad hoc SQLite regex/string-scanning call sites with 
 
 ## Checklist
 
-- [x] Add the common parser facade module. _Implemented `packages/sqlfu/src/sqlite-parser.ts` with tokenization, first-keyword, keyword-presence, CREATE statement classification, and CREATE identifier-span helpers._
+- [x] Add the common parser facade module. _Implemented `packages/sqlfu/src/sqlite-parser.ts` with first-keyword, keyword-presence, CREATE statement classification, and CREATE identifier-span helpers._
 - [x] Replace at least two parser-like regex/string-scanning call sites with the facade. _Runtime sync and schemadiff now use token-backed CREATE classification; runtime sync rewrites CREATE names from token spans; `sqlReturnsRows` uses facade keyword helpers instead of local regexes._
 - [x] Add or update focused tests for quoted identifiers, comments, casts, and multi-statement SQL. _Added `sqlite-parser`, `sqlite-text`, `api-sync`, and schemadiff plumbing coverage for comments, strings, quoted identifiers, PostgreSQL-style casts, and index-before-table ordering._
 - [x] Run targeted tests. _Passed `pnpm --filter sqlfu exec vitest run test/sqlite-parser.test.ts test/sqlite-text.test.ts test/api-sync.test.ts test/schemadiff/plumbing.test.ts`, `pnpm --filter sqlfu typecheck`, and targeted `oxfmt --check`._
@@ -44,6 +44,6 @@ Replace a meaningful set of ad hoc SQLite regex/string-scanning call sites with 
 
 - 2026-05-27: Task split from bedtime architecture request. This branch is the main-based dealer's-choice implementation.
 - 2026-05-27: Chose not to move named-parameter scanning in this pass. The first branch value was higher in centralizing CREATE/keyword classification, and the existing query-parameter scanner already has cast/comment/string coverage.
-- 2026-05-27: The facade catches tokenizer failures only for tolerant keyword/classification helpers so existing row-return behavior for PostgreSQL-ish ad hoc SQL such as `select value::json` does not regress. Strict callers can still use `tokenizeSqlite`.
+- 2026-05-27: The facade catches tokenizer failures only for tolerant keyword/classification helpers so existing row-return behavior for PostgreSQL-ish ad hoc SQL such as `select value::json` does not regress.
 - 2026-05-27: Parent review found the old runtime-sync rewrite regexes still failed for comments between CREATE keywords. The facade now returns object-name and `on`-table spans from the tokenizer, and runtime sync uses those spans instead of regex groups for prefixing/qualifying CREATE statements.
 - 2026-05-27: Review found two facade regressions before merge: bare identifiers with `$` could be partially rewritten, and PostgreSQL `show`/`fetch` row-return classification was lost because those words are not SQLite keywords. Fixed by allowing `$` as an identifier continuation in the tokenizer and letting `firstSqliteKeyword` fall back to the first word when tokenization succeeds but the first token is an identifier.

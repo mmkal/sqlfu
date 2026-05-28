@@ -25,7 +25,7 @@ export async function dumpFixtureFs(
   const files = await collectFixtureFiles(root, '', new Set(input.ignoredNames ?? []));
   const filteredFiles = files.filter((file) => matchesGlobs(file.relativePath, input));
   const lines = await renderFixtureFiles(filteredFiles);
-  return `${lines.join('\n')}\n`;
+  return `${lines.map((line) => (line.trim() ? line : '')).join('\n')}\n`;
 }
 
 export function withTrailingNewline(value: string) {

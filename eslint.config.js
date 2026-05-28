@@ -21,51 +21,6 @@ import tseslint from 'typescript-eslint';
 
 import sqlfu from './scripts/dogfood-lint-plugin.js';
 
-const inlineSnapshotMatchers = new Set(['toMatchInlineSnapshot', 'toThrowErrorMatchingInlineSnapshot']);
-
-// `unicorn/template-indent` always targets inline snapshots in addition to the
-// configured tags. Keep the upstream rule/fixer, but make this repo's
-// `unicorn/template-indent` reports match the `sql`-tag-only configuration.
-const isInlineSnapshotTemplate = (node) => {
-  const parent = node.parent;
-  if (!parent || parent.type !== 'CallExpression' || !parent.arguments.includes(node)) {
-    return false;
-  }
-
-  const {callee} = parent;
-  return (
-    callee.type === 'MemberExpression' &&
-    callee.property.type === 'Identifier' &&
-    inlineSnapshotMatchers.has(callee.property.name)
-  );
-};
-
-const sqlOnlyTemplateIndentRule = {
-  meta: unicorn.rules['template-indent'].meta,
-  create(context) {
-    const sqlScopedContext = Object.create(context);
-    Object.defineProperty(sqlScopedContext, 'report', {
-      value(descriptor) {
-        if (descriptor.node && isInlineSnapshotTemplate(descriptor.node)) {
-          return;
-        }
-
-        return context.report(descriptor);
-      },
-    });
-
-    return unicorn.rules['template-indent'].create(sqlScopedContext);
-  },
-};
-
-const unicornWithSqlScopedTemplateIndent = {
-  ...unicorn,
-  rules: {
-    ...unicorn.rules,
-    'template-indent': sqlOnlyTemplateIndentRule,
-  },
-};
-
 export default [
   {
     ignores: [
@@ -99,7 +54,7 @@ export default [
   },
   {
     plugins: {
-      unicorn: unicornWithSqlScopedTemplateIndent,
+      unicorn,
       /** @type {import('eslint').ESLint.Plugin} */
       repolocal: {
         rules: {

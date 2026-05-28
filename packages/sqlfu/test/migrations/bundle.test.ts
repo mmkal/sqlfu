@@ -35,14 +35,14 @@ test('generate emits a typed migrations bundle that can apply migrations without
           // A bundle of every migration in migrations/,
           // importable from runtimes without filesystem access (durable objects, edge workers, browsers).
           // Use \`migrate(client)\` for the common path, or \`migrations\` for lower-level control.
-          
+
           import {applyMigrations, migrationsFromBundle, type AsyncClient, type Client, type SyncClient} from 'sqlfu';
-          
+
           export const migrations = {
             "migrations/2026-04-10T00.00.00.000Z_create_posts.sql": "create table posts (id integer primary key, slug text not null);\\n",
             "migrations/2026-04-10T01.00.00.000Z_add_body.sql": "alter table posts add column body text;\\n",
           };
-          
+
           export function migrate(client: SyncClient): void;
           export function migrate(client: AsyncClient): Promise<void>;
           export function migrate(client: Client): void | Promise<void> {
@@ -51,7 +51,7 @@ test('generate emits a typed migrations bundle that can apply migrations without
               preset: "sqlfu",
             });
           }
-          
+
           export type MigrationBundle = typeof migrations;
     "
   `);

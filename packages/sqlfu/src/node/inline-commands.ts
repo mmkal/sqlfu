@@ -7,6 +7,7 @@ import {materializeDefinitionsSchemaFor, materializeMigrationsSchemaFor} from '.
 import {migrationNickname} from '../naming.js';
 import type {SqlfuHost} from '../host.js';
 import {generateInlineConfigTypes, type GenerateQueryTypesResult} from '../typegen/index.js';
+import {watch} from './watcher.js';
 import {
   appendInlineMigration,
   inlineMigrationsToMigrationFiles,
@@ -14,12 +15,89 @@ import {
   type InlineConfigSource,
 } from './inline-source.js';
 
+const INLINE_WATCH_DEBOUNCE_MS = 150;
+
 export async function generateInlineConfigModule(input: {
   modulePath: string;
   projectRoot: string;
   host: SqlfuHost;
 }): Promise<GenerateQueryTypesResult> {
   return generateInlineConfigTypes(input);
+}
+
+export async function watchGenerateInlineConfigModule(
+  input: {
+    modulePath: string;
+    projectRoot: string;
+    host: SqlfuHost;
+  },
+  options: {
+    signal?: AbortSignal;
+    onReady?: () => void;
+    logger?: Pick<Console, 'log' | 'error'>;
+  } = {},
+): Promise<void> {
+  const logger = options.logger || console;
+  let running = false;
+  let pending = false;
+  let pendingReason = '';
+
+  const runGenerate = async (reason: string) => {
+    if (running) {
+      pending = true;
+      pendingReason = reason;
+      return;
+    }
+    running = true;
+    let nextReason = reason;
+    try {
+      do {
+        pending = false;
+        logger.log(`sqlfu generate (${nextReason})`);
+        try {
+          await generateInlineConfigModule(input);
+        } catch (error) {
+          logger.error(`sqlfu generate failed: ${formatError(error)}`);
+        }
+        nextReason = pendingReason;
+      } while (pending);
+    } finally {
+      running = false;
+    }
+  };
+
+  await runGenerate('initial run');
+
+  const debounce = createDebouncer(INLINE_WATCH_DEBOUNCE_MS);
+  const watcher = watch([input.modulePath], {ignoreInitial: true});
+
+  const onEvent = (eventName: string, eventPath: string) => {
+    debounce(() => {
+      const relative = projectRelativePath(input.projectRoot, eventPath);
+      void runGenerate(`${eventName}: ${relative}`);
+    });
+  };
+
+  watcher.on('add', (eventPath) => onEvent('add', eventPath));
+  watcher.on('change', (eventPath) => onEvent('change', eventPath));
+  watcher.on('unlink', (eventPath) => onEvent('unlink', eventPath));
+  watcher.on('error', (error) => logger.error(`sqlfu watcher error: ${formatError(error)}`));
+
+  await new Promise<void>((resolve) => watcher.once('ready', () => resolve()));
+  logger.log(`sqlfu watching for changes in:\n  ${input.modulePath}`);
+  options.onReady?.();
+
+  try {
+    await new Promise<void>((resolve) => {
+      if (options.signal?.aborted) {
+        resolve();
+        return;
+      }
+      options.signal?.addEventListener('abort', () => resolve(), {once: true});
+    });
+  } finally {
+    await watcher.close();
+  }
 }
 
 export async function draftInlineConfigMigration(input: {
@@ -103,6 +181,19 @@ async function draftInlineConfigMigrationForSource(
 
 function projectRelativePath(projectRoot: string, filePath: string) {
   return path.relative(projectRoot, filePath).split(path.sep).join('/');
+}
+
+function createDebouncer(ms: number) {
+  let timer: NodeJS.Timeout | undefined;
+  return (fn: () => void) => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(fn, ms);
+  };
+}
+
+function formatError(error: unknown): string {
+  if (error instanceof Error) return error.stack || error.message;
+  return String(error);
 }
 
 function slugify(value: string) {

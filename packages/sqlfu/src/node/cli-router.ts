@@ -21,7 +21,11 @@ import {formatSqlFiles} from './format-files.js';
 import {stopProcessesListeningOnPort} from './port-process.js';
 import {generateQueryTypesForConfig} from '../typegen/index.js';
 import {watchGenerateQueryTypesForConfig} from '../typegen/watch.js';
-import {draftInlineConfigMigration, generateInlineConfigModule} from './inline-commands.js';
+import {
+  draftInlineConfigMigration,
+  generateInlineConfigModule,
+  watchGenerateInlineConfigModule,
+} from './inline-commands.js';
 import {startSqlfuServer} from '../ui/server.js';
 import {resolveSqlfuUi} from '../ui/resolve-sqlfu-ui.js';
 import packageJson from '../../package.json' with {type: 'json'};
@@ -138,7 +142,12 @@ export const router = {
       const project = await loadContextProjectState(context);
       if (project.initialized && 'inline' in project) {
         if (input?.watch) {
-          throw new Error('sqlfu generate --watch does not support inline defineConfig modules yet.');
+          await watchGenerateInlineConfigModule({
+            modulePath: project.inline.modulePath,
+            projectRoot: project.projectRoot,
+            host: context.host,
+          });
+          return;
         }
         const result = await generateInlineConfigModule({
           modulePath: project.inline.modulePath,

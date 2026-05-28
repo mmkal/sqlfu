@@ -8,7 +8,7 @@ branch: bedtime/2026-05-27-durable-object-inline-sqlfu
 
 ## Status
 
-Implementation is complete on the branch. Durable Objects can keep definitions, migrations, and queries in one static inline `defineConfig({...})` class property; module-level inline configs remain supported. `draft` appends inline migrations, `generate` writes inline query metadata, and Miniflare covers migration across redeployed object storage. PR review found type/runtime divergence for inline row shapes and expansion-style parameters; those are now covered by tests and fixed.
+Implementation is complete on the branch. Durable Objects can keep definitions, migrations, and queries in one static inline `defineConfig({...})` class property; module-level inline configs remain supported. `draft` appends inline migrations, `generate` writes inline query metadata, `generate --watch` watches the inline module, and Miniflare covers migration across redeployed object storage. PR review found type/runtime divergence for inline row shapes and expansion-style parameters; those are now covered by tests and fixed.
 
 ## Assumptions
 
@@ -25,6 +25,7 @@ Implementation is complete on the branch. Durable Objects can keep definitions, 
 
 - [x] Add an end-to-end Miniflare Durable Object spec for a self-contained TypeScript module that defines inline `defineConfig({definitions, migrations, queries})`. _Covered by `inline defineConfig modules generate, draft, and migrate durable object storage across redeploys` in `packages/sqlfu/test/adapters/durable-object.test.ts`._
 - [x] Make `sqlfu --config ./path/to/my-durable-object.ts generate` infer inline query parameter/result types and write them back into the source module. _Implemented through `generateInlineConfigTypes(...)` and `writeInlineQueryTypes(...)`._
+- [x] Make `sqlfu --config ./path/to/my-durable-object.ts generate --watch` rerun inline type generation when the module changes. _Implemented by `watchGenerateInlineConfigModule(...)`, which watches the configured TypeScript module path directly._
 - [x] Make `sqlfu --config ./path/to/my-durable-object.ts draft` append inline migration entries when definitions drift from current migrations. _Implemented through `draftInlineConfigMigration(...)` and `appendInlineMigration(...)`._
 - [x] Add a redeploy-style Durable Object spec where old storage is re-awoken with evolved inline definitions and new inline migrations. _The Miniflare fixture persists Durable Object storage between V1 and V2 deploys._
 - [x] Expose inline config through root `defineConfig(...)`, reusing the light `sqlfu` entrypoint instead of adding a separate public runtime helper. _Implemented in `packages/sqlfu/src/config-inline.ts` and the root `defineConfig` overload._
@@ -128,3 +129,4 @@ To do this it requires a fair amount of constraints on the source code. The rule
 - PR review follow-up made inline result types match raw Durable Object rows (`published_at`, nullable columns) and rejects query shapes such as `in (:ids)` that would need generated wrapper runtime expansion.
 - The inline source reader no longer needs `ts-morph` at runtime, keeping `sqlfu/api` importable in Worker bundles and moving `ts-morph` back to dev-only tooling.
 - Second review follow-up moved the public inline API to root `defineConfig(...)`, added a packed-package WebWorker TypeScript compile for `import {defineConfig, sql} from 'sqlfu'`, and fixed inline result typing for selected columns named like metadata fields such as `rowsAffected`.
+- Inline `generate --watch` now watches the configured module itself instead of rejecting inline configs; coverage lives in `packages/sqlfu/test/generate-watch.test.ts`.

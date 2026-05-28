@@ -1,4 +1,3 @@
-import {inlineSqlfu as runtimeInlineSqlfu} from './inline.js';
 import {sql as runtimeSql} from '../sql.js';
 import type {LoadedSqlfuProject} from '../config.js';
 import type {SqlfuHost} from '../host.js';
@@ -12,7 +11,6 @@ export type Confirm = (params: {
 }) => string | null | Promise<string | null>;
 
 type ApiQueryArg = null | string | number | bigint | Uint8Array | boolean;
-type ApiResultRow = object;
 type ApiSqlFragment = {
   sql: string;
   args: ApiQueryArg[];
@@ -22,84 +20,6 @@ type ApiSqlQuery = ApiSqlFragment & {
   __sqlfuType?: unknown;
 };
 type ApiSqlValue = ApiQueryArg | ApiSqlFragment;
-type ApiPreparedStatementParams = Record<string, unknown> | ApiQueryArg[];
-type ApiRunResult = {
-  rowsAffected?: number;
-  lastInsertRowid?: string | number | bigint | null;
-};
-type ApiSyncPreparedStatement<TRow extends ApiResultRow = ApiResultRow> = {
-  all(params?: ApiPreparedStatementParams): TRow[];
-  run(params?: ApiPreparedStatementParams): ApiRunResult;
-  iterate(params?: ApiPreparedStatementParams): Iterable<TRow>;
-  [Symbol.dispose](): void;
-};
-type ApiPreparedStatement<TRow extends ApiResultRow = ApiResultRow> = {
-  all(params?: ApiPreparedStatementParams): Promise<TRow[]>;
-  run(params?: ApiPreparedStatementParams): Promise<ApiRunResult>;
-  iterate(params?: ApiPreparedStatementParams): AsyncIterable<TRow>;
-  [Symbol.asyncDispose](): Promise<void>;
-};
-type ApiSyncClient = {
-  sync: true;
-  all<TRow extends ApiResultRow = ApiResultRow>(query: ApiSqlQuery): TRow[];
-  run(query: ApiSqlQuery): ApiRunResult;
-  raw(sql: string): ApiRunResult;
-  prepare<TRow extends ApiResultRow = ApiResultRow>(sql: string): ApiSyncPreparedStatement<TRow>;
-};
-type ApiAsyncClient = {
-  sync: false;
-  all<TRow extends ApiResultRow = ApiResultRow>(query: ApiSqlQuery): Promise<TRow[]>;
-  run(query: ApiSqlQuery): Promise<ApiRunResult>;
-  raw(sql: string): Promise<ApiRunResult>;
-  prepare<TRow extends ApiResultRow = ApiResultRow>(sql: string): ApiPreparedStatement<TRow>;
-};
-type ApiClient = ApiSyncClient | ApiAsyncClient;
-
-export type InlineSqlfuQueryType = {
-  parameters?: ApiPreparedStatementParams;
-  result?: ApiResultRow;
-};
-
-export type InlineSqlfuMigration = {
-  name: string;
-  content: ApiSqlQuery;
-};
-
-export type InlineSqlfuDefinition<TQueries extends Record<string, ApiSqlQuery>> = {
-  definitions: ApiSqlQuery;
-  migrations: InlineSqlfuMigration[];
-  queries: TQueries;
-};
-
-type InlineQueryParameters<TQuery> = TQuery extends {__sqlfuType?: {parameters: infer TParameters}}
-  ? TParameters
-  : undefined;
-type InlineQueryResult<TQuery> = TQuery extends {__sqlfuType?: {result: infer TResult}} ? TResult : ApiRunResult;
-type InlineQueryReturnsRows<TQuery> = TQuery extends {__sqlfuType?: {result: ApiResultRow}} ? true : false;
-type InlineQueryFunction<TClient extends ApiClient, TQuery> = undefined extends InlineQueryParameters<TQuery>
-  ? () => InlineQueryReturn<TClient, TQuery>
-  : (params: InlineQueryParameters<TQuery>) => InlineQueryReturn<TClient, TQuery>;
-type InlineQueryReturn<TClient extends ApiClient, TQuery> = TClient extends ApiSyncClient
-  ? InlineQueryReturnsRows<TQuery> extends true
-    ? InlineQueryResult<TQuery>[]
-    : ApiRunResult
-  : InlineQueryReturnsRows<TQuery> extends true
-    ? Promise<InlineQueryResult<TQuery>[]>
-    : Promise<ApiRunResult>;
-type InlineSqlfuBound<TQueries extends Record<string, ApiSqlQuery>, TClient extends ApiClient> = {
-  [TName in keyof TQueries]: InlineQueryFunction<TClient, TQueries[TName]>;
-} & {
-  migrate(): TClient extends ApiSyncClient ? void : Promise<void>;
-};
-
-export type InlineSqlfuFactory<TQueries extends Record<string, ApiSqlQuery>> = {
-  <TClient extends ApiClient>(client: TClient): InlineSqlfuBound<TQueries, TClient>;
-  $type: InlineSqlfuBound<TQueries, ApiClient>;
-};
-
-export const inlineSqlfu = runtimeInlineSqlfu as unknown as <TQueries extends Record<string, ApiSqlQuery>>(
-  definition: InlineSqlfuDefinition<TQueries>,
-) => InlineSqlfuFactory<TQueries>;
 
 export const sql = runtimeSql as unknown as <TType = unknown>(
   strings: TemplateStringsArray,
@@ -157,9 +77,9 @@ export async function sync(input: SyncOptions): Promise<void> {
 export async function draft(input: DraftOptions): Promise<{path: string} | null> {
   const {project, host} = await loadInitializedNodeProject(input);
   if ('inline' in project) {
-    const {draftInlineSqlfuMigration} =
+    const {draftInlineConfigMigration} =
       await load<typeof import('../node/inline-commands.js')>('../node/inline-commands.js');
-    return draftInlineSqlfuMigration({
+    return draftInlineConfigMigration({
       modulePath: project.inline.modulePath,
       projectRoot: project.projectRoot,
       host,
@@ -207,9 +127,9 @@ export async function check(input: CheckOptions = {}): Promise<void> {
 export async function generate(input: GenerateOptions = {}): Promise<GenerateQueryTypesResult> {
   const {project, host} = await loadInitializedNodeProject(input);
   if ('inline' in project) {
-    const {generateInlineSqlfuModule} =
+    const {generateInlineConfigModule} =
       await load<typeof import('../node/inline-commands.js')>('../node/inline-commands.js');
-    return generateInlineSqlfuModule({
+    return generateInlineConfigModule({
       modulePath: project.inline.modulePath,
       projectRoot: project.projectRoot,
       host,
@@ -228,9 +148,7 @@ export async function serve(input: ServeOptions = {}): Promise<unknown> {
   const project = await loadNodeProjectState(input);
   const params = {port: input.port, configPath: project.configPath};
   if (input.ui) {
-    const {resolveSqlfuUi} = await load<typeof import('../ui/resolve-sqlfu-ui.js')>(
-      '../ui/resolve-sqlfu-ui.js',
-    );
+    const {resolveSqlfuUi} = await load<typeof import('../ui/resolve-sqlfu-ui.js')>('../ui/resolve-sqlfu-ui.js');
     const {startSqlfuServer} = await load<typeof import('../ui/server.js')>('../ui/server.js');
     const ui = await resolveSqlfuUi({sqlfuVersion: packageJson.version});
     return startSqlfuServer({...params, ui});

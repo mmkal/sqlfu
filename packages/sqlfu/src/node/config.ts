@@ -11,7 +11,7 @@ import {
   type TsconfigPreferences,
 } from '../config.js';
 import {resolveCliConfigPath} from './cli-config.js';
-import {readInlineSqlfuSource} from './inline-source.js';
+import {readInlineConfigSources} from './inline-source.js';
 
 const defaultConfigFileNames = ['sqlfu.config.ts', 'sqlfu.config.mjs', 'sqlfu.config.js', 'sqlfu.config.cjs'] as const;
 const defaultSqlfuConfigFileName = 'sqlfu.config.ts';
@@ -28,7 +28,7 @@ export async function loadProjectConfig(input: {configPath?: string} = {}): Prom
   }
   if ('inline' in project) {
     throw new Error(
-      `No file-backed sqlfu config found at ${project.configPath}; inlineSqlfu modules support generate and draft only.`,
+      `No file-backed sqlfu config found at ${project.configPath}; inline defineConfig modules support generate and draft only.`,
     );
   }
   return project.config;
@@ -51,8 +51,8 @@ export async function loadProjectStateFrom(projectRoot: string): Promise<LoadedS
     };
   }
 
-  const inline = await readInlineSqlfuSource(configPath);
-  if (inline) {
+  const inlines = await readInlineConfigSources(configPath);
+  if (inlines.length > 0) {
     return {
       initialized: true,
       projectRoot,
@@ -86,8 +86,8 @@ export async function loadProjectStateFromConfigPath(configPath: string, cwd: st
     };
   }
 
-  const inline = await readInlineSqlfuSource(resolvedConfigPath);
-  if (inline) {
+  const inlines = await readInlineConfigSources(resolvedConfigPath);
+  if (inlines.length > 0) {
     return {
       initialized: true,
       projectRoot,
@@ -148,7 +148,7 @@ async function ensureGitignoreEntry(gitignorePath: string, entry: string) {
   }
 
   const newline = contents.includes('\r\n') ? '\r\n' : '\n';
-  const prefix = contents.trim() ? contents.endsWith('\n') ? contents : `${contents}${newline}` : '';
+  const prefix = contents.trim() ? (contents.endsWith('\n') ? contents : `${contents}${newline}`) : '';
   await fs.writeFile(gitignorePath, `${prefix}${entry}${newline}`);
 }
 

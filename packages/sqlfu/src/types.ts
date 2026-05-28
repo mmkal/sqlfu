@@ -23,6 +23,8 @@ export interface QueryMetadata {
 
 export type RunResult = QueryMetadata;
 
+export type QueryResultMode = 'many' | 'nullableOne' | 'one' | 'metadata';
+
 /**
  * Loose param shape accepted by `prepare()` handles. Either positional
  * (`QueryArg[]`) or named (`Record<string, unknown>` keyed by the bare param

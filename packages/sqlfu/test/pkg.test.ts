@@ -73,19 +73,23 @@ async function createPackedPackageFixture() {
       assert.equal(typeof sync, 'function');
     `,
     'worker-inline.ts': `
-      import {inlineSqlfu, sql} from 'sqlfu/api';
+      import {defineConfig, sql} from 'sqlfu';
 
-      const app = inlineSqlfu({
+      const app = defineConfig({
         definitions: sql\`
           create table posts(slug text primary key);
         \`,
         migrations: [],
         queries: {
-          listPosts: sql<{parameters: {limit: number}; result: {slug: string}}>\`
-            select slug
-            from posts
-            limit :limit
-          \`,
+          listPosts: {
+            query: sql\`
+              select slug
+              from posts
+              limit :limit
+            \`,
+            mode: 'many',
+            $type: {} as {parameters: {limit: number}; result: {slug: string}},
+          },
         },
       });
 

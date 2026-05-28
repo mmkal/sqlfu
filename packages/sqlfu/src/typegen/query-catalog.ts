@@ -1,3 +1,5 @@
+import type {QueryResultMode} from '../types.js';
+
 export type QueryCatalog = {
   generatedAt: string;
   queries: QueryCatalogEntry[];
@@ -9,7 +11,7 @@ export type AdHocQueryAnalysis = {
   // treats them as metadata-mode (no rows, no params).
   queryType: 'Select' | 'Insert' | 'Update' | 'Delete' | 'Copy' | 'Ddl';
   multipleRowsResult: boolean;
-  resultMode: 'many' | 'nullableOne' | 'one' | 'metadata';
+  resultMode: QueryResultMode;
   args: QueryCatalogArgument[];
   dataSchema?: JsonSchemaObject;
   paramsSchema?: JsonSchemaObject;
@@ -29,7 +31,7 @@ export type QueryCatalogEntry =
       sqlFileContent: string;
       queryType: 'Select' | 'Insert' | 'Update' | 'Delete' | 'Copy';
       multipleRowsResult: boolean;
-      resultMode: 'many' | 'nullableOne' | 'one' | 'metadata';
+      resultMode: QueryResultMode;
       args: QueryCatalogArgument[];
       dataSchema?: JsonSchemaObject;
       paramsSchema?: JsonSchemaObject;

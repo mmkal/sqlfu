@@ -22,7 +22,7 @@ client.run(sql`
 ```
 
 This entrypoint is our precious baby, and because it's a precious baby, it is *small* and *fiercely protected*. There will never be any `node:*` imports and no heavy commands tooling.
-It's what you should use for your app code, to pass into generated query wrappers, workers, and even browser-safe bundles. It will very rarely have breaking changes.
+It's what you should use for your app code, inline `defineConfig(...)` modules, generated query wrappers, workers, and even browser-safe bundles. It will very rarely have breaking changes.
 
 ## `sqlfu/api`
 
@@ -45,11 +45,9 @@ returning `null` or empty string cancels. For "yolo" mode just return `params.bo
 
 `await format('select foo from bar')` is slightly different to the `npx sqlfu format` command: instead of modifying files in place, it just formats the sql you pass to it.
 
-The inline helpers exported from `sqlfu/api`, such as `inlineSqlfu` and `sql`,
-are safe to import in Workers. The command functions (`draft`, `generate`,
-`migrate`, `serve`, etc.) dynamically load Node-only project/config code when
-called, so call those from Node or Bun tooling, not from runtime Worker request
-handlers.
+The command functions (`draft`, `generate`, `migrate`, `serve`, etc.)
+dynamically load Node-only project/config code when called, so call those from
+Node or Bun tooling, not from runtime Worker request handlers.
 
 `createSqlfuApi` lives on `sqlfu/api/core` rather than `sqlfu/api` because it is
 the host-explicit command facade. Use it when you are embedding sqlfu operations

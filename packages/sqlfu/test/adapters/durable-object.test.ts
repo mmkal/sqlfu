@@ -248,18 +248,20 @@ test('runtime sync migrates existing durable object storage on redeploy', async 
   expect(await upgraded.stub.getSyncScratchObjects()).toMatchObject([]);
 });
 
-test('inlineSqlfu modules generate, draft, and migrate durable object storage across redeploys', async () => {
-  await using fixture = await createInlineSqlfuDORedeployFixture();
+test('inline defineConfig modules generate, draft, and migrate durable object storage across redeploys', async () => {
+  await using fixture = await createInlineConfigDORedeployFixture();
 
   await fixture.writeWorkerSource(workerSourceV1());
   await fixture.draft('create posts');
   await fixture.generate();
 
   const generatedV1 = await fixture.readWorkerSource();
-  expect(generatedV1).toContain('createPost: sql<{ parameters: { slug: string } }>`');
+  expect(generatedV1).toContain('$type: {} as { parameters: { slug: string } },');
+  expect(generatedV1).toContain("mode: 'metadata',");
   expect(generatedV1).toContain(
-    'listPosts: sql<{ parameters: { limit: number }; result: { slug: string; published_at: string | null } }>`',
+    '$type: {} as { parameters: { limit: number }; result: { slug: string; published_at: string | null } },',
   );
+  expect(generatedV1).toContain("mode: 'many',");
   expect(generatedV1).toMatch(
     /\{ name: '\d{4}-\d{2}-\d{2}T\d{2}\.\d{2}\.\d{2}\.\d{3}Z_create_posts', content: sql`create table posts\(slug text primary key, published_at text\);` \}/u,
   );
@@ -274,16 +276,14 @@ test('inlineSqlfu modules generate, draft, and migrate durable object storage ac
 
   const generatedV2 = await fixture.readWorkerSource();
   expect(generatedV2).toContain(
-    'listPosts: sql<{ parameters: { limit: number }; result: { slug: string; published_at: string | null; body: string | null } }>`',
+    '$type: {} as { parameters: { limit: number }; result: { slug: string; published_at: string | null; body: string | null } },',
   );
   expect(generatedV2).toMatch(
     /\{ name: '\d{4}-\d{2}-\d{2}T\d{2}\.\d{2}\.\d{2}\.\d{3}Z_add_body', content: sql`alter table posts add column body text;` \}/u,
   );
 
   const upgraded = await fixture.deploy();
-  expect(await upgraded.stub.listPosts(10)).toMatchObject([
-    {slug: 'hello-world', published_at: null, body: null},
-  ]);
+  expect(await upgraded.stub.listPosts(10)).toMatchObject([{slug: 'hello-world', published_at: null, body: null}]);
 
   await upgraded.stub.createPost('second-post', 'durable inline sql');
   expect(await upgraded.stub.listPosts(10)).toMatchObject([
@@ -296,24 +296,25 @@ test('inlineSqlfu modules generate, draft, and migrate durable object storage ac
   ]);
 });
 
-test('inlineSqlfu generation rejects query shapes that need generated wrapper runtime expansion', async () => {
-  await using fixture = await createInlineSqlfuDORedeployFixture();
+test('inline defineConfig generation rejects query shapes that need generated wrapper runtime expansion', async () => {
+  await using fixture = await createInlineConfigDORedeployFixture();
 
   await fixture.writeWorkerSource(dedent`
-    import {createDurableObjectClient} from 'sqlfu';
-    import {inlineSqlfu, sql} from 'sqlfu/api';
+    import {createDurableObjectClient, defineConfig, sql} from 'sqlfu';
 
-    const app = inlineSqlfu({
+    const app = defineConfig({
       definitions: sql\`
         create table posts(slug text primary key);
       \`,
       migrations: [],
       queries: {
-        listPosts: sql\`
-          select slug
-          from posts
-          where slug in (:slugs)
-        \`,
+        listPosts: {
+          query: sql\`
+            select slug
+            from posts
+            where slug in (:slugs)
+          \`,
+        },
       },
     });
 
@@ -330,28 +331,29 @@ test('inlineSqlfu generation rejects query shapes that need generated wrapper ru
   `);
 
   await expect(fixture.generate()).rejects.toThrow(
-    'inlineSqlfu query listPosts cannot use scalar-array parameter "slugs" because inline runtime binds the SQL template directly.',
+    'inline defineConfig query listPosts cannot use scalar-array parameter "slugs" because inline runtime binds the SQL template directly.',
   );
 });
 
-test('inlineSqlfu generation combines update data and where parameters into one runtime parameter object', async () => {
-  await using fixture = await createInlineSqlfuDORedeployFixture();
+test('inline defineConfig generation combines update data and where parameters into one runtime parameter object', async () => {
+  await using fixture = await createInlineConfigDORedeployFixture();
 
   await fixture.writeWorkerSource(dedent`
-    import {createDurableObjectClient} from 'sqlfu';
-    import {inlineSqlfu, sql} from 'sqlfu/api';
+    import {createDurableObjectClient, defineConfig, sql} from 'sqlfu';
 
-    const app = inlineSqlfu({
+    const app = defineConfig({
       definitions: sql\`
         create table posts(slug text primary key, body text not null);
       \`,
       migrations: [],
       queries: {
-        updatePost: sql\`
-          update posts
-          set body = :body
-          where slug = :slug
-        \`,
+        updatePost: {
+          query: sql\`
+            update posts
+            set body = :body
+            where slug = :slug
+          \`,
+        },
       },
     });
 
@@ -369,9 +371,54 @@ test('inlineSqlfu generation combines update data and where parameters into one 
 
   await fixture.generate();
 
-  expect(await fixture.readWorkerSource()).toContain(
-    'updatePost: sql<{ parameters: { body: string; slug: string } }>`',
-  );
+  expect(await fixture.readWorkerSource()).toContain('$type: {} as { parameters: { body: string; slug: string } },');
+});
+
+test('inline defineConfig generation supports multiple top-level configs in one module', async () => {
+  await using fixture = await createInlineConfigDORedeployFixture();
+
+  await fixture.writeWorkerSource(dedent`
+    import {defineConfig, sql} from 'sqlfu';
+
+    const projectDb = defineConfig({
+      definitions: sql\`
+        create table projects(slug text primary key);
+      \`,
+      migrations: [],
+      queries: {
+        list: {
+          query: sql\`
+            select slug
+            from projects
+          \`,
+        },
+      },
+    });
+
+    const organizationDb = defineConfig({
+      definitions: sql\`
+        create table organizations(slug text primary key);
+      \`,
+      migrations: [],
+      queries: {
+        list: {
+          query: sql\`
+            select slug
+            from organizations
+          \`,
+        },
+      },
+    });
+
+    void projectDb;
+    void organizationDb;
+  `);
+
+  await fixture.generate();
+
+  const generated = await fixture.readWorkerSource();
+  expect(generated.match(/\$type: \{\} as \{ result: \{ slug: string \} \},/gu)).toHaveLength(2);
+  expect(generated.match(/mode: 'many',/gu)).toHaveLength(2);
 });
 
 test('createDurableObjectClient uses transactionSync when given durable object storage', async () => {
@@ -577,12 +624,12 @@ async function createDORedeployFixture() {
   }
 }
 
-async function createInlineSqlfuDORedeployFixture() {
+async function createInlineConfigDORedeployFixture() {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'sqlfu-inline-do-fixture-'));
   const persistPath = await fs.mkdtemp(path.join(os.tmpdir(), 'sqlfu-inline-do-persist-'));
   const workerSourcePath = path.join(tempDir, 'worker.ts');
   const workerPath = path.join(tempDir, 'worker.js');
-  let current: DOFixture<InlineSqlfuFixtureObject> | null = null;
+  let current: DOFixture<InlineConfigFixtureObject> | null = null;
 
   await ensureBuilt();
   await installSqlfuPackageForFixture(tempDir);
@@ -634,7 +681,7 @@ async function createInlineSqlfuDORedeployFixture() {
 
       const bindings = await miniflare.getBindings<{FIXTURE_OBJECT: DurableObjectNamespaceLike}>();
       const durableObjectStub = bindings.FIXTURE_OBJECT.get(bindings.FIXTURE_OBJECT.idFromName('fixture'));
-      const stub = createRpcStub<InlineSqlfuFixtureObject>(durableObjectStub);
+      const stub = createRpcStub<InlineConfigFixtureObject>(durableObjectStub);
       current = {
         stub,
         async [Symbol.asyncDispose]() {
@@ -657,7 +704,7 @@ async function createInlineSqlfuDORedeployFixture() {
   }
 }
 
-type InlineSqlfuFixtureObject = {
+type InlineConfigFixtureObject = {
   createPost(slug: string, body?: string | null): Promise<unknown>;
   listPosts(limit: number): Promise<{slug: string; published_at: string | null; body?: string | null}[]>;
   appliedMigrations(): Promise<{name: string}[]>;
@@ -686,32 +733,35 @@ async function installSqlfuPackageForFixture(root: string) {
 
 function workerSourceV1() {
   return dedent`
-    import {createDurableObjectClient} from 'sqlfu';
-    import {inlineSqlfu, sql} from 'sqlfu/api';
-
-    const app = inlineSqlfu({
-      definitions: sql\`
-        create table posts(slug text primary key, published_at text);
-      \`,
-      migrations: [],
-      queries: {
-        createPost: sql\`insert into posts(slug) values (:slug)\`,
-        listPosts: sql\`
-          select slug, published_at
-          from posts
-          order by slug
-          limit :limit
-        \`,
-      },
-    });
+    import {createDurableObjectClient, defineConfig, sql} from 'sqlfu';
 
     export class FixtureObject {
+      static db = defineConfig({
+        definitions: sql\`
+          create table posts(slug text primary key, published_at text);
+        \`,
+        migrations: [],
+        queries: {
+          createPost: {
+            query: sql\`insert into posts(slug) values (:slug)\`,
+          },
+          listPosts: {
+            query: sql\`
+              select slug, published_at
+              from posts
+              order by slug
+              limit :limit
+            \`,
+          },
+        },
+      });
+
       client: ReturnType<typeof createDurableObjectClient>;
-      db: typeof app.$type;
+      db: typeof FixtureObject.db.$type;
 
       constructor(state: any) {
         this.client = createDurableObjectClient(state.storage);
-        this.db = app(this.client);
+        this.db = FixtureObject.db(this.client);
         this.db.migrate();
       }
 

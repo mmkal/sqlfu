@@ -1,8 +1,11 @@
 import fs from 'node:fs/promises';
 
 import type {Migration} from '../migrations/index.js';
+import type {QueryResultMode} from '../types.js';
 
-export type InlineSqlfuSource = {
+export type InlineConfigSource = {
+  name: string;
+  className?: string;
   modulePath: string;
   sourceText: string;
   definitions: InlineSqlTemplate;
@@ -27,33 +30,82 @@ export type InlineMigrationSource = {
 export type InlineQuerySource = {
   name: string;
   content: InlineSqlTemplate;
+  object: SourceSpan;
+  type?: PropertySpan;
+  mode?: PropertySpan;
 };
 
-export async function readInlineSqlfuSource(modulePath: string): Promise<InlineSqlfuSource | null> {
+export type InlineQueryType = {
+  className?: string;
+  configName: string;
+  queryName: string;
+  type: string;
+  mode: QueryResultMode;
+};
+
+type InlineConfigTarget = {
+  className?: string;
+  name: string;
+};
+
+type InlineConfigCall = {
+  target: InlineConfigTarget | null;
+  openParen: number;
+};
+
+export async function readInlineConfigSources(modulePath: string): Promise<InlineConfigSource[]> {
   const sourceText = await fs.readFile(modulePath, 'utf8');
-  return parseInlineSqlfuSource(modulePath, sourceText);
+  return parseInlineConfigSources(modulePath, sourceText);
 }
 
-export function parseInlineSqlfuSource(modulePath: string, sourceText: string): InlineSqlfuSource | null {
-  const inlineCall = findInlineSqlfuCall(sourceText, modulePath);
-  if (!inlineCall) return null;
+export function parseInlineConfigSources(modulePath: string, sourceText: string): InlineConfigSource[] {
+  const sources: InlineConfigSource[] = [];
+  for (const inlineCall of findDefineConfigCalls(sourceText)) {
+    const source = parseInlineConfigSourceForCall(modulePath, sourceText, inlineCall);
+    if (source) sources.push(source);
+  }
+  const duplicate = firstDuplicate(sources.map((source) => inlineConfigReferenceName(source)));
+  if (duplicate) {
+    throw new Error(`${modulePath} contains more than one inline defineConfig(...) call assigned to "${duplicate}".`);
+  }
+  return sources;
+}
 
+function parseInlineConfigSourceForCall(
+  modulePath: string,
+  sourceText: string,
+  inlineCall: InlineConfigCall,
+): InlineConfigSource | null {
   const definitionStart = skipTrivia(sourceText, inlineCall.openParen + 1);
   if (sourceText[definitionStart] !== '{') {
-    throw new Error(`inlineSqlfu(...) in ${modulePath} must be called with an object literal.`);
+    return null;
   }
   const definitionEnd = findMatchingDelimiter(sourceText, definitionStart, '{', '}');
-  const afterDefinition = skipTrivia(sourceText, definitionEnd + 1);
-  if (sourceText[afterDefinition] !== ')') {
-    throw new Error(`inlineSqlfu(...) in ${modulePath} must contain exactly one object literal argument.`);
+  if (!looksLikeInlineDefineConfigObject(sourceText, definitionStart, definitionEnd)) {
+    return null;
+  }
+  const definitionProperties = parseObjectProperties(sourceText, definitionStart, definitionEnd, modulePath);
+  if (!isInlineDefineConfigShape(sourceText, definitionProperties)) {
+    return null;
   }
 
-  const definitionProperties = parseObjectProperties(sourceText, definitionStart, definitionEnd, modulePath);
+  const afterDefinition = skipTrivia(sourceText, definitionEnd + 1);
+  if (sourceText[afterDefinition] !== ')') {
+    throw new Error(`inline defineConfig(...) in ${modulePath} must contain exactly one object literal argument.`);
+  }
+  if (!inlineCall.target) {
+    throw new Error(
+      `${modulePath} inline defineConfig(...) calls must be assigned to top-level const declarations or static properties on top-level named classes.`,
+    );
+  }
+
   const definitions = readSqlProperty(definitionProperties, 'definitions', modulePath);
   const migrationsArray = readArrayProperty(definitionProperties, 'migrations', modulePath);
   const queriesObject = readObjectProperty(definitionProperties, 'queries', modulePath);
 
   return {
+    className: inlineCall.target.className,
+    name: inlineCall.target.name,
     modulePath,
     sourceText,
     definitions,
@@ -65,76 +117,289 @@ export function parseInlineSqlfuSource(modulePath: string, sourceText: string): 
   };
 }
 
-export async function writeInlineQueryTypes(
-  modulePath: string,
-  queryTypes: ReadonlyMap<string, string>,
-): Promise<void> {
-  const inline = await readRequiredInlineSqlfuSource(modulePath);
-  const replacements = inline.queries.map((query) => {
-    const queryType = queryTypes.get(query.name);
-    if (!queryType) {
-      throw new Error(`Missing generated inline query type for ${query.name}.`);
-    }
-    return {
-      start: query.content.tagStart,
-      end: query.content.templateStart,
-      text: `sql<${queryType}>`,
-    };
-  });
-  await fs.writeFile(modulePath, applyReplacements(inline.sourceText, replacements));
+function looksLikeInlineDefineConfigObject(
+  sourceText: string,
+  definitionStart: number,
+  definitionEnd: number,
+): boolean {
+  const definitionBody = sourceText.slice(definitionStart + 1, definitionEnd);
+  return definitionBody.includes('sql`') || definitionBody.includes('sql<');
+}
+
+function isInlineDefineConfigShape(sourceText: string, properties: PropertySpan[]): boolean {
+  const definitions = properties.find((property) => property.name === 'definitions');
+  if (!definitions) return false;
+  const migrations = properties.find((property) => property.name === 'migrations');
+  const queries = properties.find((property) => property.name === 'queries');
+  if (!migrations || !queries) return false;
+  const definitionsStart = skipTrivia(sourceText, definitions.start);
+  if (!startsWithIdentifier(sourceText, definitionsStart, 'sql')) return false;
+  const previous = sourceText[definitionsStart - 1] || '';
+  const next = sourceText[definitionsStart + 'sql'.length] || '';
+  if (isIdentifierPart(previous) || isIdentifierPart(next)) return false;
+  const afterTag = skipTrivia(sourceText, definitionsStart + 'sql'.length);
+  return sourceText[afterTag] === '`' || sourceText[afterTag] === '<';
+}
+
+export async function writeInlineQueryTypes(modulePath: string, queryTypes: InlineQueryType[]): Promise<void> {
+  const inlines = await readRequiredInlineConfigSources(modulePath);
+  const style = inferInlineSourceStyle(inlines[0].sourceText);
+  const replacements = inlines.flatMap((inline) =>
+    inline.queries.flatMap((query) => {
+      const queryType = queryTypes.find(
+        (candidate) =>
+          candidate.className === inline.className &&
+          candidate.configName === inline.name &&
+          candidate.queryName === query.name,
+      );
+      if (!queryType) {
+        throw new Error(`Missing generated inline query type for ${inlineConfigReferenceName(inline)}.${query.name}.`);
+      }
+      return renderInlineQueryTypeReplacements(inlines[0].sourceText, query, queryType, style);
+    }),
+  );
+  await fs.writeFile(modulePath, applyReplacements(inlines[0].sourceText, replacements));
+}
+
+function renderInlineQueryTypeReplacements(
+  sourceText: string,
+  query: InlineQuerySource,
+  queryType: InlineQueryType,
+  style: InlineSourceStyle,
+): SourceReplacement[] {
+  const typeValue = `{} as ${queryType.type}`;
+  const modeValue = quotedString(queryType.mode, style.quote);
+  if (query.type && query.mode && query.type.start < query.mode.start) {
+    return [replacePropertyLines(sourceText, query.type, query.mode, [`mode: ${modeValue}`, `$type: ${typeValue}`])];
+  }
+
+  const replacements: SourceReplacement[] = [];
+
+  if (query.mode) replacements.push(replacePropertyValue(sourceText, query.mode, modeValue));
+  if (query.type) replacements.push(replacePropertyValue(sourceText, query.type, typeValue));
+
+  if (!query.mode && query.type) replacements.push(insertPropertyBefore(sourceText, query.type, `mode: ${modeValue}`));
+  if (!query.mode && !query.type) {
+    replacements.push(
+      renderInlineQueryInsertedProperties(
+        sourceText,
+        query.object,
+        [`mode: ${modeValue}`, `$type: ${typeValue}`],
+        style,
+      ),
+    );
+  } else if (!query.type) {
+    replacements.push(renderInlineQueryInsertedProperties(sourceText, query.object, [`$type: ${typeValue}`], style));
+  }
+
+  return replacements;
+}
+
+function replacePropertyLines(
+  sourceText: string,
+  firstProperty: PropertySpan,
+  lastProperty: PropertySpan,
+  lines: string[],
+): SourceReplacement {
+  const start = lineStartIndex(sourceText, firstProperty.start);
+  const end = lineEndIndex(sourceText, lastProperty.end);
+  const indent = lineIndentAt(sourceText, firstProperty.start);
+  return {
+    start,
+    end,
+    text: lines.map((line) => `${indent}${line},`).join('\n') + (sourceText[end - 1] === '\n' ? '\n' : ''),
+  };
+}
+
+function replacePropertyValue(sourceText: string, property: PropertySpan, text: string): SourceReplacement {
+  return {
+    start: skipTrivia(sourceText, property.start),
+    end: property.end,
+    text,
+  };
+}
+
+function insertPropertyBefore(sourceText: string, property: PropertySpan, text: string): SourceReplacement {
+  const start = lineStartIndex(sourceText, property.start);
+  return {
+    start,
+    end: start,
+    text: `${lineIndentAt(sourceText, property.start)}${text},\n`,
+  };
+}
+
+function renderInlineQueryInsertedProperties(
+  sourceText: string,
+  object: SourceSpan,
+  properties: string[],
+  style: InlineSourceStyle,
+): SourceReplacement {
+  const insertionStart = trimEndIndex(sourceText, object.end);
+  const beforeClose = sourceText.slice(object.start + 1, insertionStart);
+  const closingIndent = lineIndentAt(sourceText, object.end);
+  const propertyIndent = `${closingIndent}${style.indent}`;
+  const prefix = beforeClose.length === 0 ? '\n' : `${beforeClose.endsWith(',') ? '' : ','}\n`;
+  const body = properties.map((property) => `${propertyIndent}${property},`).join('\n');
+  return {
+    start: insertionStart,
+    end: object.end,
+    text: `${prefix}${body}\n${closingIndent}`,
+  };
 }
 
 export async function appendInlineMigration(
   modulePath: string,
   migration: {
+    app?: string;
     name: string;
     content: string;
   },
 ): Promise<void> {
-  const inline = await readRequiredInlineSqlfuSource(modulePath);
+  const inline = await readRequiredInlineConfigSource(modulePath, migration.app);
   const insertPosition = inline.migrationsArray.insertPosition;
   const beforeInsert = inline.sourceText.slice(0, insertPosition).trimEnd();
   const closingIndent = lineIndentAt(inline.sourceText, insertPosition);
-  const elementIndent = `${closingIndent}  `;
+  const style = inferInlineSourceStyle(inline.sourceText);
+  const elementIndent = `${closingIndent}${style.indent}`;
   const prefix = inline.migrations.length === 0 ? '\n' : `${beforeInsert.endsWith(',') ? '' : ','}\n`;
-  const insertion = `${prefix}${renderInlineMigrationObject(elementIndent, migration)}\n${closingIndent}`;
-  await fs.writeFile(
-    modulePath,
-    `${beforeInsert}${insertion}${inline.sourceText.slice(insertPosition)}`,
-  );
+  const insertion = `${prefix}${renderInlineMigrationObject(elementIndent, migration, style)}\n${closingIndent}`;
+  await fs.writeFile(modulePath, `${beforeInsert}${insertion}${inline.sourceText.slice(insertPosition)}`);
 }
 
-export function inlineMigrationsToMigrationFiles(inline: InlineSqlfuSource): Migration[] {
+export function inlineMigrationsToMigrationFiles(inline: InlineConfigSource): Migration[] {
   return inline.migrations.map((migration) => ({
     path: `${migration.name}.sql`,
     content: migration.content.sql,
   }));
 }
 
-async function readRequiredInlineSqlfuSource(modulePath: string): Promise<InlineSqlfuSource> {
-  const inline = await readInlineSqlfuSource(modulePath);
+async function readRequiredInlineConfigSources(modulePath: string): Promise<InlineConfigSource[]> {
+  const inlines = await readInlineConfigSources(modulePath);
+  if (inlines.length === 0) {
+    throw new Error(`No inline defineConfig(...) call found in ${modulePath}.`);
+  }
+  return inlines;
+}
+
+async function readRequiredInlineConfigSource(
+  modulePath: string,
+  name: string | undefined,
+): Promise<InlineConfigSource> {
+  const inlines = await readRequiredInlineConfigSources(modulePath);
+  if (!name && inlines.length > 1) {
+    throw new Error(
+      `${modulePath} contains more than one inline defineConfig(...) call. Pass an inline app name to select one; use ClassName.propertyName for static class configs.`,
+    );
+  }
+  const inline = name ? inlines.find((candidate) => inlineConfigReferenceName(candidate) === name) : inlines[0];
   if (!inline) {
-    throw new Error(`No inlineSqlfu(...) call found in ${modulePath}.`);
+    throw new Error(`No inline defineConfig(...) call named "${name}" found in ${modulePath}.`);
   }
   return inline;
 }
 
-function findInlineSqlfuCall(sourceText: string, modulePath: string): {openParen: number} | null {
-  const calls: {openParen: number}[] = [];
-  forEachCodeIndex(sourceText, (index) => {
-    if (!startsWithIdentifier(sourceText, index, 'inlineSqlfu')) return;
+function findDefineConfigCalls(sourceText: string): InlineConfigCall[] {
+  const calls: InlineConfigCall[] = [];
+  forEachCodeIndexWithDepth(sourceText, (index, depth) => {
+    if (!startsWithIdentifier(sourceText, index, 'defineConfig')) return;
     const previous = sourceText[index - 1] || '';
-    const next = sourceText[index + 'inlineSqlfu'.length] || '';
+    const next = sourceText[index + 'defineConfig'.length] || '';
     if (isIdentifierPart(previous) || previous === '.' || isIdentifierPart(next)) return;
-    const openParen = skipTrivia(sourceText, index + 'inlineSqlfu'.length);
+    const openParen = skipTrivia(sourceText, index + 'defineConfig'.length);
     if (sourceText[openParen] === '(') {
-      calls.push({openParen});
+      calls.push({
+        target: readDefineConfigTarget(sourceText, index, depth),
+        openParen,
+      });
     }
   });
-  if (calls.length > 1) {
-    throw new Error(`${modulePath} contains more than one inlineSqlfu(...) call.`);
+  return calls;
+}
+
+function isTopLevelDepth(depth: SourceDepth): boolean {
+  return depth.braces === 0 && depth.brackets === 0 && depth.parens === 0;
+}
+
+function isClassStaticPropertyDepth(depth: SourceDepth): boolean {
+  return depth.braces === 1 && depth.brackets === 0 && depth.parens === 0;
+}
+
+function readDefineConfigTarget(sourceText: string, index: number, depth: SourceDepth): InlineConfigTarget | null {
+  if (isTopLevelDepth(depth)) {
+    const name = readDefineConfigConstName(sourceText, index);
+    return name ? {name} : null;
   }
-  return calls[0] || null;
+  if (isClassStaticPropertyDepth(depth)) {
+    return readDefineConfigStaticPropertyTarget(sourceText, index);
+  }
+  return null;
+}
+
+function readDefineConfigConstName(sourceText: string, index: number): string | null {
+  const prefix = sourceText.slice(0, index);
+  const match = prefix.match(/(?:^|[;\n])\s*(?:export\s+)?const\s+([A-Za-z_$][A-Za-z0-9_$]*)(?:\s*:[^=]+)?\s*=\s*$/u);
+  return match?.[1] || null;
+}
+
+function readDefineConfigStaticPropertyTarget(sourceText: string, index: number): InlineConfigTarget | null {
+  const classBodyStart = findEnclosingTopLevelBrace(sourceText, index);
+  if (classBodyStart === null) return null;
+  const className = readTopLevelClassName(sourceText, classBodyStart);
+  if (!className) return null;
+  const name = readStaticPropertyName(sourceText, classBodyStart + 1, index);
+  return name ? {className, name} : null;
+}
+
+function findEnclosingTopLevelBrace(sourceText: string, limit: number): number | null {
+  let cursor = 0;
+  let braces = 0;
+  let topLevelBrace: number | null = null;
+  while (cursor < limit) {
+    const skipped = skipSourceElement(sourceText, cursor);
+    if (skipped !== cursor + 1) {
+      cursor = skipped;
+      continue;
+    }
+    const char = sourceText[cursor];
+    if (char === '{') {
+      if (braces === 0) topLevelBrace = cursor;
+      braces += 1;
+    } else if (char === '}') {
+      braces -= 1;
+      if (braces === 0) topLevelBrace = null;
+    }
+    cursor += 1;
+  }
+  return braces === 1 ? topLevelBrace : null;
+}
+
+function readTopLevelClassName(sourceText: string, classBodyStart: number): string | null {
+  const prefix = sourceText.slice(0, classBodyStart);
+  const match = prefix.match(
+    /(?:^|[;\n])\s*(?:export\s+)?(?:default\s+)?(?:abstract\s+)?class\s+([A-Za-z_$][A-Za-z0-9_$]*)[^{]*$/u,
+  );
+  return match?.[1] || null;
+}
+
+function readStaticPropertyName(sourceText: string, classBodyStart: number, index: number): string | null {
+  const prefix = sourceText.slice(classBodyStart, index);
+  const match = prefix.match(
+    /(?:^|[;\n])\s*(?:(?:public|private|protected|readonly|accessor)\s+)*static\s+(?:readonly\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\s*!?(?:\s*:[^=]+)?\s*=\s*$/u,
+  );
+  return match?.[1] || null;
+}
+
+function inlineConfigReferenceName(inline: Pick<InlineConfigSource, 'className' | 'name'>): string {
+  return inline.className ? `${inline.className}.${inline.name}` : inline.name;
+}
+
+function firstDuplicate(values: string[]): string | undefined {
+  const seen: string[] = [];
+  for (const value of values) {
+    if (seen.includes(value)) return value;
+    seen.push(value);
+  }
+  return undefined;
 }
 
 type SourceSpan = {
@@ -142,12 +407,20 @@ type SourceSpan = {
   end: number;
 };
 
+type SourceReplacement = SourceSpan & {
+  text: string;
+};
+
 type PropertySpan = SourceSpan & {
   name: string;
 };
 
 function readSqlProperty(properties: PropertySpan[], name: string, modulePath: string): InlineSqlTemplate {
-  return readSqlTemplate(sourceTextFor(properties), readProperty(properties, name, modulePath), `${modulePath} ${name}`);
+  return readSqlTemplate(
+    sourceTextFor(properties),
+    readProperty(properties, name, modulePath),
+    `${modulePath} ${name}`,
+  );
 }
 
 function readArrayProperty(properties: PropertySpan[], name: string, modulePath: string): SourceSpan {
@@ -155,7 +428,7 @@ function readArrayProperty(properties: PropertySpan[], name: string, modulePath:
   const sourceText = sourceTextFor(properties);
   const start = skipTrivia(sourceText, property.start);
   if (sourceText[start] !== '[') {
-    throw new Error(`inlineSqlfu(...) in ${modulePath} must provide "${name}" as an array literal.`);
+    throw new Error(`inline defineConfig(...) in ${modulePath} must provide "${name}" as an array literal.`);
   }
   return {start, end: findMatchingDelimiter(sourceText, start, '[', ']')};
 }
@@ -165,7 +438,7 @@ function readObjectProperty(properties: PropertySpan[], name: string, modulePath
   const sourceText = sourceTextFor(properties);
   const start = skipTrivia(sourceText, property.start);
   if (sourceText[start] !== '{') {
-    throw new Error(`inlineSqlfu(...) in ${modulePath} must provide "${name}" as an object literal.`);
+    throw new Error(`inline defineConfig(...) in ${modulePath} must provide "${name}" as an object literal.`);
   }
   return {start, end: findMatchingDelimiter(sourceText, start, '{', '}')};
 }
@@ -173,7 +446,7 @@ function readObjectProperty(properties: PropertySpan[], name: string, modulePath
 function readProperty(properties: PropertySpan[], name: string, modulePath: string): PropertySpan {
   const property = properties.find((candidate) => candidate.name === name);
   if (!property) {
-    throw new Error(`inlineSqlfu(...) in ${modulePath} must provide a "${name}" property assignment.`);
+    throw new Error(`inline defineConfig(...) in ${modulePath} must provide a "${name}" property assignment.`);
   }
   return property;
 }
@@ -182,12 +455,20 @@ function readMigrationSources(sourceText: string, array: SourceSpan, modulePath:
   return parseArrayElements(sourceText, array).map((element, index) => {
     const objectStart = skipTrivia(sourceText, element.start);
     if (sourceText[objectStart] !== '{') {
-      throw new Error(`inlineSqlfu(...) migration ${index} in ${modulePath} must be an object literal.`);
+      throw new Error(`inline defineConfig(...) migration ${index} in ${modulePath} must be an object literal.`);
     }
     const objectEnd = findMatchingDelimiter(sourceText, objectStart, '{', '}');
     const properties = parseObjectProperties(sourceText, objectStart, objectEnd, modulePath);
-    const name = readStringInitializer(sourceText, readProperty(properties, 'name', modulePath), `${modulePath} migration name`);
-    const content = readSqlTemplate(sourceText, readProperty(properties, 'content', modulePath), `${modulePath} migration ${name}`);
+    const name = readStringInitializer(
+      sourceText,
+      readProperty(properties, 'name', modulePath),
+      `${modulePath} migration name`,
+    );
+    const content = readSqlTemplate(
+      sourceText,
+      readProperty(properties, 'content', modulePath),
+      `${modulePath} migration ${name}`,
+    );
     return {name, content};
   });
 }
@@ -195,8 +476,20 @@ function readMigrationSources(sourceText: string, array: SourceSpan, modulePath:
 function readQuerySources(sourceText: string, object: SourceSpan, modulePath: string): InlineQuerySource[] {
   return parseObjectProperties(sourceText, object.start, object.end, modulePath).map((property) => {
     const name = property.name;
-    const content = readSqlTemplate(sourceText, property, `${modulePath} query ${name}`);
-    return {name, content};
+    const objectStart = skipTrivia(sourceText, property.start);
+    if (sourceText[objectStart] !== '{') {
+      throw new Error(`inline defineConfig(...) query ${name} in ${modulePath} must be an object literal.`);
+    }
+    const objectEnd = findMatchingDelimiter(sourceText, objectStart, '{', '}');
+    const properties = parseObjectProperties(sourceText, objectStart, objectEnd, modulePath);
+    const content = readSqlProperty(properties, 'query', `${modulePath} query ${name}`);
+    return {
+      name,
+      content,
+      object: {start: objectStart, end: objectEnd},
+      type: properties.find((candidate) => candidate.name === '$type'),
+      mode: properties.find((candidate) => candidate.name === 'mode'),
+    };
   });
 }
 
@@ -254,7 +547,7 @@ function parseObjectProperties(
     const name = readPropertyName(sourceText, cursor, `${modulePath} object`);
     cursor = skipTrivia(sourceText, name.end);
     if (sourceText[cursor] !== ':') {
-      throw new Error(`inlineSqlfu(...) in ${modulePath} only supports property assignments.`);
+      throw new Error(`inline defineConfig(...) in ${modulePath} only supports property assignments.`);
     }
     const valueStart = cursor + 1;
     const valueEnd = findTopLevelValueEnd(sourceText, valueStart, objectEnd);
@@ -340,7 +633,7 @@ function findMatchingDelimiter(sourceText: string, openIndex: number, open: stri
     }
     cursor = skipSourceElement(sourceText, cursor);
   }
-  throw new Error(`Unbalanced ${open}${close} in inlineSqlfu(...) source.`);
+  throw new Error(`Unbalanced ${open}${close} in inline defineConfig(...) source.`);
 }
 
 function findMatchingAngle(sourceText: string, openIndex: number): number {
@@ -361,14 +654,33 @@ function findMatchingAngle(sourceText: string, openIndex: number): number {
     }
     cursor = skipSourceElement(sourceText, cursor);
   }
-  throw new Error('Unbalanced sql<...> type argument in inlineSqlfu(...) source.');
+  throw new Error('Unbalanced sql<...> type argument in inline defineConfig(...) source.');
 }
 
-function forEachCodeIndex(sourceText: string, callback: (index: number) => void): void {
+type SourceDepth = {
+  braces: number;
+  brackets: number;
+  parens: number;
+};
+
+function forEachCodeIndexWithDepth(sourceText: string, callback: (index: number, depth: SourceDepth) => void): void {
   let cursor = 0;
+  const depth = {braces: 0, brackets: 0, parens: 0};
   while (cursor < sourceText.length) {
-    callback(cursor);
-    cursor = skipSourceElement(sourceText, cursor);
+    callback(cursor, depth);
+    const skipped = skipSourceElement(sourceText, cursor);
+    if (skipped !== cursor + 1) {
+      cursor = skipped;
+      continue;
+    }
+    const char = sourceText[cursor];
+    if (char === '{') depth.braces += 1;
+    if (char === '}') depth.braces -= 1;
+    if (char === '[') depth.brackets += 1;
+    if (char === ']') depth.brackets -= 1;
+    if (char === '(') depth.parens += 1;
+    if (char === ')') depth.parens -= 1;
+    cursor += 1;
   }
 }
 
@@ -422,7 +734,7 @@ function skipLineComment(sourceText: string, index: number): number {
 function skipBlockComment(sourceText: string, index: number): number {
   const end = sourceText.indexOf('*/', index + 2);
   if (end === -1) {
-    throw new Error('Unclosed block comment in inlineSqlfu(...) source.');
+    throw new Error('Unclosed block comment in inline defineConfig(...) source.');
   }
   return end + 2;
 }
@@ -438,7 +750,7 @@ function findStringEnd(sourceText: string, start: number, quote: string): number
     if (char === quote) return cursor;
     cursor += 1;
   }
-  throw new Error('Unclosed string literal in inlineSqlfu(...) source.');
+  throw new Error('Unclosed string literal in inline defineConfig(...) source.');
 }
 
 function findTemplateEnd(sourceText: string, start: number, location: string): number {
@@ -469,7 +781,7 @@ function skipTemplateLiteral(sourceText: string, start: number): number {
     if (char === '`') return cursor + 1;
     cursor += 1;
   }
-  throw new Error('Unclosed template literal in inlineSqlfu(...) source.');
+  throw new Error('Unclosed template literal in inline defineConfig(...) source.');
 }
 
 function startsWithIdentifier(sourceText: string, index: number, identifier: string): boolean {
@@ -484,10 +796,7 @@ function isIdentifierPart(value: string): boolean {
   return /[A-Za-z0-9_$]/u.test(value);
 }
 
-function applyReplacements(
-  sourceText: string,
-  replacements: {start: number; end: number; text: string}[],
-): string {
+function applyReplacements(sourceText: string, replacements: {start: number; end: number; text: string}[]): string {
   return replacements
     .slice()
     .sort((left, right) => right.start - left.start)
@@ -503,21 +812,61 @@ function lineIndentAt(sourceText: string, index: number): string {
   return sourceText.slice(lineStart, index).match(/^[ \t]*/)?.[0] || '';
 }
 
-function renderInlineMigrationObject(indent: string, migration: {name: string; content: string}): string {
-  const content = migration.content.trim();
-  if (!content.includes('\n')) {
-    return `${indent}{ name: ${singleQuoted(migration.name)}, content: sql\`${escapeTemplateLiteral(content)}\` }`;
+function lineStartIndex(sourceText: string, index: number): number {
+  return sourceText.lastIndexOf('\n', index - 1) + 1;
+}
+
+function lineEndIndex(sourceText: string, index: number): number {
+  const lineEnd = sourceText.indexOf('\n', index);
+  return lineEnd === -1 ? index : lineEnd + 1;
+}
+
+function trimEndIndex(sourceText: string, end: number): number {
+  let index = end;
+  while (index > 0 && /\s/u.test(sourceText[index - 1] || '')) {
+    index -= 1;
   }
-  const bodyIndent = `${indent}  `;
+  return index;
+}
+
+type InlineSourceStyle = {
+  indent: string;
+  quote: '"' | "'";
+};
+
+function inferInlineSourceStyle(sourceText: string): InlineSourceStyle {
+  const indent = sourceText
+    .split('\n')
+    .map((line) => line.match(/^[ \t]+/u)?.[0])
+    .find(Boolean);
+  const quote = sourceText.match(/['"]/u)?.[0] as `"` | `'`;
+  return {
+    indent: indent || '  ',
+    quote: (quote || `'`) as InlineSourceStyle['quote'],
+  };
+}
+
+function renderInlineMigrationObject(
+  indent: string,
+  migration: {name: string; content: string},
+  style: InlineSourceStyle,
+): string {
+  const isMultiline = migration.content.includes('\n');
+  const content = migration.content.trim();
+  if (!isMultiline) {
+    return `${indent}{ name: ${quotedString(migration.name, style.quote)}, content: sql\`${escapeTemplateLiteral(content)}\` }`;
+  }
+  const propertyIndent = `${indent}${style.indent}`;
+  const bodyIndent = `${propertyIndent}${style.indent}`;
   const body = content
     .split('\n')
     .map((line) => `${bodyIndent}${escapeTemplateLiteral(line.trimEnd())}`)
     .join('\n');
-  return `${indent}{ name: ${singleQuoted(migration.name)}, content: sql\`\n${body}\n${indent}\` }`;
+  return `${indent}{\n${propertyIndent}name: ${quotedString(migration.name, style.quote)},\n${propertyIndent}content: sql\`\n${body}\n${propertyIndent}\`,\n${indent}}`;
 }
 
-function singleQuoted(value: string): string {
-  return `'${value.replaceAll('\\', '\\\\').replaceAll("'", "\\'")}'`;
+function quotedString(value: string, quote: '"' | "'"): string {
+  return `${quote}${value.replaceAll('\\', '\\\\').replaceAll(quote, `\\${quote}`)}${quote}`;
 }
 
 function escapeTemplateLiteral(value: string): string {

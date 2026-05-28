@@ -6,57 +6,85 @@ import {sqliteDialect} from '../dialect.js';
 import {materializeDefinitionsSchemaFor, materializeMigrationsSchemaFor} from '../materialize.js';
 import {migrationNickname} from '../naming.js';
 import type {SqlfuHost} from '../host.js';
-import {generateInlineSqlfuTypes, type GenerateQueryTypesResult} from '../typegen/index.js';
+import {generateInlineConfigTypes, type GenerateQueryTypesResult} from '../typegen/index.js';
 import {
   appendInlineMigration,
   inlineMigrationsToMigrationFiles,
-  readInlineSqlfuSource,
+  readInlineConfigSources,
+  type InlineConfigSource,
 } from './inline-source.js';
 
-export async function generateInlineSqlfuModule(input: {
+export async function generateInlineConfigModule(input: {
   modulePath: string;
   projectRoot: string;
   host: SqlfuHost;
 }): Promise<GenerateQueryTypesResult> {
-  return generateInlineSqlfuTypes(input);
+  return generateInlineConfigTypes(input);
 }
 
-export async function draftInlineSqlfuMigration(input: {
+export async function draftInlineConfigMigration(input: {
   modulePath: string;
   projectRoot: string;
   host: SqlfuHost;
   name?: string;
   confirm?: Confirm;
 }): Promise<{path: string} | null> {
-  const inline = await readInlineSqlfuSource(input.modulePath);
-  if (!inline) {
-    throw new Error(`No inlineSqlfu(...) call found in ${input.modulePath}.`);
+  const inlines = await readInlineConfigSources(input.modulePath);
+  if (inlines.length === 0) {
+    throw new Error(`No inline defineConfig(...) call found in ${input.modulePath}.`);
   }
 
   const dialect = sqliteDialect();
+  let drafted = false;
+  for (const inline of inlines) {
+    const didDraft = await draftInlineConfigMigrationForSource(input, inline, {
+      dialect,
+      includeInlineName: inlines.length > 1,
+    });
+    drafted ||= didDraft;
+  }
+  return drafted ? {path: projectRelativePath(input.projectRoot, input.modulePath)} : null;
+}
+
+async function draftInlineConfigMigrationForSource(
+  input: {
+    modulePath: string;
+    projectRoot: string;
+    host: SqlfuHost;
+    name?: string;
+    confirm?: Confirm;
+  },
+  inline: InlineConfigSource,
+  options: {
+    dialect: ReturnType<typeof sqliteDialect>;
+    includeInlineName: boolean;
+  },
+): Promise<boolean> {
   const [desiredSchema, baselineSchema] = await Promise.all([
-    materializeDefinitionsSchemaFor(input.host, inline.definitions.sql, {dialect}),
-    materializeMigrationsSchemaFor(input.host, inlineMigrationsToMigrationFiles(inline), {dialect}),
+    materializeDefinitionsSchemaFor(input.host, inline.definitions.sql, {dialect: options.dialect}),
+    materializeMigrationsSchemaFor(input.host, inlineMigrationsToMigrationFiles(inline), {dialect: options.dialect}),
   ]);
-  const diffLines = await dialect.diffSchema(input.host, {
+  const diffLines = await options.dialect.diffSchema(input.host, {
     baselineSql: baselineSchema,
     desiredSql: desiredSchema,
     allowDestructive: true,
   });
 
   if (diffLines.length === 0) {
-    return null;
+    return false;
   }
 
   const confirm = input.confirm || autoAcceptConfirm;
   const body = await confirm({
-    title: 'Create inline migration entry?',
+    title: options.includeInlineName
+      ? `Create inline migration entry for ${inline.name}?`
+      : 'Create inline migration entry?',
     body: diffLines.join('\n').trim(),
     bodyType: 'sql',
     editable: true,
   });
   if (!body?.trim()) {
-    return null;
+    return false;
   }
 
   const prefix = getMigrationPrefix({
@@ -65,8 +93,12 @@ export async function draftInlineSqlfuMigration(input: {
     existing: inline.migrations.map((migration) => `${migration.name}.sql`),
   });
   const name = `${prefix}_${slugify(input.name || migrationNickname(body))}`;
-  await appendInlineMigration(input.modulePath, {name, content: body});
-  return {path: projectRelativePath(input.projectRoot, input.modulePath)};
+  await appendInlineMigration(input.modulePath, {
+    app: inline.className ? `${inline.className}.${inline.name}` : inline.name,
+    name,
+    content: body,
+  });
+  return true;
 }
 
 function projectRelativePath(projectRoot: string, filePath: string) {

@@ -1,18 +1,26 @@
-import {inlineSqlfu, sql} from '../src/api/exports.js';
+import {defineConfig, sql} from '../src/index.js';
 import type {SyncClient} from '../src/types.js';
 
-const app = inlineSqlfu({
+const app = defineConfig({
   definitions: sql`
     create table metrics(rowsAffected integer not null);
   `,
   migrations: [],
   queries: {
-    listMetrics: sql<{result: {rowsAffected: number}}>`
-      select rowsAffected from metrics
-    `,
-    createMetric: sql`
-      insert into metrics(rowsAffected) values (1)
-    `,
+    listMetrics: {
+      query: sql`
+        select rowsAffected from metrics
+      `,
+      mode: 'many',
+      $type: {} as {result: {rowsAffected: number}},
+    },
+    createMetric: {
+      query: sql`
+        insert into metrics(rowsAffected) values (1)
+      `,
+      mode: 'metadata',
+      $type: {} as {},
+    },
   },
 });
 

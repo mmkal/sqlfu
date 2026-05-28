@@ -18,7 +18,7 @@ test('strict-tier entries import no node:* or disallowed bare specifiers', async
   expect(violations).toEqual([]);
 });
 
-test('built api entry exposes commands plus inline module helpers', async () => {
+test('built api entry exposes commands plus sql helper', async () => {
   const apiEntry = path.join(packageRoot, 'dist/api/exports.js');
   const api = await import(pathToFileURL(apiEntry).href);
   expect(Object.keys(api).sort()).toEqual([
@@ -32,7 +32,6 @@ test('built api entry exposes commands plus inline module helpers', async () => 
     'generate',
     'goto',
     'init',
-    'inlineSqlfu',
     'kill',
     'migrate',
     'pending',

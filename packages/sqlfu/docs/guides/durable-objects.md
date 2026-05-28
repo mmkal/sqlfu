@@ -21,43 +21,46 @@ in the Worker module and point `--config` at that module:
 
 ```ts
 import {DurableObject} from 'cloudflare:workers';
-import {createDurableObjectClient} from 'sqlfu';
-import {inlineSqlfu, sql} from 'sqlfu/api';
-
-const counterDb = inlineSqlfu({
-  definitions: sql`
-    create table counters (
-      name text primary key not null,
-      value integer not null default 0
-    );
-  `,
-  migrations: [
-    {
-      name: '20260506000000_create_counters',
-      content: sql`
-        create table counters (
-          name text primary key not null,
-          value integer not null default 0
-        );
-      `,
-    },
-  ],
-  queries: {
-    incrementCounter: sql`
-      insert into counters (name, value)
-      values (:name, 1)
-      on conflict (name) do update set value = value + 1
-      returning name, value
-    `,
-  },
-});
+import {createDurableObjectClient, defineConfig, sql} from 'sqlfu';
 
 export class CounterObject extends DurableObject {
-  db: typeof counterDb.$type;
+  static db = defineConfig({
+    definitions: sql`
+      create table counters (
+        name text primary key not null,
+        value integer not null default 0
+      );
+    `,
+    migrations: [
+      {
+        name: '20260506000000_create_counters',
+        content: sql`
+          create table counters (
+            name text primary key not null,
+            value integer not null default 0
+          );
+        `,
+      },
+    ],
+    queries: {
+      incrementCounter: {
+        query: sql`
+          insert into counters (name, value)
+          values (:name, 1)
+          on conflict (name) do update set value = value + 1
+          returning name, value
+        `,
+        mode: 'one',
+        $type: {} as { parameters: { name: string }; result: { name: string; value: number } },
+      },
+    },
+  });
+
+  db: typeof CounterObject.db.$type;
 
   constructor(ctx: DurableObjectState, env: {}) {
     super(ctx, env);
-    this.db = counterDb(createDurableObjectClient(ctx.storage));
+    this.db = CounterObject.db(createDurableObjectClient(ctx.storage));
     this.db.migrate();
   }
 }
@@ -72,8 +75,12 @@ npx sqlfu --config src/durable-objects/counter/counter.ts generate
 
 `draft` appends new `{name, content: sql\`...\`}` entries to the inline
 `migrations` array. `generate` writes inferred generic types onto each inline
-query `sql` template. The source must keep one parseable `inlineSqlfu({...})`
-object literal with `definitions`, `migrations`, and `queries` properties.
+query object. The source must keep one or more parseable top-level
+`const name = defineConfig({...})` object literals, or static
+`ClassName.name = defineConfig({...})` properties on top-level named classes,
+with `definitions`, `migrations`, and `queries` properties. The static class
+property form is preferred for Durable Objects because the schema stays attached
+to the object that owns the storage.
 
 ## Project shape
 

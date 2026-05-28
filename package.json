@@ -34,6 +34,7 @@
   "devDependencies": {
     "alchemy": "^0.93.7",
     "eslint": "^9.39.4",
+    "eslint-plugin-unicorn": "^64.0.0",
     "oxfmt": "^0.45.0",
     "simple-git-hooks": "^2.13.1",
     "tsx": "^4.21.0",

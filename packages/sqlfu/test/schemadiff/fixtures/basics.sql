@@ -34,6 +34,7 @@ drop table toy;
 
 -- #region: camelCase columns are quoted when creating a table
 -- baseline:
+
 -- desired:
 create table events(createdAt text not null);
 -- output:
@@ -42,6 +43,7 @@ create table events("createdAt" text not null);
 
 -- #region: string literals are preserved when creating a table
 -- baseline:
+
 -- desired:
 create table events(createdAt text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')));
 -- output:

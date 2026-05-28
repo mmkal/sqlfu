@@ -49,29 +49,29 @@ test('createExpoSqliteClient can write and read rows in a real expo web app', {t
 
       async resetPeople() {
         await this.client.run(sql`
-            drop table if exists person
-          `);
+          drop table if exists person
+        `);
         await this.client.run(sql`
-            create table if not exists person (
-              id integer primary key,
-              name text not null
-            )
-          `);
+          create table if not exists person (
+            id integer primary key,
+            name text not null
+          )
+        `);
         await this.client.run(sql`delete from person`);
       }
 
       async insertPerson(id: number, name: string) {
         return this.client.run(sql`
-            insert into person (id, name) values (${id}, ${name})
-          `);
+          insert into person (id, name) values (${id}, ${name})
+        `);
       }
 
       async listPeople() {
         return this.client.all<{id: number; name: string}>(sql`
-            select id, name
-            from person
-            order by id
-          `);
+          select id, name
+          from person
+          order by id
+        `);
       }
     },
   );
@@ -108,10 +108,10 @@ test('createExpoSqliteClient.raw runs multiple statements in a real expo web app
 
       async listPeople() {
         return this.client.all<{id: number; name: string}>(sql`
-            select id, name
-            from person
-            order by id
-          `);
+          select id, name
+          from person
+          order by id
+        `);
       }
     },
   );

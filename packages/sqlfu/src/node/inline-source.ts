@@ -170,7 +170,9 @@ function renderInlineQueryTypeReplacements(
   const typeValue = `{} as ${queryType.type}`;
   const modeValue = quotedString(queryType.mode, style.quote);
   if (query.type && query.mode && query.type.start < query.mode.start) {
-    return [replacePropertyLines(sourceText, query.type, query.mode, [`mode: ${modeValue}`, `$type: ${typeValue}`])];
+    return [
+      replacePropertyLines(sourceText, query.type, query.mode, [`mode: ${modeValue}`, `$type: ${typeValue}`], style),
+    ];
   }
 
   const replacements: SourceReplacement[] = [];
@@ -200,6 +202,7 @@ function replacePropertyLines(
   firstProperty: PropertySpan,
   lastProperty: PropertySpan,
   lines: string[],
+  style: InlineSourceStyle,
 ): SourceReplacement {
   const start = lineStartIndex(sourceText, firstProperty.start);
   const end = lineEndIndex(sourceText, lastProperty.end);
@@ -207,7 +210,9 @@ function replacePropertyLines(
   return {
     start,
     end,
-    text: lines.map((line) => `${indent}${line},`).join('\n') + (sourceText[end - 1] === '\n' ? '\n' : ''),
+    text:
+      lines.map((line, index) => `${indent}${line}${propertySeparator(index, lines.length, style)}`).join('\n') +
+      (sourceText[end - 1] === '\n' ? '\n' : ''),
   };
 }
 
@@ -239,7 +244,9 @@ function renderInlineQueryInsertedProperties(
   const closingIndent = lineIndentAt(sourceText, object.end);
   const propertyIndent = `${closingIndent}${style.indent}`;
   const prefix = beforeClose.length === 0 ? '\n' : `${beforeClose.endsWith(',') ? '' : ','}\n`;
-  const body = properties.map((property) => `${propertyIndent}${property},`).join('\n');
+  const body = properties
+    .map((property, index) => `${propertyIndent}${property}${propertySeparator(index, properties.length, style)}`)
+    .join('\n');
   return {
     start: insertionStart,
     end: object.end,
@@ -262,7 +269,7 @@ export async function appendInlineMigration(
   const style = inferInlineSourceStyle(inline.sourceText);
   const elementIndent = `${closingIndent}${style.indent}`;
   const prefix = inline.migrations.length === 0 ? '\n' : `${beforeInsert.endsWith(',') ? '' : ','}\n`;
-  const insertion = `${prefix}${renderInlineMigrationObject(elementIndent, migration, style)}\n${closingIndent}`;
+  const insertion = `${prefix}${renderInlineMigrationObject(elementIndent, migration, style)}${style.trailingComma ? ',' : ''}\n${closingIndent}`;
   await fs.writeFile(modulePath, `${beforeInsert}${insertion}${inline.sourceText.slice(insertPosition)}`);
 }
 
@@ -778,6 +785,10 @@ function skipTemplateLiteral(sourceText: string, start: number): number {
       cursor += 2;
       continue;
     }
+    if (char === '$' && sourceText[cursor + 1] === '{') {
+      cursor = findMatchingDelimiter(sourceText, cursor + 1, '{', '}') + 1;
+      continue;
+    }
     if (char === '`') return cursor + 1;
     cursor += 1;
   }
@@ -832,6 +843,7 @@ function trimEndIndex(sourceText: string, end: number): number {
 type InlineSourceStyle = {
   indent: string;
   quote: '"' | "'";
+  trailingComma: boolean;
 };
 
 function inferInlineSourceStyle(sourceText: string): InlineSourceStyle {
@@ -843,6 +855,7 @@ function inferInlineSourceStyle(sourceText: string): InlineSourceStyle {
   return {
     indent: indent || '  ',
     quote: (quote || `'`) as InlineSourceStyle['quote'],
+    trailingComma: /,\s*[}\]]/u.test(sourceText),
   };
 }
 
@@ -862,7 +875,11 @@ function renderInlineMigrationObject(
     .split('\n')
     .map((line) => `${bodyIndent}${escapeTemplateLiteral(line.trimEnd())}`)
     .join('\n');
-  return `${indent}{\n${propertyIndent}name: ${quotedString(migration.name, style.quote)},\n${propertyIndent}content: sql\`\n${body}\n${propertyIndent}\`,\n${indent}}`;
+  return `${indent}{\n${propertyIndent}name: ${quotedString(migration.name, style.quote)},\n${propertyIndent}content: sql\`\n${body}\n${propertyIndent}\`${style.trailingComma ? ',' : ''}\n${indent}}`;
+}
+
+function propertySeparator(index: number, length: number, style: InlineSourceStyle): string {
+  return index < length - 1 || style.trailingComma ? ',' : '';
 }
 
 function quotedString(value: string, quote: '"' | "'"): string {

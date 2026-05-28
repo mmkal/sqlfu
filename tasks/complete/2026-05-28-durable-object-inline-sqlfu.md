@@ -130,3 +130,4 @@ To do this it requires a fair amount of constraints on the source code. The rule
 - The inline source reader no longer needs `ts-morph` at runtime, keeping `sqlfu/api` importable in Worker bundles and moving `ts-morph` back to dev-only tooling.
 - Second review follow-up moved the public inline API to root `defineConfig(...)`, added a packed-package WebWorker TypeScript compile for `import {defineConfig, sql} from 'sqlfu'`, and fixed inline result typing for selected columns named like metadata fields such as `rowsAffected`.
 - Inline `generate --watch` now watches the configured module itself instead of rejecting inline configs; coverage lives in `packages/sqlfu/test/generate-watch.test.ts`.
+- Bugbot follow-up taught the source scanner to skip nested template expressions outside inline configs, and inline edits now infer trailing-comma style so generated `mode`, `$type`, and migration entries do not fight the surrounding formatter preference.

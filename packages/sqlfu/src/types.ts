@@ -6,12 +6,21 @@ export type QueryArg = null | string | number | bigint | Uint8Array | boolean;
 
 export type ResultRow = object;
 
+export interface SqlFragmentNoArgs {
+  sql: string;
+  args: [];
+}
 export interface SqlFragment {
   sql: string;
   args: QueryArg[];
 }
 
 export interface SqlQuery extends SqlFragment {
+  name?: string;
+  __sqlfuType?: unknown;
+}
+
+export interface SqlQueryNoArgs extends SqlFragmentNoArgs {
   name?: string;
   __sqlfuType?: unknown;
 }

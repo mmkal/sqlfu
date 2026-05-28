@@ -6,7 +6,7 @@ import type {
   QueryResultMode,
   ResultRow,
   RunResult,
-  SqlQuery,
+  SqlQueryNoArgs,
   SyncClient,
 } from './types.js';
 
@@ -17,17 +17,17 @@ export type InlineConfigQueryType = {
 
 export type InlineConfigMigration = {
   name: string;
-  content: SqlQuery;
+  content: SqlQueryNoArgs;
 };
 
 export type InlineConfigQuery<TType extends InlineConfigQueryType = InlineConfigQueryType> = {
-  query: SqlQuery;
+  query: SqlQueryNoArgs;
   $type?: TType;
   mode?: QueryResultMode;
 };
 
 export type InlineConfigDefinition<TQueries extends Record<string, InlineConfigQuery>> = {
-  definitions: SqlQuery;
+  definitions: SqlQueryNoArgs;
   migrations?: InlineConfigMigration[];
   queries: TQueries;
 };

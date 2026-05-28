@@ -86,6 +86,15 @@ export function isSqlFragment(value: unknown): value is SqlFragment {
   );
 }
 
+/** sql tag with no arguments */
+export function sql<TType = unknown>(
+  strings: TemplateStringsArray,
+): Omit<SqlQuery, 'args'> & {args: []; __sqlfuType?: TType};
+/** sql tag with arguments */
+export function sql<TType = unknown>(
+  strings: TemplateStringsArray,
+  ...values: SqlValue[]
+): SqlQuery & {__sqlfuType?: TType};
 export function sql<TType = unknown>(
   strings: TemplateStringsArray,
   ...values: SqlValue[]

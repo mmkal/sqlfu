@@ -118,3 +118,4 @@ To do this it requires a fair amount of constraints on the source code. The rule
 - The vendor bundler now preserves the PostgreSQL formatter bundle as well as SQLite because `format(sql, {language: 'postgresql'})` imports it from `dist/formatter.js`.
 - PR review follow-up made inline result types match raw Durable Object rows (`published_at`, nullable columns) and rejects query shapes such as `in (:ids)` that would need generated wrapper runtime expansion.
 - The inline source reader no longer needs `ts-morph` at runtime, keeping `sqlfu/api` importable in Worker bundles and moving `ts-morph` back to dev-only tooling.
+- Second review follow-up added a packed-package WebWorker TypeScript compile for `import {inlineSqlfu, sql} from 'sqlfu/api'`, and fixed inline result typing for selected columns named like metadata fields such as `rowsAffected`.

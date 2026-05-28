@@ -32,17 +32,19 @@ type InlineQueryParameters<TQuery> = TQuery extends {__sqlfuType?: {parameters: 
 
 type InlineQueryResult<TQuery> = TQuery extends {__sqlfuType?: {result: infer TResult}} ? TResult : QueryMetadata;
 
-type InlineQueryFunction<TClient extends Client, TQuery> = undefined extends InlineQueryParameters<TQuery>
-  ? () => InlineQueryReturn<TClient, InlineQueryResult<TQuery>>
-  : (params: InlineQueryParameters<TQuery>) => InlineQueryReturn<TClient, InlineQueryResult<TQuery>>;
+type InlineQueryReturnsRows<TQuery> = TQuery extends {__sqlfuType?: {result: ResultRow}} ? true : false;
 
-type InlineQueryReturn<TClient extends Client, TResult> = TClient extends SyncClient
-  ? TResult extends QueryMetadata
-    ? RunResult
-    : TResult[]
-  : TResult extends QueryMetadata
-    ? Promise<RunResult>
-    : Promise<TResult[]>;
+type InlineQueryFunction<TClient extends Client, TQuery> = undefined extends InlineQueryParameters<TQuery>
+  ? () => InlineQueryReturn<TClient, TQuery>
+  : (params: InlineQueryParameters<TQuery>) => InlineQueryReturn<TClient, TQuery>;
+
+type InlineQueryReturn<TClient extends Client, TQuery> = TClient extends SyncClient
+  ? InlineQueryReturnsRows<TQuery> extends true
+    ? InlineQueryResult<TQuery>[]
+    : RunResult
+  : InlineQueryReturnsRows<TQuery> extends true
+    ? Promise<InlineQueryResult<TQuery>[]>
+    : Promise<RunResult>;
 
 type InlineSqlfuBound<TQueries extends Record<string, SqlQuery>, TClient extends Client> = {
   [TName in keyof TQueries]: InlineQueryFunction<TClient, TQueries[TName]>;

@@ -3,7 +3,7 @@ import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 
 import {checkStrictImports, formatViolations} from '../scripts/check-strict-imports.js';
-import type {Confirm} from '../src/api/exports.js';
+import type {Confirm} from '../src/api/core.js';
 
 const packageRoot = path.resolve(path.dirname(import.meta.filename), '..');
 

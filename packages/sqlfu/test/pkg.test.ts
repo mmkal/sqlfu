@@ -12,6 +12,7 @@ test('packed package supports normal public imports', async () => {
   await fixture.run('root-import.mjs');
   await fixture.run('api-import.mjs');
   await fixture.run('cloudflare-import.mjs');
+  await fixture.typecheck('tsconfig.worker.json');
 });
 
 async function createPackedPackageFixture() {
@@ -71,6 +72,45 @@ async function createPackedPackageFixture() {
       assert.match(dbPath, /\\.sqlite$/);
       assert.equal(typeof sync, 'function');
     `,
+    'worker-inline.ts': `
+      import {inlineSqlfu, sql} from 'sqlfu/api';
+
+      const app = inlineSqlfu({
+        definitions: sql\`
+          create table posts(slug text primary key);
+        \`,
+        migrations: [],
+        queries: {
+          listPosts: sql<{parameters: {limit: number}; result: {slug: string}}>\`
+            select slug
+            from posts
+            limit :limit
+          \`,
+        },
+      });
+
+      type Db = typeof app.$type;
+      declare const db: Db;
+      const rows: {slug: string}[] | Promise<{slug: string}[]> = db.listPosts({limit: 10});
+      void rows;
+    `,
+    'tsconfig.worker.json': JSON.stringify(
+      {
+        compilerOptions: {
+          strict: true,
+          target: 'ESNext',
+          module: 'ESNext',
+          moduleResolution: 'Bundler',
+          lib: ['ESNext', 'WebWorker'],
+          types: [],
+          skipLibCheck: false,
+          noEmit: true,
+        },
+        include: ['worker-inline.ts'],
+      },
+      null,
+      2,
+    ),
   });
 
   await execa('pnpm', ['install', '--ignore-scripts', '--prefer-offline'], {cwd: root});
@@ -78,6 +118,13 @@ async function createPackedPackageFixture() {
   return {
     async run(fileName: string) {
       await execa('node', [path.join(root, fileName)], {cwd: root});
+    },
+    async typecheck(fileName: string) {
+      await execa(
+        process.execPath,
+        [path.join(packageRoot, 'node_modules/typescript/bin/tsc'), '--project', path.join(root, fileName)],
+        {cwd: root},
+      );
     },
     async [Symbol.asyncDispose]() {
       await fs.rm(root, {recursive: true, force: true});

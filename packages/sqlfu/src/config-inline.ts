@@ -48,17 +48,16 @@ type InlineQueryTypePayload<TQuery> = TQuery extends {$type: infer TType}
       : {};
 
 type InlineQueryParameters<TQuery> =
-  InlineQueryTypePayload<TQuery> extends {parameters: infer TParameters} ? TParameters : undefined;
+  InlineQueryTypePayload<TQuery> extends {parameters: infer TParameters}
+    ? [parameters: TParameters]
+    : unknown extends InlineQueryTypePayload<TQuery>
+      ? [parameters?: Record<string, unknown>]
+      : [];
 
 type InlineQueryResult<TQuery> =
   InlineQueryTypePayload<TQuery> extends {result: infer TResult} ? TResult : QueryMetadata;
 
 type InlineQueryMode<TQuery> = TQuery extends {mode: infer TMode} ? TMode : 'metadata';
-
-type InlineQueryFunction<TClient extends Client, TQuery> =
-  undefined extends InlineQueryParameters<TQuery>
-    ? () => InlineQueryReturn<TClient, TQuery>
-    : (params: InlineQueryParameters<TQuery>) => InlineQueryReturn<TClient, TQuery>;
 
 type InlineQueryReturn<TClient extends Client, TQuery> = TClient extends SyncClient
   ? InlineSyncQueryReturn<TQuery>
@@ -74,7 +73,9 @@ type InlineSyncQueryReturn<TQuery> =
         : RunResult;
 
 type InlineConfigBound<TQueries extends Record<string, InlineConfigQuery>, TClient extends Client> = {
-  [TName in keyof TQueries]: InlineQueryFunction<TClient, TQueries[TName]>;
+  [TName in keyof TQueries]: (
+    ...args: InlineQueryParameters<TQueries[TName]>
+  ) => InlineQueryReturn<TClient, TQueries[TName]>;
 } & {
   migrate(): TClient extends SyncClient ? void : Promise<void>;
 };

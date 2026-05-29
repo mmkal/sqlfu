@@ -1,5 +1,5 @@
 import {DatabaseSync} from 'node:sqlite';
-import {expect, test} from 'vitest';
+import {expect, expectTypeOf, test} from 'vitest';
 
 import {createNodeSqliteClient, defineConfig, sql, type QueryMetadata, type SyncClient} from '../src/index.js';
 
@@ -107,6 +107,32 @@ test('defineConfig works with a class', () => {
 
   const onePost = postObject.db.listPosts({limit: 1});
   expect(onePost).toHaveLength(1);
+});
+
+test('defineConfig works without having generated types yet', () => {
+  using fixture = createInlineConfigFixture();
+
+  class PostObject {
+    static dbConfig = defineConfig({
+      definitions: sql`
+        create table posts (slug text primary key, title text not null);
+      `,
+      queries: {
+        listPosts: sql.many`
+          select slug, title from posts limit :limit
+        `,
+      },
+    });
+
+    db: ReturnType<typeof PostObject.dbConfig<SyncClient>>;
+
+    constructor(client: SyncClient) {
+      this.db = PostObject.dbConfig(client);
+    }
+  }
+
+  const postObject = new PostObject(fixture.client);
+  expectTypeOf(postObject.db.listPosts).toBeCallableWith({limit: 10});
 });
 
 test('defineConfig works with a class without migrations via sync(...)', async () => {

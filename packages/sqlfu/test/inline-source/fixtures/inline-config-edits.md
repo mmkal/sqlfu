@@ -106,6 +106,93 @@ export class PostObject {
 
 </details>
 
+## class config keeps formatter-split query type tags when metadata is unchanged
+
+<details>
+<summary>input</summary>
+
+```ts (worker.ts)
+import {defineConfig, sql} from 'sqlfu';
+
+export class PostObject {
+  static db = defineConfig({
+    definitions: sql`
+      create table posts (
+        slug text primary key,
+        title text not null,
+        published_at text
+      );
+    `,
+    queries: {
+      listPosts: sql.many<{
+        parameters: {limit: number; offset: number};
+        result: {slug: string; title: string; published_at: string | null};
+      }>`
+        select slug, title, published_at
+        from posts
+        order by published_at desc
+        limit :limit
+        offset :offset
+      `,
+    },
+  });
+}
+```
+
+</details>
+
+<details>
+<summary>edits</summary>
+
+```json (edits.json)
+{
+  "types": [
+    {
+      "className": "PostObject",
+      "configName": "db",
+      "queryName": "listPosts",
+      "type": "{ parameters: { limit: number; offset: number }; result: { slug: string; title: string; published_at: string | null } }",
+      "mode": "many"
+    }
+  ]
+}
+```
+
+</details>
+
+<details>
+<summary>output</summary>
+
+```ts (worker.ts)
+import {defineConfig, sql} from 'sqlfu';
+
+export class PostObject {
+  static db = defineConfig({
+    definitions: sql`
+      create table posts (
+        slug text primary key,
+        title text not null,
+        published_at text
+      );
+    `,
+    queries: {
+      listPosts: sql.many<{
+        parameters: {limit: number; offset: number};
+        result: {slug: string; title: string; published_at: string | null};
+      }>`
+        select slug, title, published_at
+        from posts
+        order by published_at desc
+        limit :limit
+        offset :offset
+      `,
+    },
+  });
+}
+```
+
+</details>
+
 ## class configs edit two inline configs in one module
 
 <details>

@@ -17,12 +17,12 @@ export interface SqlFragment {
 
 export interface SqlQuery<TType = unknown> extends SqlFragment {
   name?: string;
-  __sqlfuType?: TType;
+  __sqlfuType: TType;
 }
 
 export interface SqlQueryNoArgs<TType = unknown> extends SqlFragmentNoArgs {
   name?: string;
-  __sqlfuType?: TType;
+  __sqlfuType: TType;
 }
 
 export interface QueryMetadata {
@@ -39,12 +39,12 @@ export interface SqlTypedQueryNoArgs<
   TMode extends QueryResultMode = QueryResultMode,
 > extends SqlQueryNoArgs {
   mode: TMode;
-  __sqlfuType?: TType;
+  __sqlfuType: TType;
 }
 
 export interface SqlTypedQuery<TType = unknown, TMode extends QueryResultMode = QueryResultMode> extends SqlQuery {
   mode: TMode;
-  __sqlfuType?: TType;
+  __sqlfuType: TType;
 }
 
 export interface SqlModeTag<TMode extends QueryResultMode> {

@@ -158,7 +158,7 @@ function isInlineDefineConfigShape(sourceText: string, properties: PropertySpan[
   return sourceText[afterTag] === '`' || sourceText[afterTag] === '<';
 }
 
-export async function writeInlineQueryTypes(modulePath: string, queryTypes: InlineQueryType[]): Promise<void> {
+export async function writeInlineQueryTypes(modulePath: string, queryTypes: InlineQueryType[]): Promise<boolean> {
   const inlines = await readRequiredInlineConfigSources(modulePath);
   const style = inferInlineSourceStyle(inlines[0].sourceText);
   const replacements = inlines.flatMap((inline) =>
@@ -175,7 +175,12 @@ export async function writeInlineQueryTypes(modulePath: string, queryTypes: Inli
       return renderInlineQueryTypeReplacements(inlines[0].sourceText, query, queryType, style);
     }),
   );
-  await fs.writeFile(modulePath, applyReplacements(inlines[0].sourceText, replacements));
+  const output = applyReplacements(inlines[0].sourceText, replacements);
+  if (output === inlines[0].sourceText) {
+    return false;
+  }
+  await fs.writeFile(modulePath, output);
+  return true;
 }
 
 function renderInlineQueryTypeReplacements(
@@ -185,7 +190,8 @@ function renderInlineQueryTypeReplacements(
   style: InlineSourceStyle,
 ): SourceReplacement[] {
   if (!query.object) {
-    return [replaceSqlTagPrefix(query.content, queryType)];
+    const replacement = replaceSqlTagPrefix(sourceText, query.content, queryType);
+    return replacement ? [replacement] : [];
   }
 
   const typeValue = `{} as ${queryType.type}`;
@@ -223,12 +229,29 @@ function renderInlineQueryTypeReplacements(
   return replacements;
 }
 
-function replaceSqlTagPrefix(template: InlineSqlTemplate, queryType: InlineQueryType): SourceReplacement {
+function replaceSqlTagPrefix(
+  sourceText: string,
+  template: InlineSqlTemplate,
+  queryType: InlineQueryType,
+): SourceReplacement | null {
+  const text = renderSqlTagPrefix(queryType);
+  const existingText = sourceText.slice(template.tagStart, template.templateStart);
+  if (normalizeInlineTypeTagPrefix(existingText) === normalizeInlineTypeTagPrefix(text)) {
+    return null;
+  }
   return {
     start: template.tagStart,
     end: template.templateStart,
-    text: `sql.${queryType.mode === 'metadata' ? 'run' : queryType.mode}<${queryType.type}>`,
+    text,
   };
+}
+
+function renderSqlTagPrefix(queryType: InlineQueryType): string {
+  return `sql.${queryType.mode === 'metadata' ? 'run' : queryType.mode}<${queryType.type}>`;
+}
+
+function normalizeInlineTypeTagPrefix(value: string): string {
+  return value.replace(/;\s*\}/gu, '}').replace(/\s+/g, '');
 }
 
 function canReplaceGeneratedPropertyLines(

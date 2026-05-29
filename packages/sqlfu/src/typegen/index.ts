@@ -193,9 +193,9 @@ export async function generateInlineConfigTypes(input: {
     }
   }
 
-  await writeInlineQueryTypes(input.modulePath, queryTypes);
+  const wroteTypes = await writeInlineQueryTypes(input.modulePath, queryTypes);
 
-  return {writtenFiles: [projectRelativePath(input, input.modulePath)]};
+  return {writtenFiles: wroteTypes ? [projectRelativePath(input, input.modulePath)] : []};
 }
 
 function inlineQuerySource(

@@ -154,7 +154,7 @@ export const router = {
           projectRoot: project.projectRoot,
           host: context.host,
         });
-        return ['Updated generated files:', ...result.writtenFiles.map((filePath) => `  ${filePath}`)].join('\n');
+        return formatGenerateResult(result.writtenFiles);
       }
       const sqlfuContext = await loadContextConfig(context);
       if (input?.watch) {
@@ -162,7 +162,7 @@ export const router = {
         return;
       }
       const result = await generateQueryTypesForConfig(sqlfuContext.config, sqlfuContext.host);
-      return ['Updated generated files:', ...result.writtenFiles.map((filePath) => `  ${filePath}`)].join('\n');
+      return formatGenerateResult(result.writtenFiles);
     }),
 
   format: base
@@ -376,6 +376,13 @@ export const router = {
     }),
   },
 };
+
+function formatGenerateResult(writtenFiles: string[]): string {
+  if (writtenFiles.length === 0) {
+    return 'No generated files changed.';
+  }
+  return ['Updated generated files:', ...writtenFiles.map((filePath) => `  ${filePath}`)].join('\n');
+}
 
 /**
  * Pick a sql-formatter dialect for `sqlfu format`. Reads the project's

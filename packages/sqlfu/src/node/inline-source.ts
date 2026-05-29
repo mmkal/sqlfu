@@ -10,9 +10,7 @@ export type InlineConfigSource = {
   sourceText: string;
   definitions: InlineSqlTemplate;
   migrations: InlineMigrationSource[];
-  migrationsArray: {
-    insertPosition: number;
-  };
+  migrationsArray: InlineMigrationsArraySource;
   queries: InlineQuerySource[];
 };
 
@@ -26,6 +24,17 @@ export type InlineMigrationSource = {
   name: string;
   content: InlineSqlTemplate;
 };
+
+export type InlineMigrationsArraySource =
+  | {
+      kind: 'present';
+      insertPosition: number;
+    }
+  | {
+      kind: 'missing';
+      insertPropertyPosition: number;
+      propertyIndent: string;
+    };
 
 export type InlineQuerySource = {
   name: string;
@@ -100,8 +109,10 @@ function parseInlineConfigSourceForCall(
   }
 
   const definitions = readSqlProperty(definitionProperties, 'definitions', modulePath);
-  const migrationsArray = readArrayProperty(definitionProperties, 'migrations', modulePath);
-  const queriesObject = readObjectProperty(definitionProperties, 'queries', modulePath);
+  const migrationsProperty = definitionProperties.find((property) => property.name === 'migrations');
+  const migrationsArray = migrationsProperty && readArrayInitializer(sourceText, migrationsProperty, 'migrations', modulePath);
+  const queriesProperty = readProperty(definitionProperties, 'queries', modulePath);
+  const queriesObject = readObjectInitializer(sourceText, queriesProperty, 'queries', modulePath);
 
   return {
     className: inlineCall.target.className,
@@ -109,10 +120,17 @@ function parseInlineConfigSourceForCall(
     modulePath,
     sourceText,
     definitions,
-    migrations: readMigrationSources(sourceText, migrationsArray, modulePath),
-    migrationsArray: {
-      insertPosition: migrationsArray.end,
-    },
+    migrations: migrationsArray ? readMigrationSources(sourceText, migrationsArray, modulePath) : [],
+    migrationsArray: migrationsArray
+      ? {
+          kind: 'present',
+          insertPosition: migrationsArray.end,
+        }
+      : {
+          kind: 'missing',
+          insertPropertyPosition: lineStartIndex(sourceText, queriesProperty.nameStart),
+          propertyIndent: lineIndentAt(sourceText, queriesProperty.nameStart),
+        },
     queries: readQuerySources(sourceText, queriesObject, modulePath),
   };
 }
@@ -129,9 +147,8 @@ function looksLikeInlineDefineConfigObject(
 function isInlineDefineConfigShape(sourceText: string, properties: PropertySpan[]): boolean {
   const definitions = properties.find((property) => property.name === 'definitions');
   if (!definitions) return false;
-  const migrations = properties.find((property) => property.name === 'migrations');
   const queries = properties.find((property) => property.name === 'queries');
-  if (!migrations || !queries) return false;
+  if (!queries) return false;
   const definitionsStart = skipTrivia(sourceText, definitions.start);
   if (!startsWithIdentifier(sourceText, definitionsStart, 'sql')) return false;
   const previous = sourceText[definitionsStart - 1] || '';
@@ -169,7 +186,12 @@ function renderInlineQueryTypeReplacements(
 ): SourceReplacement[] {
   const typeValue = `{} as ${queryType.type}`;
   const modeValue = quotedString(queryType.mode, style.quote);
-  if (query.type && query.mode && query.type.start < query.mode.start) {
+  if (
+    query.type &&
+    query.mode &&
+    query.type.start < query.mode.start &&
+    canReplaceGeneratedPropertyLines(sourceText, query.type, query.mode)
+  ) {
     return [
       replacePropertyLines(sourceText, query.type, query.mode, [`mode: ${modeValue}`, `$type: ${typeValue}`], style),
     ];
@@ -197,6 +219,33 @@ function renderInlineQueryTypeReplacements(
   return replacements;
 }
 
+function canReplaceGeneratedPropertyLines(
+  sourceText: string,
+  firstProperty: PropertySpan,
+  lastProperty: PropertySpan,
+): boolean {
+  const firstLineStart = lineStartIndex(sourceText, firstProperty.start);
+  const firstLineEnd = lineEndIndex(sourceText, firstProperty.end);
+  const lastLineStart = lineStartIndex(sourceText, lastProperty.start);
+  if (firstLineStart === lastLineStart) return false;
+
+  const firstValue = sourceText.slice(firstProperty.start, firstProperty.end);
+  const lastValue = sourceText.slice(lastProperty.start, lastProperty.end);
+  if (firstValue.includes('\n') || lastValue.includes('\n')) return false;
+
+  const firstPrefix = sourceText.slice(firstLineStart, firstProperty.start);
+  const firstSuffix = sourceText.slice(firstProperty.end, firstLineEnd);
+  const betweenLines = sourceText.slice(firstLineEnd, lastLineStart);
+  const lastPrefix = sourceText.slice(lastLineStart, lastProperty.start);
+
+  return (
+    /^\s*\$type\s*:\s*$/u.test(firstPrefix) &&
+    /^\s*,?\s*$/u.test(firstSuffix) &&
+    betweenLines.trim() === '' &&
+    /^\s*mode\s*:\s*$/u.test(lastPrefix)
+  );
+}
+
 function replacePropertyLines(
   sourceText: string,
   firstProperty: PropertySpan,
@@ -219,7 +268,7 @@ function replacePropertyLines(
 function replacePropertyValue(sourceText: string, property: PropertySpan, text: string): SourceReplacement {
   return {
     start: skipTrivia(sourceText, property.start),
-    end: property.end,
+    end: trimEndIndex(sourceText, property.end),
     text,
   };
 }
@@ -263,10 +312,24 @@ export async function appendInlineMigration(
   },
 ): Promise<void> {
   const inline = await readRequiredInlineConfigSource(modulePath, migration.app);
+  const style = inferInlineSourceStyle(inline.sourceText);
+  if (inline.migrationsArray.kind === 'missing') {
+    const insertPosition = inline.migrationsArray.insertPropertyPosition;
+    const elementIndent = `${inline.migrationsArray.propertyIndent}${style.indent}`;
+    const property =
+      `${inline.migrationsArray.propertyIndent}migrations: [\n` +
+      `${renderInlineMigrationObject(elementIndent, migration, style)}${style.trailingComma ? ',' : ''}\n` +
+      `${inline.migrationsArray.propertyIndent}],\n`;
+    await fs.writeFile(
+      modulePath,
+      `${inline.sourceText.slice(0, insertPosition)}${property}${inline.sourceText.slice(insertPosition)}`,
+    );
+    return;
+  }
+
   const insertPosition = inline.migrationsArray.insertPosition;
   const beforeInsert = inline.sourceText.slice(0, insertPosition).trimEnd();
   const closingIndent = lineIndentAt(inline.sourceText, insertPosition);
-  const style = inferInlineSourceStyle(inline.sourceText);
   const elementIndent = `${closingIndent}${style.indent}`;
   const prefix = inline.migrations.length === 0 ? '\n' : `${beforeInsert.endsWith(',') ? '' : ','}\n`;
   const insertion = `${prefix}${renderInlineMigrationObject(elementIndent, migration, style)}${style.trailingComma ? ',' : ''}\n${closingIndent}`;
@@ -420,6 +483,7 @@ type SourceReplacement = SourceSpan & {
 
 type PropertySpan = SourceSpan & {
   name: string;
+  nameStart: number;
 };
 
 function readSqlProperty(properties: PropertySpan[], name: string, modulePath: string): InlineSqlTemplate {
@@ -430,9 +494,12 @@ function readSqlProperty(properties: PropertySpan[], name: string, modulePath: s
   );
 }
 
-function readArrayProperty(properties: PropertySpan[], name: string, modulePath: string): SourceSpan {
-  const property = readProperty(properties, name, modulePath);
-  const sourceText = sourceTextFor(properties);
+function readArrayInitializer(
+  sourceText: string,
+  property: PropertySpan,
+  name: string,
+  modulePath: string,
+): SourceSpan {
   const start = skipTrivia(sourceText, property.start);
   if (sourceText[start] !== '[') {
     throw new Error(`inline defineConfig(...) in ${modulePath} must provide "${name}" as an array literal.`);
@@ -440,9 +507,12 @@ function readArrayProperty(properties: PropertySpan[], name: string, modulePath:
   return {start, end: findMatchingDelimiter(sourceText, start, '[', ']')};
 }
 
-function readObjectProperty(properties: PropertySpan[], name: string, modulePath: string): SourceSpan {
-  const property = readProperty(properties, name, modulePath);
-  const sourceText = sourceTextFor(properties);
+function readObjectInitializer(
+  sourceText: string,
+  property: PropertySpan,
+  name: string,
+  modulePath: string,
+): SourceSpan {
   const start = skipTrivia(sourceText, property.start);
   if (sourceText[start] !== '{') {
     throw new Error(`inline defineConfig(...) in ${modulePath} must provide "${name}" as an object literal.`);
@@ -560,6 +630,7 @@ function parseObjectProperties(
     const valueEnd = findTopLevelValueEnd(sourceText, valueStart, objectEnd);
     properties.push({
       name: name.value,
+      nameStart: cursor,
       start: valueStart,
       end: valueEnd,
     });

@@ -1,6 +1,7 @@
 import {sql as runtimeSql} from '../sql.js';
 import type {LoadedSqlfuProject} from '../config.js';
 import type {SqlfuHost} from '../host.js';
+import type {RootSqlTag} from '../types.js';
 import packageJson from '../../package.json' with {type: 'json'};
 
 export type Confirm = (params: {
@@ -10,21 +11,7 @@ export type Confirm = (params: {
   editable?: boolean;
 }) => string | null | Promise<string | null>;
 
-type ApiQueryArg = null | string | number | bigint | Uint8Array | boolean;
-type ApiSqlFragment = {
-  sql: string;
-  args: ApiQueryArg[];
-};
-type ApiSqlQuery = ApiSqlFragment & {
-  name?: string;
-  __sqlfuType?: unknown;
-};
-type ApiSqlValue = ApiQueryArg | ApiSqlFragment;
-
-export const sql = runtimeSql as unknown as <TType = unknown>(
-  strings: TemplateStringsArray,
-  ...values: ApiSqlValue[]
-) => ApiSqlQuery & {__sqlfuType?: TType};
+export const sql = runtimeSql as RootSqlTag;
 
 async function load<TModule>(specifier: string): Promise<TModule> {
   return import(specifier) as Promise<TModule>;

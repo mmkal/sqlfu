@@ -7,6 +7,7 @@ import type {
   ResultRow,
   RunResult,
   SqlQueryNoArgs,
+  SqlTypedQueryNoArgs,
   SyncClient,
 } from './types.js';
 
@@ -20,11 +21,16 @@ export type InlineConfigMigration = {
   content: SqlQueryNoArgs;
 };
 
-export type InlineConfigQuery<TType extends InlineConfigQueryType = InlineConfigQueryType> = {
+export type InlineConfigQueryObject<TType extends InlineConfigQueryType = InlineConfigQueryType> = {
   query: SqlQueryNoArgs;
   $type?: TType;
   mode?: QueryResultMode;
 };
+
+export type InlineConfigQuery<TType extends InlineConfigQueryType = InlineConfigQueryType> =
+  | InlineConfigQueryObject<TType>
+  | SqlTypedQueryNoArgs<TType>
+  | SqlQueryNoArgs;
 
 export type InlineConfigDefinition<TQueries extends Record<string, InlineConfigQuery>> = {
   definitions: SqlQueryNoArgs;
@@ -36,7 +42,9 @@ type InlineQueryTypePayload<TQuery> = TQuery extends {$type: infer TType}
   ? TType
   : TQuery extends {$type?: infer TType}
     ? TType
-    : {};
+    : TQuery extends {__sqlfuType?: infer TType}
+      ? TType
+      : {};
 
 type InlineQueryParameters<TQuery> =
   InlineQueryTypePayload<TQuery> extends {parameters: infer TParameters} ? TParameters : undefined;
@@ -119,13 +127,17 @@ function runInlineQuery<TClient extends Client>(
   params: PreparedStatementParams | undefined,
 ): RunResult | Promise<RunResult> | ResultRow | ResultRow[] | null | Promise<ResultRow | ResultRow[] | null> {
   const mode = readInlineQueryMode(query);
+  const sqlQuery = inlineQuerySql(query);
+  if (sqlQuery.args.length > 0) {
+    throw new Error('Inline queries cannot use template interpolations.');
+  }
   if (client.sync) {
-    using stmt = client.prepare(query.query.sql);
+    using stmt = client.prepare(sqlQuery.sql);
     if (mode === 'metadata') return stmt.run(params);
     return inlineRowsResult(stmt.all(params), mode);
   }
 
-  const stmt = client.prepare(query.query.sql);
+  const stmt = client.prepare(sqlQuery.sql);
   if (mode === 'metadata') {
     return stmt.run(params).finally(() => stmt[Symbol.asyncDispose]());
   }
@@ -136,13 +148,30 @@ function runInlineQuery<TClient extends Client>(
 }
 
 function readInlineQueryMode(query: InlineConfigQuery): QueryResultMode {
-  if (query.mode === 'many' || query.mode === 'nullableOne' || query.mode === 'one' || query.mode === 'metadata') {
-    return query.mode;
+  const mode = inlineQueryMode(query);
+  if (isQueryResultMode(mode)) {
+    return mode;
   }
-  if (!query.mode) {
+  if (!mode) {
     throw new Error('Inline query is missing generated mode. Run sqlfu generate before binding inline defineConfig().');
   }
-  throw new Error(`Inline query has unsupported generated mode ${JSON.stringify(query.mode)}.`);
+  throw new Error(`Inline query has unsupported generated mode ${JSON.stringify(mode)}.`);
+}
+
+function inlineQueryMode(query: InlineConfigQuery): unknown {
+  return 'mode' in query ? query.mode : undefined;
+}
+
+function inlineQuerySql(query: InlineConfigQuery): SqlQueryNoArgs {
+  return isInlineConfigQueryObject(query) ? query.query : query;
+}
+
+function isInlineConfigQueryObject(query: InlineConfigQuery): query is InlineConfigQueryObject {
+  return 'query' in query;
+}
+
+function isQueryResultMode(value: unknown): value is QueryResultMode {
+  return value === 'many' || value === 'nullableOne' || value === 'one' || value === 'metadata';
 }
 
 function inlineRowsResult(rows: ResultRow[], mode: QueryResultMode): ResultRow | ResultRow[] | null {

@@ -256,12 +256,10 @@ test('inline defineConfig modules generate, draft, and migrate durable object st
   await fixture.generate();
 
   const generatedV1 = await fixture.readWorkerSource();
-  expect(generatedV1).toContain('$type: {} as { parameters: { slug: string } },');
-  expect(generatedV1).toContain("mode: 'metadata',");
+  expect(generatedV1).toContain('sql.run<{ parameters: { slug: string } }>');
   expect(generatedV1).toContain(
-    '$type: {} as { parameters: { limit: number }; result: { slug: string; published_at: string | null } },',
+    'sql.many<{ parameters: { limit: number }; result: { slug: string; published_at: string | null } }>',
   );
-  expect(generatedV1).toContain("mode: 'many',");
   expect(generatedV1).toMatch(
     /\{ name: '\d{4}-\d{2}-\d{2}T\d{2}\.\d{2}\.\d{2}\.\d{3}Z_create_posts', content: sql`create table posts\(slug text primary key, published_at text\);` \}/u,
   );
@@ -276,7 +274,7 @@ test('inline defineConfig modules generate, draft, and migrate durable object st
 
   const generatedV2 = await fixture.readWorkerSource();
   expect(generatedV2).toContain(
-    '$type: {} as { parameters: { limit: number }; result: { slug: string; published_at: string | null; body: string | null } },',
+    'sql.many<{ parameters: { limit: number }; result: { slug: string; published_at: string | null; body: string | null } }>',
   );
   expect(generatedV2).toMatch(
     /\{ name: '\d{4}-\d{2}-\d{2}T\d{2}\.\d{2}\.\d{2}\.\d{3}Z_add_body', content: sql`alter table posts add column body text;` \}/u,
@@ -308,13 +306,11 @@ test('inline defineConfig generation rejects query shapes that need generated wr
       \`,
       migrations: [],
       queries: {
-        listPosts: {
-          query: sql\`
-            select slug
-            from posts
-            where slug in (:slugs)
-          \`,
-        },
+        listPosts: sql\`
+          select slug
+          from posts
+          where slug in (:slugs)
+        \`,
       },
     });
 
@@ -347,13 +343,11 @@ test('inline defineConfig generation combines update data and where parameters i
       \`,
       migrations: [],
       queries: {
-        updatePost: {
-          query: sql\`
-            update posts
-            set body = :body
-            where slug = :slug
-          \`,
-        },
+        updatePost: sql\`
+          update posts
+          set body = :body
+          where slug = :slug
+        \`,
       },
     });
 
@@ -371,7 +365,7 @@ test('inline defineConfig generation combines update data and where parameters i
 
   await fixture.generate();
 
-  expect(await fixture.readWorkerSource()).toContain('$type: {} as { parameters: { body: string; slug: string } },');
+  expect(await fixture.readWorkerSource()).toContain('sql.run<{ parameters: { body: string; slug: string } }>');
 });
 
 test('inline defineConfig generation supports multiple top-level configs in one module', async () => {
@@ -386,12 +380,10 @@ test('inline defineConfig generation supports multiple top-level configs in one 
       \`,
       migrations: [],
       queries: {
-        list: {
-          query: sql\`
-            select slug
-            from projects
-          \`,
-        },
+        list: sql\`
+          select slug
+          from projects
+        \`,
       },
     });
 
@@ -401,12 +393,10 @@ test('inline defineConfig generation supports multiple top-level configs in one 
       \`,
       migrations: [],
       queries: {
-        list: {
-          query: sql\`
-            select slug
-            from organizations
-          \`,
-        },
+        list: sql\`
+          select slug
+          from organizations
+        \`,
       },
     });
 
@@ -417,8 +407,7 @@ test('inline defineConfig generation supports multiple top-level configs in one 
   await fixture.generate();
 
   const generated = await fixture.readWorkerSource();
-  expect(generated.match(/\$type: \{\} as \{ result: \{ slug: string \} \},/gu)).toHaveLength(2);
-  expect(generated.match(/mode: 'many',/gu)).toHaveLength(2);
+  expect(generated.match(/sql\.many<\{ result: \{ slug: string \} \}>/gu)).toHaveLength(2);
 });
 
 test('createDurableObjectClient uses transactionSync when given durable object storage', async () => {
@@ -742,17 +731,13 @@ function workerSourceV1() {
         \`,
         migrations: [],
         queries: {
-          createPost: {
-            query: sql\`insert into posts(slug) values (:slug)\`,
-          },
-          listPosts: {
-            query: sql\`
-              select slug, published_at
-              from posts
-              order by slug
-              limit :limit
-            \`,
-          },
+          createPost: sql\`insert into posts(slug) values (:slug)\`,
+          listPosts: sql\`
+            select slug, published_at
+            from posts
+            order by slug
+            limit :limit
+          \`,
         },
       });
 

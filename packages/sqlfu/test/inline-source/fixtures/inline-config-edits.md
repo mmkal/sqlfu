@@ -24,19 +24,15 @@ export class PostObject {
       },
     ],
     queries: {
-      listPosts: {
-        query: sql`
-          select slug, title
-          from posts
-          order by slug
-        `,
-      },
-      createPost: {
-        query: sql`
-          insert into posts (slug, title)
-          values (:slug, :title)
-        `,
-      },
+      listPosts: sql`
+        select slug, title
+        from posts
+        order by slug
+      `,
+      createPost: sql`
+        insert into posts (slug, title)
+        values (:slug, :title)
+      `,
     },
   });
 
@@ -92,23 +88,15 @@ export class PostObject {
       },
     ],
     queries: {
-      listPosts: {
-        query: sql`
-          select slug, title
-          from posts
-          order by slug
-        `,
-        mode: 'many',
-        $type: {} as { parameters: { limit: number }; result: { slug: string; title: string } },
-      },
-      createPost: {
-        query: sql`
-          insert into posts (slug, title)
-          values (:slug, :title)
-        `,
-        mode: 'metadata',
-        $type: {} as { parameters: { slug: string; title: string } },
-      },
+      listPosts: sql.many<{ parameters: { limit: number }; result: { slug: string; title: string } }>`
+        select slug, title
+        from posts
+        order by slug
+      `,
+      createPost: sql.run<{ parameters: { slug: string; title: string } }>`
+        insert into posts (slug, title)
+        values (:slug, :title)
+      `,
     },
   });
 
@@ -133,12 +121,10 @@ export class ProjectObject {
     `,
     migrations: [],
     queries: {
-      list: {
-        query: sql`
-          select slug
-          from projects
-        `,
-      },
+      list: sql`
+        select slug
+        from projects
+      `,
     },
   });
 }
@@ -150,12 +136,10 @@ export class OrganizationObject {
     `,
     migrations: [],
     queries: {
-      list: {
-        query: sql`
-          select slug
-          from organizations
-        `,
-      },
+      list: sql`
+        select slug
+        from organizations
+      `,
     },
   });
 }
@@ -207,14 +191,10 @@ export class ProjectObject {
     `,
     migrations: [],
     queries: {
-      list: {
-        query: sql`
-          select slug
-          from projects
-        `,
-        mode: 'many',
-        $type: {} as { result: { slug: string } },
-      },
+      list: sql.many<{ result: { slug: string } }>`
+        select slug
+        from projects
+      `,
     },
   });
 }
@@ -228,14 +208,10 @@ export class OrganizationObject {
       { name: '0001_create_organizations', content: sql`create table organizations (slug text primary key);` },
     ],
     queries: {
-      list: {
-        query: sql`
-          select slug
-          from organizations
-        `,
-        mode: 'many',
-        $type: {} as { result: { slug: string } },
-      },
+      list: sql.many<{ result: { slug: string } }>`
+        select slug
+        from organizations
+      `,
     },
   });
 }
@@ -274,13 +250,11 @@ export class CounterObject {
       `,
       migrations: [],
       queries: {
-        getCounter: {
-          query: sql`
-            select value
-            from counters
-            where name = :name
-          `,
-        },
+        getCounter: sql`
+          select value
+          from counters
+          where name = :name
+        `,
       },
     }
   );
@@ -339,15 +313,11 @@ export class CounterObject {
       `,
       migrations: [],
       queries: {
-        getCounter: {
-          query: sql`
-            select value
-            from counters
-            where name = :name
-          `,
-          mode: 'nullableOne',
-          $type: {} as { parameters: { name: string }; result: { value: number } },
-        },
+        getCounter: sql.nullableOne<{ parameters: { name: string }; result: { value: number } }>`
+          select value
+          from counters
+          where name = :name
+        `,
       },
     }
   );
@@ -462,12 +432,10 @@ export class PostObject {
 		`,
 		migrations: [],
 		queries: {
-			getPost: {
-				query: sql`
-					select slug
-					from posts
-				`,
-			},
+			getPost: sql`
+				select slug
+				from posts
+			`,
 		},
 	});
 }
@@ -520,14 +488,10 @@ export class PostObject {
 			},
 		],
 		queries: {
-			getPost: {
-				query: sql`
-					select slug
-					from posts
-				`,
-				mode: "many",
-				$type: {} as { result: { slug: string } },
-			},
+			getPost: sql.many<{ result: { slug: string } }>`
+				select slug
+				from posts
+			`,
 		},
 	});
 }
@@ -616,19 +580,15 @@ const app = defineConfig({
     },
   ],
   queries: {
-    listPosts: {
-      query: sql`
-        select slug, title
-        from posts
-        order by slug
-      `,
-    },
-    createPost: {
-      query: sql`
-        insert into posts (slug, title)
-        values (:slug, :title)
-      `,
-    },
+    listPosts: sql`
+      select slug, title
+      from posts
+      order by slug
+    `,
+    createPost: sql`
+      insert into posts (slug, title)
+      values (:slug, :title)
+    `,
   },
 });
 
@@ -680,23 +640,15 @@ const app = defineConfig({
     },
   ],
   queries: {
-    listPosts: {
-      query: sql`
-        select slug, title
-        from posts
-        order by slug
-      `,
-      mode: 'many',
-      $type: {} as { parameters: { limit: number }; result: { slug: string; title: string } },
-    },
-    createPost: {
-      query: sql`
-        insert into posts (slug, title)
-        values (:slug, :title)
-      `,
-      mode: 'metadata',
-      $type: {} as { parameters: { slug: string; title: string } },
-    },
+    listPosts: sql.many<{ parameters: { limit: number }; result: { slug: string; title: string } }>`
+      select slug, title
+      from posts
+      order by slug
+    `,
+    createPost: sql.run<{ parameters: { slug: string; title: string } }>`
+      insert into posts (slug, title)
+      values (:slug, :title)
+    `,
   },
 });
 
@@ -719,12 +671,10 @@ const projectDb = defineConfig({
   `,
   migrations: [],
   queries: {
-    list: {
-      query: sql`
-        select slug
-        from projects
-      `,
-    },
+    list: sql`
+      select slug
+      from projects
+    `,
   },
 });
 
@@ -734,12 +684,10 @@ const organizationDb = defineConfig({
   `,
   migrations: [],
   queries: {
-    list: {
-      query: sql`
-        select slug
-        from organizations
-      `,
-    },
+    list: sql`
+      select slug
+      from organizations
+    `,
   },
 });
 
@@ -790,14 +738,10 @@ const projectDb = defineConfig({
   `,
   migrations: [],
   queries: {
-    list: {
-      query: sql`
-        select slug
-        from projects
-      `,
-      mode: 'many',
-      $type: {} as { result: { slug: string } },
-    },
+    list: sql.many<{ result: { slug: string } }>`
+      select slug
+      from projects
+    `,
   },
 });
 
@@ -809,14 +753,10 @@ const organizationDb = defineConfig({
     { name: '0001_create_organizations', content: sql`create table organizations (slug text primary key);` },
   ],
   queries: {
-    list: {
-      query: sql`
-        select slug
-        from organizations
-      `,
-      mode: 'many',
-      $type: {} as { result: { slug: string } },
-    },
+    list: sql.many<{ result: { slug: string } }>`
+      select slug
+      from organizations
+    `,
   },
 });
 
@@ -856,13 +796,11 @@ const app = defineConfig(
     `,
     migrations: [],
     queries: {
-      getCounter: {
-        query: sql`
-          select value
-          from counters
-          where name = :name
-        `,
-      },
+      getCounter: sql`
+        select value
+        from counters
+        where name = :name
+      `,
     },
   }
 );
@@ -918,15 +856,11 @@ const app = defineConfig(
     `,
     migrations: [],
     queries: {
-      getCounter: {
-        query: sql`
-          select value
-          from counters
-          where name = :name
-        `,
-        mode: 'nullableOne',
-        $type: {} as { parameters: { name: string }; result: { value: number } },
-      },
+      getCounter: sql.nullableOne<{ parameters: { name: string }; result: { value: number } }>`
+        select value
+        from counters
+        where name = :name
+      `,
     },
   }
 );
@@ -1038,12 +972,10 @@ const app = defineConfig({
 	`,
 	migrations: [],
 	queries: {
-		getPost: {
-			query: sql`
-				select slug
-				from posts
-			`,
-		},
+		getPost: sql`
+			select slug
+			from posts
+		`,
 	},
 });
 
@@ -1094,14 +1026,10 @@ const app = defineConfig({
 		},
 	],
 	queries: {
-		getPost: {
-			query: sql`
-				select slug
-				from posts
-			`,
-			mode: "many",
-			$type: {} as { result: { slug: string } },
-		},
+		getPost: sql.many<{ result: { slug: string } }>`
+			select slug
+			from posts
+		`,
 	},
 });
 

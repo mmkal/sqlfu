@@ -39,7 +39,7 @@ export type InlineMigrationsArraySource =
 export type InlineQuerySource = {
   name: string;
   content: InlineSqlTemplate;
-  object: SourceSpan;
+  object?: SourceSpan;
   type?: PropertySpan;
   mode?: PropertySpan;
 };
@@ -184,6 +184,10 @@ function renderInlineQueryTypeReplacements(
   queryType: InlineQueryType,
   style: InlineSourceStyle,
 ): SourceReplacement[] {
+  if (!query.object) {
+    return [replaceSqlTagPrefix(query.content, queryType)];
+  }
+
   const typeValue = `{} as ${queryType.type}`;
   const modeValue = quotedString(queryType.mode, style.quote);
   if (
@@ -217,6 +221,14 @@ function renderInlineQueryTypeReplacements(
   }
 
   return replacements;
+}
+
+function replaceSqlTagPrefix(template: InlineSqlTemplate, queryType: InlineQueryType): SourceReplacement {
+  return {
+    start: template.tagStart,
+    end: template.templateStart,
+    text: `sql.${queryType.mode === 'metadata' ? 'run' : queryType.mode}<${queryType.type}>`,
+  };
 }
 
 function canReplaceGeneratedPropertyLines(
@@ -555,7 +567,10 @@ function readQuerySources(sourceText: string, object: SourceSpan, modulePath: st
     const name = property.name;
     const objectStart = skipTrivia(sourceText, property.start);
     if (sourceText[objectStart] !== '{') {
-      throw new Error(`inline defineConfig(...) query ${name} in ${modulePath} must be an object literal.`);
+      return {
+        name,
+        content: readSqlTemplate(sourceText, property, `${modulePath} query ${name}`),
+      };
     }
     const objectEnd = findMatchingDelimiter(sourceText, objectStart, '{', '}');
     const properties = parseObjectProperties(sourceText, objectStart, objectEnd, modulePath);
@@ -576,6 +591,13 @@ function readSqlTemplate(sourceText: string, span: SourceSpan, location: string)
     throw new Error(`${location} must use the sql tag.`);
   }
   let cursor = skipTrivia(sourceText, tagStart + 'sql'.length);
+  if (sourceText[cursor] === '.') {
+    const modeName = readIdentifier(sourceText, skipTrivia(sourceText, cursor + 1), `${location} sql tag`);
+    if (!isQueryResultModeTag(modeName.value)) {
+      throw new Error(`${location} uses unsupported sql tag mode ${JSON.stringify(modeName.value)}.`);
+    }
+    cursor = skipTrivia(sourceText, modeName.end);
+  }
   if (sourceText[cursor] === '<') {
     cursor = skipTrivia(sourceText, findMatchingAngle(sourceText, cursor) + 1);
   }
@@ -593,6 +615,21 @@ function readSqlTemplate(sourceText: string, span: SourceSpan, location: string)
     tagStart,
     templateStart,
   };
+}
+
+function readIdentifier(sourceText: string, start: number, location: string): {value: string; end: number} {
+  if (!isIdentifierStart(sourceText[start] || '')) {
+    throw new Error(`${location} must use an identifier.`);
+  }
+  let end = start + 1;
+  while (isIdentifierPart(sourceText[end] || '')) {
+    end += 1;
+  }
+  return {value: sourceText.slice(start, end), end};
+}
+
+function isQueryResultModeTag(value: string): value is QueryResultMode | 'run' {
+  return value === 'many' || value === 'nullableOne' || value === 'one' || value === 'metadata' || value === 'run';
 }
 
 function readStringInitializer(sourceText: string, span: SourceSpan, location: string): string {

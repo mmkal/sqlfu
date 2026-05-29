@@ -2,9 +2,12 @@ import type {
   AsyncClient,
   AsyncSqlTag,
   QueryArg,
+  QueryResultMode,
   ResultRow,
+  RootSqlTag,
   RunResult,
   SqlFragment,
+  SqlModeTag,
   SqlQuery,
   SqlRowsPromise,
   SqlValue,
@@ -86,16 +89,14 @@ export function isSqlFragment(value: unknown): value is SqlFragment {
   );
 }
 
-/** sql tag with no arguments */
-export function sql<TType = unknown>(
+function runtimeSql<TType = unknown>(
   strings: TemplateStringsArray,
 ): Omit<SqlQuery, 'args'> & {args: []; __sqlfuType?: TType};
-/** sql tag with arguments */
-export function sql<TType = unknown>(
+function runtimeSql<TType = unknown>(
   strings: TemplateStringsArray,
   ...values: SqlValue[]
 ): SqlQuery & {__sqlfuType?: TType};
-export function sql<TType = unknown>(
+function runtimeSql<TType = unknown>(
   strings: TemplateStringsArray,
   ...values: SqlValue[]
 ): SqlQuery & {__sqlfuType?: TType} {
@@ -121,6 +122,20 @@ export function sql<TType = unknown>(
   }
 
   return {sql: collapseWhitespace(text), args};
+}
+
+export const sql = Object.assign(runtimeSql, {
+  many: modeSqlTag('many'),
+  nullableOne: modeSqlTag('nullableOne'),
+  one: modeSqlTag('one'),
+  run: modeSqlTag('metadata'),
+  metadata: modeSqlTag('metadata'),
+}) as RootSqlTag;
+
+function modeSqlTag<TMode extends QueryResultMode>(mode: TMode): SqlModeTag<TMode> {
+  return ((strings: TemplateStringsArray, ...values: SqlValue[]) => {
+    return {...runtimeSql(strings, ...values), mode};
+  }) as SqlModeTag<TMode>;
 }
 
 export function raw(value: string): SqlFragment {

@@ -87,13 +87,11 @@ test('regenerates an inline class config when its module changes', async () => {
         \`,
         migrations: [],
         queries: {
-          listPosts: {
-            query: sql\`
-              select slug
-              from posts
-              order by slug
-            \`,
-          },
+          listPosts: sql\`
+            select slug
+            from posts
+            order by slug
+          \`,
         },
       });
     }
@@ -102,15 +100,14 @@ test('regenerates an inline class config when its module changes', async () => {
   await using _watcher = await fixture.startWatcher();
 
   const initial = await fs.readFile(fixture.modulePath, 'utf8');
-  expect(initial).toContain(`mode: 'many'`);
-  expect(initial).toContain(`$type: {} as { result: { slug: string } }`);
+  expect(initial).toContain(`sql.many<{ result: { slug: string } }>`);
   expect(initial).not.toContain(`title: string`);
 
   await fixture.writeModule((source) => source.replace('select slug', 'select slug, title'));
 
   await waitFor(async () => {
     const updated = await fs.readFile(fixture.modulePath, 'utf8');
-    expect(updated).toContain(`$type: {} as { result: { slug: string; title: string } }`);
+    expect(updated).toContain(`sql.many<{ result: { slug: string; title: string } }>`);
   });
 });
 

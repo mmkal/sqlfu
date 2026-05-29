@@ -117,7 +117,7 @@ export default [
       'unicorn/template-indent': [
         'error',
         {
-          tags: ['sql'],
+          tags: ['sql', 'sql.many', 'sql.nullableOne', 'sql.one', 'sql.run', 'sql.metadata'],
           functions: [],
           selectors: [],
           comments: [],

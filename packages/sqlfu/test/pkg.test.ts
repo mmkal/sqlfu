@@ -81,15 +81,11 @@ async function createPackedPackageFixture() {
         \`,
         migrations: [],
         queries: {
-          listPosts: {
-            query: sql\`
-              select slug
-              from posts
-              limit :limit
-            \`,
-            mode: 'many',
-            $type: {} as {parameters: {limit: number}; result: {slug: string}},
-          },
+          listPosts: sql.many<{parameters: {limit: number}; result: {slug: string}}>\`
+            select slug
+            from posts
+            limit :limit
+          \`,
         },
       });
 

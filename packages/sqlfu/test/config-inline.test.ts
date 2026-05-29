@@ -3,6 +3,53 @@ import {expect, test} from 'vitest';
 
 import {createNodeSqliteClient, defineConfig, sql, type QueryMetadata, type SyncClient} from '../src/index.js';
 
+test('defineConfig accepts compact generated query tags', () => {
+  using fixture = createInlineConfigFixture();
+
+  class PostObject {
+    static dbConfig = defineConfig({
+      definitions: sql`
+        create table posts (slug text primary key, title text not null);
+      `,
+      migrations: [
+        {
+          name: '0001_create_posts',
+          content: sql`
+            create table posts (slug text primary key, title text not null);
+          `,
+        },
+      ],
+      queries: {
+        listPosts: sql.many<{parameters: {limit: number}; result: {slug: string; title: string}}>`
+          select slug, title
+          from posts
+          order by slug
+          limit :limit
+        `,
+        createPost: sql.run<{parameters: {slug: string; title: string}}>`
+          insert into posts (slug, title)
+          values (:slug, :title)
+        `,
+      },
+    });
+
+    db: ReturnType<typeof PostObject.dbConfig<SyncClient>>;
+
+    constructor(client: SyncClient) {
+      this.db = PostObject.dbConfig(client);
+    }
+  }
+
+  const postObject = new PostObject(fixture.client);
+  postObject.db.migrate();
+
+  const created: QueryMetadata = postObject.db.createPost({slug: 'hello-world', title: 'Hello, World!'});
+  expect(created).toMatchObject({rowsAffected: 1});
+
+  const posts: {slug: string; title: string}[] = postObject.db.listPosts({limit: 10});
+  expect(posts).toEqual([{slug: 'hello-world', title: 'Hello, World!'}]);
+});
+
 test('defineConfig works with a class', () => {
   using fixture = createInlineConfigFixture();
 
@@ -20,28 +67,20 @@ test('defineConfig works with a class', () => {
         },
       ],
       queries: {
-        listPosts: {
-          query: sql`
-            select slug, title
-            from posts
-            order by slug
-            limit :limit
-          `,
-          mode: 'many',
-          $type: {} as {parameters: {limit: number}; result: {slug: string; title: string}},
-        },
-        createPost: {
-          query: sql`
-            insert into posts (slug, title)
-            values (:slug, :title)
-          `,
-          mode: 'metadata',
-          $type: {} as {parameters: {slug: string; title: string}},
-        },
+        listPosts: sql.many<{parameters: {limit: number}; result: {slug: string; title: string}}>`
+          select slug, title
+          from posts
+          order by slug
+          limit :limit
+        `,
+        createPost: sql.run<{parameters: {slug: string; title: string}}>`
+          insert into posts (slug, title)
+          values (:slug, :title)
+        `,
       },
     });
 
-    db: typeof PostObject.dbConfig.$type;
+    db: ReturnType<typeof PostObject.dbConfig<SyncClient>>;
 
     constructor(client: SyncClient) {
       this.db = PostObject.dbConfig(client);
@@ -80,28 +119,20 @@ test('defineConfig works with a class without migrations via sync(...)', async (
         create table posts (slug text primary key, title text not null);
       `,
       queries: {
-        listPosts: {
-          query: sql`
-            select slug, title
-            from posts
-            order by slug
-            limit :limit
-          `,
-          mode: 'many',
-          $type: {} as {parameters: {limit: number}; result: {slug: string; title: string}},
-        },
-        createPost: {
-          query: sql`
-            insert into posts (slug, title)
-            values (:slug, :title)
-          `,
-          mode: 'metadata',
-          $type: {} as {parameters: {slug: string; title: string}},
-        },
+        listPosts: sql.many<{parameters: {limit: number}; result: {slug: string; title: string}}>`
+          select slug, title
+          from posts
+          order by slug
+          limit :limit
+        `,
+        createPost: sql.run<{parameters: {slug: string; title: string}}>`
+          insert into posts (slug, title)
+          values (:slug, :title)
+        `,
       },
     });
 
-    db: typeof PostObject.dbConfig.$type;
+    db: ReturnType<typeof PostObject.dbConfig<SyncClient>>;
 
     constructor(client: SyncClient) {
       this.db = PostObject.dbConfig(client);
@@ -147,42 +178,26 @@ test('static inline defineConfig binds generated query methods to a sync client'
         },
       ],
       queries: {
-        listPosts: {
-          query: sql`
-            select slug, title
-            from posts
-            order by slug
-            limit :limit
-          `,
-          mode: 'many',
-          $type: {} as {parameters: {limit: number}; result: {slug: string; title: string}},
-        },
-        findPost: {
-          query: sql`
-            select slug, title
-            from posts
-            where slug = :slug
-          `,
-          mode: 'nullableOne',
-          $type: {} as {parameters: {slug: string}; result: {slug: string; title: string}},
-        },
-        getPost: {
-          query: sql`
-            select slug, title
-            from posts
-            where slug = :slug
-          `,
-          mode: 'one',
-          $type: {} as {parameters: {slug: string}; result: {slug: string; title: string}},
-        },
-        createPost: {
-          query: sql`
-            insert into posts (slug, title)
-            values (:slug, :title)
-          `,
-          mode: 'metadata',
-          $type: {} as {parameters: {slug: string; title: string}},
-        },
+        listPosts: sql.many<{parameters: {limit: number}; result: {slug: string; title: string}}>`
+          select slug, title
+          from posts
+          order by slug
+          limit :limit
+        `,
+        findPost: sql.nullableOne<{parameters: {slug: string}; result: {slug: string; title: string}}>`
+          select slug, title
+          from posts
+          where slug = :slug
+        `,
+        getPost: sql.one<{parameters: {slug: string}; result: {slug: string; title: string}}>`
+          select slug, title
+          from posts
+          where slug = :slug
+        `,
+        createPost: sql.run<{parameters: {slug: string; title: string}}>`
+          insert into posts (slug, title)
+          values (:slug, :title)
+        `,
       },
     });
 

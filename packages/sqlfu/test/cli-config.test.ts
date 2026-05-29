@@ -265,7 +265,7 @@ test('loadProjectState resolves paths relative to the selected config file', asy
     configPath: path.join(projectRoot, 'sqlfu.config.ts'),
   });
   expect(project.initialized).toBe(true);
-  if (project.initialized) {
+  if (project.initialized && !('inline' in project)) {
     expect(path.normalize(project.config.definitions)).toBe(path.join(projectRoot, 'definitions.sql'));
     expect(path.normalize(project.config.queries)).toBe(path.join(projectRoot, 'sql'));
   }

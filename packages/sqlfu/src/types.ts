@@ -6,13 +6,23 @@ export type QueryArg = null | string | number | bigint | Uint8Array | boolean;
 
 export type ResultRow = object;
 
+export interface SqlFragmentNoArgs {
+  sql: string;
+  args: [];
+}
 export interface SqlFragment {
   sql: string;
   args: QueryArg[];
 }
 
-export interface SqlQuery extends SqlFragment {
+export interface SqlQuery<TType = unknown> extends SqlFragment {
   name?: string;
+  __sqlfuType?: TType;
+}
+
+export interface SqlQueryNoArgs<TType = unknown> extends SqlFragmentNoArgs {
+  name?: string;
+  __sqlfuType?: TType;
 }
 
 export interface QueryMetadata {
@@ -21,6 +31,36 @@ export interface QueryMetadata {
 }
 
 export type RunResult = QueryMetadata;
+
+export type QueryResultMode = 'many' | 'nullableOne' | 'one' | 'metadata';
+
+export interface SqlTypedQueryNoArgs<
+  TType = unknown,
+  TMode extends QueryResultMode = QueryResultMode,
+> extends SqlQueryNoArgs {
+  mode: TMode;
+  __sqlfuType?: TType;
+}
+
+export interface SqlTypedQuery<TType = unknown, TMode extends QueryResultMode = QueryResultMode> extends SqlQuery {
+  mode: TMode;
+  __sqlfuType?: TType;
+}
+
+export interface SqlModeTag<TMode extends QueryResultMode> {
+  <TType = unknown>(strings: TemplateStringsArray): SqlTypedQueryNoArgs<TType, TMode>;
+  <TType = unknown>(strings: TemplateStringsArray, ...values: SqlValue[]): SqlTypedQuery<TType, TMode>;
+}
+
+export interface RootSqlTag {
+  <TType = unknown>(strings: TemplateStringsArray): SqlQueryNoArgs<TType>;
+  <TType = unknown>(strings: TemplateStringsArray, ...values: SqlValue[]): SqlQuery<TType>;
+  many: SqlModeTag<'many'>;
+  nullableOne: SqlModeTag<'nullableOne'>;
+  one: SqlModeTag<'one'>;
+  run: SqlModeTag<'metadata'>;
+  metadata: SqlModeTag<'metadata'>;
+}
 
 /**
  * Loose param shape accepted by `prepare()` handles. Either positional

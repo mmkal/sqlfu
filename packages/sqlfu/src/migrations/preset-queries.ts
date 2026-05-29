@@ -30,11 +30,13 @@ export function presetTableName(preset: SqlfuMigrationPreset): string {
 export function* ensureMigrationTableGen(
   client: Client,
   preset: SqlfuMigrationPreset,
-  dialect: Dialect,
+  dialect?: Pick<Dialect, 'defaultMigrationTableDdl'>,
 ): DualGenerator<ResolvedPresetShape> {
   if (preset === 'sqlfu') {
     yield client.run({
-      sql: dialect.defaultMigrationTableDdl(SQLFU_TABLE),
+      sql: dialect
+        ? dialect.defaultMigrationTableDdl(SQLFU_TABLE)
+        : `create table if not exists ${SQLFU_TABLE} (name text primary key, checksum text not null, applied_at text not null);`,
       args: [],
       name: 'ensureMigrationTable',
     });

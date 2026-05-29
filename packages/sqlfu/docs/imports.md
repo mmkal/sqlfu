@@ -22,7 +22,7 @@ client.run(sql`
 ```
 
 This entrypoint is our precious baby, and because it's a precious baby, it is *small* and *fiercely protected*. There will never be any `node:*` imports and no heavy commands tooling.
-It's what you should use for your app code, to pass into generated query wrappers, workers, and even browser-safe bundles. It will very rarely have breaking changes.
+It's what you should use for your app code, inline `defineConfig(...)` modules, generated query wrappers, workers, and even browser-safe bundles. It will very rarely have breaking changes.
 
 ## `sqlfu/api`
 
@@ -30,20 +30,28 @@ Use `sqlfu/api` for programmatic access to the functionality behind `npx sqlfu` 
 
 ```ts
 import {check, draft, format, migrate} from 'sqlfu/api';
+import {createSqlfuApi} from 'sqlfu/api/core';
 
 await check();
 await draft({name: 'add-posts', confirm: (params) => params.body});
 await migrate({confirm: (params) => params.body});
-const formatted = format('SELECT * FROM users WHERE id=1;');
+const formatted = await format('SELECT * FROM users WHERE id=1;');
+const api = createSqlfuApi({projectRoot, config, host});
 ```
 
 Note: Mutating commands require a `confirm` callback anywhere the CLI would ask the
 user to review SQL or generated file contents. Returning the body (or a modified body) accepts it;
 returning `null` or empty string cancels. For "yolo" mode just return `params.body`, or you can insert your own approval/modification workflow.
 
-`format('select foo from bar')` is slightly different to the `npx sqlfu format` command: instead of modifying files in place, it just formats the sql you pass to it.
+`await format('select foo from bar')` is slightly different to the `npx sqlfu format` command: instead of modifying files in place, it just formats the sql you pass to it.
 
-`sqlfu/api` *does* import from some `node:*` modules. It uses simple filesystem and path functions, so can be used from Bun too. Right now, because of the filesystem access, it should not be used from the browser, or from Cloudflare Workers, even with nodejs_compat. See `sqlfu/api/core` below for that. Aside from `format()`, it loads project config from the current process, creates the default Node host, and may import command, server, typegen, and file system code.
+The command functions (`draft`, `generate`, `migrate`, `serve`, etc.)
+dynamically load Node-only project/config code when called, so call those from
+Node or Bun tooling, not from runtime Worker request handlers.
+
+`createSqlfuApi` lives on `sqlfu/api/core` rather than `sqlfu/api` because it is
+the host-explicit command facade. Use it when you are embedding sqlfu operations
+behind your own host, UI, tests, or runtime boundary.
 
 ## `sqlfu/api/core`
 

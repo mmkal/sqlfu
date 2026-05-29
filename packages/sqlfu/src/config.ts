@@ -216,6 +216,14 @@ export type LoadedSqlfuProject =
       config: SqlfuProjectConfig;
     }
   | {
+      initialized: true;
+      projectRoot: string;
+      configPath: string;
+      inline: {
+        modulePath: string;
+      };
+    }
+  | {
       initialized: false;
       projectRoot: string;
       configPath: string;

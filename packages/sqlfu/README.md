@@ -301,6 +301,58 @@ sqlfu --config ./durable-objects/session/sqlfu.config.ts draft
 
 Relative paths inside that config are resolved from the config file's directory, so each Durable Object can keep its own `definitions.sql`, `migrations/`, and `sql/` directories alongside the config.
 
+### Inline Durable Object configs
+
+For a self-contained Durable Object, the config can live on a static class
+property in the Worker module instead of a separate `sqlfu.config.ts` project:
+
+```ts
+import {DurableObject} from 'cloudflare:workers';
+import {createDurableObjectClient, defineConfig, sql} from 'sqlfu';
+
+export class CounterObject extends DurableObject {
+  static db = defineConfig({
+    definitions: sql`
+      create table counters (
+        name text primary key not null,
+        value integer not null default 0
+      );
+    `,
+    migrations: [],
+    queries: {
+      incrementCounter: sql.one<{ parameters: { name: string }; result: { name: string; value: number } }>`
+        insert into counters (name, value)
+        values (:name, 1)
+        on conflict (name) do update set value = value + 1
+        returning name, value
+      `,
+    },
+  });
+
+  db: typeof CounterObject.db.$type;
+
+  constructor(ctx: DurableObjectState, env: {}) {
+    super(ctx, env);
+    this.db = CounterObject.db(createDurableObjectClient(ctx.storage));
+    this.db.migrate();
+  }
+}
+```
+
+Point `--config` at the module itself:
+
+```sh
+sqlfu --config src/durable-objects/counter.ts draft
+sqlfu --config src/durable-objects/counter.ts generate
+sqlfu --config src/durable-objects/counter.ts generate --watch
+```
+
+`draft` appends inline migration entries, and `generate` writes each query's
+inferred mode and type into compact tags such as `sql.one<{...}>`,
+`sql.many<{...}>`, or `sql.run<{...}>`. `generate --watch` watches that one
+Worker module and updates it as the inline SQL changes. See [Durable
+Objects](./docs/guides/durable-objects.md) for the full guide.
+
 ### Pluggable `db`
 
 When your app talks to an adapter-mediated database (Cloudflare D1, Turso, libsql, a miniflare binding), point sqlfu at the same client your app uses by giving `db` a factory instead of a path. Every sqlfu command that touches the DB -- `migrate`, `check`, `sync`, `goto`, `baseline`, the UI, and `generate` when its authority needs a DB -- will then operate on the *real* database, not a scratch file.

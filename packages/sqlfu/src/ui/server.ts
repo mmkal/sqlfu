@@ -5,7 +5,7 @@ import path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {RPCHandler} from '@orpc/server/fetch';
 import type {ViteDevServer} from 'vite';
-import {resolveProjectConfig} from '../config.js';
+import {resolveProjectConfig, type LoadedSqlfuProject} from '../config.js';
 import {sqliteDialect} from '../dialect.js';
 import {loadProjectStateFrom, loadProjectStateFromConfigPath} from '../node/config.js';
 import {PortInUseError, getListeningProcesses} from '../node/port-process.js';
@@ -208,11 +208,11 @@ function createProjectResolver(input: StartSqlfuServerOptions, host: SqlfuHost):
 }
 
 function createFixedProjectResolver(projectRoot: string): ProjectResolver {
-  return async () => await loadProjectStateFrom(projectRoot);
+  return async () => toResolvedUiProject(await loadProjectStateFrom(projectRoot));
 }
 
 function createFixedConfigResolver(configPath: string, cwd: string): ProjectResolver {
-  return async () => await loadProjectStateFromConfigPath(configPath, cwd);
+  return async () => toResolvedUiProject(await loadProjectStateFromConfigPath(configPath, cwd));
 }
 
 function createSubdomainProjectResolver(input: {
@@ -257,7 +257,21 @@ async function ensureProjectConfig(input: {
     });
     await ensureDatabase(input.host, projectRoot);
   });
-  return await loadProjectStateFrom(projectRoot);
+  return toResolvedUiProject(await loadProjectStateFrom(projectRoot));
+}
+
+function toResolvedUiProject(project: LoadedSqlfuProject): ResolvedUiProject {
+  if (!project.initialized) return project;
+  if ('inline' in project) {
+    throw new Error(
+      'The sqlfu UI requires a file-backed sqlfu config; inline defineConfig modules support generate and draft.',
+    );
+  }
+  return {
+    initialized: true,
+    projectRoot: project.projectRoot,
+    config: project.config,
+  };
 }
 
 const projectInitLocks = new Map<string, Promise<void>>();

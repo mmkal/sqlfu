@@ -16,6 +16,7 @@ import {
 import {
   assertSqliteMaterialized,
   registerSqliteTypegenImpls,
+  sqliteDialect,
   type DialectColumnInfo,
   type LogicalType,
   type RelationInfo,
@@ -32,7 +33,14 @@ import type {
 } from './query-catalog.js';
 import {loadProjectConfig} from '../node/config.js';
 import {createNodeHost} from '../node/host.js';
-import type {Client, SqlfuGenerateCasing, SqlfuGenerateRuntime, SqlfuProjectConfig, SqlfuValidator} from '../types.js';
+import type {
+  Client,
+  QueryResultMode,
+  SqlfuGenerateCasing,
+  SqlfuGenerateRuntime,
+  SqlfuProjectConfig,
+  SqlfuValidator,
+} from '../types.js';
 import type {SqlfuHost} from '../host.js';
 import {excludeReservedSqliteObjects, extractSchema} from '../sqlite-text.js';
 import {createBunClient, createNodeSqliteClient} from '../index.js';
@@ -40,6 +48,12 @@ import {migrationName, readMigrationHistory, type Migration} from '../migrations
 import {presetTableName} from '../migrations/preset-queries.js';
 import {materializeDefinitionsSchemaFor, readMigrationFiles} from '../materialize.js';
 import {queryIdentityFromPath, querySourceManifestEntry, renderQuerySourceManifest} from '../query-identity.js';
+import {
+  readInlineConfigSources,
+  writeInlineQueryTypes,
+  type InlineQueryType,
+  type InlineConfigSource,
+} from '../node/inline-source.js';
 
 export type {
   AdHocQueryAnalysis,
@@ -122,7 +136,142 @@ export async function generateQueryTypesForConfig(
   return {writtenFiles: writtenFiles.sort((left, right) => left.localeCompare(right))};
 }
 
-function projectRelativePath(config: SqlfuProjectConfig, filePath: string) {
+export async function generateInlineConfigTypes(input: {
+  modulePath: string;
+  projectRoot: string;
+  host: SqlfuHost;
+}): Promise<GenerateQueryTypesResult> {
+  const inlines = await readInlineConfigSources(input.modulePath);
+  if (inlines.length === 0) {
+    throw new Error(`No inline defineConfig(...) call found in ${input.modulePath}.`);
+  }
+
+  const dialect = sqliteDialect();
+  const queryTypes: InlineQueryType[] = [];
+  for (const inline of inlines) {
+    const sourceSql = await materializeDefinitionsSchemaFor(input.host, inline.definitions.sql, {dialect});
+    await using materialized = await dialect.materializeTypegenSchema(input.host, {
+      projectRoot: input.projectRoot,
+      sourceSql,
+      experimentalJsonTypes: false,
+    });
+    const schema = await dialect.loadSchemaForTypegen(materialized);
+    const querySources = inline.queries.map((query) =>
+      inlineQuerySource(input.modulePath, inline, query.name, query.content.sql),
+    );
+    assertUniqueQueryFunctionNames(querySources);
+
+    const queryAnalyses = await dialect.analyzeQueries(
+      materialized,
+      querySources.map((query) => ({
+        sqlPath: query.sqlPath,
+        sqlContent: query.analysisSqlContent,
+      })),
+    );
+
+    for (const querySource of querySources) {
+      const analysis = queryAnalyses.find((query) => query.sqlPath === querySource.sqlPath);
+      if (!analysis) {
+        throw new Error(`Missing vendored TypeSQL analysis for ${querySource.sqlPath}`);
+      }
+      if (!analysis.ok) {
+        throw new Error(analysis.error.description);
+      }
+      const prepared = prepareQueryDescriptor({
+        descriptor: refineDescriptor(analysis.descriptor, querySource.analysisSqlContent, schema),
+        explicitParameterExpansions: querySource.parameterExpansions,
+        sourceSql: querySource.sqlContent,
+      });
+      assertInlineConfigRuntimeSupported(querySource, prepared.descriptor, prepared.parameterExpansions);
+      queryTypes.push({
+        className: inline.className,
+        configName: inline.name,
+        queryName: querySource.functionName,
+        type: renderInlineConfigQueryType(prepared.descriptor, 'preserve'),
+        mode: getResultMode(prepared.descriptor),
+      });
+    }
+  }
+
+  const wroteTypes = await writeInlineQueryTypes(input.modulePath, queryTypes);
+
+  return {writtenFiles: wroteTypes ? [projectRelativePath(input, input.modulePath)] : []};
+}
+
+function inlineQuerySource(
+  modulePath: string,
+  inline: InlineConfigSource,
+  functionName: string,
+  sqlContent: string,
+): QuerySource {
+  const parameterExpansions = parseInlineParameterExpansions(sqlContent);
+  const inlineName = inline.className ? `${inline.className}.${inline.name}` : inline.name;
+  return {
+    sqlPath: `${modulePath}#${inlineName}.${functionName}`,
+    sourceSqlPath: modulePath,
+    id: functionName,
+    functionName,
+    sqlContent,
+    sqlFileContent: sqlContent,
+    analysisSqlContent: prepareSqlForAnalysis(sqlContent, parameterExpansions),
+    parameterExpansions,
+  };
+}
+
+function renderInlineConfigQueryType(descriptor: GeneratedQueryDescriptor, casing: SqlfuGenerateCasing): string {
+  const {descriptor: cased} = applyGeneratedInputCasing(descriptor, casing);
+  const parts: string[] = [];
+  const parameterFields = [...(cased.data || []), ...cased.parameters];
+  if (parameterFields.length > 0) {
+    parts.push(`parameters: ${renderInlineTypeLiteral(parameterFields, 'parameter')}`);
+  }
+  if (getResultMode(cased) !== 'metadata') {
+    const resultFields = mapColumnDerivedFields(getResultFields(cased), casing).publicFields;
+    parts.push(`result: ${renderInlineTypeLiteral(resultFields, 'result')}`);
+  }
+  if (parts.length === 0) return '{}';
+  return `{ ${parts.join('; ')} }`;
+}
+
+function renderInlineTypeLiteral(fields: GeneratedField[], fieldKind: 'parameter' | 'result'): string {
+  const properties = fields.map((field) => {
+    const optional = fieldKind === 'parameter' && Boolean(field.optional);
+    return `${field.name}${optional ? '?' : ''}: ${inlineFieldTypeExpression(field, fieldKind)}`;
+  });
+  return `{ ${properties.join('; ')} }`;
+}
+
+function inlineFieldTypeExpression(field: GeneratedField, fieldKind: 'parameter' | 'result'): string {
+  const typeExpression = fieldTypeExpression(field, fieldKind);
+  if (fieldKind === 'result' && !field.notNull) {
+    return `${typeExpression} | null`;
+  }
+  return typeExpression;
+}
+
+function assertInlineConfigRuntimeSupported(
+  querySource: QuerySource,
+  descriptor: GeneratedQueryDescriptor,
+  parameterExpansions: ParameterExpansion[],
+): void {
+  const expansion = parameterExpansions[0];
+  if (expansion) {
+    throw new Error(
+      `inline defineConfig query ${querySource.functionName} cannot use ${expansion.kind} parameter "${expansion.name}" because inline runtime binds the SQL template directly.`,
+    );
+  }
+
+  const convertedParameter = [...(descriptor.data || []), ...descriptor.parameters].find(
+    (field) => inferDriverEncoding(field) !== 'identity',
+  );
+  if (convertedParameter) {
+    throw new Error(
+      `inline defineConfig query ${querySource.functionName} cannot use non-identity driver parameter "${convertedParameter.name}" because inline runtime binds the SQL template directly.`,
+    );
+  }
+}
+
+function projectRelativePath(config: Pick<SqlfuProjectConfig, 'projectRoot'>, filePath: string) {
   return path.relative(config.projectRoot, filePath).split(path.sep).join('/');
 }
 
@@ -2394,12 +2543,7 @@ function buildValidatorImplementation(input: {
       ? `${input.resultMapperName}(${rowExpression})`
       : jsonDecodedRowExpression(rowExpression, input.resultFields, input.resultTypeRef);
   const rowExpr = (rowExpression: string) =>
-    rowParseExpressionOrNull(
-      emitter,
-      input.resultSchemaName,
-      publicRowExpression(rowExpression),
-      prettyErrors,
-    );
+    rowParseExpressionOrNull(emitter, input.resultSchemaName, publicRowExpression(rowExpression), prettyErrors);
   const rowBlock = (rowExpression: string, indent: string) =>
     rowParseStatements(
       emitter,
@@ -2447,7 +2591,10 @@ function buildValidatorImplementation(input: {
     const parsedExpression = rowExpr('rows[0]');
     const expr = parsedExpression && returnType ? `(${parsedExpression} as ${returnType})` : parsedExpression;
     if (expr) {
-      return [`\t\tconst rows${rawRowsAnnotation} = ${maybeAwait}client.all${resultRowsType}(${q});`, `\t\treturn ${expr};`];
+      return [
+        `\t\tconst rows${rawRowsAnnotation} = ${maybeAwait}client.all${resultRowsType}(${q});`,
+        `\t\treturn ${expr};`,
+      ];
     }
     return [
       `\t\tconst rows${rawRowsAnnotation} = ${maybeAwait}client.all${resultRowsType}(${q});`,
@@ -2498,7 +2645,7 @@ function getReturnType(descriptor: GeneratedQueryDescriptor, resultTypeName: str
   return resultTypeName;
 }
 
-function getResultMode(descriptor: GeneratedQueryDescriptor): 'many' | 'nullableOne' | 'one' | 'metadata' {
+function getResultMode(descriptor: GeneratedQueryDescriptor): QueryResultMode {
   if (!descriptor.returning && descriptor.queryType !== 'Select') {
     return 'metadata';
   }
@@ -3076,7 +3223,10 @@ function mapColumnDerivedFields<TField extends GeneratedField>(
   };
 }
 
-function applyGeneratedInputCasing(descriptor: GeneratedQueryDescriptor, casing: SqlfuGenerateCasing): DescriptorCasingPlan {
+function applyGeneratedInputCasing(
+  descriptor: GeneratedQueryDescriptor,
+  casing: SqlfuGenerateCasing,
+): DescriptorCasingPlan {
   const parameters = descriptor.parameters.map((field) => mapColumnDerivedObjectFields(field, casing));
   const dataWithPublicObjectFields = descriptor.data?.map((field) => mapColumnDerivedObjectFields(field, casing));
   const dataMapping = dataWithPublicObjectFields ? mapColumnDerivedFields(dataWithPublicObjectFields, casing) : null;
@@ -3090,7 +3240,10 @@ function applyGeneratedInputCasing(descriptor: GeneratedQueryDescriptor, casing:
   };
 }
 
-function mapColumnDerivedObjectFields<TField extends GeneratedField>(field: TField, casing: SqlfuGenerateCasing): TField {
+function mapColumnDerivedObjectFields<TField extends GeneratedField>(
+  field: TField,
+  casing: SqlfuGenerateCasing,
+): TField {
   if (!field.objectFields) {
     return field;
   }
@@ -3100,7 +3253,8 @@ function mapColumnDerivedObjectFields<TField extends GeneratedField>(field: TFie
     objectMapping.mappings.map((mapping) => [mapping.raw.name, mapping.public] as const),
   );
   const driverObjectFields = field.driverObjectFields?.map(
-    (driverField) => publicFieldByRawName.get(driverField.name) || mapColumnDerivedFields([driverField], casing).publicFields[0]!,
+    (driverField) =>
+      publicFieldByRawName.get(driverField.name) || mapColumnDerivedFields([driverField], casing).publicFields[0]!,
   );
   return {
     ...field,

@@ -1,7 +1,10 @@
 # Durable Objects
 
-Planning to try sqlfu with Durable Objects? Start with the normal
-[Getting Started](../getting-started.md) workflow, then change two things:
+Planning to try sqlfu with Durable Objects? You can use either the normal
+[Getting Started](../getting-started.md) workflow or a single inline TypeScript
+module when one Durable Object owns one small schema.
+
+The normal file-backed project changes two things:
 
 1. Keep a separate `sqlfu.config.ts`, `definitions.sql`, `migrations/`, and
    `sql/` directory for each Durable Object class that owns its own storage.
@@ -10,6 +13,72 @@ Planning to try sqlfu with Durable Objects? Start with the normal
 
 That is the whole shape. You still author SQL first, draft migration files, and
 generate typed wrappers from `.sql` query files.
+
+## Inline module
+
+For a self-contained Durable Object, keep definitions, migrations, and queries
+in the Worker module and point `--config` at that module:
+
+```ts
+import {DurableObject} from 'cloudflare:workers';
+import {createDurableObjectClient, defineConfig, sql} from 'sqlfu';
+
+export class CounterObject extends DurableObject {
+  static db = defineConfig({
+    definitions: sql`
+      create table counters (
+        name text primary key not null,
+        value integer not null default 0
+      );
+    `,
+    migrations: [
+      {
+        name: '20260506000000_create_counters',
+        content: sql`
+          create table counters (
+            name text primary key not null,
+            value integer not null default 0
+          );
+        `,
+      },
+    ],
+    queries: {
+      incrementCounter: sql.one<{ parameters: { name: string }; result: { name: string; value: number } }>`
+        insert into counters (name, value)
+        values (:name, 1)
+        on conflict (name) do update set value = value + 1
+        returning name, value
+      `,
+    },
+  });
+
+  db: typeof CounterObject.db.$type;
+
+  constructor(ctx: DurableObjectState, env: {}) {
+    super(ctx, env);
+    this.db = CounterObject.db(createDurableObjectClient(ctx.storage));
+    this.db.migrate();
+  }
+}
+```
+
+Then run:
+
+```sh
+npx sqlfu --config src/durable-objects/counter/counter.ts draft
+npx sqlfu --config src/durable-objects/counter/counter.ts generate
+npx sqlfu --config src/durable-objects/counter/counter.ts generate --watch
+```
+
+`draft` appends new `{name, content: sql\`...\`}` entries to the inline
+`migrations` array. `generate` writes inferred query mode and type metadata into
+compact tags such as `sql.one<{...}>`, `sql.many<{...}>`, or `sql.run<{...}>`;
+`generate --watch` reruns that edit whenever the module changes. The source must
+keep one or more parseable top-level `const name = defineConfig({...})` object
+literals or static class properties such as `static db = defineConfig({...})` on
+top-level named classes, with `definitions`, `migrations`, and `queries`
+properties. The static class property form is preferred for Durable Objects
+because the schema stays attached to the object that owns the storage.
 
 ## Project shape
 

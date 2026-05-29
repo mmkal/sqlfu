@@ -108,7 +108,10 @@ export async function getMigrationResultantSchema(
   }
 
   await using database = await context.host.openDb(context.config);
-  const applied = await readMigrationHistory(database.client, {preset: migrationsPresetOf(context), dialect: context.config.dialect});
+  const applied = await readMigrationHistory(database.client, {
+    preset: migrationsPresetOf(context),
+    dialect: context.config.dialect,
+  });
   const targetIndex = applied.findIndex((migration) => migration.name === input.id);
   if (targetIndex === -1) {
     throw new Error(`migration history entry ${input.id} not found`);
@@ -399,7 +402,10 @@ async function analyzeMigrateHealthWithClient(
   migrations: Migration[],
   client: Client,
 ): Promise<MigrateHealthAnalysis> {
-  const applied = await readMigrationHistory(client, {preset: migrationsPresetOf(context), dialect: context.config.dialect});
+  const applied = await readMigrationHistory(client, {
+    preset: migrationsPresetOf(context),
+    dialect: context.config.dialect,
+  });
   const liveSchema = await context.config.dialect.extractSchemaFromClient(client, {
     excludedTables: schemaDriftExcludedTables(context),
   });
@@ -647,7 +653,10 @@ export async function analyzeDatabase(context: SqlfuContext) {
   const liveSchema = await context.config.dialect.extractSchemaFromClient(database.client, {
     excludedTables: schemaDriftExcludedTables(context),
   });
-  const applied = await readMigrationHistory(database.client, {preset: migrationsPresetOf(context), dialect: context.config.dialect});
+  const applied = await readMigrationHistory(database.client, {
+    preset: migrationsPresetOf(context),
+    dialect: context.config.dialect,
+  });
   const hasAppliedHistory = applied.length > 0;
   const appliedNames = new Set(applied.map((migration) => migration.name));
   const migrationByName = new Map(migrations.map((migration) => [migrationName(migration), migration]));
@@ -1029,6 +1038,11 @@ export async function loadContextConfig(context: SqlfuCommandContext): Promise<S
       throw new Error(`No sqlfu config found at ${project.configPath}. Run 'sqlfu init' first.`);
     }
     throw new Error(`No sqlfu config found in ${project.projectRoot}. Run 'sqlfu init' first.`);
+  }
+  if ('inline' in project) {
+    throw new Error(
+      'This command requires a file-backed sqlfu config. inline defineConfig modules currently support generate and draft.',
+    );
   }
 
   return {

@@ -1,6 +1,6 @@
 import {sha256} from '../vendor/sha256.js';
 
-import {sqliteDialect, type Dialect} from '../dialect.js';
+import type {Dialect} from '../dialect.js';
 import type {AsyncClient, Client, SqlfuMigrationPreset, SyncClient} from '../types.js';
 import {basename} from '../paths.js';
 import {awaited, driveAsync, driveSync, type DualGenerator} from '../dual-dispatch.js';
@@ -66,16 +66,15 @@ export function readMigrationHistory(
   params: HistoryParams = {},
 ): MigrationHistoryRow[] | Promise<MigrationHistoryRow[]> {
   const preset = params.preset ?? 'sqlfu';
-  const dialect = params.dialect ?? sqliteDialect();
   return client.sync
-    ? driveSync(readMigrationHistoryGen(client, preset, dialect))
-    : driveAsync(readMigrationHistoryGen(client, preset, dialect));
+    ? driveSync(readMigrationHistoryGen(client, preset, params.dialect))
+    : driveAsync(readMigrationHistoryGen(client, preset, params.dialect));
 }
 
 function* readMigrationHistoryGen(
   client: Client,
   preset: SqlfuMigrationPreset,
-  dialect: Dialect,
+  dialect: Dialect | undefined,
 ): DualGenerator<MigrationHistoryRow[]> {
   const shape = yield* ensureMigrationTableGen(client, preset, dialect);
   const rows = yield* awaited(client.all<MigrationHistoryRow>(selectHistoryQuery(shape)));
@@ -107,9 +106,8 @@ export function applyMigrations(client: Client, params: ApplyMigrationsParams): 
   // always carry through into the dialect call below. Manually re-typing
   // via cast keeps the call site honest.
   const asyncClient = client as AsyncClient;
-  const dialect = params.dialect ?? sqliteDialect();
   const run = () => driveAsync(applyMigrationsGen(asyncClient, params));
-  return dialect.withMigrationLock ? dialect.withMigrationLock(asyncClient, run) : run();
+  return params.dialect?.withMigrationLock ? params.dialect.withMigrationLock(asyncClient, run) : run();
 }
 
 export function baselineMigrationHistory(client: SyncClient, params: BaselineParams): void;
@@ -138,8 +136,7 @@ export function replaceMigrationHistory(client: Client, params: ReplaceParams): 
 
 function* applyMigrationsGen(client: Client, params: ApplyMigrationsParams): DualGenerator<void> {
   const preset = params.preset ?? 'sqlfu';
-  const dialect = params.dialect ?? sqliteDialect();
-  const shape = yield* ensureMigrationTableGen(client, preset, dialect);
+  const shape = yield* ensureMigrationTableGen(client, preset, params.dialect);
   const appliedRaw = yield* awaited(client.all<MigrationHistoryRow>(selectHistoryQuery(shape)));
   const applied = appliedRaw.map((row) => ({...row, name: normalizeHistoryName(shape, row.name)}));
   const byName = new Map(params.migrations.map((migration) => [migrationName(migration), migration]));
@@ -210,8 +207,7 @@ function* baselineMigrationHistoryGen(client: Client, params: BaselineParams): D
 
 function* replaceMigrationHistoryGen(client: Client, params: ReplaceParams): DualGenerator<void> {
   const preset = params.preset ?? 'sqlfu';
-  const dialect = params.dialect ?? sqliteDialect();
-  const shape = yield* ensureMigrationTableGen(client, preset, dialect);
+  const shape = yield* ensureMigrationTableGen(client, preset, params.dialect);
   yield client.run(deleteHistoryQuery(shape));
   for (const migration of params.migrations) {
     yield client.run(

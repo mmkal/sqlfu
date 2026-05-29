@@ -37,7 +37,25 @@ export * from './adapters/turso-database.js';
 export * from './adapters/turso-serverless.js';
 export * from './adapters/pg.js';
 
-export {defineConfig} from './config.js';
+import {defineConfig as defineConfigFs} from './config.js';
+import {
+  defineInlineConfig,
+  type InlineConfigDefinition,
+  type InlineConfigFactory,
+  type InlineConfigQuery,
+} from './config-inline.js';
+import type {SqlfuConfig} from './types.js';
+
+export function defineConfig(config: SqlfuConfig): SqlfuConfig;
+export function defineConfig<const TQueries extends Record<string, InlineConfigQuery>>(
+  definition: InlineConfigDefinition<TQueries>,
+): InlineConfigFactory<TQueries>;
+export function defineConfig(config: any) {
+  if (typeof config?.definitions === 'string' || typeof config?.queries === 'string') {
+    return defineConfigFs(config);
+  }
+  return defineInlineConfig(config);
+}
 
 // Pluggable dialect surface. The default `sqliteDialect` is wired up
 // automatically when `defineConfig` omits `dialect`. Postgres support arrives

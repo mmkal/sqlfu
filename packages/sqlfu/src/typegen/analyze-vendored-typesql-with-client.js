@@ -8,4 +8,4 @@
 // the vendored-code layer. Bundlers (Vite, esbuild) follow this `.js`
 // file and statically bundle the vendor import — no dynamic-import dance.
 
-export {analyzeSqliteQueriesWithClient as analyzeVendoredTypesqlQueriesWithClient} from '../vendor/typesql/sqlfu.js';
+export {analyzeSqliteQueriesWithClient as analyzeVendoredTypesqlQueriesWithClient} from '../vendor/typesql/sqlfu-with-client.js';

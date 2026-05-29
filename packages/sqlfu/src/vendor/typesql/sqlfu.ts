@@ -5,31 +5,17 @@
  * Local additions:
  * - expose a sqlite-only descriptor-level API for sqlfu
  * - avoid the upstream file-oriented compile pipeline when sqlfu generates wrappers
- * - expose a client-level entrypoint so non-node callers (browser wasm) can run
- *   the same analysis against an already-open sqlite client
+ * - re-export the browser-safe client-level entrypoint from sqlfu-with-client.ts
  */
-import {isLeft} from '../small-utils.js';
-import {validateAndDescribeQuery} from './codegen/sqlite.js';
-import {closeClient, createClient, loadSchemaInfo} from './schema-info.js';
-import type {TsDescriptor} from './codegen/shared/codegen-util.js';
-import type {DatabaseClient, TypeSqlError} from './types.js';
+import {closeClient, createClient} from './schema-info.js';
+import {
+	analyzeSqliteQueriesWithClient,
+	type SqlfuQueryAnalysis,
+	type SqlfuQueryInput,
+} from './sqlfu-with-client.js';
 
-export type SqlfuQueryInput = {
-	readonly sqlPath: string;
-	readonly sqlContent: string;
-};
-
-export type SqlfuQueryAnalysis =
-	| {
-		readonly sqlPath: string;
-		readonly ok: true;
-		readonly descriptor: TsDescriptor;
-	}
-	| {
-		readonly sqlPath: string;
-		readonly ok: false;
-		readonly error: TypeSqlError;
-	};
+export {analyzeSqliteQueriesWithClient};
+export type {SqlfuQueryAnalysis, SqlfuQueryInput};
 
 export async function analyzeSqliteQueries(databaseUri: string, queries: readonly SqlfuQueryInput[]): Promise<readonly SqlfuQueryAnalysis[]> {
 	const databaseClientResult = await createClient(databaseUri, 'sqlite');
@@ -44,31 +30,4 @@ export async function analyzeSqliteQueries(databaseUri: string, queries: readonl
 	} finally {
 		await closeClient(databaseClient);
 	}
-}
-
-export async function analyzeSqliteQueriesWithClient(
-	databaseClient: DatabaseClient,
-	queries: readonly SqlfuQueryInput[],
-): Promise<readonly SqlfuQueryAnalysis[]> {
-	const schemaInfoResult = await loadSchemaInfo(databaseClient);
-	if (schemaInfoResult.isErr()) {
-		throw new Error(schemaInfoResult.error.description);
-	}
-
-	return queries.map((query) => {
-		const descriptorResult = validateAndDescribeQuery(databaseClient, query.sqlContent, schemaInfoResult.value.columns);
-		if (isLeft(descriptorResult)) {
-			return {
-				sqlPath: query.sqlPath,
-				ok: false,
-				error: descriptorResult.left,
-			};
-		}
-
-		return {
-			sqlPath: query.sqlPath,
-			ok: true,
-			descriptor: descriptorResult.right,
-		};
-	});
 }

@@ -21,6 +21,11 @@ import {formatSqlFiles} from './format-files.js';
 import {stopProcessesListeningOnPort} from './port-process.js';
 import {generateQueryTypesForConfig} from '../typegen/index.js';
 import {watchGenerateQueryTypesForConfig} from '../typegen/watch.js';
+import {
+  draftInlineConfigMigration,
+  generateInlineConfigModule,
+  watchGenerateInlineConfigModule,
+} from './inline-commands.js';
 import {startSqlfuServer} from '../ui/server.js';
 import {resolveSqlfuUi} from '../ui/resolve-sqlfu-ui.js';
 import packageJson from '../../package.json' with {type: 'json'};
@@ -134,13 +139,30 @@ export const router = {
         .optional(),
     )
     .handler(async ({context, input}) => {
+      const project = await loadContextProjectState(context);
+      if (project.initialized && 'inline' in project) {
+        if (input?.watch) {
+          await watchGenerateInlineConfigModule({
+            modulePath: project.inline.modulePath,
+            projectRoot: project.projectRoot,
+            host: context.host,
+          });
+          return;
+        }
+        const result = await generateInlineConfigModule({
+          modulePath: project.inline.modulePath,
+          projectRoot: project.projectRoot,
+          host: context.host,
+        });
+        return formatGenerateResult(result.writtenFiles);
+      }
       const sqlfuContext = await loadContextConfig(context);
       if (input?.watch) {
         await watchGenerateQueryTypesForConfig(sqlfuContext.config, sqlfuContext.host);
         return;
       }
       const result = await generateQueryTypesForConfig(sqlfuContext.config, sqlfuContext.host);
-      return ['Updated generated files:', ...result.writtenFiles.map((filePath) => `  ${filePath}`)].join('\n');
+      return formatGenerateResult(result.writtenFiles);
     }),
 
   format: base
@@ -203,6 +225,17 @@ export const router = {
         .optional(),
     )
     .handler(async ({context, input}) => {
+      const project = await loadContextProjectState(context);
+      if (project.initialized && 'inline' in project) {
+        const result = await draftInlineConfigMigration({
+          modulePath: project.inline.modulePath,
+          projectRoot: project.projectRoot,
+          host: context.host,
+          name: input?.name,
+          confirm: context.confirm,
+        });
+        return result ? `Wrote ${result.path}` : undefined;
+      }
       const result = await applyDraftSql(await loadContextConfig(context), input, context.confirm);
       return result ? `Wrote ${result.path}` : undefined;
     }),
@@ -237,7 +270,10 @@ export const router = {
       const initializedContext = await loadContextConfig(context);
       const migrations = await readMigrationsFromContext(initializedContext);
       await using database = await initializedContext.host.openDb(initializedContext.config);
-      const applied = await readMigrationHistory(database.client, {preset: migrationsPresetOf(initializedContext), dialect: initializedContext.config.dialect});
+      const applied = await readMigrationHistory(database.client, {
+        preset: migrationsPresetOf(initializedContext),
+        dialect: initializedContext.config.dialect,
+      });
       const appliedNames = new Set(applied.map((migration) => migration.name));
       return migrations.map((migration) => migrationName(migration)).filter((name) => !appliedNames.has(name));
     }),
@@ -249,7 +285,10 @@ export const router = {
     .handler(async ({context}) => {
       const initializedContext = await loadContextConfig(context);
       await using database = await initializedContext.host.openDb(initializedContext.config);
-      const applied = await readMigrationHistory(database.client, {preset: migrationsPresetOf(initializedContext), dialect: initializedContext.config.dialect});
+      const applied = await readMigrationHistory(database.client, {
+        preset: migrationsPresetOf(initializedContext),
+        dialect: initializedContext.config.dialect,
+      });
       return applied.map((migration) => migration.name);
     }),
 
@@ -266,7 +305,10 @@ export const router = {
       const initializedContext = await loadContextConfig(context);
       const migrations = await readMigrationsFromContext(initializedContext);
       await using database = await initializedContext.host.openDb(initializedContext.config);
-      const applied = await readMigrationHistory(database.client, {preset: migrationsPresetOf(initializedContext), dialect: initializedContext.config.dialect});
+      const applied = await readMigrationHistory(database.client, {
+        preset: migrationsPresetOf(initializedContext),
+        dialect: initializedContext.config.dialect,
+      });
       const appliedNames = new Set(applied.map((migration) => migration.name));
       return migrations
         .map((migration) => migrationName(migration))
@@ -335,6 +377,13 @@ export const router = {
   },
 };
 
+function formatGenerateResult(writtenFiles: string[]): string {
+  if (writtenFiles.length === 0) {
+    return 'No generated files changed.';
+  }
+  return ['Updated generated files:', ...writtenFiles.map((filePath) => `  ${filePath}`)].join('\n');
+}
+
 /**
  * Pick a sql-formatter dialect for `sqlfu format`. Reads the project's
  * configured dialect when one's loadable; falls back to sqlite (the
@@ -345,6 +394,7 @@ async function detectFormatLanguage(context: SqlfuCommandRouterContext): Promise
   try {
     const project = await loadContextProjectState(context);
     if (!project.initialized) return undefined;
+    if ('inline' in project) return 'sqlite';
     return project.config.dialect.name === 'postgresql' ? 'postgresql' : 'sqlite';
   } catch {
     return undefined;

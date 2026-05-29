@@ -3,7 +3,7 @@ import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 
 import {checkStrictImports, formatViolations} from '../scripts/check-strict-imports.js';
-import type {Confirm} from '../src/api/exports.js';
+import type {Confirm} from '../src/api/core.js';
 
 const packageRoot = path.resolve(path.dirname(import.meta.filename), '..');
 
@@ -18,7 +18,7 @@ test('strict-tier entries import no node:* or disallowed bare specifiers', async
   expect(violations).toEqual([]);
 });
 
-test('built api entry exposes only the command facade', async () => {
+test('built api entry exposes commands plus sql helper', async () => {
   const apiEntry = path.join(packageRoot, 'dist/api/exports.js');
   const api = await import(pathToFileURL(apiEntry).href);
   expect(Object.keys(api).sort()).toEqual([
@@ -26,7 +26,6 @@ test('built api entry exposes only the command facade', async () => {
     'baseline',
     'check',
     'config',
-    'createSqlfuApi',
     'draft',
     'find',
     'format',
@@ -37,6 +36,7 @@ test('built api entry exposes only the command facade', async () => {
     'migrate',
     'pending',
     'serve',
+    'sql',
     'sync',
   ]);
 });

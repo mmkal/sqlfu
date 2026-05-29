@@ -8,10 +8,10 @@ const distVendor = resolve(pkgRoot, 'dist/vendor');
 // ------------------------------------------------------------------
 // vendor/typesql bundle
 // ------------------------------------------------------------------
-// The sqlite path is the only consumer of vendored typesql; it imports
-// `analyzeSqliteQueriesWithClient` from vendor/typesql/sqlfu.ts and goes from
-// there. Bundle only that client-level export so browser-strict surfaces do not
-// retain TypeSQL's node/bun database-opening helpers.
+// The sqlite path is the only consumer of vendored typesql. We publish two
+// entries: a node entry for file-backed generation and a browser-safe client
+// entry for sqlfu/analyze. Splitting keeps the parser/analyzer code shared
+// instead of shipping two near-identical bundles.
 //
 // Previously there was a `gut-antlr-parsers` plugin here that rewrote the
 // vendored MySQL parser at bundle time to strip its parse-table data. That
@@ -19,17 +19,18 @@ const distVendor = resolve(pkgRoot, 'dist/vendor');
 // subtrees) were deleted once the sqlite analyzer was untangled from MySQL's
 // AST — see tasks/slim-package.md for the history.
 await esbuild.build({
-  stdin: {
-    contents: `export { analyzeSqliteQueriesWithClient } from './sqlfu.js';`,
-    resolveDir: resolve(pkgRoot, 'src/vendor/typesql'),
-    sourcefile: 'sqlfu-entry.ts',
-    loader: 'ts',
+  entryPoints: {
+    sqlfu: resolve(pkgRoot, 'src/vendor/typesql/sqlfu.ts'),
+    'sqlfu-with-client': resolve(pkgRoot, 'src/vendor/typesql/sqlfu-with-client.ts'),
   },
   bundle: true,
   platform: 'node',
   format: 'esm',
   target: 'node20',
-  outfile: resolve(distVendor, 'typesql/sqlfu.js'),
+  outdir: resolve(distVendor, 'typesql'),
+  entryNames: '[name]',
+  chunkNames: 'chunks/[name]-[hash]',
+  splitting: true,
   treeShaking: true,
   minify: true,
   legalComments: 'inline',
@@ -61,9 +62,12 @@ const typesqlToDelete = [
   'typesql/shared-analyzer',
   'typesql/schema-info.js',
   'typesql/schema-info.js.map',
+  'typesql/schema-info-client.js',
+  'typesql/schema-info-client.js.map',
   'typesql/sql-generator.js',
   'typesql/sql-generator.js.map',
   'typesql/sqlfu.js.map',
+  'typesql/sqlfu-with-client.js.map',
   'typesql/sqlite-query-analyzer',
   'typesql/ts-dynamic-query-descriptor.js',
   'typesql/ts-dynamic-query-descriptor.js.map',

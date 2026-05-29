@@ -3,51 +3,25 @@
  * f0356201d41f3f317824968a3f1c7a90fbafdc99 (MIT).
  *
  * Local modifications:
- * - route runtime database loading through `SQLFU_SQLITE_RUNTIME` so sqlfu can pick
- *   between bun:sqlite and node:sqlite at runtime
+ * - move runtime database loading to `sqlite-client.ts` so injected-client
+ *   analysis can bundle for browsers without importing node sqlite
  * - import Either/Result helpers from sqlfu's vendored `small-utils` instead of neverthrow
  * - ESM-compatible relative import suffixes
  */
 import { type Either, Result, err, left, ok, right } from '../../small-utils.js';
-import type { DatabaseClient, TypeSqlError } from '../types.js';
+import type { TypeSqlError } from '../types.js';
 import type { ColumnSchema, Table } from '../shared-analyzer/types.js';
 import type { EnumColumnMap, EnumMap, SQLiteType } from './types.js';
 import { enumParser } from './enum-parser.js';
 import { virtualTablesSchema } from './virtual-tables.js';
 
-type DatabaseType = {
+export type DatabaseType = {
 	prepare(sql: string): {
 		all(...args: unknown[]): unknown[];
 	};
 	exec(sql: string): void;
 	close(): void;
 };
-
-async function loadDatabaseConstructor(): Promise<new (databaseUri: string) => DatabaseType> {
-	const runtime = process.env.SQLFU_SQLITE_RUNTIME ?? ('Bun' in globalThis ? 'bun' : 'node');
-	if (runtime === 'bun') {
-		const {Database} = await import('bun:sqlite' as any);
-		return Database as unknown as new (databaseUri: string) => DatabaseType;
-	}
-
-	const {DatabaseSync} = await import('node:sqlite');
-	return DatabaseSync as unknown as new (databaseUri: string) => DatabaseType;
-}
-
-export async function createSqliteClient(client: 'sqlite' | 'better-sqlite3' | 'bun:sqlite' | 'd1' | 'libsql', databaseUri: string, attachList: string[], loadExtensions: string[]): Promise<Result<DatabaseClient, TypeSqlError>> {
-	const DatabaseConstructor = await loadDatabaseConstructor();
-	const db = new DatabaseConstructor(databaseUri);
-	for (const attach of attachList) {
-		db.exec(`attach database ${attach}`);
-	}
-	for (const extension of loadExtensions) {
-		void extension;
-	}
-	return ok({
-		type: client,
-		client: db as DatabaseClient['client']
-	});
-}
 
 export function loadDbSchema(db: DatabaseType): Result<ColumnSchema[], TypeSqlError> {
 	const database_list = db

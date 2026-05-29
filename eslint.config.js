@@ -29,8 +29,12 @@ export default [
       '**/.sqlfu/**',
       '**/.typesql/**',
       '**/node_modules/**',
+      '**/*ignoreme*',
+      '**/*ignoreme*/**',
+      'tmp/**',
       'packages/sqlfu/src/vendor/**',
       'packages/pg/src/vendor/**',
+      'packages/ui/test/projects/**',
       // Fixture files contain intentionally-unformatted SQL (before/after
       // blocks, malformed input) — linting them would fight the fixtures.
       'packages/sqlfu/test/formatter/**',
@@ -113,7 +117,7 @@ export default [
       'unicorn/template-indent': [
         'error',
         {
-          tags: ['sql'],
+          tags: ['sql', 'sql.many', 'sql.nullableOne', 'sql.one', 'sql.run', 'sql.metadata'],
           functions: [],
           selectors: [],
           comments: [],

@@ -43,16 +43,12 @@ export class CounterObject extends DurableObject {
       },
     ],
     queries: {
-      incrementCounter: {
-        query: sql`
-          insert into counters (name, value)
-          values (:name, 1)
-          on conflict (name) do update set value = value + 1
-          returning name, value
-        `,
-        mode: 'one',
-        $type: {} as { parameters: { name: string }; result: { name: string; value: number } },
-      },
+      incrementCounter: sql.one<{ parameters: { name: string }; result: { name: string; value: number } }>`
+        insert into counters (name, value)
+        values (:name, 1)
+        on conflict (name) do update set value = value + 1
+        returning name, value
+      `,
     },
   });
 
@@ -75,14 +71,14 @@ npx sqlfu --config src/durable-objects/counter/counter.ts generate --watch
 ```
 
 `draft` appends new `{name, content: sql\`...\`}` entries to the inline
-`migrations` array. `generate` writes inferred `mode` and `$type` metadata onto
-each inline query object; `generate --watch` reruns that edit whenever the
-module changes. The source must keep one or more parseable top-level
-`const name = defineConfig({...})` object literals or static class properties
-such as `static db = defineConfig({...})` on top-level named classes, with
-`definitions`, `migrations`, and `queries` properties. The static class property
-form is preferred for Durable Objects because the schema stays attached to the
-object that owns the storage.
+`migrations` array. `generate` writes inferred query mode and type metadata into
+compact tags such as `sql.one<{...}>`, `sql.many<{...}>`, or `sql.run<{...}>`;
+`generate --watch` reruns that edit whenever the module changes. The source must
+keep one or more parseable top-level `const name = defineConfig({...})` object
+literals or static class properties such as `static db = defineConfig({...})` on
+top-level named classes, with `definitions`, `migrations`, and `queries`
+properties. The static class property form is preferred for Durable Objects
+because the schema stays attached to the object that owns the storage.
 
 ## Project shape
 

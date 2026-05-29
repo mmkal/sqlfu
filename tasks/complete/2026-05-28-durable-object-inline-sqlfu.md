@@ -49,9 +49,7 @@ class MyDO extends DurableObject {
       { name: 'create-table-posts', content: sql`create table posts(slug text)` },
     ],
     queries: {
-      listPosts: {
-        query: sql`select * from posts limit :limit`,
-      },
+      listPosts: sql`select * from posts limit :limit`,
     }
   });
 
@@ -78,18 +76,14 @@ How it'd work. You write the above manually, then you run
 sqlfu --config ./path/to/my-durable-object.ts generate
 ```
 
-And it will add `mode` and `$type` to the inline `defineConfig(...)` `queries` prop:
+And it will rewrite inline query tags with the inferred mode and type metadata:
 
 
 ```ts
   queries: {
-    listPosts: {
-      query: sql`
-        select * from posts limit :limit
-      `,
-      mode: 'many',
-      $type: {} as { parameters: { limit: number }; result: { slug: string; body: string } },
-    },
+    listPosts: sql.many<{ parameters: { limit: number }; result: { slug: string; body: string } }>`
+      select * from posts limit :limit
+    `,
   }
 ```
 

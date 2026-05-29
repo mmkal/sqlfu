@@ -320,14 +320,12 @@ export class CounterObject extends DurableObject {
     `,
     migrations: [],
     queries: {
-      incrementCounter: {
-        query: sql`
-          insert into counters (name, value)
-          values (:name, 1)
-          on conflict (name) do update set value = value + 1
-          returning name, value
-        `,
-      },
+      incrementCounter: sql.one<{ parameters: { name: string }; result: { name: string; value: number } }>`
+        insert into counters (name, value)
+        values (:name, 1)
+        on conflict (name) do update set value = value + 1
+        returning name, value
+      `,
     },
   });
 
@@ -350,9 +348,10 @@ sqlfu --config src/durable-objects/counter.ts generate --watch
 ```
 
 `draft` appends inline migration entries, and `generate` writes each query's
-`mode` and `$type` metadata back into the static config. `generate --watch`
-watches that one Worker module and updates it as the inline SQL changes. See
-[Durable Objects](./docs/guides/durable-objects.md) for the full guide.
+inferred mode and type into compact tags such as `sql.one<{...}>`,
+`sql.many<{...}>`, or `sql.run<{...}>`. `generate --watch` watches that one
+Worker module and updates it as the inline SQL changes. See [Durable
+Objects](./docs/guides/durable-objects.md) for the full guide.
 
 ### Pluggable `db`
 

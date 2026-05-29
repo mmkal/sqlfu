@@ -217,7 +217,7 @@ async function createWatchFixture(input: {
       };
     },
     async [Symbol.asyncDispose]() {
-      await fs.rm(root, {recursive: true, force: true});
+      await fs.rm(root, {recursive: true, force: true, maxRetries: 5, retryDelay: 50});
     },
   };
 }
@@ -261,7 +261,7 @@ async function createInlineWatchFixture(moduleText: string) {
       };
     },
     async [Symbol.asyncDispose]() {
-      await fs.rm(root, {recursive: true, force: true});
+      await fs.rm(root, {recursive: true, force: true, maxRetries: 5, retryDelay: 50});
     },
   };
 }
